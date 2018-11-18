@@ -13,7 +13,7 @@
 namespace catamari {
 
 template<class Real>
-bool ReadArrayValueFromMatrixMarket(
+bool ReadMatrixMarketArrayValue(
     const MatrixMarketDescription& description,
     std::ifstream& file,
     Real* value) {
@@ -21,7 +21,7 @@ bool ReadArrayValueFromMatrixMarket(
 }
 
 template<typename Real>
-bool ReadArrayValueFromMatrixMarket(
+bool ReadMatrixMarketArrayValue(
     const MatrixMarketDescription& description,
     std::ifstream& file,
     std::complex<Real>* value) {

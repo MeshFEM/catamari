@@ -59,6 +59,14 @@ Real ImagPart(const Real& value) CATAMARI_NOEXCEPT;
 template<class Real>
 Real ImagPart(const Complex<Real>& value) CATAMARI_NOEXCEPT;
 
+// Returns the complex-conjugate of a real value (the value itself).
+template<class Real>
+Real Conjugate(const Real& value) CATAMARI_NOEXCEPT;
+
+// Returns the complex-conjugate of a complex value.
+template<class Real>
+Complex<Real> Conjugate(const Complex<Real>& value) CATAMARI_NOEXCEPT;
+
 } // namespace catamari
 
 #include "catamari/complex-impl.hpp"

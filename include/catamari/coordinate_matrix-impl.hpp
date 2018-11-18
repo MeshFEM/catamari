@@ -119,7 +119,8 @@ CoordinateMatrix<Field>::FromMatrixMarket(
   for (Int entry_index = 0; entry_index < num_entries; ++entry_index) {
     Int row, column;
     Field value;
-    if (!ReadMatrixMarketFieldValue(description, file, &row, &column, &value)) {
+    if (!ReadMatrixMarketCoordinateEntry(
+        description, file, &row, &column, &value)) {
       result.reset();
       return result;
     }
@@ -427,6 +428,20 @@ bool CoordinateMatrix<Field>::EntryExists(Int row, Int column) const
 template<class Field>
 Int CoordinateMatrix<Field>::NumRowNonzeros(Int row) const CATAMARI_NOEXCEPT {
   return RowEntryOffset(row + 1) - RowEntryOffset(row);
+}
+
+template<class Field>
+std::unique_ptr<quotient::CoordinateGraph>
+CoordinateMatrix<Field>::CoordinateGraph() const CATAMARI_NOEXCEPT {
+  std::unique_ptr<quotient::CoordinateGraph> graph(
+      new quotient::CoordinateGraph);
+  graph->AsymmetricResize(NumRows(), NumColumns());
+  graph->ReserveEdgeAdditions(NumEntries());
+  for (const MatrixEntry<Field>& entry : Entries()) {
+    graph->QueueEdgeAddition(entry.row, entry.column);
+  }
+  graph->FlushEdgeQueues();
+  return graph;
 }
 
 template<class Field>

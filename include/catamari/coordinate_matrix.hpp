@@ -190,6 +190,11 @@ class CoordinateMatrix {
   // Returns the number of columns where the given row has entries.
   Int NumRowNonzeros(Int row) const CATAMARI_NOEXCEPT;
 
+  // Returns a CoordinateGraph representing the nonzero pattern of the sparse
+  // matrix.
+  std::unique_ptr<quotient::CoordinateGraph> CoordinateGraph() const
+      CATAMARI_NOEXCEPT;
+
  private:
   // The height of the matrix.
   Int num_rows_;

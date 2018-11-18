@@ -38,3 +38,10 @@ coordinate_matrix_test_exe = executable(
     ['test/coordinate_matrix_test.cc', 'include/catamari.hpp'],
     include_directories : include_dir,
     dependencies : deps)
+
+# A utility for running the MinimumDegree analysis on a Matrix Market graph.
+matrix_market_exe = executable(
+    'matrix_market',
+    ['example/matrix_market.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps)
