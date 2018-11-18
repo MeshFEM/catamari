@@ -1,0 +1,5 @@
+[wrap-git]
+directory = quotient
+url = https://gitlab.com/hodge_star/quotient.git
+revision = head
+clone-recursive = true
