@@ -12,10 +12,6 @@
 
 #define CATAMARI_ASSERT(condition, msg) QUOTIENT_ASSERT(condition, msg)
 
-#ifdef QUOTIENT_DEBUG
-#  define CATAMARI_DEBUG
-#endif
-
 #define CATAMARI_NOEXCEPT QUOTIENT_NOEXCEPT
 
 #endif // ifndef CATAMARI_MACROS_H_
