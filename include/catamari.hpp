@@ -13,7 +13,7 @@
 #include "catamari/complex.hpp"
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"
+#include "catamari/ldl.hpp"
 #include "catamari/macros.hpp"
-#include "catamari/cholesky_factor.hpp"
 
 #endif // ifndef CATAMARI_H_

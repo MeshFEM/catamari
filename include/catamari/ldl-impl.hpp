@@ -5,10 +5,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_CHOLESKY_FACTOR_IMPL_H_
-#define CATAMARI_CHOLESKY_FACTOR_IMPL_H_
+#ifndef CATAMARI_LDL_IMPL_H_
+#define CATAMARI_LDL_IMPL_H_
 
-#include "catamari/cholesky_factor.hpp"
+#include "catamari/ldl.hpp"
 
 namespace catamari {
 
@@ -265,4 +265,4 @@ void UnitLowerAdjointTriangularSolve(
 
 } // namespace catamari
 
-#endif // ifndef CATAMARI_CHOLESKY_FACTOR_IMPL_H_
+#endif // ifndef CATAMARI_LDL_IMPL_H_
