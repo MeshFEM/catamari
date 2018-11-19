@@ -17,186 +17,71 @@
 
 using catamari::Int;
 
-// A simple data structure for storing the median, mean, and standard deviation
-// of a random variable.
-struct SufficientStatistics {
-  // The median of the set of samples.
-  double median = std::numeric_limits<double>::infinity();
-
-  // The mean of the set of samples.
-  double mean = std::numeric_limits<double>::infinity();
-
-  // The standard deviation of the set of samples.
-  double standard_deviation = std::numeric_limits<double>::infinity();
-};
-
-// Pretty prints the SufficientStatistics structure.
-void PrintSufficientStatistics(
-    const SufficientStatistics& stats, const std::string& label) {
-  if (stats.mean != std::numeric_limits<double>::infinity()) {
-    std::cout << label << ": median=" << stats.median << ", mean=" << stats.mean
-              << ", stddev=" << stats.standard_deviation << std::endl;
-  }
-}
-
-// A list of properties to measure from an AMD reordering.
-struct AMDExperiment {
-  // The number of members of the largest supernode.
-  SufficientStatistics largest_supernode_size;
-
+// A list of properties to measure from a sparse LDL factorization / solve.
+struct Experiment {
   // The number of (structural) nonzeros in the associated Cholesky factor.
-  SufficientStatistics num_nonzeros;
-
-  // The number of (structural) nonzeros in the strictly lower triangle of the
-  // associated Cholesky factor.
-  SufficientStatistics num_strictly_lower_nonzeros;
+  Int num_nonzeros;
 
   // The number of floating-point operations required for a standard Cholesky
   // factorization using the returned ordering.
-  SufficientStatistics num_flops;
+  double num_flops;
 
-  // The number of degree updates performed during the AMD analysis.
-  SufficientStatistics num_degree_updates;
+  // The number of seconds that elapsed during the analysis.
+  double analysis_seconds;
 
-  // The number of aggressive absorptions during the AMD analysis.
-  SufficientStatistics num_aggressive_absorptions;
+  // The number of seconds that elapsed during the factorization.
+  double factorization_seconds;
 
-  // The number of times supervariables were falsely hashed into the same
-  // bucket.
-  SufficientStatistics num_hash_bucket_collisions;
-
-  // The number of times supervariables were falsely had the same hash value.
-  SufficientStatistics num_hash_collisions;
-
-  // The number of seconds that elapsed during the AMD analysis.
-  SufficientStatistics elapsed_seconds;
-
-  // The fraction of pivots with multiple elements.
-  SufficientStatistics fraction_of_pivots_with_multiple_elements;
-
-  // The fraction of degree updates with multiple elements.
-  SufficientStatistics fraction_of_degree_updates_with_multiple_elements;
+  // The number of seconds that elapsed during the solve.
+  double solve_seconds;
 };
 
-// Pretty prints the AMDExperiment structure.
-void PrintAMDExperiment(
-    const AMDExperiment& experiment, const std::string& label) {
+// Pretty prints the Experiment structure.
+void PrintExperiment(
+    const Experiment& experiment, const std::string& label) {
   std::cout << label << ":\n";
-  PrintSufficientStatistics(
-      experiment.largest_supernode_size, "  largest_supernode_size");
-  PrintSufficientStatistics(experiment.num_nonzeros, "  num_nonzeros");
-  PrintSufficientStatistics(
-      experiment.num_strictly_lower_nonzeros, "  num_strictly_lower_nonzeros");
-  PrintSufficientStatistics(experiment.num_flops, "  num_flops");
-  PrintSufficientStatistics(
-      experiment.num_degree_updates, "  num_degree_updates");
-  PrintSufficientStatistics(
-      experiment.num_aggressive_absorptions, "  num_aggressive_absorptions");
-  PrintSufficientStatistics(
-      experiment.num_hash_bucket_collisions, "  num_hash_bucket_collisions");
-  PrintSufficientStatistics(
-      experiment.num_hash_collisions, "  num_hash_collisions");
-  PrintSufficientStatistics(
-      experiment.elapsed_seconds, "  elapsed_seconds");
-  PrintSufficientStatistics(
-      experiment.fraction_of_pivots_with_multiple_elements,
-      "  fraction of pivots w/ multi elements");
-  PrintSufficientStatistics(
-      experiment.fraction_of_degree_updates_with_multiple_elements,
-      "  fraction of degree updates w/ multi elements");
+  std::cout << "  num_nonzeros:          " << experiment.num_nonzeros << "\n";
+  std::cout << "  num_flops:             " << experiment.num_flops << "\n";
+  std::cout << "  analysis_seconds:      "
+            << experiment.analysis_seconds << "\n";
+  std::cout << "  factorization_seconds: "
+            << experiment.factorization_seconds << "\n";
+  std::cout << "  solve_seconds:         " << experiment.solve_seconds << "\n";
+  std::cout << std::endl;
 }
 
-// Returns the median of a given vector.
-template<typename T>
-double Median(const std::vector<T>& vec) {
-  const std::size_t num_entries = vec.size();
-  if (num_entries == 0) {
-    return std::numeric_limits<double>::infinity();
+template<typename Real>
+Real EuclideanNorm(const std::vector<Real>& vector) {
+  Real squared_norm{0};
+  const Int num_rows = vector.size();
+  for (Int i = 0; i < num_rows; ++i) {
+    squared_norm += vector[i] * vector[i];
   }
-
-  std::vector<T> vec_copy(vec);
-  std::sort(vec_copy.begin(), vec_copy.end());
-  if (num_entries % 2 == 0) {
-    return (vec_copy[(num_entries / 2) - 1] + vec_copy[num_entries / 2]) / 2;
-  } else {
-    return vec_copy[num_entries / 2];
-  }
+  return std::sqrt(squared_norm);
 }
 
-// Returns the mean of a given vector.
-template<typename T>
-double Mean(const std::vector<T>& vec) {
-  const std::size_t num_entries = vec.size();
-  if (num_entries == 0) {
-    return std::numeric_limits<double>::infinity();
+template<typename Real>
+Real EuclideanNorm(const std::vector<catamari::Complex<Real>>& vector) {
+  Real squared_norm{0};
+  const Int num_rows = vector.size();
+  for (Int i = 0; i < num_rows; ++i) {
+    squared_norm += std::norm(vector[i]);
   }
-
-  double mean = 0.; 
-  for (std::size_t index = 0; index < vec.size(); ++index) {
-    mean += vec[index] / num_entries;
-  }
-
-  return mean;
+  return std::sqrt(squared_norm);
 }
 
-// A helper routine for safely updating a representation of the two-norm of a
-// vector as scale * sqrt(scaled_square).
-void UpdateScaledSquare(double update, double* scale, double* scaled_square) {
-  const double abs_update = std::abs(update);
-  if (abs_update == 0.) {
-    return;
-  }
-
-  if (abs_update <= *scale) {
-    const double relative_scale = abs_update / *scale;
-    *scaled_square += relative_scale * relative_scale;
-  } else {
-    const double relative_scale = *scale / abs_update;
-    *scaled_square = *scaled_square * relative_scale * relative_scale + 1.;
-    *scale = abs_update;
-  }
-}
-
-// Returns the standard deviation of a given vector with a given mean.
-template<typename T>
-double StandardDeviation(const std::vector<T>& vec, double mean) {
-  const std::size_t num_entries = vec.size();
-  if (num_entries == 0) {
-    return std::numeric_limits<double>::infinity();
-  }
-
-  double scale = 0;
-  double scaled_variance = 1.;
-  for (std::size_t index = 0; index < vec.size(); ++index) { 
-    const double difference_from_mean = static_cast<double>(vec[index] - mean);
-    UpdateScaledSquare(difference_from_mean, &scale, &scaled_variance);
-  }
-
-  return scale * std::sqrt(scaled_variance);
-}
-
-// Returns the SufficientStatistics properties for a given vector.
-template<typename T>
-SufficientStatistics GetSufficientStatistics(const std::vector<T>& vec) {
-  SufficientStatistics stats;
-  stats.median = Median(vec);
-  stats.mean = Mean(vec);
-  stats.standard_deviation = StandardDeviation(vec, stats.mean);
-  return stats;
-}
-
-// Returns the AMDExperiment statistics for a single Matrix Market input matrix.
-AMDExperiment RunMatrixMarketAMDTest(
+// Returns the Experiment statistics for a single Matrix Market input matrix.
+Experiment RunMatrixMarketTest(
     const std::string& filename,
     bool skip_explicit_zeros,
     quotient::EntryMask mask,
     const quotient::MinimumDegreeControl& control,
     bool force_symmetry,
-    int num_random_permutations,
+    double diagonal_shift,
     bool print_progress,
-    bool write_permuted_graphs,
-    bool write_assembly_forests) {
-  typedef catamari::Complex<double> Field;
+    bool write_permuted_matrix) {
+  typedef double Field;
+  typedef catamari::ComplexBase<Field> BaseField;
 
   if (print_progress) {
     std::cout << "Reading CoordinateGraph from " << filename << "..."
@@ -205,9 +90,9 @@ AMDExperiment RunMatrixMarketAMDTest(
   std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix =
       catamari::CoordinateMatrix<Field>::FromMatrixMarket(
           filename, skip_explicit_zeros, mask);
+  Experiment experiment;
   if (!matrix) {
     std::cerr << "Could not open " << filename << "." << std::endl;
-    AMDExperiment experiment;
     return experiment;
   }
 
@@ -225,6 +110,14 @@ AMDExperiment RunMatrixMarketAMDTest(
     }
     matrix->FlushEntryQueues();
   }
+
+  // Adding the diagonal shift.
+  const Int num_rows = matrix->NumRows();
+  matrix->ReserveEntryAdditions(num_rows);
+  for (Int i = 0; i < num_rows; ++i) {
+    matrix->QueueEntryAddition(i, i, diagonal_shift);
+  }
+  matrix->FlushEntryQueues();
 
   if (print_progress) {
     std::cout << "Matrix had " << matrix->NumRows() << " rows and "
@@ -245,129 +138,93 @@ AMDExperiment RunMatrixMarketAMDTest(
   // Produce a graph from the loaded matrix.
   std::unique_ptr<quotient::CoordinateGraph> graph = matrix->CoordinateGraph();
 
-  const int num_experiments = num_random_permutations + 1;
-  std::vector<Int> largest_supernode_sizes(num_experiments);
-  std::vector<Int> num_nonzeros(num_experiments);
-  std::vector<Int> num_strictly_lower_nonzeros(num_experiments);
-  std::vector<double> num_flops(num_experiments);
-  std::vector<Int> num_degree_updates(num_experiments);
-  std::vector<Int> num_aggressive_absorptions(num_experiments);
-  std::vector<Int> num_hash_collisions(num_experiments);
-  std::vector<Int> num_hash_bucket_collisions(num_experiments);
-  std::vector<double> elapsed_seconds(num_experiments);
-  std::vector<double> fraction_of_pivots_with_multiple_elements;
-  std::vector<double> fraction_of_degree_updates_with_multiple_elements;
-  for (int instance = 0; instance < num_experiments; ++instance) {
-    if (print_progress) {
-      std::cout << "  Running analysis " << instance << " of "
-                << num_experiments << "..." << std::endl;
-    }
-    quotient::Timer timer;
-    timer.Start();
-    const quotient::MinimumDegreeResult analysis =
-        quotient::MinimumDegree(*graph, control);
-    elapsed_seconds[instance] = timer.Stop();
-    largest_supernode_sizes[instance] = analysis.LargestSupernodeSize();
-    num_nonzeros[instance] = analysis.num_cholesky_nonzeros;
-    num_strictly_lower_nonzeros[instance] =
-        analysis.NumStrictlyLowerCholeskyNonzeros();
-    num_flops[instance] = analysis.num_cholesky_flops;
-    num_degree_updates[instance] = analysis.num_degree_updates;
-    num_aggressive_absorptions[instance] = analysis.num_aggressive_absorptions;
-    num_hash_collisions[instance] = analysis.num_hash_collisions;
-    num_hash_bucket_collisions[instance] = analysis.num_hash_bucket_collisions;
-    if (print_progress) {
-      std::cout << "  Finished analysis in " << elapsed_seconds[instance]
-                << " seconds. There were "
-                << num_strictly_lower_nonzeros[instance]
-                << " subdiagonal nonzeros and the largest supernode had "
-                << largest_supernode_sizes[instance] << " members."
-                << std::endl;
-    }
-    if (control.store_pivot_element_list_sizes) {
-      fraction_of_pivots_with_multiple_elements.push_back(
-          analysis.FractionOfPivotsWithMultipleElements());
-      std::cout << "  Fraction of pivots with multiple elements: "
-                << fraction_of_pivots_with_multiple_elements.back()
-                << std::endl;
-    }
-    if (control.store_num_degree_updates_with_multiple_elements) {
-      fraction_of_degree_updates_with_multiple_elements.push_back(
-          analysis.FractionOfDegreeUpdatesWithMultipleElements());
-      std::cout << "  Fraction of degree updates with multiple elements: "
-                << fraction_of_degree_updates_with_multiple_elements.back()
-                << std::endl;
-    }
+  if (print_progress) {
+    std::cout << "  Running analysis..." << std::endl;
+  }
+  quotient::Timer timer;
+  timer.Start();
+  const quotient::MinimumDegreeResult analysis =
+      quotient::MinimumDegree(*graph, control);
+  experiment.analysis_seconds = timer.Stop();
+  experiment.num_nonzeros = analysis.num_cholesky_nonzeros;
+  experiment.num_flops = analysis.num_cholesky_flops;
+  if (print_progress) {
+    std::cout << "  Finished analysis in " << experiment.analysis_seconds
+              << " seconds. There were " << experiment.num_nonzeros
+              << " nonzeros." << std::endl;
+  }
 #ifdef QUOTIENT_ENABLE_TIMERS
-    for (const std::pair<std::string, double>& pairing :
-        analysis.elapsed_seconds) {
-      std::cout << "    " << pairing.first << ": " << pairing.second
-                << " seconds." << std::endl;
-    }
+  for (const std::pair<std::string, double>& pairing :
+      analysis.elapsed_seconds) {
+    std::cout << "    " << pairing.first << ": " << pairing.second
+              << " seconds." << std::endl;
+  }
 #endif
 
-    if (write_permuted_graphs) {
-      const std::vector<Int> permutation = analysis.Permutation();
-
-      quotient::CoordinateGraph permuted_graph;
-      permuted_graph.Resize(graph->NumSources());
-      permuted_graph.ReserveEdgeAdditions(graph->NumEdges());
-      for (const std::pair<Int, Int>& edge : graph->Edges()) {
-        permuted_graph.QueueEdgeAddition(
-            permutation[edge.first], permutation[edge.second]);
-      }
-      permuted_graph.FlushEdgeQueues();
-      const std::string new_filename =
-          filename + "perm-" + std::to_string(instance) + ".mtx";
-      permuted_graph.ToMatrixMarket(new_filename);
-    }
-
-    if (write_assembly_forests) {
-      const std::string new_filename = filename + ".gv";
-      analysis.AssemblyForestToDot(new_filename);
-    }
-
-    if (instance == num_random_permutations) {
-      break;
-    }
-
-    // Generate a random permutation.
-    std::vector<Int> permutation(graph->NumSources());
-    std::iota(permutation.begin(), permutation.end(), 0);
-    std::random_shuffle(permutation.begin(), permutation.end());
-
-    // Apply the permutation to the graph.
-    quotient::CoordinateGraph permuted_graph;
-    permuted_graph.Resize(graph->NumSources());
-    permuted_graph.ReserveEdgeAdditions(graph->NumEdges());
-    for (const std::pair<Int, Int>& edge : graph->Edges()) {
-      permuted_graph.QueueEdgeAddition(
-          permutation[edge.first], permutation[edge.second]);
-    }
-    permuted_graph.FlushEdgeQueues();
-
-    *graph = permuted_graph;
+  // Form the permuted matrix.
+  const std::vector<Int> permutation = analysis.Permutation();
+  catamari::CoordinateMatrix<Field> permuted_matrix;
+  permuted_matrix.Resize(matrix->NumRows(), matrix->NumColumns());
+  permuted_matrix.ReserveEntryAdditions(matrix->NumEntries());
+  for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
+    permuted_matrix.QueueEntryAddition(
+        permutation[entry.row], permutation[entry.column], entry.value);
+  }
+  permuted_matrix.FlushEntryQueues();
+  if (write_permuted_matrix) {
+    const std::string new_filename = filename + "-perm.mtx";
+    permuted_matrix.ToMatrixMarket(new_filename);
   }
 
-  AMDExperiment experiment;
-  experiment.num_nonzeros = GetSufficientStatistics(num_nonzeros);
-  experiment.num_strictly_lower_nonzeros = GetSufficientStatistics(
-      num_strictly_lower_nonzeros);
-  experiment.num_flops = GetSufficientStatistics(num_flops);
-  experiment.largest_supernode_size = GetSufficientStatistics(
-      largest_supernode_sizes);
-  experiment.num_degree_updates = GetSufficientStatistics(num_degree_updates);
-  experiment.num_aggressive_absorptions =
-      GetSufficientStatistics(num_aggressive_absorptions);
-  experiment.num_hash_collisions = GetSufficientStatistics(num_hash_collisions);
-  experiment.num_hash_bucket_collisions =
-      GetSufficientStatistics(num_hash_bucket_collisions);
-  experiment.elapsed_seconds = GetSufficientStatistics(elapsed_seconds);
-  experiment.fraction_of_pivots_with_multiple_elements =
-      GetSufficientStatistics(fraction_of_pivots_with_multiple_elements);
-  experiment.fraction_of_degree_updates_with_multiple_elements =
-      GetSufficientStatistics(
-          fraction_of_degree_updates_with_multiple_elements);
+  // Factor the permuted matrix.
+  if (print_progress) {
+    std::cout << "  Running factorization..." << std::endl;
+  }
+  quotient::Timer factorization_timer;
+  factorization_timer.Start();
+  catamari::ScalarLDLAnalysis ldl_analysis;
+  catamari::ScalarLowerFactor<Field> ldl_lower_factor;
+  catamari::ScalarDiagonalFactor<Field> ldl_diagonal_factor;
+  catamari::ScalarLDLSetup(
+      permuted_matrix, &ldl_analysis, &ldl_lower_factor, &ldl_diagonal_factor);
+  if (print_progress) {
+    std::cout << "    Finished setup..." << std::endl;
+  }
+  const Int num_pivots = catamari::ScalarLDLFactorization(
+      permuted_matrix, ldl_analysis, &ldl_lower_factor, &ldl_diagonal_factor);
+  experiment.factorization_seconds = factorization_timer.Stop();
+  if (num_pivots < num_rows) {
+    std::cout << "  Failed factorization after " << num_pivots << " pivots."
+              << std::endl;
+    return experiment;
+  }
+
+  // Solve a random linear system.
+  if (print_progress) {
+    std::cout << "  Running solve..." << std::endl;
+  }
+
+  std::vector<Field> right_hand_side(num_rows, 0);
+  for (Int row = 0; row < num_rows; ++row) {
+    right_hand_side[row] = row % 5;
+  }
+  const BaseField right_hand_side_norm = EuclideanNorm(right_hand_side);
+  if (print_progress) {
+    std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
+  }
+  auto solution = right_hand_side;
+  quotient::Timer solve_timer;
+  solve_timer.Start();
+  catamari::LDLSolve(ldl_lower_factor, ldl_diagonal_factor, &solution);
+  experiment.solve_seconds = solve_timer.Stop();
+
+  // Compute the residual.
+  auto residual = right_hand_side;
+  catamari::MatrixVectorProduct(
+      Field{-1}, permuted_matrix, solution, Field{1}, &residual);
+  const BaseField residual_norm = EuclideanNorm(residual);
+  std::cout << "  || b - A x ||_F / || b ||_F = "
+            << residual_norm / right_hand_side_norm << std::endl;
 
   return experiment;
 }
@@ -377,21 +234,20 @@ AMDExperiment RunMatrixMarketAMDTest(
 // to loosely reproduce Fig. 2.
 //
 // It is worth noting that the LHR34 results from the paper appear to be
-// incorrect, as the results shown in 
+// incorrect, as the results shown in
 //
 //   https://www.cise.ufl.edu/research/sparse/matrices/Mallya/lhr34.html
 //
 // agree with the results observed from this code's implementation.
 //
-std::unordered_map<std::string, AMDExperiment> RunADD96Tests(
+std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory,
     bool skip_explicit_zeros,
     quotient::EntryMask mask,
     const quotient::MinimumDegreeControl& control,
-    int num_random_permutations,
+    double diagonal_shift,
     bool print_progress,
-    bool write_permuted_graphs,
-    bool write_assembly_forests) {
+    bool write_permuted_matrix) {
   const std::vector<std::string> kMatrixNames{
       "appu",
       "bbmat",
@@ -422,26 +278,28 @@ std::unordered_map<std::string, AMDExperiment> RunADD96Tests(
   };
   const bool force_symmetry = true;
 
-  std::unordered_map<std::string, AMDExperiment> experiments;
+  std::unordered_map<std::string, Experiment> experiments;
   for (const std::string& matrix_name : kMatrixNames) {
     const std::string filename = matrix_market_directory + "/" + matrix_name +
         "/" + matrix_name + ".mtx";
-    experiments[matrix_name] = RunMatrixMarketAMDTest(
+    experiments[matrix_name] = RunMatrixMarketTest(
         filename,
         skip_explicit_zeros,
         mask,
         control,
         force_symmetry,
-        num_random_permutations,
+        diagonal_shift,
         print_progress,
-        write_permuted_graphs,
-        write_assembly_forests);
+        write_permuted_matrix);
   }
 
   return experiments;
 }
 
 int main(int argc, char** argv) {
+  typedef double Field;
+  typedef catamari::ComplexBase<Field> BaseField;
+
   specify::ArgumentParser parser(argc, argv);
   const std::string filename = parser.OptionalInput<std::string>(
       "filename", "The location of a Matrix Market file.", "");
@@ -477,41 +335,21 @@ int main(int argc, char** argv) {
       "determining if a row is dense. The actual threshold will be: "
       "max(min_dense_threshold, dense_sqrt_multiple * sqrt(n))",
       10.f);
-  const bool store_pivot_element_list_sizes =
-      parser.OptionalInput<bool>(
-          "store_pivot_element_list_sizes",
-          "Store the length of each pivot's element list?",
-          false);
-  const bool store_num_degree_updates_with_multiple_elements =
-      parser.OptionalInput<bool>(
-          "store_num_degree_updates_with_multiple_elements",
-          "Store the number of degree updates whose corresponding variable had "
-          "more than two members in its element list?",
-          false);
-  const bool store_structures = parser.OptionalInput<bool>(
-      "store_structure",
-      "Store the original structures for each pivot?",
-      false);
-  const int num_random_permutations = parser.OptionalInput<int>(
-      "num_random_permutations",
-      "The number of random permutations to test "
-      "(in addition to the original order).",
-      21);
   const bool force_symmetry = parser.OptionalInput<bool>(
       "force_symmetry",
       "Use the nonzero pattern of A + A'?",
       true);
+  const double diagonal_shift = parser.OptionalInput<BaseField>(
+      "diagonal_shift",
+      "The value to add to the diagonal.",
+      1e6);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress",
       "Print the progress of the experiments?",
       false);
-  const bool write_permuted_graphs = parser.OptionalInput<bool>(
-      "write_permuted_graphs",
-      "Write the permuted graphs to file?",
-      false);
-  const bool write_assembly_forests = parser.OptionalInput<bool>(
-      "write_assembly_forests",
-      "Write out dot files for the assembly forests?",
+  const bool write_permuted_matrix = parser.OptionalInput<bool>(
+      "write_permuted_matrix",
+      "Write the permuted matrix to file?",
       false);
   const std::string matrix_market_directory = parser.OptionalInput<std::string>(
       "matrix_market_directory",
@@ -558,10 +396,6 @@ int main(int argc, char** argv) {
   control.aggressive_absorption = aggressive_absorption;
   control.min_dense_threshold = min_dense_threshold;
   control.dense_sqrt_multiple = dense_sqrt_multiple;
-  control.store_pivot_element_list_sizes = store_pivot_element_list_sizes;
-  control.store_num_degree_updates_with_multiple_elements =
-      store_num_degree_updates_with_multiple_elements;
-  control.store_structures = store_structures;
 
   if (randomly_seed) {
     // Seed the random number generator based upon the current time.
@@ -571,31 +405,29 @@ int main(int argc, char** argv) {
   }
 
   if (!matrix_market_directory.empty()) {
-    const std::unordered_map<std::string, AMDExperiment> experiments =
+    const std::unordered_map<std::string, Experiment> experiments =
         RunADD96Tests(
             matrix_market_directory,
             skip_explicit_zeros,
             mask,
             control,
-            num_random_permutations,
+            diagonal_shift,
             print_progress,
-            write_permuted_graphs,
-            write_assembly_forests);
-    for (const std::pair<std::string, AMDExperiment>& pairing : experiments) {
-      PrintAMDExperiment(pairing.second, pairing.first);  
+            write_permuted_matrix);
+    for (const std::pair<std::string, Experiment>& pairing : experiments) {
+      PrintExperiment(pairing.second, pairing.first);
     }
   } else {
-    const AMDExperiment experiment = RunMatrixMarketAMDTest(
+    const Experiment experiment = RunMatrixMarketTest(
         filename,
         skip_explicit_zeros,
         mask,
         control,
         force_symmetry,
-        num_random_permutations,
+        diagonal_shift,
         print_progress,
-        write_permuted_graphs,
-        write_assembly_forests);
-    PrintAMDExperiment(experiment, filename);
+        write_permuted_matrix);
+    PrintExperiment(experiment, filename);
   }
 
   return 0;

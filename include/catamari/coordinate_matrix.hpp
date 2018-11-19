@@ -232,6 +232,11 @@ class CoordinateMatrix {
   static void CombineSortedEntries(std::vector<MatrixEntry<Field>>* entries);
 };
 
+// Pretty-prints the CoordinateMatrix.
+template<class Field>
+void PrintCoordinateMatrix(
+    const CoordinateMatrix<Field>& matrix, const std::string& label);
+
 } // namespace catamari
 
 #include "catamari/coordinate_matrix-impl.hpp"

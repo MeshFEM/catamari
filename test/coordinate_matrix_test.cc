@@ -48,5 +48,23 @@ TEST_CASE("Basic", "[Basic]") {
       {4, 4, 3.f},
   };
 
-  REQUIRE(entries == new_expected_entries);
+  matrix.ReserveEntryAdditions(5);
+  for (quotient::Int i = 0; i < 5; ++i) {
+    matrix.QueueEntryAddition(i, i, 10.f);
+  }
+  matrix.FlushEntryQueues();
+  
+  const std::vector<catamari::MatrixEntry<float>> final_expected_entries{
+      {0, 0, 10.f},
+      {1, 1, 10.f},
+      {2, 0, -1.f},
+      {2, 2, 10.f},
+      {3, 2, 4.f},
+      {3, 3, 10.f},
+      {3, 4, 1.f},
+      {4, 2, -2.f},
+      {4, 4, 13.f},
+  };
+
+  REQUIRE(entries == final_expected_entries);
 }

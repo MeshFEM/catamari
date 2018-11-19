@@ -475,7 +475,7 @@ void CoordinateMatrix<Field>::CombineSortedEntries(
     const MatrixEntry<Field>& entry = (*entries)[index];
 
     if (entry.row == last_row && entry.column == last_column) {
-      (*entries)[num_packed].value += entry.value;
+      (*entries)[num_packed - 1].value += entry.value;
     } else {
       last_row = entry.row;
       last_column = entry.column;
@@ -483,6 +483,16 @@ void CoordinateMatrix<Field>::CombineSortedEntries(
     }
   }
   entries->resize(num_packed);
+}
+
+template<class Field>
+void PrintCoordinateMatrix(
+    const CoordinateMatrix<Field>& matrix, const std::string& label) {
+  std::cout << label << ":\n";
+  for (const MatrixEntry<Field>& entry : matrix.Entries()) {
+    std::cout << entry.row << " " << entry.column << " " << entry.value << "\n";
+  }
+  std::cout << std::endl;
 }
 
 } // namespace catamari
