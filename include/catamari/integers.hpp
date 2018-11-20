@@ -15,6 +15,6 @@ namespace catamari {
 using quotient::Int;
 using quotient::UInt;
 
-} // namespace catamari
+}  // namespace catamari
 
-#endif // ifndef CATAMARI_INTEGERS_H_
+#endif  // ifndef CATAMARI_INTEGERS_H_

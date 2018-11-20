@@ -22,48 +22,38 @@ using quotient::MatrixMarketDescription;
 // Market file.
 //
 // Returns true if successful.
-template<class Real>
-bool ReadMatrixMarketArrayValue(
-    const MatrixMarketDescription& description,
-    std::ifstream& file,
-    Real* value);
+template <class Real>
+bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
+                                std::ifstream& file, Real* value);
 
 // Reads a single complex floating-point value from a line of an array-format
 // Matrix Market file.
 //
 // Returns true if successful.
-template<class Real>
-bool ReadMatrixMarketArrayValue(
-    const MatrixMarketDescription& description,
-    std::ifstream& file,
-    std::complex<Real>* value);
+template <class Real>
+bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
+                                std::ifstream& file, std::complex<Real>* value);
 
 // Reads a single real entry from a line of an coordinate-format Matrix Market
 // file.
 //
 // Returns true if successful.
-template<class Real>
-bool ReadMatrixMarketCoordinateEntry(
-    const MatrixMarketDescription& description,
-    std::ifstream& file,
-    Int* row,
-    Int* column,
-    Real* value);
+template <class Real>
+bool ReadMatrixMarketCoordinateEntry(const MatrixMarketDescription& description,
+                                     std::ifstream& file, Int* row, Int* column,
+                                     Real* value);
 
 // Reads a single complex entry from a line of an coordinate-format Matrix
 // Market file.
 //
 // Returns true if successful.
-template<class Real>
-bool ReadMatrixMarketCoordinateEntry(
-    const MatrixMarketDescription& description,
-    std::ifstream& file,
-    Int* row,
-    Int* column,
-    std::complex<Real>* value);
+template <class Real>
+bool ReadMatrixMarketCoordinateEntry(const MatrixMarketDescription& description,
+                                     std::ifstream& file, Int* row, Int* column,
+                                     std::complex<Real>* value);
 
-} // namespace catamari
+}  // namespace catamari
 
 #include "catamari/matrix_market-impl.hpp"
 
-#endif // ifndef CATAMARI_MATRIX_MARKET_H_
+#endif  // ifndef CATAMARI_MATRIX_MARKET_H_

@@ -39,20 +39,19 @@ struct Experiment {
 };
 
 // Pretty prints the Experiment structure.
-void PrintExperiment(
-    const Experiment& experiment, const std::string& label) {
+void PrintExperiment(const Experiment& experiment, const std::string& label) {
   std::cout << label << ":\n";
   std::cout << "  num_nonzeros:          " << experiment.num_nonzeros << "\n";
   std::cout << "  num_flops:             " << experiment.num_flops << "\n";
-  std::cout << "  analysis_seconds:      "
-            << experiment.analysis_seconds << "\n";
-  std::cout << "  factorization_seconds: "
-            << experiment.factorization_seconds << "\n";
+  std::cout << "  analysis_seconds:      " << experiment.analysis_seconds
+            << "\n";
+  std::cout << "  factorization_seconds: " << experiment.factorization_seconds
+            << "\n";
   std::cout << "  solve_seconds:         " << experiment.solve_seconds << "\n";
   std::cout << std::endl;
 }
 
-template<typename Real>
+template <typename Real>
 Real EuclideanNorm(const std::vector<Real>& vector) {
   Real squared_norm{0};
   const Int num_rows = vector.size();
@@ -62,7 +61,7 @@ Real EuclideanNorm(const std::vector<Real>& vector) {
   return std::sqrt(squared_norm);
 }
 
-template<typename Real>
+template <typename Real>
 Real EuclideanNorm(const std::vector<catamari::Complex<Real>>& vector) {
   Real squared_norm{0};
   const Int num_rows = vector.size();
@@ -73,15 +72,13 @@ Real EuclideanNorm(const std::vector<catamari::Complex<Real>>& vector) {
 }
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
-Experiment RunMatrixMarketTest(
-    const std::string& filename,
-    bool skip_explicit_zeros,
-    quotient::EntryMask mask,
-    const quotient::MinimumDegreeControl& control,
-    bool force_symmetry,
-    double diagonal_shift,
-    bool print_progress,
-    bool write_permuted_matrix) {
+Experiment RunMatrixMarketTest(const std::string& filename,
+                               bool skip_explicit_zeros,
+                               quotient::EntryMask mask,
+                               const quotient::MinimumDegreeControl& control,
+                               bool force_symmetry, double diagonal_shift,
+                               bool print_progress,
+                               bool write_permuted_matrix) {
   typedef double Field;
   typedef catamari::ComplexBase<Field> BaseField;
 
@@ -105,10 +102,9 @@ Experiment RunMatrixMarketTest(
       std::cout << "Enforcing matrix Hermiticity..." << std::endl;
     }
     matrix->ReserveEntryAdditions(matrix->NumEntries());
-    for (const catamari::MatrixEntry<Field>& entry :
-        matrix->Entries()) {
-      matrix->QueueEntryAddition(
-          entry.column, entry.row, catamari::Conjugate(entry.value));
+    for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
+      matrix->QueueEntryAddition(entry.column, entry.row,
+                                 catamari::Conjugate(entry.value));
     }
     matrix->FlushEntryQueues();
   }
@@ -127,7 +123,7 @@ Experiment RunMatrixMarketTest(
 
     Int densest_row_size = 0;
     Int densest_row_index = -1;
-    for (Int i = 0; i < matrix->NumRows(); ++i ) {
+    for (Int i = 0; i < matrix->NumRows(); ++i) {
       if (matrix->NumRowNonzeros(i) > densest_row_size) {
         densest_row_size = matrix->NumRowNonzeros(i);
         densest_row_index = i;
@@ -157,7 +153,7 @@ Experiment RunMatrixMarketTest(
   }
 #ifdef QUOTIENT_ENABLE_TIMERS
   for (const std::pair<std::string, double>& pairing :
-      analysis.elapsed_seconds) {
+       analysis.elapsed_seconds) {
     std::cout << "    " << pairing.first << ": " << pairing.second
               << " seconds." << std::endl;
   }
@@ -169,8 +165,8 @@ Experiment RunMatrixMarketTest(
   permuted_matrix.Resize(matrix->NumRows(), matrix->NumColumns());
   permuted_matrix.ReserveEntryAdditions(matrix->NumEntries());
   for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
-    permuted_matrix.QueueEntryAddition(
-        permutation[entry.row], permutation[entry.column], entry.value);
+    permuted_matrix.QueueEntryAddition(permutation[entry.row],
+                                       permutation[entry.column], entry.value);
   }
   permuted_matrix.FlushEntryQueues();
   if (write_permuted_matrix) {
@@ -216,8 +212,8 @@ Experiment RunMatrixMarketTest(
 
   // Compute the residual.
   auto residual = right_hand_side;
-  catamari::MatrixVectorProduct(
-      Field{-1}, permuted_matrix, solution, Field{1}, &residual);
+  catamari::MatrixVectorProduct(Field{-1}, permuted_matrix, solution, Field{1},
+                                &residual);
   const BaseField residual_norm = EuclideanNorm(residual);
   std::cout << "  || b - A x ||_F / || b ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
@@ -237,56 +233,25 @@ Experiment RunMatrixMarketTest(
 // agree with the results observed from this code's implementation.
 //
 std::unordered_map<std::string, Experiment> RunADD96Tests(
-    const std::string& matrix_market_directory,
-    bool skip_explicit_zeros,
-    quotient::EntryMask mask,
-    const quotient::MinimumDegreeControl& control,
-    double diagonal_shift,
-    bool print_progress,
-    bool write_permuted_matrix) {
-  const std::vector<std::string> kMatrixNames{
-      "appu",
-      "bbmat",
-      "bcsstk30",
-      "bcsstk31",
-      "bcsstk32",
-      "bcsstk33",
-      "crystk02",
-      "crystk03",
-      "ct20stif",
-      "ex11",
-      "ex19",
-      "ex40",
-      "finan512",
-      "lhr34",
-      "lhr71",
-      "nasasrb",
-      "olafu",
-      "orani678",
-      "psmigr_1",
-      "raefsky1",
-      "raefsky3",
-      "raefsky4",
-      "rim",
-      "venkat01",
-      "wang3",
-      "wang4",
+    const std::string& matrix_market_directory, bool skip_explicit_zeros,
+    quotient::EntryMask mask, const quotient::MinimumDegreeControl& control,
+    double diagonal_shift, bool print_progress, bool write_permuted_matrix) {
+  const std::vector<std::string> matrix_names{
+      "appu",     "bbmat",    "bcsstk30", "bcsstk31", "bcsstk32", "bcsstk33",
+      "crystk02", "crystk03", "ct20stif", "ex11",     "ex19",     "ex40",
+      "finan512", "lhr34",    "lhr71",    "nasasrb",  "olafu",    "orani678",
+      "psmigr_1", "raefsky1", "raefsky3", "raefsky4", "rim",      "venkat01",
+      "wang3",    "wang4",
   };
   const bool force_symmetry = true;
 
   std::unordered_map<std::string, Experiment> experiments;
-  for (const std::string& matrix_name : kMatrixNames) {
+  for (const std::string& matrix_name : matrix_names) {
     const std::string filename = matrix_market_directory + "/" + matrix_name +
-        "/" + matrix_name + ".mtx";
+                                 "/" + matrix_name + ".mtx";
     experiments[matrix_name] = RunMatrixMarketTest(
-        filename,
-        skip_explicit_zeros,
-        mask,
-        control,
-        force_symmetry,
-        diagonal_shift,
-        print_progress,
-        write_permuted_matrix);
+        filename, skip_explicit_zeros, mask, control, force_symmetry,
+        diagonal_shift, print_progress, write_permuted_matrix);
   }
 
   return experiments;
@@ -301,19 +266,18 @@ int main(int argc, char** argv) {
       "filename", "The location of a Matrix Market file.", "");
   const bool skip_explicit_zeros = parser.OptionalInput<bool>(
       "skip_explicit_zeros", "Skip explicitly zero entries?", true);
-  const int entry_mask_int = parser.OptionalInput<int>(
-      "entry_mask_int",
-      "The quotient::EntryMask integer.\n"
-      "0:full, 1:lower-triangle, 2:upper-triangle",
-      0);
-  const int degree_type_int = parser.OptionalInput<int>(
-      "degree_type_int",
-      "The degree approximation type.\n"
-      "0:exact, 1:Amestoy, 2:Ashcraft, 3:Gilbert",
-      1);
+  const int entry_mask_int =
+      parser.OptionalInput<int>("entry_mask_int",
+                                "The quotient::EntryMask integer.\n"
+                                "0:full, 1:lower-triangle, 2:upper-triangle",
+                                0);
+  const int degree_type_int =
+      parser.OptionalInput<int>("degree_type_int",
+                                "The degree approximation type.\n"
+                                "0:exact, 1:Amestoy, 2:Ashcraft, 3:Gilbert",
+                                1);
   const bool aggressive_absorption = parser.OptionalInput<bool>(
-      "aggressive_absorption",
-      "Eliminate elements with aggressive absorption?",
+      "aggressive_absorption", "Eliminate elements with aggressive absorption?",
       true);
   const Int min_dense_threshold = parser.OptionalInput<Int>(
       "min_dense_threshold",
@@ -328,21 +292,13 @@ int main(int argc, char** argv) {
       "max(min_dense_threshold, dense_sqrt_multiple * sqrt(n))",
       10.f);
   const bool force_symmetry = parser.OptionalInput<bool>(
-      "force_symmetry",
-      "Use the nonzero pattern of A + A'?",
-      true);
+      "force_symmetry", "Use the nonzero pattern of A + A'?", true);
   const double diagonal_shift = parser.OptionalInput<BaseField>(
-      "diagonal_shift",
-      "The value to add to the diagonal.",
-      1e6);
+      "diagonal_shift", "The value to add to the diagonal.", 1e6);
   const bool print_progress = parser.OptionalInput<bool>(
-      "print_progress",
-      "Print the progress of the experiments?",
-      false);
+      "print_progress", "Print the progress of the experiments?", false);
   const bool write_permuted_matrix = parser.OptionalInput<bool>(
-      "write_permuted_matrix",
-      "Write the permuted matrix to file?",
-      false);
+      "write_permuted_matrix", "Write the permuted matrix to file?", false);
   const std::string matrix_market_directory = parser.OptionalInput<std::string>(
       "matrix_market_directory",
       "The directory where the ADD96 matrix market .tar.gz's were unpacked",
@@ -350,21 +306,21 @@ int main(int argc, char** argv) {
 #ifdef _OPENMP
   const int num_omp_threads = parser.OptionalInput<int>(
       "num_omp_threads",
-      "The desired number of OpenMP threads. Uses default if <= 0.",
-      1);
+      "The desired number of OpenMP threads. Uses default if <= 0.", 1);
 #endif
   if (!parser.OK()) {
     return 0;
   }
   if (filename.empty() && matrix_market_directory.empty()) {
     std::cerr << "One of 'filename' or 'matrix_market_directory' must be "
-                 "specified.\n" << std::endl;
+                 "specified.\n"
+              << std::endl;
     parser.PrintReport();
     return 0;
   }
 
-  const quotient::EntryMask mask = static_cast<quotient::EntryMask>(
-      entry_mask_int);
+  const quotient::EntryMask mask =
+      static_cast<quotient::EntryMask>(entry_mask_int);
 
 #ifdef _OPENMP
   if (num_omp_threads > 0) {
@@ -386,27 +342,16 @@ int main(int argc, char** argv) {
 
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
-        RunADD96Tests(
-            matrix_market_directory,
-            skip_explicit_zeros,
-            mask,
-            control,
-            diagonal_shift,
-            print_progress,
-            write_permuted_matrix);
+        RunADD96Tests(matrix_market_directory, skip_explicit_zeros, mask,
+                      control, diagonal_shift, print_progress,
+                      write_permuted_matrix);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
     }
   } else {
     const Experiment experiment = RunMatrixMarketTest(
-        filename,
-        skip_explicit_zeros,
-        mask,
-        control,
-        force_symmetry,
-        diagonal_shift,
-        print_progress,
-        write_permuted_matrix);
+        filename, skip_explicit_zeros, mask, control, force_symmetry,
+        diagonal_shift, print_progress, write_permuted_matrix);
     PrintExperiment(experiment, filename);
   }
 

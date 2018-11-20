@@ -12,19 +12,16 @@
 
 namespace catamari {
 
-template<class Real>
-bool ReadMatrixMarketArrayValue(
-    const MatrixMarketDescription& description,
-    std::ifstream& file,
-    Real* value) {
+template <class Real>
+bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
+                                std::ifstream& file, Real* value) {
   return quotient::ReadMatrixMarketArrayRealValue(description, file, value);
 }
 
-template<typename Real>
-bool ReadMatrixMarketArrayValue(
-    const MatrixMarketDescription& description,
-    std::ifstream& file,
-    std::complex<Real>* value) {
+template <typename Real>
+bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
+                                std::ifstream& file,
+                                std::complex<Real>* value) {
   Real real_value, imag_value;
   bool status = quotient::ReadMatrixMarketArrayComplexValue(
       description, file, &real_value, &imag_value);
@@ -32,24 +29,18 @@ bool ReadMatrixMarketArrayValue(
   return status;
 }
 
-template<class Real>
-bool ReadMatrixMarketCoordinateEntry(
-    const MatrixMarketDescription& description,
-    std::ifstream& file,
-    Int* row,
-    Int* column,
-    Real* value) {
-  return quotient::ReadMatrixMarketCoordinateRealEntry(
-      description, file, row, column, value);
+template <class Real>
+bool ReadMatrixMarketCoordinateEntry(const MatrixMarketDescription& description,
+                                     std::ifstream& file, Int* row, Int* column,
+                                     Real* value) {
+  return quotient::ReadMatrixMarketCoordinateRealEntry(description, file, row,
+                                                       column, value);
 }
 
-template<class Real>
-bool ReadMatrixMarketCoordinateEntry(
-    const MatrixMarketDescription& description,
-    std::ifstream& file,
-    Int* row,
-    Int* column,
-    std::complex<Real>* value) {
+template <class Real>
+bool ReadMatrixMarketCoordinateEntry(const MatrixMarketDescription& description,
+                                     std::ifstream& file, Int* row, Int* column,
+                                     std::complex<Real>* value) {
   Real real_value, imag_value;
   bool status = quotient::ReadMatrixMarketCoordinateComplexEntry(
       description, file, row, column, &real_value, &imag_value);
@@ -57,6 +48,6 @@ bool ReadMatrixMarketCoordinateEntry(
   return status;
 }
 
-} // namespace catamari
+}  // namespace catamari
 
-#endif // ifndef CATAMARI_MATRIX_MARKET_IMPL_H_
+#endif  // ifndef CATAMARI_MATRIX_MARKET_IMPL_H_

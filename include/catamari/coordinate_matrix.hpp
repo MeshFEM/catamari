@@ -19,7 +19,7 @@ using quotient::EntryMask;
 using quotient::SwapClearVector;
 
 // A tuple of the row, column, and value of a nonzero in a sparse matrix.
-template<class Field>
+template <class Field>
 struct MatrixEntry {
   // The row index of the entry.
   Int row;
@@ -31,15 +31,15 @@ struct MatrixEntry {
   Field value;
 
   // A trivial constructor (required for STL sorting).
-  MatrixEntry() { }
+  MatrixEntry() {}
 
   // A standard constructor (required for emplacement).
   MatrixEntry(Int row_, Int column_, const Field& value_)
-  : row(row_), column(column_), value(value_) { }
+      : row(row_), column(column_), value(value_) {}
 
   // A copy constructor.
   MatrixEntry(const MatrixEntry<Field>& other)
-  : row(other.row), column(other.column), value(other.value) { }
+      : row(other.row), column(other.column), value(other.value) {}
 
   // A partial ordering that ignores the floating-point value in comparisons.
   bool operator<(const MatrixEntry<Field>& other) const {
@@ -94,7 +94,7 @@ struct MatrixEntry {
 //
 // TODO(Jack Poulson): Add support for 'END' index marker so that ranges
 // can be easily incorporated.
-template<class Field>
+template <class Field>
 class CoordinateMatrix {
  public:
   // The trivial constructor.
@@ -109,9 +109,8 @@ class CoordinateMatrix {
 
   // Builds and returns a CoordinateMatrix from a Matrix Market description.
   static std::unique_ptr<CoordinateMatrix<Field>> FromMatrixMarket(
-      const std::string& filename,
-      bool skip_explicit_zeros,
-      EntryMask mask=EntryMask::kEntryMaskFull);
+      const std::string& filename, bool skip_explicit_zeros,
+      EntryMask mask = EntryMask::kEntryMaskFull);
 
   // Writes a copy of the CoordinateMatrix to a Matrix Market file.
   void ToMatrixMarket(const std::string& filename) const;
@@ -234,12 +233,12 @@ class CoordinateMatrix {
 };
 
 // Pretty-prints the CoordinateMatrix.
-template<class Field>
-void PrintCoordinateMatrix(
-    const CoordinateMatrix<Field>& matrix, const std::string& label);
+template <class Field>
+void PrintCoordinateMatrix(const CoordinateMatrix<Field>& matrix,
+                           const std::string& label);
 
-} // namespace catamari
+}  // namespace catamari
 
 #include "catamari/coordinate_matrix-impl.hpp"
 
-#endif // ifndef CATAMARI_COORDINATE_MATRIX_H_
+#endif  // ifndef CATAMARI_COORDINATE_MATRIX_H_

@@ -16,7 +16,7 @@
 namespace catamari {
 
 // A column-major lower-triangular sparse matrix.
-template<class Field>
+template <class Field>
 struct LowerFactor {
   // A vector of length 'num_rows + 1'; each entry corresponds to the offset
   // in 'indices' and 'values' of the corresponding column of the matrix.
@@ -33,67 +33,72 @@ struct LowerFactor {
 };
 
 // A diagonal matrix representing the 'D' in an L D L' factorization.
-template<class Field>
+template <class Field>
 struct DiagonalFactor {
   std::vector<Field> values;
 };
 
 // Pretty-prints a column-oriented sparse lower-triangular matrix.
-template<class Field>
-void PrintLowerFactor(
-    const LowerFactor<Field>& lower_factor,
-    const std::string& label,
-    std::ostream& os);
+template <class Field>
+void PrintLowerFactor(const LowerFactor<Field>& lower_factor,
+                      const std::string& label, std::ostream& os);
 
 // Pretty-prints the diagonal factor of the L D L' factorization.
-template<class Field>
-void PrintDiagonalFactor(
-    const DiagonalFactor<Field>& diagonal_factor,
-    const std::string& label,
-    std::ostream& os);
+template <class Field>
+void PrintDiagonalFactor(const DiagonalFactor<Field>& diagonal_factor,
+                         const std::string& label, std::ostream& os);
 
 // vec1 := alpha matrix vec0 + beta vec1.
-template<class Field>
-void MatrixVectorProduct(
-    const Field& alpha,
-    const CoordinateMatrix<Field>& matrix,
-    const std::vector<Field>& vec0,
-    const Field& beta,
-    std::vector<Field>* vec1);
+template <class Field>
+void MatrixVectorProduct(const Field& alpha,
+                         const CoordinateMatrix<Field>& matrix,
+                         const std::vector<Field>& vec0, const Field& beta,
+                         std::vector<Field>* vec1);
+
+// Performs a non-supernodal left-looking LDL' factorization.
+// Cf. Section 4.8 of Tim Davis, "Direct Methods for Sparse Linear Systems".
+//
+// The basic high-level algorithm is of the form:
+//   for k = 1:n
+//     L(k, k) = sqrt(A(k, k) - L(k, 1:k-1) * L(k, 1:k-1)');
+//     L(k+1:n, k) = (A(k+1:n, k) - L(k+1:n, 1:k-1) * L(k, 1:k-1)') / L(k, k);
+//   end
+template <class Field>
+Int LeftLookingLDL(const CoordinateMatrix<Field>& matrix,
+                   LowerFactor<Field>* unit_lower_factor,
+                   DiagonalFactor<Field>* diagonal_factor);
 
 // Performs a non-supernodal up-looking LDL' factorization.
 // Cf. Section 4.7 of Tim Davis, "Direct Methods for Sparse Linear Systems".
-template<class Field>
-Int UpLookingLDL(
-    const CoordinateMatrix<Field>& matrix,
-    LowerFactor<Field>* unit_lower_factor,
-    DiagonalFactor<Field>* diagonal_factor);
+template <class Field>
+Int UpLookingLDL(const CoordinateMatrix<Field>& matrix,
+                 LowerFactor<Field>* unit_lower_factor,
+                 DiagonalFactor<Field>* diagonal_factor);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
-template<class Field>
-void LDLSolve(
-    const LowerFactor<Field>& unit_lower_factor,
-    const DiagonalFactor<Field>& diagonal_factor,
-    std::vector<Field>* vector);
+template <class Field>
+void LDLSolve(const LowerFactor<Field>& unit_lower_factor,
+              const DiagonalFactor<Field>& diagonal_factor,
+              std::vector<Field>* vector);
 
 // Solves L x = b using a unit-lower triangular matrix L.
-template<class Field>
-void UnitLowerTriangularSolve(
-    const LowerFactor<Field>& unit_lower_factor, std::vector<Field>* vector);
+template <class Field>
+void UnitLowerTriangularSolve(const LowerFactor<Field>& unit_lower_factor,
+                              std::vector<Field>* vector);
 
 // Solves D x = b using a diagonal matrix D.
-template<class Field>
-void DiagonalSolve(
-    const DiagonalFactor<Field>& diagonal_factor, std::vector<Field>* vector);
+template <class Field>
+void DiagonalSolve(const DiagonalFactor<Field>& diagonal_factor,
+                   std::vector<Field>* vector);
 
 // Solves L' x = b using a unit-lower triangular matrix L.
-template<class Field>
+template <class Field>
 void UnitLowerAdjointTriangularSolve(
     const LowerFactor<Field>& unit_lower_factor, std::vector<Field>* vector);
 
-} // namespace catamari
+}  // namespace catamari
 
 #include "catamari/ldl-impl.hpp"
 
-#endif // ifndef CATAMARI_LDL_H_
+#endif  // ifndef CATAMARI_LDL_H_

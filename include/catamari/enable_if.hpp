@@ -22,11 +22,11 @@ namespace catamari {
 //
 // would lead to the 'Log' function returning an 'int' for any integral type
 // and a 'double' for any non-integral type.
-template<typename Condition, class T = void>
+template <typename Condition, class T = void>
 using EnableIf = typename std::enable_if<Condition::value, T>::type;
-template<typename Condition, class T = void>
+template <typename Condition, class T = void>
 using DisableIf = typename std::enable_if<!Condition::value, T>::type;
 
-} // namespace catamari
+}  // namespace catamari
 
-#endif // ifndef CATAMARI_ENABLE_IF_H_
+#endif  // ifndef CATAMARI_ENABLE_IF_H_

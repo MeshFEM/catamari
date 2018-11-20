@@ -14,4 +14,4 @@
 #include "catamari/ldl.hpp"
 #include "catamari/macros.hpp"
 
-#endif // ifndef CATAMARI_H_
+#endif  // ifndef CATAMARI_H_

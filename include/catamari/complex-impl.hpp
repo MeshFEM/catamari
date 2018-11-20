@@ -12,30 +12,36 @@
 
 namespace catamari {
 
-template<class Real>
-Real RealPart(const Real& value) CATAMARI_NOEXCEPT { return value; }
+template <class Real>
+Real RealPart(const Real& value) CATAMARI_NOEXCEPT {
+  return value;
+}
 
-template<class Real>
+template <class Real>
 Real RealPart(const Complex<Real>& value) CATAMARI_NOEXCEPT {
   return value.real();
 }
 
-template<class Real>
-Real ImagPart(const Real& value) CATAMARI_NOEXCEPT { return 0; }
+template <class Real>
+Real ImagPart(const Real& value) CATAMARI_NOEXCEPT {
+  return 0;
+}
 
-template<class Real>
+template <class Real>
 Real ImagPart(const Complex<Real>& value) CATAMARI_NOEXCEPT {
   return value.imag();
 }
 
-template<class Real>
-Real Conjugate(const Real& value) CATAMARI_NOEXCEPT { return value; }
+template <class Real>
+Real Conjugate(const Real& value) CATAMARI_NOEXCEPT {
+  return value;
+}
 
-template<class Real>
+template <class Real>
 Complex<Real> Conjugate(const Complex<Real>& value) CATAMARI_NOEXCEPT {
   return Complex<Real>{value.real(), -value.imag()};
 }
 
-} // namespace catamari
+}  // namespace catamari
 
-#endif // ifndef CATAMARI_COMPLEX_IMPL_H_
+#endif  // ifndef CATAMARI_COMPLEX_IMPL_H_

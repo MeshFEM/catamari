@@ -14,4 +14,4 @@
 
 #define CATAMARI_NOEXCEPT QUOTIENT_NOEXCEPT
 
-#endif // ifndef CATAMARI_MACROS_H_
+#endif  // ifndef CATAMARI_MACROS_H_
