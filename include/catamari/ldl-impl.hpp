@@ -9,13 +9,16 @@
 #define CATAMARI_LDL_IMPL_H_
 
 #include "catamari/ldl.hpp"
+#include "quotient/io_utils.hpp"
 
 namespace catamari {
 
 template<class Field>
-void PrintScalarLowerFactor(
-    const ScalarLowerFactor<Field>& lower_factor, const std::string& label) {
-  std::cout << label << ":\n";
+void PrintLowerFactor(
+    const LowerFactor<Field>& lower_factor,
+    const std::string& label,
+    std::ostream& os) {
+  os << label << ":\n";
   const Int num_columns = lower_factor.column_offsets.size() - 1;
   for (Int column = 0; column < num_columns; ++column) {
     const Int column_beg = lower_factor.column_offsets[column];
@@ -23,17 +26,18 @@ void PrintScalarLowerFactor(
     for (Int index = column_beg; index < column_end; ++index) {
       const Int row = lower_factor.indices[index];
       const Field& value = lower_factor.values[index];
-      std::cout << row << " " << column << " " << value << "\n";
+      os << row << " " << column << " " << value << "\n";
     }
   }
-  std::cout << std::endl;
+  os << std::endl;
 }
 
 template<class Field>
-void PrintScalarDiagonalFactor(
-    const ScalarDiagonalFactor<Field>& diagonal_factor,
-    const std::string& label) {
-  quotient::PrintVector(diagonal_factor.values, label);
+void PrintDiagonalFactor(
+    const DiagonalFactor<Field>& diagonal_factor,
+    const std::string& label,
+    std::ostream& os) {
+  quotient::PrintVector(diagonal_factor.values, label, os);
 }
 
 template<class Field>
@@ -44,9 +48,9 @@ void MatrixVectorProduct(
     const Field& beta,
     std::vector<Field>* vec1) {
   const Int num_rows = matrix.NumRows();
-  CATAMARI_ASSERT(vec0.size() == matrix.NumColumns(),
+  CATAMARI_ASSERT(static_cast<Int>(vec0.size()) == matrix.NumColumns(),
       "vec0 was of the incorrect size.");
-  CATAMARI_ASSERT(vec1->size() == num_rows,
+  CATAMARI_ASSERT(static_cast<Int>(vec1->size()) == num_rows,
       "vec1 was of the incorrect size.");
 
   // vec1 += alpha matrix vec0 + beta vec1
@@ -55,7 +59,7 @@ void MatrixVectorProduct(
     (*vec1)[row] *= beta;
     const Int row_beg = matrix.RowEntryOffset(row);
     const Int row_end = matrix.RowEntryOffset(row + 1);
-    for (Int index = row_beg; index < row_end; ++index) { 
+    for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       CATAMARI_ASSERT(entry.row == row, "Invalid entry row index.");
       // vec1(row) += alpha matrix(row, column) vec0(column).
@@ -64,7 +68,7 @@ void MatrixVectorProduct(
   }
 }
 
-namespace scalar_ldl {
+namespace ldl {
 
 // Computes the elimination forest (via the 'parents' array) and sizes of the
 // structures of a scalar (simplicial) LDL' factorization.
@@ -125,18 +129,124 @@ void EliminationForestAndStructureSizes(
   }
 }
 
+// Fills in the structures of each column of the lower-triangular Cholesky
+// factor.
+template<class Field>
+void InitializeLeftLookingFactors(
+    const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& parents,
+    std::vector<Int>* structure_sizes,
+    LowerFactor<Field>* unit_lower_factor,
+    DiagonalFactor<Field>* diagonal_factor) {
+  const Int num_rows = matrix.NumRows();
+
+  // Set up the column offsets and allocate space (initializing the values of
+  // the unit-lower and diagonal and all zeros).
+  unit_lower_factor->column_offsets.resize(num_rows + 1, 0);
+  Int num_entries = 0;
+  for (Int column = 0; column < num_rows; ++column) {
+    unit_lower_factor->column_offsets[column] = num_entries;
+    num_entries += (*structure_sizes)[column];
+  }
+  unit_lower_factor->column_offsets[num_rows] = num_entries;
+  unit_lower_factor->indices.resize(num_entries);
+  unit_lower_factor->values.resize(num_entries, Field{0});
+  diagonal_factor->values.resize(num_rows, Field{0});
+
+  // Initialize each node's flag to its own index.
+  std::vector<Int> flags(num_rows);
+  std::iota(flags.begin(), flags.end(), 0);
+
+  // Initialize the number of entries that have been stored into each column.
+  structure_sizes->clear();
+  structure_sizes->resize(num_rows, 0);
+
+  // Fill in the structure indices.
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int row = 0; row < num_rows; ++row) {
+    const Int row_beg = matrix.RowEntryOffset(row);
+    const Int row_end = matrix.RowEntryOffset(row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      Int column = entry.column;
+
+      // We are traversing the strictly lower triangle and know that the
+      // indices are sorted.
+      if (column >= row) {
+        break;
+      }
+
+      // Look for new entries in the pattern by walking up to the root of this
+      // subtree of the elimination forest from index 'column'. Any unset
+      // parent pointers can be filled in during the traversal, as the current
+      // row index would then be the parent.
+      while (flags[column] != row) {
+        // Mark index 'column' as in the pattern of row 'row'.
+        flags[column] = row;
+        const Int index =
+            unit_lower_factor->column_offsets[column] +
+            (*structure_sizes)[column];
+        unit_lower_factor->indices[index] = row;
+        ++(*structure_sizes)[column];
+
+        // Move up to the parent in this subtree of the elimination forest.
+        // Moving to the parent will increase the index (but remain bounded
+        // from above by 'row').
+        column = parents[column];
+      }
+    }
+  }
+
+  // Sort the indices in the structures.
+  for (Int column = 0; column < num_rows; ++column) {
+    const Int column_beg = unit_lower_factor->column_offsets[column];
+    const Int column_end = unit_lower_factor->column_offsets[column + 1];
+    std::sort(
+        unit_lower_factor->indices.data() + column_beg,
+        unit_lower_factor->indices.data() + column_end);
+  }
+
+  // Fill in the nonzeros for the structure.
+  for (Int row = 0; row < num_rows; ++row) {
+    const Int row_beg = matrix.RowEntryOffset(row);
+    const Int row_end = matrix.RowEntryOffset(row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      Int column = entry.column;
+
+      if (column == row) {
+        diagonal_factor->values[row] = entry.value;
+      }
+      if (column >= row) {
+        break;
+      }
+
+      const Int column_beg = unit_lower_factor->column_offsets[column];
+      const Int column_end = unit_lower_factor->column_offsets[column + 1];
+      Int* iter = std::lower_bound(
+          unit_lower_factor->indices.data() + column_beg,
+          unit_lower_factor->indices.data() + column_end,
+          row);
+      CATAMARI_ASSERT(iter != unit_lower_factor->indices.data() + column_end,
+          "Did not find index.");
+      const Int structure_index =
+          std::distance(unit_lower_factor->indices.data(), iter);
+      unit_lower_factor->values[structure_index] = entry.value;
+    }
+  }
+}
+
 // Sets up the data structures needed for a scalar up-looking LDL'
 // factorization: the elimination forest and structure sizes are computed,
 // and the memory for the factors is allocated.
 template<class Field>
 void UpLookingSetup(
     const CoordinateMatrix<Field>& matrix,
-    ScalarLDLAnalysis* analysis,
-    ScalarLowerFactor<Field>* unit_lower_factor,
-    ScalarDiagonalFactor<Field>* diagonal_factor) {
+    std::vector<Int>* parents,
+    LowerFactor<Field>* unit_lower_factor,
+    DiagonalFactor<Field>* diagonal_factor) {
   std::vector<Int> structure_sizes;
-  scalar_ldl::EliminationForestAndStructureSizes(
-      matrix, &analysis->parents, &structure_sizes);
+  EliminationForestAndStructureSizes(matrix, parents, &structure_sizes);
 
   const Int num_rows = matrix.NumRows();
   unit_lower_factor->column_offsets.resize(num_rows + 1, 0);
@@ -149,7 +259,19 @@ void UpLookingSetup(
   unit_lower_factor->indices.resize(num_entries);
   unit_lower_factor->values.resize(num_entries);
 
-  diagonal_factor->values.resize(num_rows); 
+  diagonal_factor->values.resize(num_rows);
+}
+
+template<class Field>
+void LeftLookingSetup(
+    const CoordinateMatrix<Field>& matrix,
+    std::vector<Int>* parents,
+    LowerFactor<Field>* unit_lower_factor,
+    DiagonalFactor<Field>* diagonal_factor) {
+  std::vector<Int> structure_sizes;
+  EliminationForestAndStructureSizes(matrix, parents, &structure_sizes);
+  InitializeLeftLookingFactors(
+      matrix, *parents, &structure_sizes, &unit_lower_factor, &diagonal_factor);
 }
 
 // Compute the nonzero pattern of L(row, :) in
@@ -164,7 +286,7 @@ Int UpLookingRowPattern(
     Int* row_structure,
     Field* row_workspace) {
   Int start = matrix.NumRows();
-  const Int row_beg = matrix.RowEntryOffset(row); 
+  const Int row_beg = matrix.RowEntryOffset(row);
   const Int row_end = matrix.RowEntryOffset(row + 1);
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int index = row_beg; index < row_end; ++index) {
@@ -205,8 +327,8 @@ template<class Field>
 void UpLookingRowUpdate(
     Int row,
     Int column,
-    ScalarLowerFactor<Field>* unit_lower_factor,
-    ScalarDiagonalFactor<Field>* diagonal_factor,
+    LowerFactor<Field>* unit_lower_factor,
+    DiagonalFactor<Field>* diagonal_factor,
     Int* structure_sizes,
     Field* row_workspace) {
   // Load eta := L(row, column) * d(column) from the workspace.
@@ -241,42 +363,18 @@ void UpLookingRowUpdate(
   ++structure_sizes[column];
 }
 
-} // namespace scalar_ldl
-
-template<class Field>
-void ScalarUpLookingCholeskySetup(
-    const CoordinateMatrix<Field>& matrix,
-    ScalarLDLAnalysis* analysis,
-    ScalarLowerFactor<Field>* unit_lower_factor) {
-  std::vector<Int> structure_sizes;
-  scalar_ldl::EliminationForestAndStructureSizes(
-      matrix, &analysis->parents, &structure_sizes);
-
-  const Int num_rows = matrix.NumRows();
-  unit_lower_factor->column_offsets.resize(num_rows + 1, 0);
-  Int num_entries = 0;
-  for (Int column = 0; column < num_rows; ++column) {
-    unit_lower_factor->column_offsets[column] = num_entries;
-
-    // We must also account for the diagonal entry.
-    num_entries += structure_sizes[column] + 1;
-  }
-  unit_lower_factor->column_offsets[num_rows] = num_entries;
-  unit_lower_factor->indices.resize(num_entries);
-  unit_lower_factor->values.resize(num_entries);
-}
+} // namespace ldl
 
 // Cf. Tim Davis's up-looking "LDL" numerical factorization.
 template<class Field>
-Int ScalarUpLookingLDL(
+Int UpLookingLDL(
     const CoordinateMatrix<Field>& matrix,
-    ScalarLowerFactor<Field>* unit_lower_factor,
-    ScalarDiagonalFactor<Field>* diagonal_factor) {
+    LowerFactor<Field>* unit_lower_factor,
+    DiagonalFactor<Field>* diagonal_factor) {
   const Int num_rows = matrix.NumRows();
 
-  ScalarLDLAnalysis analysis;
-  scalar_ldl::UpLookingSetup(
-      matrix, &analysis, unit_lower_factor, diagonal_factor);
+  std::vector<Int> parents;
+  ldl::UpLookingSetup(matrix, &parents, unit_lower_factor, diagonal_factor);
 
   // Initialize each node flag to its own index.
   std::vector<Int> flags(num_rows);
@@ -295,8 +393,8 @@ Int ScalarUpLookingLDL(
   for (Int row = 0; row < num_rows; ++row) {
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
-    const Int start = scalar_ldl::UpLookingRowPattern(
-        matrix, analysis.parents, row, flags.data(), row_structure.data(),
+    const Int start = ldl::UpLookingRowPattern(
+        matrix, parents, row, flags.data(), row_structure.data(),
         row_workspace.data());
 
     // Pull the diagonal entry out of the workspace.
@@ -307,7 +405,7 @@ Int ScalarUpLookingLDL(
     //   L(row, :) := matrix(row, :) / L(0 : row - 1, 0 : row - 1)'.
     for (Int index = start; index < num_rows; ++index) {
       const Int column = row_structure[index];
-      scalar_ldl::UpLookingRowUpdate(
+      ldl::UpLookingRowUpdate(
           row, column, unit_lower_factor, diagonal_factor,
           structure_sizes.data(), row_workspace.data());
     }
@@ -323,8 +421,8 @@ Int ScalarUpLookingLDL(
 
 template<class Field>
 void LDLSolve(
-    const ScalarLowerFactor<Field>& unit_lower_factor,
-    const ScalarDiagonalFactor<Field>& diagonal_factor,
+    const LowerFactor<Field>& unit_lower_factor,
+    const DiagonalFactor<Field>& diagonal_factor,
     std::vector<Field>* vector) {
   UnitLowerTriangularSolve(unit_lower_factor, vector);
   DiagonalSolve(diagonal_factor, vector);
@@ -333,10 +431,10 @@ void LDLSolve(
 
 template<class Field>
 void UnitLowerTriangularSolve(
-    const ScalarLowerFactor<Field>& unit_lower_factor,
+    const LowerFactor<Field>& unit_lower_factor,
     std::vector<Field>* vector) {
   const Int num_rows = unit_lower_factor.column_offsets.size() - 1;
-  CATAMARI_ASSERT(vector->size() == num_rows,
+  CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
       "Vector was of the incorrect size.");
   for (Int column = 0; column < num_rows; ++column) {
     const Int factor_column_beg = unit_lower_factor.column_offsets[column];
@@ -351,10 +449,10 @@ void UnitLowerTriangularSolve(
 
 template<class Field>
 void DiagonalSolve(
-    const ScalarDiagonalFactor<Field>& diagonal_factor,
+    const DiagonalFactor<Field>& diagonal_factor,
     std::vector<Field>* vector) {
   const Int num_rows = diagonal_factor.values.size();
-  CATAMARI_ASSERT(vector->size() == num_rows,
+  CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
       "Vector was of the incorrect size.");
   for (Int column = 0; column < num_rows; ++column) {
     (*vector)[column] /= diagonal_factor.values[column];
@@ -363,12 +461,12 @@ void DiagonalSolve(
 
 template<class Field>
 void UnitLowerAdjointTriangularSolve(
-    const ScalarLowerFactor<Field>& unit_lower_factor,
+    const LowerFactor<Field>& unit_lower_factor,
     std::vector<Field>* vector) {
   const Int num_rows = unit_lower_factor.column_offsets.size() - 1;
-  CATAMARI_ASSERT(vector->size() == num_rows,
+  CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
       "Vector was of the incorrect size.");
-  for (Int column = num_rows - 1; column >= 0; --column) { 
+  for (Int column = num_rows - 1; column >= 0; --column) {
     const Int factor_column_beg = unit_lower_factor.column_offsets[column];
     const Int factor_column_end = unit_lower_factor.column_offsets[column + 1];
     for (Int index = factor_column_beg; index < factor_column_end; ++index) {

@@ -8,8 +8,6 @@
 #ifndef CATAMARI_H_
 #define CATAMARI_H_
 
-#include "quotient.hpp"
-
 #include "catamari/complex.hpp"
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"

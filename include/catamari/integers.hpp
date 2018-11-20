@@ -8,6 +8,8 @@
 #ifndef CATAMARI_INTEGERS_H_
 #define CATAMARI_INTEGERS_H_
 
+#include "quotient/integers.hpp"
+
 namespace catamari {
 
 using quotient::Int;

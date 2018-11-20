@@ -12,7 +12,9 @@
 #include <limits>
 #include <numeric>
 #include <vector>
+
 #include "catamari.hpp"
+#include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
 
 using catamari::Int;
@@ -182,9 +184,9 @@ Experiment RunMatrixMarketTest(
   }
   quotient::Timer factorization_timer;
   factorization_timer.Start();
-  catamari::ScalarLowerFactor<Field> ldl_lower_factor;
-  catamari::ScalarDiagonalFactor<Field> ldl_diagonal_factor;
-  const Int num_pivots = catamari::ScalarUpLookingLDL(
+  catamari::LowerFactor<Field> ldl_lower_factor;
+  catamari::DiagonalFactor<Field> ldl_diagonal_factor;
+  const Int num_pivots = catamari::UpLookingLDL(
       permuted_matrix, &ldl_lower_factor, &ldl_diagonal_factor);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (num_pivots < num_rows) {

@@ -8,23 +8,16 @@
 #ifndef CATAMARI_LDL_H_
 #define CATAMARI_LDL_H_
 
+#include <ostream>
+
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"
 
 namespace catamari {
 
-// The metadata involved in the symbolic analysis for a scalar L D L'
-// factorization.
-struct ScalarLDLAnalysis {
-  // A vector of length 'num_rows'; each entry is either the parent of the
-  // corresponding vertex in the elimination forest or -1, denoting that said
-  // vertex is a root in the elimination forest.
-  std::vector<Int> parents;
-};
-
 // A column-major lower-triangular sparse matrix.
 template<class Field>
-struct ScalarLowerFactor {
+struct LowerFactor {
   // A vector of length 'num_rows + 1'; each entry corresponds to the offset
   // in 'indices' and 'values' of the corresponding column of the matrix.
   std::vector<Int> column_offsets;
@@ -41,20 +34,23 @@ struct ScalarLowerFactor {
 
 // A diagonal matrix representing the 'D' in an L D L' factorization.
 template<class Field>
-struct ScalarDiagonalFactor {
+struct DiagonalFactor {
   std::vector<Field> values;
 };
 
 // Pretty-prints a column-oriented sparse lower-triangular matrix.
 template<class Field>
-void PrintScalarLowerFactor(
-    const ScalarLowerFactor<Field>& lower_factor, const std::string& label);
+void PrintLowerFactor(
+    const LowerFactor<Field>& lower_factor,
+    const std::string& label,
+    std::ostream& os);
 
 // Pretty-prints the diagonal factor of the L D L' factorization.
 template<class Field>
-void PrintScalarDiagonalFactor(
-    const ScalarDiagonalFactor<Field>& diagonal_factor,
-    const std::string& label);
+void PrintDiagonalFactor(
+    const DiagonalFactor<Field>& diagonal_factor,
+    const std::string& label,
+    std::ostream& os);
 
 // vec1 := alpha matrix vec0 + beta vec1.
 template<class Field>
@@ -68,36 +64,33 @@ void MatrixVectorProduct(
 // Performs a non-supernodal up-looking LDL' factorization.
 // Cf. Section 4.7 of Tim Davis, "Direct Methods for Sparse Linear Systems".
 template<class Field>
-Int ScalarUpLookingLDL(
+Int UpLookingLDL(
     const CoordinateMatrix<Field>& matrix,
-    ScalarLowerFactor<Field>* unit_lower_factor,
-    ScalarDiagonalFactor<Field>* diagonal_factor);
+    LowerFactor<Field>* unit_lower_factor,
+    DiagonalFactor<Field>* diagonal_factor);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
 template<class Field>
 void LDLSolve(
-    const ScalarLowerFactor<Field>& unit_lower_factor,
-    const ScalarDiagonalFactor<Field>& diagonal_factor,
+    const LowerFactor<Field>& unit_lower_factor,
+    const DiagonalFactor<Field>& diagonal_factor,
     std::vector<Field>* vector);
 
 // Solves L x = b using a unit-lower triangular matrix L.
 template<class Field>
 void UnitLowerTriangularSolve(
-    const ScalarLowerFactor<Field>& unit_lower_factor,
-    std::vector<Field>* vector);
+    const LowerFactor<Field>& unit_lower_factor, std::vector<Field>* vector);
 
 // Solves D x = b using a diagonal matrix D.
 template<class Field>
 void DiagonalSolve(
-    const ScalarDiagonalFactor<Field>& diagonal_factor,
-    std::vector<Field>* vector);
+    const DiagonalFactor<Field>& diagonal_factor, std::vector<Field>* vector);
 
 // Solves L' x = b using a unit-lower triangular matrix L.
 template<class Field>
 void UnitLowerAdjointTriangularSolve(
-    const ScalarLowerFactor<Field>& unit_lower_factor,
-    std::vector<Field>* vector);
+    const LowerFactor<Field>& unit_lower_factor, std::vector<Field>* vector);
 
 } // namespace catamari
 

@@ -10,6 +10,7 @@
 
 #include "catamari/integers.hpp"
 #include "catamari/macros.hpp"
+#include "quotient/coordinate_graph.hpp"
 
 namespace catamari {
 
