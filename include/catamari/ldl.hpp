@@ -65,19 +65,11 @@ void MatrixVectorProduct(
     const Field& beta,
     std::vector<Field>* vec1);
 
-// Performs the symbolic analysis for the LDL' factorization.
+// Performs a non-supernodal up-looking LDL' factorization.
+// Cf. Section 4.7 of Tim Davis, "Direct Methods for Sparse Linear Systems".
 template<class Field>
-void ScalarLDLSetup(
+Int ScalarUpLookingLDL(
     const CoordinateMatrix<Field>& matrix,
-    ScalarLDLAnalysis* analysis,
-    ScalarLowerFactor<Field>* unit_lower_factor,
-    ScalarDiagonalFactor<Field>* diagonal_factor);
-
-// Performs the LDL' factorization.
-template<class Field>
-Int ScalarLDLFactorization(
-    const CoordinateMatrix<Field>& matrix,
-    const ScalarLDLAnalysis& analysis,
     ScalarLowerFactor<Field>* unit_lower_factor,
     ScalarDiagonalFactor<Field>* diagonal_factor);
 

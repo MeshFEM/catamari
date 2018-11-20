@@ -182,16 +182,10 @@ Experiment RunMatrixMarketTest(
   }
   quotient::Timer factorization_timer;
   factorization_timer.Start();
-  catamari::ScalarLDLAnalysis ldl_analysis;
   catamari::ScalarLowerFactor<Field> ldl_lower_factor;
   catamari::ScalarDiagonalFactor<Field> ldl_diagonal_factor;
-  catamari::ScalarLDLSetup(
-      permuted_matrix, &ldl_analysis, &ldl_lower_factor, &ldl_diagonal_factor);
-  if (print_progress) {
-    std::cout << "    Finished setup..." << std::endl;
-  }
-  const Int num_pivots = catamari::ScalarLDLFactorization(
-      permuted_matrix, ldl_analysis, &ldl_lower_factor, &ldl_diagonal_factor);
+  const Int num_pivots = catamari::ScalarUpLookingLDL(
+      permuted_matrix, &ldl_lower_factor, &ldl_diagonal_factor);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (num_pivots < num_rows) {
     std::cout << "  Failed factorization after " << num_pivots << " pivots."

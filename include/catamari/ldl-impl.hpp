@@ -64,25 +64,29 @@ void MatrixVectorProduct(
   }
 }
 
-// NOTE: This implementation is an analogue of that of Tim Davis's "LDL"'s
-// symbolic factorization.
+namespace scalar_ldl {
+
+// Computes the elimination forest (via the 'parents' array) and sizes of the
+// structures of a scalar (simplicial) LDL' factorization.
+//
+// Cf. Tim Davis's "LDL"'s symbolic factorization.
 template<class Field>
-void ScalarLDLSetup(
+void EliminationForestAndStructureSizes(
     const CoordinateMatrix<Field>& matrix,
-    ScalarLDLAnalysis* analysis,
-    ScalarLowerFactor<Field>* unit_lower_factor,
-    ScalarDiagonalFactor<Field>* diagonal_factor) {
+    std::vector<Int>* parents,
+    std::vector<Int>* structure_sizes) {
   const Int num_rows = matrix.NumRows();
 
   // Initialize all of the parent indices as unset.
-  analysis->parents.resize(num_rows, -1);
+  parents->resize(num_rows, -1);
 
   // Initialize each node's flag to its own index.
   std::vector<Int> flags(num_rows);
   std::iota(flags.begin(), flags.end(), 0);
 
   // Initialize the number of entries that will be stored into each column.
-  std::vector<Int> structure_sizes(num_rows, 0);
+  structure_sizes->clear();
+  structure_sizes->resize(num_rows, 0);
 
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
@@ -91,21 +95,50 @@ void ScalarLDLSetup(
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       Int column = entry.column;
+
+      // We are traversing the strictly lower triangle and know that the
+      // indices are sorted.
       if (column >= row) {
         break;
       }
-      while (flags[column] != row) {
-        if (analysis->parents[column] == -1) {
-          analysis->parents[column] = row;
-        }
-        ++structure_sizes[column];
-        flags[column] = row;
 
-        column = analysis->parents[column];
+      // Look for new entries in the pattern by walking up to the root of this
+      // subtree of the elimination forest from index 'column'. Any unset
+      // parent pointers can be filled in during the traversal, as the current
+      // row index would then be the parent.
+      while (flags[column] != row) {
+        // Mark index 'column' as in the pattern of row 'row'.
+        flags[column] = row;
+        ++(*structure_sizes)[column];
+
+        if ((*parents)[column] == -1) {
+          // This is the first occurrence of 'column' in a row pattern.
+          (*parents)[column] = row;
+        }
+
+        // Move up to the parent in this subtree of the elimination forest.
+        // Moving to the parent will increase the index (but remain bounded
+        // from above by 'row').
+        column = (*parents)[column];
       }
     }
   }
+}
 
+// Sets up the data structures needed for a scalar up-looking LDL'
+// factorization: the elimination forest and structure sizes are computed,
+// and the memory for the factors is allocated.
+template<class Field>
+void UpLookingSetup(
+    const CoordinateMatrix<Field>& matrix,
+    ScalarLDLAnalysis* analysis,
+    ScalarLowerFactor<Field>* unit_lower_factor,
+    ScalarDiagonalFactor<Field>* diagonal_factor) {
+  std::vector<Int> structure_sizes;
+  scalar_ldl::EliminationForestAndStructureSizes(
+      matrix, &analysis->parents, &structure_sizes);
+
+  const Int num_rows = matrix.NumRows();
   unit_lower_factor->column_offsets.resize(num_rows + 1, 0);
   Int num_entries = 0;
   for (Int column = 0; column < num_rows; ++column) {
@@ -119,15 +152,131 @@ void ScalarLDLSetup(
   diagonal_factor->values.resize(num_rows); 
 }
 
-// NOTE: This implementation is an analogue of that of Tim Davis's "LDL"
-// numerical factorization; it is generalized to handle complex matrices.
+// Compute the nonzero pattern of L(row, :) in
+// row_structure[start : num_rows - 1] and spread A(row, 0 : row - 1) into
+// row_workspace.
 template<class Field>
-Int ScalarLDLFactorization(
+Int UpLookingRowPattern(
     const CoordinateMatrix<Field>& matrix,
-    const ScalarLDLAnalysis& analysis,
+    const std::vector<Int>& parents,
+    Int row,
+    Int* flags,
+    Int* row_structure,
+    Field* row_workspace) {
+  Int start = matrix.NumRows();
+  const Int row_beg = matrix.RowEntryOffset(row); 
+  const Int row_end = matrix.RowEntryOffset(row + 1);
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int index = row_beg; index < row_end; ++index) {
+    const MatrixEntry<Field>& entry = entries[index];
+    Int column = entry.column;
+    if (column > row) {
+      break;
+    }
+
+    // Scatter matrix(row, column) into row_workspace.
+    row_workspace[column] = entry.value;
+
+    // Walk up to the root of the current subtree of the elimination
+    // forest, stopping if we encounter a member already marked as in the
+    // row pattern.
+    Int num_packed = 0;
+    while (flags[column] != row) {
+      // Place 'column' into the pattern of row 'row'.
+      row_structure[num_packed++] = column;
+      flags[column] = row;
+
+      // Move up to the parent in this subtree of the elimination forest.
+      column = parents[column];
+    }
+
+    // Pack this ancestral sequence into the back of the pattern.
+    while (num_packed > 0) {
+      row_structure[--start] = row_structure[--num_packed];
+    }
+  }
+  return start;
+}
+
+// For each index 'i' in the structure of column 'column' of L formed so far:
+//   L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
+// L(row, row) is similarly updated, within d, then L(row, column) is finalized.
+template<class Field>
+void UpLookingRowUpdate(
+    Int row,
+    Int column,
+    ScalarLowerFactor<Field>* unit_lower_factor,
+    ScalarDiagonalFactor<Field>* diagonal_factor,
+    Int* structure_sizes,
+    Field* row_workspace) {
+  // Load eta := L(row, column) * d(column) from the workspace.
+  const Field eta = row_workspace[column];
+  row_workspace[column] = Field{0};
+
+  // Update
+  //
+  //   L(row, I) -= (L(row, column) * d(column)) * conj(L(I, column)),
+  //
+  // where I is the set of already-formed entries in the structure of column
+  // 'column' of L.
+  const Int column_structure_size = structure_sizes[column];
+  const Int factor_column_beg = unit_lower_factor->column_offsets[column];
+  const Int factor_column_end = factor_column_beg + column_structure_size;
+  for (Int index = factor_column_beg; index < factor_column_end; ++index) {
+    // Update L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
+    const Int i = unit_lower_factor->indices[index];
+    const Field& value = unit_lower_factor->values[index];
+    row_workspace[i] -= eta * Conjugate(value);
+  }
+
+  // Compute L(row, column) from eta = L(row, column) * d(column).
+  const Field lambda = eta / diagonal_factor->values[column];
+
+  // Update L(row, row) -= (L(row, column) * d(column)) * conj(L(row, column)).
+  diagonal_factor->values[row] -= eta * Conjugate(lambda);
+
+  // Append L(row, column) into the structure of column 'column'.
+  unit_lower_factor->indices[factor_column_end] = row;
+  unit_lower_factor->values[factor_column_end] = lambda;
+  ++structure_sizes[column];
+}
+
+} // namespace scalar_ldl
+
+template<class Field>
+void ScalarUpLookingCholeskySetup(
+    const CoordinateMatrix<Field>& matrix,
+    ScalarLDLAnalysis* analysis,
+    ScalarLowerFactor<Field>* unit_lower_factor) {
+  std::vector<Int> structure_sizes;
+  scalar_ldl::EliminationForestAndStructureSizes(
+      matrix, &analysis->parents, &structure_sizes);
+
+  const Int num_rows = matrix.NumRows();
+  unit_lower_factor->column_offsets.resize(num_rows + 1, 0);
+  Int num_entries = 0;
+  for (Int column = 0; column < num_rows; ++column) {
+    unit_lower_factor->column_offsets[column] = num_entries;
+
+    // We must also account for the diagonal entry.
+    num_entries += structure_sizes[column] + 1;
+  }
+  unit_lower_factor->column_offsets[num_rows] = num_entries;
+  unit_lower_factor->indices.resize(num_entries);
+  unit_lower_factor->values.resize(num_entries);
+}
+
+// Cf. Tim Davis's up-looking "LDL" numerical factorization.
+template<class Field>
+Int ScalarUpLookingLDL(
+    const CoordinateMatrix<Field>& matrix,
     ScalarLowerFactor<Field>* unit_lower_factor,
     ScalarDiagonalFactor<Field>* diagonal_factor) {
   const Int num_rows = matrix.NumRows();
+
+  ScalarLDLAnalysis analysis;
+  scalar_ldl::UpLookingSetup(
+      matrix, &analysis, unit_lower_factor, diagonal_factor);
 
   // Initialize each node flag to its own index.
   std::vector<Int> flags(num_rows);
@@ -143,60 +292,27 @@ Int ScalarLDLFactorization(
   // input matrix.
   std::vector<Field> row_workspace(num_rows, Field{0});
 
-  Int top;
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
-    // Compute the nonzero pattern of L(row, :) in
-    // row_structure[top : num_rows - 1].
-    top = num_rows;
-    const Int row_beg = matrix.RowEntryOffset(row); 
-    const Int row_end = matrix.RowEntryOffset(row + 1);
-    for (Int index = row_beg; index < row_end; ++index) {
-      const MatrixEntry<Field>& entry = entries[index];
-      Int column = entry.column;
-      if (column > row) {
-        break;
-      }
+    // Compute the row pattern and scatter the row of the input matrix into
+    // the workspace.
+    const Int start = scalar_ldl::UpLookingRowPattern(
+        matrix, analysis.parents, row, flags.data(), row_structure.data(),
+        row_workspace.data());
 
-      // Scatter matrix(row, column) into row_workspace.
-      row_workspace[column] = entry.value;
-
-      // Compute an ancestral sequence.
-      Int num_packed = 0;
-      while (flags[column] != row) {
-        row_structure[num_packed++] = column;
-        flags[column] = row;
-        column = analysis.parents[column];
-      }
-
-      // Pack this ancestral sequence into the back of the pattern.
-      while (num_packed > 0) {
-        row_structure[--top] = row_structure[--num_packed];
-      }
-    }
+    // Pull the diagonal entry out of the workspace.
+    diagonal_factor->values[row] = row_workspace[row];
+    row_workspace[row] = Field{0};
 
     // Compute L(row, :) using a sparse triangular solve. In particular,
     //   L(row, :) := matrix(row, :) / L(0 : row - 1, 0 : row - 1)'.
-    diagonal_factor->values[row] = row_workspace[row];
-    row_workspace[row] = Field{0};
-    for ( ; top < num_rows; ++top) {
-      Int column = row_structure[top];
-      const Field eta = row_workspace[column];
-      row_workspace[column] = Field{0};
-      const Int factor_column_beg = unit_lower_factor->column_offsets[column];
-      const Int factor_column_end = factor_column_beg + structure_sizes[column];
-      for (Int index = factor_column_beg; index < factor_column_end; ++index) {
-        const Int i = unit_lower_factor->indices[index];
-        const Field& value = unit_lower_factor->values[index];
-        // L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column))
-        row_workspace[i] -= eta * Conjugate(value);
-      }
-      const Field lambda = eta / diagonal_factor->values[column];
-      diagonal_factor->values[row] -= eta * Conjugate(lambda);
-      unit_lower_factor->indices[factor_column_end] = row;
-      unit_lower_factor->values[factor_column_end] = lambda;
-      ++structure_sizes[column];
+    for (Int index = start; index < num_rows; ++index) {
+      const Int column = row_structure[index];
+      scalar_ldl::UpLookingRowUpdate(
+          row, column, unit_lower_factor, diagonal_factor,
+          structure_sizes.data(), row_workspace.data());
     }
+
+    // Early exit if solving would involve division by zero.
     if (diagonal_factor->values[row] == Field{0}) {
       return row;
     }
