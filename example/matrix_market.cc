@@ -309,10 +309,6 @@ int main(int argc, char** argv) {
       "The degree approximation type.\n"
       "0:exact, 1:Amestoy, 2:Ashcraft, 3:Gilbert",
       1);
-  const bool allow_supernodes = parser.OptionalInput<bool>(
-      "allow_supernodes",
-      "Allow variables to be merged into supernodes?",
-      true);
   const bool aggressive_absorption = parser.OptionalInput<bool>(
       "aggressive_absorption",
       "Eliminate elements with aggressive absorption?",
@@ -349,10 +345,6 @@ int main(int argc, char** argv) {
       "matrix_market_directory",
       "The directory where the ADD96 matrix market .tar.gz's were unpacked",
       "");
-  const bool randomly_seed = parser.OptionalInput<bool>(
-      "randomly_seed",
-      "Randomly seed the pseudo-random number generator?",
-      false);
 #ifdef _OPENMP
   const int num_omp_threads = parser.OptionalInput<int>(
       "num_omp_threads",
@@ -386,17 +378,9 @@ int main(int argc, char** argv) {
 
   quotient::MinimumDegreeControl control;
   control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
-  control.allow_supernodes = allow_supernodes;
   control.aggressive_absorption = aggressive_absorption;
   control.min_dense_threshold = min_dense_threshold;
   control.dense_sqrt_multiple = dense_sqrt_multiple;
-
-  if (randomly_seed) {
-    // Seed the random number generator based upon the current time.
-    const unsigned srand_seed = std::time(0);
-    std::cout << "Seeding std::srand with " << srand_seed << std::endl;
-    std::srand(srand_seed);
-  }
 
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
