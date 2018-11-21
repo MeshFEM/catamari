@@ -78,6 +78,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
                                quotient::EntryMask mask,
                                const quotient::MinimumDegreeControl& control,
                                bool force_symmetry, double diagonal_shift,
+                               catamari::LDLAlgorithm ldl_algorithm,
                                bool print_progress,
                                bool write_permuted_matrix) {
   typedef double Field;
@@ -183,8 +184,8 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   factorization_timer.Start();
   catamari::LowerFactor<Field> ldl_lower_factor;
   catamari::DiagonalFactor<Field> ldl_diagonal_factor;
-  const Int num_pivots = catamari::UpLookingLDL(
-      permuted_matrix, &ldl_lower_factor, &ldl_diagonal_factor);
+  const Int num_pivots = catamari::LDL(
+      permuted_matrix, ldl_algorithm, &ldl_lower_factor, &ldl_diagonal_factor);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (num_pivots < num_rows) {
     std::cout << "  Failed factorization after " << num_pivots << " pivots."
@@ -236,7 +237,8 @@ Experiment RunMatrixMarketTest(const std::string& filename,
 std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, const quotient::MinimumDegreeControl& control,
-    double diagonal_shift, bool print_progress, bool write_permuted_matrix) {
+    double diagonal_shift, catamari::LDLAlgorithm ldl_algorithm,
+    bool print_progress, bool write_permuted_matrix) {
   const std::vector<std::string> matrix_names{
       "appu",     "bbmat",    "bcsstk30", "bcsstk31", "bcsstk32", "bcsstk33",
       "crystk02", "crystk03", "ct20stif", "ex11",     "ex19",     "ex40",
@@ -252,7 +254,7 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
                                  "/" + matrix_name + ".mtx";
     experiments[matrix_name] = RunMatrixMarketTest(
         filename, skip_explicit_zeros, mask, control, force_symmetry,
-        diagonal_shift, print_progress, write_permuted_matrix);
+        diagonal_shift, ldl_algorithm, print_progress, write_permuted_matrix);
   }
 
   return experiments;
@@ -296,6 +298,11 @@ int main(int argc, char** argv) {
       "force_symmetry", "Use the nonzero pattern of A + A'?", true);
   const double diagonal_shift = parser.OptionalInput<BaseField>(
       "diagonal_shift", "The value to add to the diagonal.", 1e6);
+  const int ldl_algorithm_int =
+      parser.OptionalInput<int>("ldl_algorithm_int",
+                                "The LDL algorithm type.\n"
+                                "0:left-looking, 1:up-looking",
+                                1);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
   const bool write_permuted_matrix = parser.OptionalInput<bool>(
@@ -341,10 +348,13 @@ int main(int argc, char** argv) {
   control.min_dense_threshold = min_dense_threshold;
   control.dense_sqrt_multiple = dense_sqrt_multiple;
 
+  const catamari::LDLAlgorithm ldl_algorithm =
+      static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
         RunADD96Tests(matrix_market_directory, skip_explicit_zeros, mask,
-                      control, diagonal_shift, print_progress,
+                      control, diagonal_shift, ldl_algorithm, print_progress,
                       write_permuted_matrix);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
@@ -352,7 +362,7 @@ int main(int argc, char** argv) {
   } else {
     const Experiment experiment = RunMatrixMarketTest(
         filename, skip_explicit_zeros, mask, control, force_symmetry,
-        diagonal_shift, print_progress, write_permuted_matrix);
+        diagonal_shift, ldl_algorithm, print_progress, write_permuted_matrix);
     PrintExperiment(experiment, filename);
   }
 

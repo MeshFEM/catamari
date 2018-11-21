@@ -15,6 +15,16 @@
 
 namespace catamari {
 
+enum LDLAlgorithm {
+  // A left-looking LDL factorization. Cf. Section 4.8 of Tim Davis,
+  // "Direct Methods for Sparse Linear Systems".
+  kLeftLookingLDL,
+
+  // An up-looking LDL factorization. Cf. Section 4.7 of Tim Davis,
+  // "Direct Methods for Sparse Linear Systems".
+  kUpLookingLDL,
+};
+
 // A column-major lower-triangular sparse matrix.
 template <class Field>
 struct LowerFactor {
@@ -48,25 +58,11 @@ template <class Field>
 void PrintDiagonalFactor(const DiagonalFactor<Field>& diagonal_factor,
                          const std::string& label, std::ostream& os);
 
-// Performs a non-supernodal left-looking LDL' factorization.
-// Cf. Section 4.8 of Tim Davis, "Direct Methods for Sparse Linear Systems".
-//
-// The basic high-level algorithm is of the form:
-//   for k = 1:n
-//     L(k, k) = sqrt(A(k, k) - L(k, 1:k-1) * L(k, 1:k-1)');
-//     L(k+1:n, k) = (A(k+1:n, k) - L(k+1:n, 1:k-1) * L(k, 1:k-1)') / L(k, k);
-//   end
+// Performs a non-supernodal LDL' factorization in the natural ordering.
 template <class Field>
-Int LeftLookingLDL(const CoordinateMatrix<Field>& matrix,
-                   LowerFactor<Field>* unit_lower_factor,
-                   DiagonalFactor<Field>* diagonal_factor);
-
-// Performs a non-supernodal up-looking LDL' factorization.
-// Cf. Section 4.7 of Tim Davis, "Direct Methods for Sparse Linear Systems".
-template <class Field>
-Int UpLookingLDL(const CoordinateMatrix<Field>& matrix,
-                 LowerFactor<Field>* unit_lower_factor,
-                 DiagonalFactor<Field>* diagonal_factor);
+Int LDL(const CoordinateMatrix<Field>& matrix, LDLAlgorithm algorithm,
+        LowerFactor<Field>* unit_lower_factor,
+        DiagonalFactor<Field>* diagonal_factor);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
