@@ -238,15 +238,15 @@ void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
 }
 
 // Computes the nonzero pattern of L(row, :) in
-// row_structure[start : num_rows - 1].
+// row_structure[0 : num_packed - 1].
 template <class Field>
 Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
                       const std::vector<Int>& parents, Int row, Int* flags,
                       Int* row_structure) {
-  Int start = matrix.NumRows();
   const Int row_beg = matrix.RowEntryOffset(row);
   const Int row_end = matrix.RowEntryOffset(row + 1);
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  Int num_packed = 0;
   for (Int index = row_beg; index < row_end; ++index) {
     const MatrixEntry<Field>& entry = entries[index];
     Int column = entry.column;
@@ -257,7 +257,6 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
     // Walk up to the root of the current subtree of the elimination
     // forest, stopping if we encounter a member already marked as in the
     // row pattern.
-    Int num_packed = 0;
     while (flags[column] != row) {
       // Place 'column' into the pattern of row 'row'.
       row_structure[num_packed++] = column;
@@ -266,23 +265,17 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
       // Move up to the parent in this subtree of the elimination forest.
       column = parents[column];
     }
-
-    // Pack this ancestral sequence into the back of the pattern.
-    while (num_packed > 0) {
-      row_structure[--start] = row_structure[--num_packed];
-    }
   }
-  return start;
+  return num_packed;
 }
 
-// Computes the nonzero pattern of L(row, :) in
+// Computes the nonzero pattern of L(row, :) in a topological ordering in
 // row_structure[start : num_rows - 1] and spread A(row, 0 : row - 1) into
 // row_workspace.
 template <class Field>
-Int ComputeRowPatternAndScatterNonzeros(const CoordinateMatrix<Field>& matrix,
-                                        const std::vector<Int>& parents,
-                                        Int row, Int* flags, Int* row_structure,
-                                        Field* row_workspace) {
+Int ComputeTopologicalRowPatternAndScatterNonzeros(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
+    Int row, Int* flags, Int* row_structure, Field* row_workspace) {
   Int start = matrix.NumRows();
   const Int row_beg = matrix.RowEntryOffset(row);
   const Int row_end = matrix.RowEntryOffset(row + 1);
@@ -385,12 +378,12 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
   for (Int column = 0; column < num_rows; ++column) {
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
-    const Int start = ldl::ComputeRowPattern(
+    const Int num_packed = ldl::ComputeRowPattern(
         matrix, parents, column, flags.data(), row_structure.data());
 
     // for j = find(L(column, :))
     //   L(column:n, column) -= L(column:n, j) * (d(j) * conj(L(column, j)))
-    for (Int index = start; index < num_rows; ++index) {
+    for (Int index = 0; index < num_packed; ++index) {
       const Int j = row_structure[index];
       if (j == column) {
         continue;
@@ -487,7 +480,7 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
   for (Int row = 0; row < num_rows; ++row) {
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
-    const Int start = ldl::ComputeRowPatternAndScatterNonzeros(
+    const Int start = ldl::ComputeTopologicalRowPatternAndScatterNonzeros(
         matrix, parents, row, flags.data(), row_structure.data(),
         row_workspace.data());
 
