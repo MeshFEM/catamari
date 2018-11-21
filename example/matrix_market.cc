@@ -13,7 +13,8 @@
 #include <numeric>
 #include <vector>
 
-#include "catamari.hpp"
+#include "catamari/ldl.hpp"
+#include "catamari/matrix_vector_product.hpp"
 #include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
 

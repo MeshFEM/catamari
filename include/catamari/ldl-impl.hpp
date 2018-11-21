@@ -36,32 +36,6 @@ void PrintDiagonalFactor(const DiagonalFactor<Field>& diagonal_factor,
   quotient::PrintVector(diagonal_factor.values, label, os);
 }
 
-template <class Field>
-void MatrixVectorProduct(const Field& alpha,
-                         const CoordinateMatrix<Field>& matrix,
-                         const std::vector<Field>& vec0, const Field& beta,
-                         std::vector<Field>* vec1) {
-  const Int num_rows = matrix.NumRows();
-  CATAMARI_ASSERT(static_cast<Int>(vec0.size()) == matrix.NumColumns(),
-                  "vec0 was of the incorrect size.");
-  CATAMARI_ASSERT(static_cast<Int>(vec1->size()) == num_rows,
-                  "vec1 was of the incorrect size.");
-
-  // vec1 += alpha matrix vec0 + beta vec1
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
-  for (Int row = 0; row < num_rows; ++row) {
-    (*vec1)[row] *= beta;
-    const Int row_beg = matrix.RowEntryOffset(row);
-    const Int row_end = matrix.RowEntryOffset(row + 1);
-    for (Int index = row_beg; index < row_end; ++index) {
-      const MatrixEntry<Field>& entry = entries[index];
-      CATAMARI_ASSERT(entry.row == row, "Invalid entry row index.");
-      // vec1(row) += alpha matrix(row, column) vec0(column).
-      (*vec1)[row] += alpha * entry.value * vec0[entry.column];
-    }
-  }
-}
-
 namespace ldl {
 
 // Computes the elimination forest (via the 'parents' array) and sizes of the

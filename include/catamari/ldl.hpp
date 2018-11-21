@@ -48,13 +48,6 @@ template <class Field>
 void PrintDiagonalFactor(const DiagonalFactor<Field>& diagonal_factor,
                          const std::string& label, std::ostream& os);
 
-// vec1 := alpha matrix vec0 + beta vec1.
-template <class Field>
-void MatrixVectorProduct(const Field& alpha,
-                         const CoordinateMatrix<Field>& matrix,
-                         const std::vector<Field>& vec0, const Field& beta,
-                         std::vector<Field>* vec1);
-
 // Performs a non-supernodal left-looking LDL' factorization.
 // Cf. Section 4.8 of Tim Davis, "Direct Methods for Sparse Linear Systems".
 //
