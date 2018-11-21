@@ -407,7 +407,11 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
       const Field lambda_k_j = unit_lower_factor->values[j_ptr];
       const Field eta = diagonal_factor->values[j] * Conjugate(lambda_k_j);
 
-      // L(column:n, column) -= L(column:n, j) * eta.
+      // L(column, column) -= L(column, j) * eta.
+      diagonal_factor->values[column] -= lambda_k_j * eta;
+      ++j_ptr;
+
+      // L(column+1:n, column) -= L(column+1:n, j) * eta.
       const Int column_beg = unit_lower_factor->column_offsets[column];
       Int column_ptr = column_beg;
       for (; j_ptr != j_end; ++j_ptr) {
@@ -415,21 +419,17 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
         CATAMARI_ASSERT(row >= column, "Row index was less than column.");
 
         // L(row, column) -= L(row, j) * eta.
-        const Field update = unit_lower_factor->values[j_ptr] * eta;
-        if (row == column) {
-          diagonal_factor->values[column] -= update;
-        } else {
-          // Move the pointer for column 'column' to the equivalent index.
-          while (unit_lower_factor->indices[column_ptr] < row) {
-            ++column_ptr;
-          }
-          CATAMARI_ASSERT(unit_lower_factor->indices[column_ptr] == row,
-                          "The column pattern did not contain the j pattern.");
-          CATAMARI_ASSERT(
-              column_ptr < unit_lower_factor->column_offsets[column + 1],
-              "The column pointer left the column.");
-          unit_lower_factor->values[column_ptr] -= update;
+        // Move the pointer for column 'column' to the equivalent index.
+        while (unit_lower_factor->indices[column_ptr] < row) {
+          ++column_ptr;
         }
+        CATAMARI_ASSERT(unit_lower_factor->indices[column_ptr] == row,
+                        "The column pattern did not contain the j pattern.");
+        CATAMARI_ASSERT(
+            column_ptr < unit_lower_factor->column_offsets[column + 1],
+            "The column pointer left the column.");
+        const Field update = unit_lower_factor->values[j_ptr] * eta;
+        unit_lower_factor->values[column_ptr] -= update;
       }
     }
 
