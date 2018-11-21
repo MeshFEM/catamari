@@ -375,7 +375,14 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
   // Set up an integer workspace that could hold any row nonzero pattern.
   std::vector<Int> row_structure(num_rows);
 
+  // Since we will sequentially access each of the entries in each column of
+  // L during the updates of the active column, we can avoid the need for
+  // binary search by maintaining a separate counter for each column.
+  std::vector<Int> column_update_ptrs(num_rows);
+
   for (Int column = 0; column < num_rows; ++column) {
+    column_update_ptrs[column] = unit_lower_factor->column_offsets[column];
+
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
     const Int num_packed = ldl::ComputeRowPattern(
@@ -391,18 +398,11 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
       CATAMARI_ASSERT(j < column, "Looking into upper triangle.");
 
       // Find L(column, j) in the j'th column.
-      const Int j_beg = unit_lower_factor->column_offsets[j];
+      Int j_ptr = column_update_ptrs[j]++;
       const Int j_end = unit_lower_factor->column_offsets[j + 1];
-      Int j_ptr = j_beg;
-      for (; j_ptr != j_end; ++j_ptr) {
-        const Int row = unit_lower_factor->indices[j_ptr];
-        if (row == column) {
-          break;
-        }
-      }
       CATAMARI_ASSERT(j_ptr != j_end, "Left column looking for L(column, j)");
       CATAMARI_ASSERT(unit_lower_factor->indices[j_ptr] == column,
-                      "Did not find L(column, j");
+                      "Did not find L(column, j)");
 
       const Field lambda_k_j = unit_lower_factor->values[j_ptr];
       const Field eta = diagonal_factor->values[j] * Conjugate(lambda_k_j);
