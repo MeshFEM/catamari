@@ -51,9 +51,9 @@ void EliminationForestAndStructureSizes(const CoordinateMatrix<Field>& matrix,
   // Initialize all of the parent indices as unset.
   parents->resize(num_rows, -1);
 
-  // Initialize each node's flag to its own index.
-  std::vector<Int> flags(num_rows);
-  std::iota(flags.begin(), flags.end(), 0);
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> pattern_flags(num_rows);
 
   // Initialize the number of entries that will be stored into each column.
   structure_sizes->clear();
@@ -61,6 +61,8 @@ void EliminationForestAndStructureSizes(const CoordinateMatrix<Field>& matrix,
 
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
+    pattern_flags[row] = row;
+
     const Int row_beg = matrix.RowEntryOffset(row);
     const Int row_end = matrix.RowEntryOffset(row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
@@ -77,9 +79,9 @@ void EliminationForestAndStructureSizes(const CoordinateMatrix<Field>& matrix,
       // subtree of the elimination forest from index 'column'. Any unset
       // parent pointers can be filled in during the traversal, as the current
       // row index would then be the parent.
-      while (flags[column] != row) {
+      while (pattern_flags[column] != row) {
         // Mark index 'column' as in the pattern of row 'row'.
-        flags[column] = row;
+        pattern_flags[column] = row;
         ++(*structure_sizes)[column];
 
         if ((*parents)[column] == -1) {
@@ -119,17 +121,19 @@ void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
   unit_lower_factor->values.resize(num_entries, Field{0});
   diagonal_factor->values.resize(num_rows, Field{0});
 
-  // Initialize each node's flag to its own index.
-  std::vector<Int> flags(num_rows);
-  std::iota(flags.begin(), flags.end(), 0);
-
-  // Initialize the number of entries that have been stored into each column.
-  structure_sizes->clear();
-  structure_sizes->resize(num_rows, 0);
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> pattern_flags(num_rows);
 
   // Fill in the structure indices.
+  //
+  // We will now repurpose the 'structure_sizes' array to point to the
+  // insertion index for each column of the factor.
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
+    pattern_flags[row] = row;
+    (*structure_sizes)[row] = unit_lower_factor->column_offsets[row];
+
     const Int row_beg = matrix.RowEntryOffset(row);
     const Int row_end = matrix.RowEntryOffset(row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
@@ -149,13 +153,11 @@ void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
       // subtree of the elimination forest from index 'column'. Any unset
       // parent pointers can be filled in during the traversal, as the current
       // row index would then be the parent.
-      while (flags[column] != row) {
+      while (pattern_flags[column] != row) {
         // Mark index 'column' as in the pattern of row 'row'.
-        flags[column] = row;
-        const Int index = unit_lower_factor->column_offsets[column] +
-                          (*structure_sizes)[column];
+        pattern_flags[column] = row;
+        const Int index = (*structure_sizes)[column]++;
         unit_lower_factor->indices[index] = row;
-        ++(*structure_sizes)[column];
 
         // Move up to the parent in this subtree of the elimination forest.
         // Moving to the parent will increase the index (but remain bounded
@@ -241,8 +243,8 @@ void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
 // row_structure[0 : num_packed - 1].
 template <class Field>
 Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
-                      const std::vector<Int>& parents, Int row, Int* flags,
-                      Int* row_structure) {
+                      const std::vector<Int>& parents, Int row,
+                      Int* pattern_flags, Int* row_structure) {
   const Int row_beg = matrix.RowEntryOffset(row);
   const Int row_end = matrix.RowEntryOffset(row + 1);
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
@@ -257,10 +259,10 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
     // Walk up to the root of the current subtree of the elimination
     // forest, stopping if we encounter a member already marked as in the
     // row pattern.
-    while (flags[column] != row) {
+    while (pattern_flags[column] != row) {
       // Place 'column' into the pattern of row 'row'.
       row_structure[num_packed++] = column;
-      flags[column] = row;
+      pattern_flags[column] = row;
 
       // Move up to the parent in this subtree of the elimination forest.
       column = parents[column];
@@ -275,7 +277,7 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 Int ComputeTopologicalRowPatternAndScatterNonzeros(
     const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
-    Int row, Int* flags, Int* row_structure, Field* row_workspace) {
+    Int row, Int* pattern_flags, Int* row_structure, Field* row_workspace) {
   Int start = matrix.NumRows();
   const Int row_beg = matrix.RowEntryOffset(row);
   const Int row_end = matrix.RowEntryOffset(row + 1);
@@ -294,10 +296,10 @@ Int ComputeTopologicalRowPatternAndScatterNonzeros(
     // forest, stopping if we encounter a member already marked as in the
     // row pattern.
     Int num_packed = 0;
-    while (flags[column] != row) {
+    while (pattern_flags[column] != row) {
       // Place 'column' into the pattern of row 'row'.
       row_structure[num_packed++] = column;
-      flags[column] = row;
+      pattern_flags[column] = row;
 
       // Move up to the parent in this subtree of the elimination forest.
       column = parents[column];
@@ -318,7 +320,7 @@ template <class Field>
 void UpLookingRowUpdate(Int row, Int column,
                         LowerFactor<Field>* unit_lower_factor,
                         DiagonalFactor<Field>* diagonal_factor,
-                        Int* structure_sizes, Field* row_workspace) {
+                        Int* column_update_ptrs, Field* row_workspace) {
   // Load eta := L(row, column) * d(column) from the workspace.
   const Field eta = row_workspace[column];
   row_workspace[column] = Field{0};
@@ -329,9 +331,13 @@ void UpLookingRowUpdate(Int row, Int column,
   //
   // where I is the set of already-formed entries in the structure of column
   // 'column' of L.
-  const Int column_structure_size = structure_sizes[column];
+  //
+  // Rothberg and Gupta refer to this as a 'scatter kernel' in:
+  //   "An Evaluation of Left-Looking, Right-Looking and Multifrontal
+  //   Approaches to Sparse Cholesky Factorization on Hierarchical-Memory
+  //   Machines".
   const Int factor_column_beg = unit_lower_factor->column_offsets[column];
-  const Int factor_column_end = factor_column_beg + column_structure_size;
+  const Int factor_column_end = column_update_ptrs[column]++;
   for (Int index = factor_column_beg; index < factor_column_end; ++index) {
     // Update L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
     const Int i = unit_lower_factor->indices[index];
@@ -348,7 +354,6 @@ void UpLookingRowUpdate(Int row, Int column,
   // Append L(row, column) into the structure of column 'column'.
   unit_lower_factor->indices[factor_column_end] = row;
   unit_lower_factor->values[factor_column_end] = lambda;
-  ++structure_sizes[column];
 }
 
 // Performs a non-supernodal left-looking LDL' factorization.
@@ -368,9 +373,9 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
   std::vector<Int> parents;
   ldl::LeftLookingSetup(matrix, &parents, unit_lower_factor, diagonal_factor);
 
-  // Initialize each node flag to its own index.
-  std::vector<Int> flags(num_rows);
-  std::iota(flags.begin(), flags.end(), 0);
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> pattern_flags(num_rows);
 
   // Set up an integer workspace that could hold any row nonzero pattern.
   std::vector<Int> row_structure(num_rows);
@@ -381,12 +386,13 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
   std::vector<Int> column_update_ptrs(num_rows);
 
   for (Int column = 0; column < num_rows; ++column) {
+    pattern_flags[column] = column;
     column_update_ptrs[column] = unit_lower_factor->column_offsets[column];
 
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
     const Int num_packed = ldl::ComputeRowPattern(
-        matrix, parents, column, flags.data(), row_structure.data());
+        matrix, parents, column, pattern_flags.data(), row_structure.data());
 
     // for j = find(L(column, :))
     //   L(column:n, column) -= L(column:n, j) * (d(j) * conj(L(column, j)))
@@ -420,6 +426,12 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 
         // L(row, column) -= L(row, j) * eta.
         // Move the pointer for column 'column' to the equivalent index.
+        //
+        // TODO(Jack Poulson): Decide if this 'search kernel' (see Rothbert
+        // and Gupta's "An Evaluation of Left-Looking, Right-Looking and
+        // Multifrontal Approaches to Sparse Cholesky Factorization on
+        // Hierarchical-Memory Machines") can be improved via binary search
+        // or some other mechanism.
         while (unit_lower_factor->indices[column_ptr] < row) {
           ++column_ptr;
         }
@@ -463,25 +475,29 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
   std::vector<Int> parents;
   ldl::UpLookingSetup(matrix, &parents, unit_lower_factor, diagonal_factor);
 
-  // Initialize each node flag to its own index.
-  std::vector<Int> flags(num_rows);
-  std::iota(flags.begin(), flags.end(), 0);
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> pattern_flags(num_rows);
 
   // Set up an integer workspace that could hold any row nonzero pattern.
   std::vector<Int> row_structure(num_rows);
 
-  // Initialize the number of entries that have been packed into each column.
-  std::vector<Int> structure_sizes(num_rows, 0);
+  // An array for holding the active index to insert the new entry of each
+  // column into.
+  std::vector<Int> column_update_ptrs(num_rows);
 
   // Set up a workspace for performing a triangular solve against a row of the
   // input matrix.
   std::vector<Field> row_workspace(num_rows, Field{0});
 
   for (Int row = 0; row < num_rows; ++row) {
+    pattern_flags[row] = row;
+    column_update_ptrs[row] = unit_lower_factor->column_offsets[row];
+
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
     const Int start = ldl::ComputeTopologicalRowPatternAndScatterNonzeros(
-        matrix, parents, row, flags.data(), row_structure.data(),
+        matrix, parents, row, pattern_flags.data(), row_structure.data(),
         row_workspace.data());
 
     // Pull the diagonal entry out of the workspace.
@@ -493,7 +509,7 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
     for (Int index = start; index < num_rows; ++index) {
       const Int column = row_structure[index];
       ldl::UpLookingRowUpdate(row, column, unit_lower_factor, diagonal_factor,
-                              structure_sizes.data(), row_workspace.data());
+                              column_update_ptrs.data(), row_workspace.data());
     }
 
     // Early exit if solving would involve division by zero.
