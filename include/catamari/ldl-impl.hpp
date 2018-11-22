@@ -430,8 +430,10 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
         // TODO(Jack Poulson): Decide if this 'search kernel' (see Rothbert
         // and Gupta's "An Evaluation of Left-Looking, Right-Looking and
         // Multifrontal Approaches to Sparse Cholesky Factorization on
-        // Hierarchical-Memory Machines") can be improved via binary search
-        // or some other mechanism.
+        // Hierarchical-Memory Machines") can be improved. Unfortunately,
+        // binary search, e.g., via std::lower_bound between 'column_ptr' and
+        // the end of the column, leads to a 3x slowdown of the factorization
+        // of the bbmat matrix.
         while (unit_lower_factor->indices[column_ptr] < row) {
           ++column_ptr;
         }
