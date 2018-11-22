@@ -182,10 +182,9 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   }
   quotient::Timer factorization_timer;
   factorization_timer.Start();
-  catamari::LowerFactor<Field> ldl_lower_factor;
-  catamari::DiagonalFactor<Field> ldl_diagonal_factor;
+  catamari::LDLFactorization<Field> ldl_factorization;
   const Int num_pivots = catamari::LDL(
-      permuted_matrix, ldl_algorithm, &ldl_lower_factor, &ldl_diagonal_factor);
+      permuted_matrix, ldl_algorithm, &ldl_factorization);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (num_pivots < num_rows) {
     std::cout << "  Failed factorization after " << num_pivots << " pivots."
@@ -209,7 +208,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   auto solution = right_hand_side;
   quotient::Timer solve_timer;
   solve_timer.Start();
-  catamari::LDLSolve(ldl_lower_factor, ldl_diagonal_factor, &solution);
+  catamari::LDLSolve(ldl_factorization, &solution);
   experiment.solve_seconds = solve_timer.Stop();
 
   // Compute the residual.

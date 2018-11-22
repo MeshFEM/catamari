@@ -48,6 +48,16 @@ struct DiagonalFactor {
   std::vector<Field> values;
 };
 
+// A representation of a non-supernodal LDL' factorization.
+template <class Field>
+struct LDLFactorization {
+  // The unit lower-triangular factor, L.
+  LowerFactor<Field> lower_factor;
+
+  // The diagonal factor, D.
+  DiagonalFactor<Field> diagonal_factor;
+};
+
 // Pretty-prints a column-oriented sparse lower-triangular matrix.
 template <class Field>
 void PrintLowerFactor(const LowerFactor<Field>& lower_factor,
@@ -61,14 +71,12 @@ void PrintDiagonalFactor(const DiagonalFactor<Field>& diagonal_factor,
 // Performs a non-supernodal LDL' factorization in the natural ordering.
 template <class Field>
 Int LDL(const CoordinateMatrix<Field>& matrix, LDLAlgorithm algorithm,
-        LowerFactor<Field>* unit_lower_factor,
-        DiagonalFactor<Field>* diagonal_factor);
+        LDLFactorization<Field>* factorization);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
 template <class Field>
-void LDLSolve(const LowerFactor<Field>& unit_lower_factor,
-              const DiagonalFactor<Field>& diagonal_factor,
+void LDLSolve(const LDLFactorization<Field>& factorization,
               std::vector<Field>* vector);
 
 // Solves L x = b using a unit-lower triangular matrix L.
