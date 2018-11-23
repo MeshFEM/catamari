@@ -23,20 +23,20 @@ using catamari::Int;
 // A list of properties to measure from a sparse LDL factorization / solve.
 struct Experiment {
   // The number of (structural) nonzeros in the associated Cholesky factor.
-  Int num_nonzeros;
+  Int num_nonzeros = 0;
 
   // The number of floating-point operations required for a standard Cholesky
   // factorization using the returned ordering.
-  double num_flops;
+  double num_flops = 0;
 
   // The number of seconds that elapsed during the analysis.
-  double analysis_seconds;
+  double analysis_seconds = 0;
 
   // The number of seconds that elapsed during the factorization.
-  double factorization_seconds;
+  double factorization_seconds = 0;
 
   // The number of seconds that elapsed during the solve.
-  double solve_seconds;
+  double solve_seconds = 0;
 };
 
 // Pretty prints the Experiment structure.
@@ -73,14 +73,12 @@ Real EuclideanNorm(const std::vector<catamari::Complex<Real>>& vector) {
 }
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
-Experiment RunMatrixMarketTest(const std::string& filename,
-                               bool skip_explicit_zeros,
-                               quotient::EntryMask mask,
-                               const quotient::MinimumDegreeControl& control,
-                               bool force_symmetry, double diagonal_shift,
-                               catamari::LDLAlgorithm ldl_algorithm,
-                               bool print_progress,
-                               bool write_permuted_matrix) {
+Experiment RunMatrixMarketTest(
+    const std::string& filename, bool skip_explicit_zeros,
+    quotient::EntryMask mask, const quotient::MinimumDegreeControl& control,
+    bool disable_reordering, bool force_symmetry, double diagonal_shift,
+    catamari::LDLAlgorithm ldl_algorithm, bool print_progress,
+    bool write_permuted_matrix) {
   typedef double Field;
   typedef catamari::ComplexBase<Field> BaseField;
 
@@ -138,42 +136,47 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   // Produce a graph from the loaded matrix.
   std::unique_ptr<quotient::CoordinateGraph> graph = matrix->CoordinateGraph();
 
-  if (print_progress) {
-    std::cout << "  Running analysis..." << std::endl;
-  }
-  quotient::Timer timer;
-  timer.Start();
-  const quotient::MinimumDegreeResult analysis =
-      quotient::MinimumDegree(*graph, control);
-  experiment.analysis_seconds = timer.Stop();
-  experiment.num_nonzeros = analysis.num_cholesky_nonzeros;
-  experiment.num_flops = analysis.num_cholesky_flops;
-  if (print_progress) {
-    std::cout << "  Finished analysis in " << experiment.analysis_seconds
-              << " seconds. There were " << experiment.num_nonzeros
-              << " nonzeros." << std::endl;
-  }
+  catamari::CoordinateMatrix<Field> permuted_matrix;
+  if (disable_reordering) {
+    permuted_matrix = *matrix;
+  } else {
+    if (print_progress) {
+      std::cout << "  Running analysis..." << std::endl;
+    }
+    quotient::Timer timer;
+    timer.Start();
+    const quotient::MinimumDegreeResult analysis =
+        quotient::MinimumDegree(*graph, control);
+    experiment.analysis_seconds = timer.Stop();
+    experiment.num_nonzeros = analysis.num_cholesky_nonzeros;
+    experiment.num_flops = analysis.num_cholesky_flops;
+    if (print_progress) {
+      std::cout << "  Finished analysis in " << experiment.analysis_seconds
+                << " seconds. There were " << experiment.num_nonzeros
+                << " nonzeros." << std::endl;
+    }
 #ifdef QUOTIENT_ENABLE_TIMERS
-  for (const std::pair<std::string, double>& pairing :
-       analysis.elapsed_seconds) {
-    std::cout << "    " << pairing.first << ": " << pairing.second
-              << " seconds." << std::endl;
-  }
+    for (const std::pair<std::string, double>& pairing :
+         analysis.elapsed_seconds) {
+      std::cout << "    " << pairing.first << ": " << pairing.second
+                << " seconds." << std::endl;
+    }
 #endif
 
-  // Form the permuted matrix.
-  const std::vector<Int> permutation = analysis.Permutation();
-  catamari::CoordinateMatrix<Field> permuted_matrix;
-  permuted_matrix.Resize(matrix->NumRows(), matrix->NumColumns());
-  permuted_matrix.ReserveEntryAdditions(matrix->NumEntries());
-  for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
-    permuted_matrix.QueueEntryAddition(permutation[entry.row],
-                                       permutation[entry.column], entry.value);
-  }
-  permuted_matrix.FlushEntryQueues();
-  if (write_permuted_matrix) {
-    const std::string new_filename = filename + "-perm.mtx";
-    permuted_matrix.ToMatrixMarket(new_filename);
+    // Form the permuted matrix.
+    const std::vector<Int> permutation = analysis.Permutation();
+
+    permuted_matrix.Resize(matrix->NumRows(), matrix->NumColumns());
+    permuted_matrix.ReserveEntryAdditions(matrix->NumEntries());
+    for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
+      permuted_matrix.QueueEntryAddition(
+          permutation[entry.row], permutation[entry.column], entry.value);
+    }
+    permuted_matrix.FlushEntryQueues();
+    if (write_permuted_matrix) {
+      const std::string new_filename = filename + "-perm.mtx";
+      permuted_matrix.ToMatrixMarket(new_filename);
+    }
   }
 
   // Factor the permuted matrix.
@@ -183,8 +186,8 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   quotient::Timer factorization_timer;
   factorization_timer.Start();
   catamari::LDLFactorization<Field> ldl_factorization;
-  const Int num_pivots = catamari::LDL(
-      permuted_matrix, ldl_algorithm, &ldl_factorization);
+  const Int num_pivots =
+      catamari::LDL(permuted_matrix, ldl_algorithm, &ldl_factorization);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (num_pivots < num_rows) {
     std::cout << "  Failed factorization after " << num_pivots << " pivots."
@@ -236,8 +239,9 @@ Experiment RunMatrixMarketTest(const std::string& filename,
 std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, const quotient::MinimumDegreeControl& control,
-    double diagonal_shift, catamari::LDLAlgorithm ldl_algorithm,
-    bool print_progress, bool write_permuted_matrix) {
+    bool disable_reordering, double diagonal_shift,
+    catamari::LDLAlgorithm ldl_algorithm, bool print_progress,
+    bool write_permuted_matrix) {
   const std::vector<std::string> matrix_names{
       "appu",     "bbmat",    "bcsstk30", "bcsstk31", "bcsstk32", "bcsstk33",
       "crystk02", "crystk03", "ct20stif", "ex11",     "ex19",     "ex40",
@@ -252,8 +256,9 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string filename = matrix_market_directory + "/" + matrix_name +
                                  "/" + matrix_name + ".mtx";
     experiments[matrix_name] = RunMatrixMarketTest(
-        filename, skip_explicit_zeros, mask, control, force_symmetry,
-        diagonal_shift, ldl_algorithm, print_progress, write_permuted_matrix);
+        filename, skip_explicit_zeros, mask, control, disable_reordering,
+        force_symmetry, diagonal_shift, ldl_algorithm, print_progress,
+        write_permuted_matrix);
   }
 
   return experiments;
@@ -293,6 +298,8 @@ int main(int argc, char** argv) {
       "determining if a row is dense. The actual threshold will be: "
       "max(min_dense_threshold, dense_sqrt_multiple * sqrt(n))",
       10.f);
+  const bool disable_reordering = parser.OptionalInput<bool>(
+      "disable_reordering", "Disable the AMD reordering?", false);
   const bool force_symmetry = parser.OptionalInput<bool>(
       "force_symmetry", "Use the nonzero pattern of A + A'?", true);
   const double diagonal_shift = parser.OptionalInput<BaseField>(
@@ -353,15 +360,16 @@ int main(int argc, char** argv) {
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
         RunADD96Tests(matrix_market_directory, skip_explicit_zeros, mask,
-                      control, diagonal_shift, ldl_algorithm, print_progress,
-                      write_permuted_matrix);
+                      control, disable_reordering, diagonal_shift,
+                      ldl_algorithm, print_progress, write_permuted_matrix);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
     }
   } else {
     const Experiment experiment = RunMatrixMarketTest(
-        filename, skip_explicit_zeros, mask, control, force_symmetry,
-        diagonal_shift, ldl_algorithm, print_progress, write_permuted_matrix);
+        filename, skip_explicit_zeros, mask, control, disable_reordering,
+        force_symmetry, diagonal_shift, ldl_algorithm, print_progress,
+        write_permuted_matrix);
     PrintExperiment(experiment, filename);
   }
 

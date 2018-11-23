@@ -168,16 +168,6 @@ void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
     }
   }
 
-  // Sort the indices in the structures.
-  for (Int column = 0; column < num_rows; ++column) {
-    const Int column_beg = lower_factor.column_offsets[column];
-    const Int column_end = lower_factor.column_offsets[column + 1];
-    CATAMARI_ASSERT(column_beg + (*structure_sizes)[column] == column_end,
-                    "Structure sizes were incorrectly computed.");
-    std::sort(lower_factor.indices.data() + column_beg,
-              lower_factor.indices.data() + column_end);
-  }
-
   // Fill in the nonzeros for the structure.
   for (Int row = 0; row < num_rows; ++row) {
     const Int row_beg = matrix.RowEntryOffset(row);
