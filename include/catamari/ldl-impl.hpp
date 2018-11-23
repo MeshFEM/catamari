@@ -145,9 +145,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
       }
 
       // Look for new entries in the pattern by walking up to the root of this
-      // subtree of the elimination forest from index 'column'. Any unset
-      // parent pointers can be filled in during the traversal, as the current
-      // row index would then be the parent.
+      // subtree of the elimination forest from index 'column'.
       while (pattern_flags[column] != row) {
         // Mark index 'column' as in the pattern of row 'row'.
         pattern_flags[column] = row;
