@@ -15,6 +15,7 @@
 
 #include "catamari/ldl.hpp"
 #include "catamari/matrix_vector_product.hpp"
+#include "catamari/supernodal_ldl.hpp"
 #include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
 

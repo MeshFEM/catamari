@@ -45,7 +45,7 @@ namespace ldl {
 template <class Field>
 void EliminationForestAndStructureSizes(const CoordinateMatrix<Field>& matrix,
                                         std::vector<Int>* parents,
-                                        std::vector<Int>* structure_sizes) {
+                                        std::vector<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
 
   // Initialize all of the parent indices as unset.
@@ -55,9 +55,10 @@ void EliminationForestAndStructureSizes(const CoordinateMatrix<Field>& matrix,
   // of the active row of the lower-triangular factor.
   std::vector<Int> pattern_flags(num_rows);
 
-  // Initialize the number of entries that will be stored into each column.
-  structure_sizes->clear();
-  structure_sizes->resize(num_rows, 0);
+  // Initialize the number of subdiagonal entries that will be stored into
+  // each column.
+  degrees->clear();
+  degrees->resize(num_rows, 0);
 
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
@@ -82,7 +83,7 @@ void EliminationForestAndStructureSizes(const CoordinateMatrix<Field>& matrix,
       while (pattern_flags[column] != row) {
         // Mark index 'column' as in the pattern of row 'row'.
         pattern_flags[column] = row;
-        ++(*structure_sizes)[column];
+        ++(*degrees)[column];
 
         if ((*parents)[column] == -1) {
           // This is the first occurrence of 'column' in a row pattern.
@@ -98,15 +99,13 @@ void EliminationForestAndStructureSizes(const CoordinateMatrix<Field>& matrix,
   }
 }
 
-// Fills in the structures of each column of the lower-triangular Cholesky
-// factor.
+// Fills in the structure indices for the lower factor.
 template <class Field>
-void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
-                                  const std::vector<Int>& parents,
-                                  std::vector<Int>* structure_sizes,
-                                  LDLFactorization<Field>* factorization) {
+void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
+                          const std::vector<Int>& parents,
+                          const std::vector<Int>& degrees,
+                          LDLFactorization<Field>* factorization) {
   LowerFactor<Field>& lower_factor = factorization->lower_factor;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
   const Int num_rows = matrix.NumRows();
 
   // Set up the column offsets and allocate space (initializing the values of
@@ -115,34 +114,29 @@ void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
   Int num_entries = 0;
   for (Int column = 0; column < num_rows; ++column) {
     lower_factor.column_offsets[column] = num_entries;
-    num_entries += (*structure_sizes)[column];
+    num_entries += degrees[column];
   }
   lower_factor.column_offsets[num_rows] = num_entries;
   lower_factor.indices.resize(num_entries);
-  lower_factor.values.resize(num_entries, Field{0});
-  diagonal_factor.values.resize(num_rows, Field{0});
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
   std::vector<Int> pattern_flags(num_rows);
 
-  // Fill in the structure indices.
-  //
-  // We will now repurpose the 'structure_sizes' array to point to the
-  // insertion index for each column of the factor.
+  // A set of pointers for keeping track of where to insert column pattern
+  // indices.
+  std::vector<Int> column_ptrs(num_rows);
+
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
     pattern_flags[row] = row;
-    (*structure_sizes)[row] = lower_factor.column_offsets[row];
+    column_ptrs[row] = lower_factor.column_offsets[row];
 
     const Int row_beg = matrix.RowEntryOffset(row);
     const Int row_end = matrix.RowEntryOffset(row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       Int column = entry.column;
-      if (column == row) {
-        diagonal_factor.values[column] = entry.value;
-      }
 
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
@@ -157,8 +151,7 @@ void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
       while (pattern_flags[column] != row) {
         // Mark index 'column' as in the pattern of row 'row'.
         pattern_flags[column] = row;
-        const Int index = (*structure_sizes)[column]++;
-        lower_factor.indices[index] = row;
+        lower_factor.indices[column_ptrs[column]++] = row;
 
         // Move up to the parent in this subtree of the elimination forest.
         // Moving to the parent will increase the index (but remain bounded
@@ -167,14 +160,30 @@ void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
       }
     }
   }
+}
 
-  // Fill in the nonzeros for the structure.
+// Fill the factorization with the nonzeros from the input matrix.
+template <class Field>
+void FillNonzeros(const CoordinateMatrix<Field>& matrix,
+                  LDLFactorization<Field>* factorization) {
+  LowerFactor<Field>& lower_factor = factorization->lower_factor;
+  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
+  const Int num_rows = matrix.NumRows();
+  const Int num_entries = lower_factor.indices.size();
+
+  lower_factor.values.resize(num_entries, Field{0});
+  diagonal_factor.values.resize(num_rows, Field{0});
+
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
     const Int row_beg = matrix.RowEntryOffset(row);
     const Int row_end = matrix.RowEntryOffset(row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       Int column = entry.column;
+      if (column == row) {
+        diagonal_factor.values[column] = entry.value;
+      }
       if (column >= row) {
         break;
       }
@@ -194,6 +203,17 @@ void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
   }
 }
 
+// Fills in the structures of each column of the lower-triangular Cholesky
+// factor.
+template <class Field>
+void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
+                                  const std::vector<Int>& parents,
+                                  const std::vector<Int>& degrees,
+                                  LDLFactorization<Field>* factorization) {
+  FillStructureIndices(matrix, parents, degrees, factorization);
+  FillNonzeros(matrix, factorization);
+}
+
 // Sets up the data structures needed for a scalar up-looking LDL'
 // factorization: the elimination forest and structure sizes are computed,
 // and the memory for the factors is allocated.
@@ -204,20 +224,20 @@ void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
   LowerFactor<Field>& lower_factor = factorization->lower_factor;
   DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
 
-  std::vector<Int> structure_sizes;
-  EliminationForestAndStructureSizes(matrix, parents, &structure_sizes);
+  std::vector<Int> degrees;
+  EliminationForestAndStructureSizes(matrix, parents, &degrees);
 
   const Int num_rows = matrix.NumRows();
   lower_factor.column_offsets.resize(num_rows + 1);
   Int num_entries = 0;
   for (Int column = 0; column < num_rows; ++column) {
     lower_factor.column_offsets[column] = num_entries;
-    num_entries += structure_sizes[column];
+    num_entries += degrees[column];
   }
   lower_factor.column_offsets[num_rows] = num_entries;
   lower_factor.indices.resize(num_entries);
-  lower_factor.values.resize(num_entries);
 
+  lower_factor.values.resize(num_entries);
   diagonal_factor.values.resize(num_rows);
 }
 
@@ -225,10 +245,9 @@ template <class Field>
 void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
                       std::vector<Int>* parents,
                       LDLFactorization<Field>* factorization) {
-  std::vector<Int> structure_sizes;
-  EliminationForestAndStructureSizes(matrix, parents, &structure_sizes);
-  InitializeLeftLookingFactors(matrix, *parents, &structure_sizes,
-                               factorization);
+  std::vector<Int> degrees;
+  EliminationForestAndStructureSizes(matrix, parents, &degrees);
+  InitializeLeftLookingFactors(matrix, *parents, degrees, factorization);
 }
 
 // Computes the nonzero pattern of L(row, :) in
