@@ -263,7 +263,7 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
   for (Int index = row_beg; index < row_end; ++index) {
     const MatrixEntry<Field>& entry = entries[index];
     Int column = entry.column;
-    if (column > row) {
+    if (column >= row) {
       break;
     }
 
@@ -403,8 +403,7 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
     pattern_flags[column] = column;
     column_update_ptrs[column] = lower_factor.column_offsets[column];
 
-    // Compute the row pattern and scatter the row of the input matrix into
-    // the workspace.
+    // Compute the row pattern.
     const Int num_packed = ldl::ComputeRowPattern(
         matrix, parents, column, pattern_flags.data(), row_structure.data());
 
@@ -412,9 +411,6 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
     //   L(column:n, column) -= L(column:n, j) * (d(j) * conj(L(column, j)))
     for (Int index = 0; index < num_packed; ++index) {
       const Int j = row_structure[index];
-      if (j == column) {
-        continue;
-      }
       CATAMARI_ASSERT(j < column, "Looking into upper triangle.");
 
       // Find L(column, j) in the j'th column.
