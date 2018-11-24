@@ -16,21 +16,47 @@ namespace catamari {
 // that is below the supernodal diagonal blocks.
 template <class Field>
 struct SupernodalLowerFactor {
-  std::vector<Int> supernode_index_offsets;
+  // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
+  // degrees (excluding the diagonal blocks) of supernodes 0 through j - 1.
+  std::vector<Int> index_offsets;
 
-  std::vector<Int> supernode_value_offsets;
-
+  // The concatenation of the structures of the supernodes. The structure of
+  // supernode j is stored between indices index_offsets[j] and
+  // index_offsets[j + 1].
   std::vector<Int> indices;
 
-  std::vector<Int> values;
+  // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
+  // number of supernodes that supernodes 0 through j - 1 individually intersect
+  // with.
+  std::vector<Int> intersection_size_offsets;
+
+  // The concatenation of the number of rows in each supernodal intersection.
+  // The supernodal intersection sizes for supernode j are stored in indices
+  // intersection_size_offsets[j] through intersection_size_offsets[j + 1].
+  std::vector<Int> intersection_sizes;
+
+  // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
+  // number of nonzero entries (the degree times the supernode size) of
+  // supernodes 0 through j - 1.
+  std::vector<Int> value_offsets;
+
+  // The concatenation of the numerical values of the supernodal structures.
+  // The entries of supernode j are stored between indices value_offsets[j] and
+  // value_offsets[j + 1].
+  std::vector<Field> values;
 };
 
 // Stores the (dense) diagonal blocks for the supernodes.
 template <class Field>
 struct SupernodalDiagonalFactor {
-  std::vector<Int> supernode_value_offsets;
+  // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
+  // number of nonzero entries (the square of the supernode size) of supernodes
+  // 0 through j - 1.
+  std::vector<Int> value_offsets;
 
-  std::vector<Int> values;
+  // The concatenation of the numerical values of the supernodal diagonal
+  // blocks.
+  std::vector<Field> values;
 };
 
 template <class Field>
@@ -54,6 +80,35 @@ struct SupernodalLDLFactorization {
   // The block-diagonal factor.
   SupernodalDiagonalFactor<Field> diagonal_factor;
 };
+
+// Performs a supernodal LDL' factorization in the natural ordering.
+template <class Field>
+Int LDL(const CoordinateMatrix<Field>& matrix,
+        const std::vector<Int>& supernode_sizes, LDLAlgorithm algorithm,
+        SupernodalLDLFactorization<Field>* factorization);
+
+// Solve A x = b via the substitution (L D L') x = b and the sequence:
+//   x := L' \ (D \ (L \ b)).
+template <class Field>
+void LDLSolve(const SupernodalLDLFactorization<Field>& factorization,
+              std::vector<Field>* vector);
+
+// Solves L x = b using a unit-lower triangular matrix L.
+template <class Field>
+void UnitLowerTriangularSolve(
+    const SupernodalLDLFactorization<Field>& factorization,
+    std::vector<Field>* vector);
+
+// Solves D x = b using a diagonal matrix D.
+template <class Field>
+void DiagonalSolve(const SupernodalLDLFactorization<Field>& factorization,
+                   std::vector<Field>* vector);
+
+// Solves L' x = b using a unit-lower triangular matrix L.
+template <class Field>
+void UnitLowerAdjointTriangularSolve(
+    const SupernodalLDLFactorization<Field>& factorization,
+    std::vector<Field>* vector);
 
 }  // namespace catamari
 
