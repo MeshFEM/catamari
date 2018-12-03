@@ -43,9 +43,9 @@ namespace ldl {
 //
 // Cf. Tim Davis's "LDL"'s symbolic factorization.
 template <class Field>
-void EliminationForestAndStructureSizes(const CoordinateMatrix<Field>& matrix,
-                                        std::vector<Int>* parents,
-                                        std::vector<Int>* degrees) {
+void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
+                                 std::vector<Int>* parents,
+                                 std::vector<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
 
   // Initialize all of the parent indices as unset.
@@ -223,7 +223,7 @@ void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
   DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
 
   std::vector<Int> degrees;
-  EliminationForestAndStructureSizes(matrix, parents, &degrees);
+  EliminationForestAndDegrees(matrix, parents, &degrees);
 
   const Int num_rows = matrix.NumRows();
   lower_factor.column_offsets.resize(num_rows + 1);
@@ -244,7 +244,7 @@ void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
                       std::vector<Int>* parents,
                       LDLFactorization<Field>* factorization) {
   std::vector<Int> degrees;
-  EliminationForestAndStructureSizes(matrix, parents, &degrees);
+  EliminationForestAndDegrees(matrix, parents, &degrees);
   InitializeLeftLookingFactors(matrix, *parents, degrees, factorization);
 }
 

@@ -28,12 +28,12 @@ struct SupernodalLowerFactor {
   // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
   // number of supernodes that supernodes 0 through j - 1 individually intersect
   // with.
-  std::vector<Int> intersection_size_offsets;
+  std::vector<Int> intersect_size_offsets;
 
   // The concatenation of the number of rows in each supernodal intersection.
   // The supernodal intersection sizes for supernode j are stored in indices
-  // intersection_size_offsets[j] through intersection_size_offsets[j + 1].
-  std::vector<Int> intersection_sizes;
+  // intersect_size_offsets[j] through intersect_size_offsets[j + 1].
+  std::vector<Int> intersect_sizes;
 
   // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
   // number of nonzero entries (the degree times the supernode size) of
@@ -83,8 +83,7 @@ struct SupernodalLDLFactorization {
 
 // Performs a supernodal LDL' factorization in the natural ordering.
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix,
-        const std::vector<Int>& supernode_sizes, LDLAlgorithm algorithm,
+Int LDL(const CoordinateMatrix<Field>& matrix, LDLAlgorithm algorithm,
         SupernodalLDLFactorization<Field>* factorization);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
@@ -109,6 +108,18 @@ template <class Field>
 void UnitLowerAdjointTriangularSolve(
     const SupernodalLDLFactorization<Field>& factorization,
     std::vector<Field>* vector);
+
+// Prints the unit-diagonal lower-triangular factor of the LDL' factorization.
+template <class Field>
+void PrintLowerFactor(
+    const SupernodalLDLFactorization<Field>& factorization,
+    const std::string& label, std::ostream& os);
+
+// Prints the diagonal factor of the LDL' factorization.
+template <class Field>
+void PrintDiagonalFactor(
+    const SupernodalLDLFactorization<Field>& factorization,
+    const std::string& label, std::ostream& os);
 
 }  // namespace catamari
 
