@@ -94,12 +94,15 @@ inline void InitializeEliminationForest(
 template <class Field>
 void EliminationForestAndDegrees(
     const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation,
     const std::vector<Int>& supernode_sizes,
     const std::vector<Int>& supernode_offsets,
     const std::vector<Int>& supernode_container, std::vector<Int>* parents,
     std::vector<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = supernode_sizes.size();
+  const bool have_permutation = !permutation.empty();
 
   InitializeEliminationForest(supernode_offsets, supernode_container, parents);
 
@@ -116,11 +119,13 @@ void EliminationForestAndDegrees(
     const Int main_supernode = supernode_container[row];
     pattern_flags[row] = row;
 
-    const Int row_beg = matrix.RowEntryOffset(row);
-    const Int row_end = matrix.RowEntryOffset(row + 1);
+    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int descendant = entry.column;
+      Int descendant = have_permutation ? permutation[entry.column] :
+          entry.column;
       Int descendant_supernode = supernode_container[descendant];
 
       // We are traversing the strictly lower triangle and know that the
@@ -133,22 +138,22 @@ void EliminationForestAndDegrees(
       // subtree of the elimination forest from index 'descendant'. Any unset
       // parent pointers can be filled in during the traversal, as the current
       // row index would then be the parent.
+      Int last_supernode = -1;
       while (pattern_flags[descendant] != row) {
         // Mark index 'descendant' as in the pattern of row 'row'.
         pattern_flags[descendant] = row;
 
-        // Since the pattern of each column in a supernode is the same, we can
-        // compute a supernode's pattern size by only incrementing for
-        // principal supernode members.
+        // Since the elimination tree cannot come back to a supernode after
+        // leaving it, we can ensure that row entries are not double-counted by
+        // only incrementing on the first entry into the supernode.
         descendant_supernode = supernode_container[descendant];
         CATAMARI_ASSERT(descendant_supernode <= main_supernode,
                         "Descendant supernode was larger than main supernode.");
-
-        const Int descendant_supernode_beg =
-            supernode_offsets[descendant_supernode];
-        if (descendant_supernode < main_supernode &&
-            descendant == descendant_supernode_beg) {
-          ++(*degrees)[descendant_supernode];
+        if (descendant_supernode < main_supernode) {
+          if (descendant_supernode != last_supernode) {
+            ++(*degrees)[descendant_supernode];
+            last_supernode = descendant_supernode;
+          }
         }
 
         if ((*parents)[descendant] == -1) {
@@ -173,6 +178,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           SupernodalLDLFactorization<Field>* factorization) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = factorization->supernode_sizes.size();
+  const bool have_permutation = !factorization->permutation.empty();
   SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
 
   // A data structure for marking whether or not a node is in the pattern of
@@ -192,11 +198,14 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     const Int main_supernode = factorization->supernode_container[row];
     pattern_flags[row] = row;
 
-    const Int row_beg = matrix.RowEntryOffset(row);
-    const Int row_end = matrix.RowEntryOffset(row + 1);
+    const Int orig_row = have_permutation ?
+        factorization->inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int descendant = entry.column;
+      Int descendant = have_permutation ?
+          factorization->permutation[entry.column] : entry.column;
       Int descendant_supernode = factorization->supernode_container[descendant];
 
       // We are traversing the strictly lower triangle and know that the
@@ -207,6 +216,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
       // Look for new entries in the pattern by walking up to the root of this
       // subtree of the elimination forest.
+      Int last_supernode = -1;
       while (pattern_flags[descendant] != row) {
         // Mark 'descendant' as in the pattern of this row.
         pattern_flags[descendant] = row;
@@ -217,10 +227,11 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
         if (descendant_supernode == main_supernode) {
           break;
         }
-        const Int descendant_supernode_beg =
-            factorization->supernode_offsets[descendant_supernode];
 
-        if (descendant == descendant_supernode_beg) {
+        // Since the elimination tree cannot come back to a supernode after
+        // leaving it, we can ensure that row entries are not double-counted by
+        // only incrementing on the first entry into the supernode.
+        if (descendant_supernode != last_supernode) {
           CATAMARI_ASSERT(
               descendant_supernode < main_supernode,
               "Descendant supernode was as large as main supernode.");
@@ -231,6 +242,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                   lower_factor.index_offsets[descendant_supernode + 1],
               "Left supernode's indices.");
           lower_factor.indices[supernode_ptrs[descendant_supernode]++] = row;
+          last_supernode = descendant_supernode;
         }
 
         // Move up to the parent in this subtree of the elimination forest.
@@ -464,7 +476,8 @@ void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
   std::vector<Int> parents;
   std::vector<Int> degrees;
   EliminationForestAndDegrees(
-      matrix, factorization->supernode_sizes, factorization->supernode_offsets,
+      matrix, factorization->permutation, factorization->inverse_permutation,
+      factorization->supernode_sizes, factorization->supernode_offsets,
       factorization->supernode_container, &parents, &degrees);
   InitializeLeftLookingFactors(matrix, parents, &degrees, factorization);
 
@@ -477,6 +490,8 @@ void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
 // row_structure[0 : num_packed - 1].
 template <class Field>
 Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
+                      const std::vector<Int>& permutation,
+                      const std::vector<Int>& inverse_permutation,
                       const std::vector<Int>& supernode_sizes,
                       const std::vector<Int>& supernode_offsets,
                       const std::vector<Int>& supernode_container,
@@ -484,18 +499,23 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
                       Int main_supernode, Int* pattern_flags,
                       Int* row_structure) {
   Int num_packed = 0;
+  const bool have_permutation = !permutation.empty();
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
 
   // Take the union of the row patterns of each row in the supernode.
   const Int main_supernode_size = supernode_sizes[main_supernode];
   const Int main_supernode_beg = supernode_offsets[main_supernode];
   for (Int row = main_supernode_beg;
       row < main_supernode_beg + main_supernode_size; ++row) {
-    const Int row_beg = matrix.RowEntryOffset(row);
-    const Int row_end = matrix.RowEntryOffset(row + 1);
-    const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int descendant_supernode = supernode_container[entry.column];
+      const Int descendant = have_permutation ? permutation[entry.column] :
+          entry.column;
+
+      Int descendant_supernode = supernode_container[descendant];
       if (descendant_supernode >= main_supernode) {
         break;
       }
@@ -871,10 +891,10 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 
     // Compute the supernodal row pattern.
     const Int num_packed = ComputeRowPattern(
-        matrix, factorization->supernode_sizes,
-        factorization->supernode_offsets, factorization->supernode_container,
-        supernode_parents, main_supernode, pattern_flags.data(),
-        row_structure.data());
+        matrix, factorization->permutation, factorization->inverse_permutation,
+        factorization->supernode_sizes, factorization->supernode_offsets,
+        factorization->supernode_container, supernode_parents, main_supernode,
+        pattern_flags.data(), row_structure.data());
 
     // for J = find(L(K, :))
     //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
@@ -952,8 +972,9 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
   return num_pivots;
 }
 
+// Compute an unrelaxed supernodal partition using the existing ordering.
 template <class Field>
-void FormSupernodes(
+void FormFundamentalSupernodes(
     const CoordinateMatrix<Field>& matrix,
     SupernodalLDLFactorization<Field>* factorization) {
   const Int num_rows = matrix.NumRows();
@@ -965,11 +986,12 @@ void FormSupernodes(
   LowerFactor<Field>& lower_factor = scalar_factorization.lower_factor;
   ldl::FillStructureIndices(matrix, parents, degrees, &scalar_factorization);
 
-  factorization->supernode_sizes.reserve(num_rows);
+  factorization->supernode_sizes.clear();
   if (!num_rows) {
     return;
   }
 
+  factorization->supernode_sizes.reserve(num_rows);
   factorization->supernode_sizes.push_back(1);
   for (Int column = 1; column < num_rows; ++column) {
     // Test if the structure of this supernode matches that of the previous
@@ -985,7 +1007,7 @@ void FormSupernodes(
       ++last_column_ptr;
     }
 
-    // Test if both of the remaining structures are equal.
+    // Test if both of the remaining column structures are equal.
     bool equal_structures = true;
     for (Int index = column_beg; index < column_end; ++index) { 
       const Int row = lower_factor.indices[index];
@@ -1002,13 +1024,20 @@ void FormSupernodes(
       factorization->supernode_sizes.push_back(1);
     }
   }
+
+#ifdef CATAMARI_DEBUG
+  if (!ValidFundamentalSupernodes(matrix, factorization->supernode_sizes)) {
+    std::cerr << "Invalid fundamental supernodes." << std::endl;
+    return 0;
+  }
+#endif
 }
 
 // Checks that a valid set of supernodes has been provided by explicitly
 // computing each row pattern and ensuring that each intersects entire
 // supernodes.
 template <class Field>
-bool ValidSupernodes(
+bool ValidFundamentalSupernodes(
     const CoordinateMatrix<Field>& matrix,
     const std::vector<Int>& supernode_sizes) {
   const Int num_rows = matrix.NumRows();
@@ -1063,30 +1092,63 @@ bool ValidSupernodes(
   return valid;
 }
 
+template <class Field>
+void RelaxSupernodes(
+    const CoordinateMatrix<Field>& matrix,
+    const SupernodalLDLControl& control,
+    SupernodalLDLFactorization<Field>* factorization) {
+  // DO_NOT_SUBMIT
+  // TODO(Jack Poulson): Decide if the fundamental supernodal elimination tree
+  // should be passed in as an argument.
+  // HERE
+}
+
+template <class Field>
+void FormSupernodes(
+    const CoordinateMatrix<Field>& matrix,
+    const SupernodalLDLControl& control,
+    SupernodalLDLFactorization<Field>* factorization) {
+  FormFundamentalSupernodes(matrix, factorization);
+  if (control.relax_supernodes) { 
+    RelaxSupernodes(matrix, control, factorization);
+  }
+}
+
 }  // namespace supernodal_ldl
 
 template <class Field>
 Int LDL(const CoordinateMatrix<Field>& matrix,
         const SupernodalLDLControl& control,
         SupernodalLDLFactorization<Field>* factorization) {
-  supernodal_ldl::FormSupernodes(matrix, factorization);
-#ifdef CATAMARI_DEBUG
-  if (!supernodal_ldl::ValidSupernodes(
-      matrix, factorization->supernode_sizes)) {
-    std::cerr << "Invalid supernodes." << std::endl;
-    return 0;
-  }
-#endif
-
+  supernodal_ldl::FormSupernodes(matrix, control, factorization);
   return supernodal_ldl::LeftLooking(matrix, factorization);
 }
 
 template <class Field>
 void LDLSolve(const SupernodalLDLFactorization<Field>& factorization,
               std::vector<Field>* vector) {
+  const bool have_permutation = !factorization.permutation.empty();
+  const Int num_rows = vector->size();
+
+  // Reorder the input into the permutation of the factorization.
+  if (have_permutation) {
+    std::vector<Field> vector_copy = *vector;
+    for (Int row = 0; row < num_rows; ++row) {
+      (*vector)[factorization.permutation[row]] = vector_copy[row]; 
+    }
+  }
+
   UnitLowerTriangularSolve(factorization, vector);
   DiagonalSolve(factorization, vector);
   UnitLowerAdjointTriangularSolve(factorization, vector);
+
+  // Reverse the factorization permutation.
+  if (have_permutation) {
+    std::vector<Field> vector_copy = *vector;
+    for (Int row = 0; row < num_rows; ++row) {
+      (*vector)[factorization.inverse_permutation[row]] = vector_copy[row];
+    }
+  }
 }
 
 template <class Field>

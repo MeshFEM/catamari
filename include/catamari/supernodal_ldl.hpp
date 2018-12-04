@@ -80,17 +80,31 @@ struct SupernodalLDLFactorization {
 
   // The block-diagonal factor.
   SupernodalDiagonalFactor<Field> diagonal_factor;
+
+  // Creating relaxed supernodes generally involves a permutation; if the
+  // following is nonempty, then, if the permutation is a matrix P, the matrix
+  // P A P' has been factored.
+  std::vector<Int> permutation;
+
+  // The inverse of the above permutation (if it is nontrivial).
+  std::vector<Int> inverse_permutation;
 };
 
 // Configuration options for supernodal LDL' factorization.
 struct SupernodalLDLControl {
-  // The allowable number of explicit zeros in any supernode.
+  // If true, relaxed supernodes are created in a manner similar to the
+  // suggestion from:
+  //   Ashcraft and Grime, "The impact of relaxed supernode partitions on the
+  //   multifrontal method", 1989.
+  bool relax_supernodes = true;
+
+  // The allowable number of explicit zeros in any relaxed supernode.
   Int allowable_supernode_zeros = 128;
 
-  // The allowable ratio of explicit zeros in any supernode. This should be
-  // interpreted as an *alternative* allowance for a supernode merge. If the
-  // number of explicit zeros that would be introduced is less than or equal
-  // to 'allowable_supernode_zeros', *or* the ratio of explicit zeros to
+  // The allowable ratio of explicit zeros in any relaxed supernode. This
+  // should be interpreted as an *alternative* allowance for a supernode merge.
+  // If the number of explicit zeros that would be introduced is less than or
+  // equal to 'allowable_supernode_zeros', *or* the ratio of explicit zeros to
   // nonzeros is bounded by 'allowable_supernode_zero_ratio', then the merge
   // can procede.
   float allowable_supernode_zero_ratio = 0.01;;
