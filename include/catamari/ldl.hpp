@@ -58,6 +58,12 @@ struct LDLFactorization {
   DiagonalFactor<Field> diagonal_factor;
 };
 
+// Configuration options for non-supernodal LDL' factorization.
+struct LDLControl {
+  // The choice of either left-looking or up-looking LDL' factorization.
+  LDLAlgorithm algorithm = kUpLookingLDL;
+};
+
 // Pretty-prints a column-oriented sparse lower-triangular matrix.
 template <class Field>
 void PrintLowerFactor(const LowerFactor<Field>& lower_factor,
@@ -70,7 +76,7 @@ void PrintDiagonalFactor(const DiagonalFactor<Field>& diagonal_factor,
 
 // Performs a non-supernodal LDL' factorization in the natural ordering.
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix, LDLAlgorithm algorithm,
+Int LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
         LDLFactorization<Field>* factorization);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:

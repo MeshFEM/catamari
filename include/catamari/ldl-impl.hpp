@@ -532,9 +532,9 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
 }  // namespace ldl
 
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix, LDLAlgorithm algorithm,
+Int LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
         LDLFactorization<Field>* factorization) {
-  if (algorithm == kLeftLookingLDL) {
+  if (control.algorithm == kLeftLookingLDL) {
     return ldl::LeftLooking(matrix, factorization);
   } else {
     return ldl::UpLooking(matrix, factorization);
@@ -556,12 +556,14 @@ void UnitLowerTriangularSolve(const LowerFactor<Field>& unit_lower_factor,
   CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
                   "Vector was of the incorrect size.");
   for (Int column = 0; column < num_rows; ++column) {
+    const Field& eta = (*vector)[column];
+
     const Int factor_column_beg = unit_lower_factor.column_offsets[column];
     const Int factor_column_end = unit_lower_factor.column_offsets[column + 1];
     for (Int index = factor_column_beg; index < factor_column_end; ++index) {
       const Int i = unit_lower_factor.indices[index];
       const Field& value = unit_lower_factor.values[index];
-      (*vector)[i] -= value * (*vector)[column];
+      (*vector)[i] -= value * eta;
     }
   }
 }
@@ -584,12 +586,14 @@ void UnitLowerAdjointTriangularSolve(
   CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
                   "Vector was of the incorrect size.");
   for (Int column = num_rows - 1; column >= 0; --column) {
+    Field& eta = (*vector)[column];
+
     const Int factor_column_beg = unit_lower_factor.column_offsets[column];
     const Int factor_column_end = unit_lower_factor.column_offsets[column + 1];
     for (Int index = factor_column_beg; index < factor_column_end; ++index) {
       const Int i = unit_lower_factor.indices[index];
       const Field& value = unit_lower_factor.values[index];
-      (*vector)[column] -= Conjugate(value) * (*vector)[i];
+      eta -= Conjugate(value) * (*vector)[i];
     }
   }
 }

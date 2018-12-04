@@ -357,7 +357,6 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
         diag_block[rel_index] = entry.value;
         continue;
       }
-
       if (column_supernode > supernode) {
         break;
       }
@@ -372,6 +371,7 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
       CATAMARI_ASSERT(iter != column_index_end, "Exceeded column indices.");
       CATAMARI_ASSERT(*iter == row, "Did not find index.");
       const Int rel_index_index = std::distance(column_index_beg, iter);
+#ifdef CATAMARI_DEBUG
       if (*iter != row) {
         const Int column_supernode_beg =
             factorization->supernode_offsets[column_supernode];
@@ -388,6 +388,7 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
           std::cerr << ", *iter=" << *iter << std::endl;
         }
       }
+#endif
 
       // Convert the relative row index into the corresponding value index
       // (for column 'column').
@@ -1065,7 +1066,8 @@ bool ValidSupernodes(
 }  // namespace supernodal_ldl
 
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix, LDLAlgorithm algorithm,
+Int LDL(const CoordinateMatrix<Field>& matrix,
+        const SupernodalLDLControl& control,
         SupernodalLDLFactorization<Field>* factorization) {
   supernodal_ldl::FormSupernodes(matrix, factorization);
 #ifdef CATAMARI_DEBUG
@@ -1108,12 +1110,13 @@ void UnitLowerTriangularSolve(
 
     for (Int j = 0; j < supernode_size; ++j) {
       const Int column = supernode_beg + j;
+      const Field& eta = (*vector)[column];
 
       // Handle the diagonal-block portion of the supernode.
       for (Int i = j + 1; i < supernode_size; ++i) {
         const Int row = supernode_beg + i;
         const Field& value = diag_block[i + j * supernode_size];
-        (*vector)[row] -= value * (*vector)[column];
+        (*vector)[row] -= value * eta;
       }
 
       // Handle the below-diagonal portion of this supernode.
@@ -1122,8 +1125,7 @@ void UnitLowerTriangularSolve(
         const Field& value =
             factorization.lower_factor.values[
                 value_beg + i * supernode_size + j];
-
-        (*vector)[row] -= value * (*vector)[column];
+        (*vector)[row] -= value * eta;
       }
     }
   }
@@ -1171,21 +1173,23 @@ void UnitLowerAdjointTriangularSolve(
 
     for (Int j = supernode_size - 1; j >= 0; --j) {
       const Int column = supernode_beg + j;
+       Field& eta = (*vector)[column];
 
       // Handle the diagonal-block portion of the supernode.
+      const Field* diag_column = &diag_block[j * supernode_size];
       for (Int i = j + 1; i < supernode_size; ++i) {
         const Int row = supernode_beg + i;
-        const Field& value = diag_block[i + j * supernode_size];
-        (*vector)[column] -= Conjugate(value) * (*vector)[row];
+        const Field& value = diag_column[i];
+        eta -= Conjugate(value) * (*vector)[row];
       }
 
       // Handle the below-diagonal portion of this supernode.
+      const Field* value_column =
+          &factorization.lower_factor.values[value_beg + j];
       for (Int i = 0; i < degree; ++i) {
         const Int row = factorization.lower_factor.indices[index_beg + i];
-        const Field& value =
-            factorization.lower_factor.values[
-                value_beg + i * supernode_size + j];
-        (*vector)[column] -= Conjugate(value) * (*vector)[row];
+        const Field& value = value_column[i * supernode_size];
+        eta -= Conjugate(value) * (*vector)[row];
       }
     }
   }

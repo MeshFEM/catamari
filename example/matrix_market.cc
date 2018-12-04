@@ -76,9 +76,9 @@ Real EuclideanNorm(const std::vector<catamari::Complex<Real>>& vector) {
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 Experiment RunMatrixMarketTest(
     const std::string& filename, bool skip_explicit_zeros,
-    quotient::EntryMask mask, const quotient::MinimumDegreeControl& control,
+    quotient::EntryMask mask, const quotient::MinimumDegreeControl& amd_control,
     bool disable_reordering, bool force_symmetry, double diagonal_shift,
-    catamari::LDLAlgorithm ldl_algorithm, bool print_progress,
+    const catamari::LDLControl& ldl_control, bool print_progress,
     bool write_permuted_matrix) {
   typedef double Field;
   typedef catamari::ComplexBase<Field> BaseField;
@@ -147,7 +147,7 @@ Experiment RunMatrixMarketTest(
     quotient::Timer timer;
     timer.Start();
     const quotient::MinimumDegreeResult analysis =
-        quotient::MinimumDegree(*graph, control);
+        quotient::MinimumDegree(*graph, amd_control);
     experiment.analysis_seconds = timer.Stop();
     experiment.num_nonzeros = analysis.num_cholesky_nonzeros;
     experiment.num_flops = analysis.num_cholesky_flops;
@@ -166,7 +166,6 @@ Experiment RunMatrixMarketTest(
 
     // Form the permuted matrix.
     const std::vector<Int> permutation = analysis.Permutation();
-
     permuted_matrix.Resize(matrix->NumRows(), matrix->NumColumns());
     permuted_matrix.ReserveEntryAdditions(matrix->NumEntries());
     for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
@@ -187,8 +186,8 @@ Experiment RunMatrixMarketTest(
   quotient::Timer factorization_timer;
   factorization_timer.Start();
   catamari::LDLFactorization<Field> ldl_factorization;
-  const Int num_pivots =
-      catamari::LDL(permuted_matrix, ldl_algorithm, &ldl_factorization);
+  const Int num_pivots = catamari::LDL(
+      permuted_matrix, ldl_control, &ldl_factorization);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (num_pivots < num_rows) {
     std::cout << "  Failed factorization after " << num_pivots << " pivots."
@@ -239,9 +238,9 @@ Experiment RunMatrixMarketTest(
 //
 std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
-    quotient::EntryMask mask, const quotient::MinimumDegreeControl& control,
+    quotient::EntryMask mask, const quotient::MinimumDegreeControl& amd_control,
     bool disable_reordering, double diagonal_shift,
-    catamari::LDLAlgorithm ldl_algorithm, bool print_progress,
+    const catamari::LDLControl& ldl_control, bool print_progress,
     bool write_permuted_matrix) {
   const std::vector<std::string> matrix_names{
       "appu",     "bbmat",    "bcsstk30", "bcsstk31", "bcsstk32", "bcsstk33",
@@ -257,8 +256,8 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string filename = matrix_market_directory + "/" + matrix_name +
                                  "/" + matrix_name + ".mtx";
     experiments[matrix_name] = RunMatrixMarketTest(
-        filename, skip_explicit_zeros, mask, control, disable_reordering,
-        force_symmetry, diagonal_shift, ldl_algorithm, print_progress,
+        filename, skip_explicit_zeros, mask, amd_control, disable_reordering,
+        force_symmetry, diagonal_shift, ldl_control, print_progress,
         write_permuted_matrix);
   }
 
@@ -349,27 +348,28 @@ int main(int argc, char** argv) {
   }
 #endif
 
-  quotient::MinimumDegreeControl control;
-  control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
-  control.aggressive_absorption = aggressive_absorption;
-  control.min_dense_threshold = min_dense_threshold;
-  control.dense_sqrt_multiple = dense_sqrt_multiple;
+  quotient::MinimumDegreeControl amd_control;
+  amd_control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
+  amd_control.aggressive_absorption = aggressive_absorption;
+  amd_control.min_dense_threshold = min_dense_threshold;
+  amd_control.dense_sqrt_multiple = dense_sqrt_multiple;
 
-  const catamari::LDLAlgorithm ldl_algorithm =
+  catamari::LDLControl ldl_control;
+  ldl_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
         RunADD96Tests(matrix_market_directory, skip_explicit_zeros, mask,
-                      control, disable_reordering, diagonal_shift,
-                      ldl_algorithm, print_progress, write_permuted_matrix);
+                      amd_control, disable_reordering, diagonal_shift,
+                      ldl_control, print_progress, write_permuted_matrix);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
     }
   } else {
     const Experiment experiment = RunMatrixMarketTest(
-        filename, skip_explicit_zeros, mask, control, disable_reordering,
-        force_symmetry, diagonal_shift, ldl_algorithm, print_progress,
+        filename, skip_explicit_zeros, mask, amd_control, disable_reordering,
+        force_symmetry, diagonal_shift, ldl_control, print_progress,
         write_permuted_matrix);
     PrintExperiment(experiment, filename);
   }

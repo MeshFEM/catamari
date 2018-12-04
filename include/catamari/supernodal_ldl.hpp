@@ -59,6 +59,7 @@ struct SupernodalDiagonalFactor {
   std::vector<Field> values;
 };
 
+// The user-facing data structure for storing a supernodal LDL' factorization.
 template <class Field>
 struct SupernodalLDLFactorization {
   // An array of length 'num_supernodes'; the i'th member is the size of the
@@ -81,9 +82,24 @@ struct SupernodalLDLFactorization {
   SupernodalDiagonalFactor<Field> diagonal_factor;
 };
 
+// Configuration options for supernodal LDL' factorization.
+struct SupernodalLDLControl {
+  // The allowable number of explicit zeros in any supernode.
+  Int allowable_supernode_zeros = 128;
+
+  // The allowable ratio of explicit zeros in any supernode. This should be
+  // interpreted as an *alternative* allowance for a supernode merge. If the
+  // number of explicit zeros that would be introduced is less than or equal
+  // to 'allowable_supernode_zeros', *or* the ratio of explicit zeros to
+  // nonzeros is bounded by 'allowable_supernode_zero_ratio', then the merge
+  // can procede.
+  float allowable_supernode_zero_ratio = 0.01;;
+};
+
 // Performs a supernodal LDL' factorization in the natural ordering.
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix, LDLAlgorithm algorithm,
+Int LDL(const CoordinateMatrix<Field>& matrix,
+        const SupernodalLDLControl& control,
         SupernodalLDLFactorization<Field>* factorization);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
