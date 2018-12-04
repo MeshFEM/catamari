@@ -96,7 +96,7 @@ struct SupernodalLDLControl {
   // suggestion from:
   //   Ashcraft and Grime, "The impact of relaxed supernode partitions on the
   //   multifrontal method", 1989.
-  bool relax_supernodes = true;
+  bool relax_supernodes = false;
 
   // The allowable number of explicit zeros in any relaxed supernode.
   Int allowable_supernode_zeros = 128;
