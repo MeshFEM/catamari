@@ -16,13 +16,14 @@ namespace catamari {
 template <class Field>
 void PrintLowerFactor(const LowerFactor<Field>& lower_factor,
                       const std::string& label, std::ostream& os) {
+  const LowerStructure& lower_structure = lower_factor.structure;
   os << label << ":\n";
-  const Int num_columns = lower_factor.column_offsets.size() - 1;
+  const Int num_columns = lower_structure.column_offsets.size() - 1;
   for (Int column = 0; column < num_columns; ++column) {
-    const Int column_beg = lower_factor.column_offsets[column];
-    const Int column_end = lower_factor.column_offsets[column + 1];
+    const Int column_beg = lower_structure.column_offsets[column];
+    const Int column_end = lower_structure.column_offsets[column + 1];
     for (Int index = column_beg; index < column_end; ++index) {
-      const Int row = lower_factor.indices[index];
+      const Int row = lower_structure.indices[index];
       const Field& value = lower_factor.values[index];
       os << row << " " << column << " " << value << "\n";
     }
@@ -104,20 +105,19 @@ template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const std::vector<Int>& parents,
                           const std::vector<Int>& degrees,
-                          LDLFactorization<Field>* factorization) {
-  LowerFactor<Field>& lower_factor = factorization->lower_factor;
+                          LowerStructure* lower_structure) {
   const Int num_rows = matrix.NumRows();
 
   // Set up the column offsets and allocate space (initializing the values of
   // the unit-lower and diagonal and all zeros).
-  lower_factor.column_offsets.resize(num_rows + 1);
+  lower_structure->column_offsets.resize(num_rows + 1);
   Int num_entries = 0;
   for (Int column = 0; column < num_rows; ++column) {
-    lower_factor.column_offsets[column] = num_entries;
+    lower_structure->column_offsets[column] = num_entries;
     num_entries += degrees[column];
   }
-  lower_factor.column_offsets[num_rows] = num_entries;
-  lower_factor.indices.resize(num_entries);
+  lower_structure->column_offsets[num_rows] = num_entries;
+  lower_structure->indices.resize(num_entries);
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -130,7 +130,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
     pattern_flags[row] = row;
-    column_ptrs[row] = lower_factor.column_offsets[row];
+    column_ptrs[row] = lower_structure->column_offsets[row];
 
     const Int row_beg = matrix.RowEntryOffset(row);
     const Int row_end = matrix.RowEntryOffset(row + 1);
@@ -149,7 +149,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
       while (pattern_flags[column] != row) {
         // Mark index 'column' as in the pattern of row 'row'.
         pattern_flags[column] = row;
-        lower_factor.indices[column_ptrs[column]++] = row;
+        lower_structure->indices[column_ptrs[column]++] = row;
 
         // Move up to the parent in this subtree of the elimination forest.
         // Moving to the parent will increase the index (but remain bounded
@@ -165,9 +165,10 @@ template <class Field>
 void FillNonzeros(const CoordinateMatrix<Field>& matrix,
                   LDLFactorization<Field>* factorization) {
   LowerFactor<Field>& lower_factor = factorization->lower_factor;
+  LowerStructure& lower_structure = lower_factor.structure;
   DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
   const Int num_rows = matrix.NumRows();
-  const Int num_entries = lower_factor.indices.size();
+  const Int num_entries = lower_structure.indices.size();
 
   lower_factor.values.resize(num_entries, Field{0});
   diagonal_factor.values.resize(num_rows, Field{0});
@@ -186,16 +187,16 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
         break;
       }
 
-      const Int column_beg = lower_factor.column_offsets[column];
-      const Int column_end = lower_factor.column_offsets[column + 1];
+      const Int column_beg = lower_structure.column_offsets[column];
+      const Int column_end = lower_structure.column_offsets[column + 1];
       Int* iter =
-          std::lower_bound(lower_factor.indices.data() + column_beg,
-                           lower_factor.indices.data() + column_end, row);
-      CATAMARI_ASSERT(iter != lower_factor.indices.data() + column_end,
+          std::lower_bound(lower_structure.indices.data() + column_beg,
+                           lower_structure.indices.data() + column_end, row);
+      CATAMARI_ASSERT(iter != lower_structure.indices.data() + column_end,
                       "Exceeded column indices.");
       CATAMARI_ASSERT(*iter == row, "Did not find index.");
       const Int structure_index =
-          std::distance(lower_factor.indices.data(), iter);
+          std::distance(lower_structure.indices.data(), iter);
       lower_factor.values[structure_index] = entry.value;
     }
   }
@@ -208,7 +209,8 @@ void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
                                   const std::vector<Int>& parents,
                                   const std::vector<Int>& degrees,
                                   LDLFactorization<Field>* factorization) {
-  FillStructureIndices(matrix, parents, degrees, factorization);
+  FillStructureIndices(
+      matrix, parents, degrees, &factorization->lower_factor.structure);
   FillNonzeros(matrix, factorization);
 }
 
@@ -220,20 +222,21 @@ void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
                     std::vector<Int>* parents,
                     LDLFactorization<Field>* factorization) {
   LowerFactor<Field>& lower_factor = factorization->lower_factor;
+  LowerStructure& lower_structure = lower_factor.structure;
   DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
 
   std::vector<Int> degrees;
   EliminationForestAndDegrees(matrix, parents, &degrees);
 
   const Int num_rows = matrix.NumRows();
-  lower_factor.column_offsets.resize(num_rows + 1);
+  lower_structure.column_offsets.resize(num_rows + 1);
   Int num_entries = 0;
   for (Int column = 0; column < num_rows; ++column) {
-    lower_factor.column_offsets[column] = num_entries;
+    lower_structure.column_offsets[column] = num_entries;
     num_entries += degrees[column];
   }
-  lower_factor.column_offsets[num_rows] = num_entries;
-  lower_factor.indices.resize(num_entries);
+  lower_structure.column_offsets[num_rows] = num_entries;
+  lower_structure.indices.resize(num_entries);
 
   lower_factor.values.resize(num_entries);
   diagonal_factor.values.resize(num_rows);
@@ -330,6 +333,7 @@ void UpLookingRowUpdate(Int row, Int column,
                         LDLFactorization<Field>* factorization,
                         Int* column_update_ptrs, Field* row_workspace) {
   LowerFactor<Field>& lower_factor = factorization->lower_factor;
+  LowerStructure& lower_structure = lower_factor.structure;
   DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
 
   // Load eta := L(row, column) * d(column) from the workspace.
@@ -347,11 +351,11 @@ void UpLookingRowUpdate(Int row, Int column,
   //   "An Evaluation of Left-Looking, Right-Looking and Multifrontal
   //   Approaches to Sparse Cholesky Factorization on Hierarchical-Memory
   //   Machines".
-  const Int factor_column_beg = lower_factor.column_offsets[column];
+  const Int factor_column_beg = lower_structure.column_offsets[column];
   const Int factor_column_end = column_update_ptrs[column]++;
   for (Int index = factor_column_beg; index < factor_column_end; ++index) {
     // Update L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
-    const Int i = lower_factor.indices[index];
+    const Int i = lower_structure.indices[index];
     const Field& value = lower_factor.values[index];
     row_workspace[i] -= eta * Conjugate(value);
   }
@@ -363,7 +367,7 @@ void UpLookingRowUpdate(Int row, Int column,
   diagonal_factor.values[row] -= eta * Conjugate(lambda);
 
   // Append L(row, column) into the structure of column 'column'.
-  lower_factor.indices[factor_column_end] = row;
+  lower_structure.indices[factor_column_end] = row;
   lower_factor.values[factor_column_end] = lambda;
 }
 
@@ -379,11 +383,13 @@ template <class Field>
 Int LeftLooking(const CoordinateMatrix<Field>& matrix,
                 LDLFactorization<Field>* factorization) {
   const Int num_rows = matrix.NumRows();
-  LowerFactor<Field>& lower_factor = factorization->lower_factor;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
 
   std::vector<Int> parents;
   ldl::LeftLookingSetup(matrix, &parents, factorization);
+
+  LowerFactor<Field>& lower_factor = factorization->lower_factor;
+  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
+  const LowerStructure& lower_structure = lower_factor.structure;
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -399,7 +405,7 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 
   for (Int column = 0; column < num_rows; ++column) {
     pattern_flags[column] = column;
-    column_update_ptrs[column] = lower_factor.column_offsets[column];
+    column_update_ptrs[column] = lower_structure.column_offsets[column];
 
     // Compute the row pattern.
     const Int num_packed = ldl::ComputeRowPattern(
@@ -413,9 +419,9 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 
       // Find L(column, j) in the j'th column.
       Int j_ptr = column_update_ptrs[j]++;
-      const Int j_end = lower_factor.column_offsets[j + 1];
+      const Int j_end = lower_structure.column_offsets[j + 1];
       CATAMARI_ASSERT(j_ptr != j_end, "Left column looking for L(column, j)");
-      CATAMARI_ASSERT(lower_factor.indices[j_ptr] == column,
+      CATAMARI_ASSERT(lower_structure.indices[j_ptr] == column,
                       "Did not find L(column, j)");
 
       const Field lambda_k_j = lower_factor.values[j_ptr];
@@ -426,10 +432,10 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
       ++j_ptr;
 
       // L(column+1:n, column) -= L(column+1:n, j) * eta.
-      const Int column_beg = lower_factor.column_offsets[column];
+      const Int column_beg = lower_structure.column_offsets[column];
       Int column_ptr = column_beg;
       for (; j_ptr != j_end; ++j_ptr) {
-        const Int row = lower_factor.indices[j_ptr];
+        const Int row = lower_structure.indices[j_ptr];
         CATAMARI_ASSERT(row >= column, "Row index was less than column.");
 
         // L(row, column) -= L(row, j) * eta.
@@ -442,12 +448,12 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
         // binary search, e.g., via std::lower_bound between 'column_ptr' and
         // the end of the column, leads to a 3x slowdown of the factorization
         // of the bbmat matrix.
-        while (lower_factor.indices[column_ptr] < row) {
+        while (lower_structure.indices[column_ptr] < row) {
           ++column_ptr;
         }
-        CATAMARI_ASSERT(lower_factor.indices[column_ptr] == row,
+        CATAMARI_ASSERT(lower_structure.indices[column_ptr] == row,
                         "The column pattern did not contain the j pattern.");
-        CATAMARI_ASSERT(column_ptr < lower_factor.column_offsets[column + 1],
+        CATAMARI_ASSERT(column_ptr < lower_structure.column_offsets[column + 1],
                         "The column pointer left the column.");
         const Field update = lower_factor.values[j_ptr] * eta;
         lower_factor.values[column_ptr] -= update;
@@ -462,8 +468,8 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 
     // L(column+1:n, column) /= d(column).
     {
-      const Int column_beg = lower_factor.column_offsets[column];
-      const Int column_end = lower_factor.column_offsets[column + 1];
+      const Int column_beg = lower_structure.column_offsets[column];
+      const Int column_end = lower_structure.column_offsets[column + 1];
       for (Int index = column_beg; index < column_end; ++index) {
         lower_factor.values[index] /= pivot;
       }
@@ -482,6 +488,7 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
 
   std::vector<Int> parents;
   ldl::UpLookingSetup(matrix, &parents, factorization);
+  const LowerStructure& lower_structure = factorization->lower_factor.structure;
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -500,7 +507,7 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
 
   for (Int row = 0; row < num_rows; ++row) {
     pattern_flags[row] = row;
-    column_update_ptrs[row] = factorization->lower_factor.column_offsets[row];
+    column_update_ptrs[row] = lower_structure.column_offsets[row];
 
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
@@ -552,16 +559,17 @@ void LDLSolve(const LDLFactorization<Field>& factorization,
 template <class Field>
 void UnitLowerTriangularSolve(const LowerFactor<Field>& unit_lower_factor,
                               std::vector<Field>* vector) {
-  const Int num_rows = unit_lower_factor.column_offsets.size() - 1;
+  const LowerStructure& lower_structure = unit_lower_factor.structure;
+  const Int num_rows = lower_structure.column_offsets.size() - 1;
   CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
                   "Vector was of the incorrect size.");
   for (Int column = 0; column < num_rows; ++column) {
     const Field& eta = (*vector)[column];
 
-    const Int factor_column_beg = unit_lower_factor.column_offsets[column];
-    const Int factor_column_end = unit_lower_factor.column_offsets[column + 1];
+    const Int factor_column_beg = lower_structure.column_offsets[column];
+    const Int factor_column_end = lower_structure.column_offsets[column + 1];
     for (Int index = factor_column_beg; index < factor_column_end; ++index) {
-      const Int i = unit_lower_factor.indices[index];
+      const Int i = lower_structure.indices[index];
       const Field& value = unit_lower_factor.values[index];
       (*vector)[i] -= value * eta;
     }
@@ -582,16 +590,17 @@ void DiagonalSolve(const DiagonalFactor<Field>& diagonal_factor,
 template <class Field>
 void UnitLowerAdjointTriangularSolve(
     const LowerFactor<Field>& unit_lower_factor, std::vector<Field>* vector) {
-  const Int num_rows = unit_lower_factor.column_offsets.size() - 1;
+  const LowerStructure& lower_structure = unit_lower_factor.structure;
+  const Int num_rows = lower_structure.column_offsets.size() - 1;
   CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
                   "Vector was of the incorrect size.");
   for (Int column = num_rows - 1; column >= 0; --column) {
     Field& eta = (*vector)[column];
 
-    const Int factor_column_beg = unit_lower_factor.column_offsets[column];
-    const Int factor_column_end = unit_lower_factor.column_offsets[column + 1];
+    const Int factor_column_beg = lower_structure.column_offsets[column];
+    const Int factor_column_end = lower_structure.column_offsets[column + 1];
     for (Int index = factor_column_beg; index < factor_column_end; ++index) {
-      const Int i = unit_lower_factor.indices[index];
+      const Int i = lower_structure.indices[index];
       const Field& value = unit_lower_factor.values[index];
       eta -= Conjugate(value) * (*vector)[i];
     }

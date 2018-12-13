@@ -69,11 +69,11 @@ struct SupernodalLDLFactorization {
   // An array of length 'num_supernodes + 1'; the i'th member, for
   // 0 <= i < num_supernodes, is the principal member of the i'th supernode.
   // The last member is equal to 'num_rows'.
-  std::vector<Int> supernode_offsets;
+  std::vector<Int> supernode_starts;
 
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.
-  std::vector<Int> supernode_container;
+  std::vector<Int> supernode_member_to_index;
 
   // The subdiagonal-block portion of the lower-triangular factor.
   SupernodalLowerFactor<Field> lower_factor;

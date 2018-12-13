@@ -25,9 +25,8 @@ enum LDLAlgorithm {
   kUpLookingLDL,
 };
 
-// A column-major lower-triangular sparse matrix.
-template <class Field>
-struct LowerFactor {
+// The nonzero patterns below the diagonal of the lower-triangular factor.
+struct LowerStructure {
   // A vector of length 'num_rows + 1'; each entry corresponds to the offset
   // in 'indices' and 'values' of the corresponding column of the matrix.
   std::vector<Int> column_offsets;
@@ -35,6 +34,13 @@ struct LowerFactor {
   // A vector of length 'num_entries'; each segment, column_offsets[j] to
   // column_offsets[j + 1] - 1, contains the row indices for the j'th column.
   std::vector<Int> indices;
+};
+
+// A column-major lower-triangular sparse matrix.
+template <class Field>
+struct LowerFactor {
+  // The nonzero structure of each column in the factor.
+  LowerStructure structure;
 
   // A vector of length 'num_entries'; each segment, column_offsets[j] to
   // column_offsets[j + 1] - 1, contains the (typically nonzero) entries for

@@ -12,42 +12,126 @@
 
 namespace catamari {
 
+template <class Field>
+void GeneralMatrixMultiplyTransposeNormal(
+    Int output_height, Int output_width, Int contraction_size,
+    const Field& alpha, const Field* A, Int leading_dim_of_A,
+    const Field* B, Int leading_dim_of_B, const Field& beta, Field* C,
+    Int leading_dim_of_C) {
+  // TODO(Jack Poulson): Substitute an optimized version of this routine.
+  for (Int j = 0; j < output_width; ++j) {
+    for (Int i = 0; i < output_height; ++i) {
+      Field& output_entry = C[i + j * leading_dim_of_C];
+      output_entry *= beta;
+      for (Int k = 0; k < contraction_size; ++k) {
+        output_entry +=
+            alpha * A[k + i * leading_dim_of_A] * B[k + j * leading_dim_of_B];
+      }
+    }
+  }
+}
+
+template <class Field>
+void HermitianMatrixMultiplyTransposeNormalLower(
+    Int output_height, Int contraction_size,
+    const Field& alpha, const Field* A, Int leading_dim_of_A,
+    const Field* B, Int leading_dim_of_B, const Field& beta, Field* C,
+    Int leading_dim_of_C) {
+  // TODO(Jack Poulson): Substitute an optimized version of this routine.
+  for (Int j = 0; j < output_height; ++j) {
+    for (Int i = j; i < output_height; ++i) {
+      Field& output_entry = C[i + j * leading_dim_of_C];
+      output_entry *= beta;
+      for (Int k = 0; k < contraction_size; ++k) {
+        output_entry +=
+            alpha * A[k + i * leading_dim_of_A] * B[k + j * leading_dim_of_B];
+      }
+    }
+  }
+}
+
+template <class Field>
+Int LowerLDLAdjointFactorization(Int height, Field* A, Int leading_dim) {
+  // TODO(Jack Poulson): Substitute an optimized version of this routine.
+  for (Int i = 0; i < height; ++i) {
+    const Field& delta = A[i + i * leading_dim];
+    const Field delta_conj = Conjugate(delta);
+    if (delta == Field{0}) {
+      return i;
+    }
+
+    // Solve for the remainder of the i'th column of L.
+    for (Int k = i + 1; k < height; ++k) {
+      A[k + i * leading_dim] /= delta_conj;
+    }
+
+    // Perform the rank-one update.
+    for (Int j = i + 1; j < height; ++j) {
+      const Field eta = delta * Conjugate(A[j + i * leading_dim]);
+      for (Int k = j; k < height; ++k) {
+        const Field& lambda_left = A[k + i * leading_dim];
+        A[k + j * height] -= lambda_left * eta;
+      }
+    }
+  }
+  return height;
+}
+
+template <class Field>
+void DiagonalTimesConjugateUnitLowerTriangularSolves(
+  Int height, Int width, const Field* L, Int leading_dim_of_L, Field* A,
+  Int leading_dim_of_A) {
+  // TODO(Jack Poulson): Switch to a level-3 BLAS implementation.
+  for (Int j = 0; j < width; ++j) {
+    Field* input_column = &A[j * leading_dim_of_A];
+
+    // Interleave with a subsequent solve against D.
+    for (Int i = 0; i < height; ++i) {
+      const Field* l_column = &L[i * leading_dim_of_L];
+      for (Int k = i + 1; k < height; ++k) {
+        input_column[k] -= Conjugate(l_column[k]) * input_column[i];
+      }
+      input_column[i] /= l_column[i];
+    }
+  }
+}
+
 namespace supernodal_ldl {
 
-// Fills 'supernode_offsets' with a length 'num_supernodes + 1' array whose
+// Fills 'supernode_starts' with a length 'num_supernodes + 1' array whose
 // i'th index is the sum of the supernode sizes whose indices are less than i.
-inline void SupernodeOffsets(const std::vector<Int>& supernode_sizes,
-                             std::vector<Int>* supernode_offsets) {
+inline void SupernodeStarts(const std::vector<Int>& supernode_sizes,
+                            std::vector<Int>* supernode_starts) {
   const Int num_supernodes = supernode_sizes.size();
-  supernode_offsets->resize(num_supernodes + 1);
+  supernode_starts->resize(num_supernodes + 1);
 
   Int offset = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    (*supernode_offsets)[supernode] = offset;
+    (*supernode_starts)[supernode] = offset;
     CATAMARI_ASSERT(supernode_sizes[supernode], "Supernode was empty.");
     offset += supernode_sizes[supernode];
   }
-  (*supernode_offsets)[num_supernodes] = offset;
+  (*supernode_starts)[num_supernodes] = offset;
 }
 
-// Fills 'supernode_container' with a length 'num_rows' array whose i'th index
+// Fills 'member_to_index' with a length 'num_rows' array whose i'th index
 // is the index of the supernode containing column 'i'.
-inline void SupernodeContainers(Int num_rows,
-                                const std::vector<Int>& supernode_offsets,
-                                std::vector<Int>* supernode_container) {
-  supernode_container->resize(num_rows);
+inline void MemberToIndex(
+    Int num_rows, const std::vector<Int>& supernode_starts,
+    std::vector<Int>* member_to_index) {
+  member_to_index->resize(num_rows);
 
   Int supernode = 0;
   for (Int column = 0; column < num_rows; ++column) {
-    if (column == supernode_offsets[supernode + 1]) {
+    if (column == supernode_starts[supernode + 1]) {
       ++supernode;
     }
-    CATAMARI_ASSERT(column >= supernode_offsets[supernode] &&
-                        column < supernode_offsets[supernode + 1],
+    CATAMARI_ASSERT(column >= supernode_starts[supernode] &&
+                        column < supernode_starts[supernode + 1],
                     "Column was not in the marked supernode.");
-    (*supernode_container)[column] = supernode;
+    (*member_to_index)[column] = supernode;
   }
-  CATAMARI_ASSERT(supernode == static_cast<Int>(supernode_offsets.size()) - 2,
+  CATAMARI_ASSERT(supernode == static_cast<Int>(supernode_starts.size()) - 2,
                   "Did not end on the last supernode.");
 }
 
@@ -56,17 +140,17 @@ inline void SupernodeContainers(Int num_rows,
 inline void ConvertFromScalarToSupernodalEliminationForest(
     Int num_supernodes,
     const std::vector<Int>& parents,
-    const std::vector<Int>& supernode_container,
+    const std::vector<Int>& member_to_index,
     std::vector<Int>* supernode_parents) {
   const Int num_rows = parents.size();
-  supernode_parents->resize(num_supernodes, -1); 
+  supernode_parents->resize(num_supernodes, -1);
   for (Int row = 0; row < num_rows; ++row) {
-    const Int supernode = supernode_container[row];
+    const Int supernode = member_to_index[row];
     const Int parent = parents[row];
     if (parent == -1) {
       (*supernode_parents)[supernode] = -1;
     } else {
-      const Int parent_supernode = supernode_container[parent];
+      const Int parent_supernode = member_to_index[parent];
       if (parent_supernode != supernode) {
         (*supernode_parents)[supernode] = parent_supernode;
       }
@@ -77,13 +161,13 @@ inline void ConvertFromScalarToSupernodalEliminationForest(
 // Initialize the last member of each supernode as unset, but other supernode
 // members as having the member to their right as their parent.
 inline void InitializeEliminationForest(
-    const std::vector<Int>& supernode_offsets,
-    const std::vector<Int>& supernode_container, std::vector<Int>* parents) {
-  const Int num_rows = supernode_container.size();
+    const std::vector<Int>& supernode_starts,
+    const std::vector<Int>& member_to_index, std::vector<Int>* parents) {
+  const Int num_rows = member_to_index.size();
   parents->resize(num_rows, -1);
   for (Int column = 0; column < num_rows; ++column) {
-    const Int supernode = supernode_container[column];
-    if (column != supernode_offsets[supernode + 1] - 1) {
+    const Int supernode = member_to_index[column];
+    if (column != supernode_starts[supernode + 1] - 1) {
       (*parents)[column] = column + 1;
     }
   }
@@ -97,27 +181,32 @@ void EliminationForestAndDegrees(
     const std::vector<Int>& permutation,
     const std::vector<Int>& inverse_permutation,
     const std::vector<Int>& supernode_sizes,
-    const std::vector<Int>& supernode_offsets,
-    const std::vector<Int>& supernode_container, std::vector<Int>* parents,
-    std::vector<Int>* degrees) {
+    const std::vector<Int>& supernode_starts,
+    const std::vector<Int>& member_to_index, std::vector<Int>* parents,
+    std::vector<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = supernode_sizes.size();
   const bool have_permutation = !permutation.empty();
 
-  InitializeEliminationForest(supernode_offsets, supernode_container, parents);
+  InitializeEliminationForest(supernode_starts, member_to_index, parents);
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
   std::vector<Int> pattern_flags(num_rows);
 
+  // A data structure for marking whether or not a supernode is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> supernode_pattern_flags(num_supernodes);
+
   // Initialize the number of entries that will be stored into each supernode
-  degrees->clear();
-  degrees->resize(num_supernodes, 0);
+  supernode_degrees->clear();
+  supernode_degrees->resize(num_supernodes, 0);
 
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
-    const Int main_supernode = supernode_container[row];
+    const Int main_supernode = member_to_index[row];
     pattern_flags[row] = row;
+    supernode_pattern_flags[main_supernode] = row;
 
     const Int orig_row = have_permutation ? inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
@@ -126,7 +215,7 @@ void EliminationForestAndDegrees(
       const MatrixEntry<Field>& entry = entries[index];
       Int descendant = have_permutation ? permutation[entry.column] :
           entry.column;
-      Int descendant_supernode = supernode_container[descendant];
+      Int descendant_supernode = member_to_index[descendant];
 
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
@@ -138,21 +227,17 @@ void EliminationForestAndDegrees(
       // subtree of the elimination forest from index 'descendant'. Any unset
       // parent pointers can be filled in during the traversal, as the current
       // row index would then be the parent.
-      Int last_supernode = -1;
       while (pattern_flags[descendant] != row) {
         // Mark index 'descendant' as in the pattern of row 'row'.
         pattern_flags[descendant] = row;
 
-        // Since the elimination tree cannot come back to a supernode after
-        // leaving it, we can ensure that row entries are not double-counted by
-        // only incrementing on the first entry into the supernode.
-        descendant_supernode = supernode_container[descendant];
+        descendant_supernode = member_to_index[descendant];
         CATAMARI_ASSERT(descendant_supernode <= main_supernode,
                         "Descendant supernode was larger than main supernode.");
         if (descendant_supernode < main_supernode) {
-          if (descendant_supernode != last_supernode) {
-            ++(*degrees)[descendant_supernode];
-            last_supernode = descendant_supernode;
+          if (supernode_pattern_flags[descendant_supernode] != row) {
+            supernode_pattern_flags[descendant_supernode] = row;
+            ++(*supernode_degrees)[descendant_supernode];
           }
         }
 
@@ -185,6 +270,10 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
   // the active row of the lower-triangular factor.
   std::vector<Int> pattern_flags(num_rows);
 
+  // A data structure for marking whether or not a supernode is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> supernode_pattern_flags(num_supernodes);
+
   // A set of pointers for keeping track of where to insert supernode pattern
   // indices.
   std::vector<Int> supernode_ptrs(num_supernodes);
@@ -195,8 +284,9 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
   // Fill in the structure indices.
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
-    const Int main_supernode = factorization->supernode_container[row];
+    const Int main_supernode = factorization->supernode_member_to_index[row];
     pattern_flags[row] = row;
+    supernode_pattern_flags[main_supernode] = row;
 
     const Int orig_row = have_permutation ?
         factorization->inverse_permutation[row] : row;
@@ -206,7 +296,8 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
       const MatrixEntry<Field>& entry = entries[index];
       Int descendant = have_permutation ?
           factorization->permutation[entry.column] : entry.column;
-      Int descendant_supernode = factorization->supernode_container[descendant];
+      Int descendant_supernode =
+          factorization->supernode_member_to_index[descendant];
 
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
@@ -216,22 +307,20 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
       // Look for new entries in the pattern by walking up to the root of this
       // subtree of the elimination forest.
-      Int last_supernode = -1;
       while (pattern_flags[descendant] != row) {
         // Mark 'descendant' as in the pattern of this row.
         pattern_flags[descendant] = row;
 
-        descendant_supernode = factorization->supernode_container[descendant];
+        descendant_supernode =
+            factorization->supernode_member_to_index[descendant];
         CATAMARI_ASSERT(descendant_supernode <= main_supernode,
                         "Descendant supernode was larger than main supernode.");
         if (descendant_supernode == main_supernode) {
           break;
         }
 
-        // Since the elimination tree cannot come back to a supernode after
-        // leaving it, we can ensure that row entries are not double-counted by
-        // only incrementing on the first entry into the supernode.
-        if (descendant_supernode != last_supernode) {
+        if (supernode_pattern_flags[descendant_supernode] != row) {
+          supernode_pattern_flags[descendant_supernode] = row;
           CATAMARI_ASSERT(
               descendant_supernode < main_supernode,
               "Descendant supernode was as large as main supernode.");
@@ -242,7 +331,6 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                   lower_factor.index_offsets[descendant_supernode + 1],
               "Left supernode's indices.");
           lower_factor.indices[supernode_ptrs[descendant_supernode]++] = row;
-          last_supernode = descendant_supernode;
         }
 
         // Move up to the parent in this subtree of the elimination forest.
@@ -259,14 +347,25 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     const Int index_end = lower_factor.index_offsets[supernode + 1];
     CATAMARI_ASSERT(supernode_ptrs[supernode] == index_end,
                     "Supernode pointers did not match index offsets.");
+    bool sorted = true;
     Int last_row = -1;
     for (Int index = index_beg; index < index_end; ++index) {
       const Int row = lower_factor.indices[index];
       if (row <= last_row) {
-        std::cerr << "Supernode " << supernode
-                  << " did not have sorted indices." << std::endl; 
+        sorted = false;
+        break;
       }
       last_row = row;
+    }
+
+    if (!sorted) {
+      std::cerr << "Supernode " << supernode
+                << " did not have sorted indices." << std::endl;
+      for (Int index = index_beg; index < index_end; ++index) {
+        const Int row = lower_factor.indices[index];
+        std::cout << row << " ";
+      }
+      std::cout << std::endl;
     }
   }
 #endif
@@ -291,7 +390,7 @@ void FillIntersections(SupernodalLDLFactorization<Field>* factorization) {
     const Int index_end = lower_factor.index_offsets[column_supernode + 1];
     for (Int index = index_beg; index < index_end; ++index) {
       const Int row = lower_factor.indices[index];
-      const Int supernode = factorization->supernode_container[row];
+      const Int supernode = factorization->supernode_member_to_index[row];
       if (supernode != last_supernode) {
         last_supernode = supernode;
         ++num_supernode_intersects;
@@ -312,7 +411,7 @@ void FillIntersections(SupernodalLDLFactorization<Field>* factorization) {
     const Int index_end = lower_factor.index_offsets[supernode + 1];
     for (Int index = index_beg; index < index_end; ++index) {
       const Int row = lower_factor.indices[index];
-      const Int row_supernode = factorization->supernode_container[row];
+      const Int row_supernode = factorization->supernode_member_to_index[row];
       if (row_supernode != last_supernode) {
         if (last_supernode != -1) {
           // Close out the supernodal intersection.
@@ -346,8 +445,8 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
 
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
-    const Int supernode = factorization->supernode_container[row];
-    const Int supernode_beg = factorization->supernode_offsets[supernode];
+    const Int supernode = factorization->supernode_member_to_index[row];
+    const Int supernode_start= factorization->supernode_starts[supernode];
     const Int supernode_size = factorization->supernode_sizes[supernode];
 
     const Int row_beg = matrix.RowEntryOffset(row);
@@ -355,16 +454,17 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       const Int column = entry.column;
-      const Int column_supernode = factorization->supernode_container[column];
+      const Int column_supernode =
+          factorization->supernode_member_to_index[column];
 
       if (column_supernode == supernode) {
         // Insert the value into the diagonal block.
-        const Int diag_supernode_offset =
+        const Int diag_supernode_start =
             diagonal_factor.value_offsets[supernode];
-        Field* diag_block = &diagonal_factor.values[diag_supernode_offset];
+        Field* diag_block = &diagonal_factor.values[diag_supernode_start];
 
-        const Int rel_row = row - supernode_beg;
-        const Int rel_column = column - supernode_beg;
+        const Int rel_row = row - supernode_start;
+        const Int rel_column = column - supernode_start;
         const Int rel_index = rel_row + rel_column * supernode_size;
         diag_block[rel_index] = entry.value;
         continue;
@@ -385,12 +485,12 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
       const Int rel_index_index = std::distance(column_index_beg, iter);
 #ifdef CATAMARI_DEBUG
       if (*iter != row) {
-        const Int column_supernode_beg =
-            factorization->supernode_offsets[column_supernode];
+        const Int column_supernode_start =
+            factorization->supernode_starts[column_supernode];
         const Int column_supernode_size =
             factorization->supernode_sizes[column_supernode];
         std::cerr << "row=" << row << ", column=" << column
-                  << ", column_supernode_beg=" << column_supernode_beg
+                  << ", column_supernode_start=" << column_supernode_start
                   << ", column_supernode_size=" << column_supernode_size
                   << ", rel_index_index=" << rel_index_index;
         if (rel_index_index > 0) {
@@ -407,9 +507,9 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
       const Int column_value_beg = lower_factor.value_offsets[column_supernode];
       const Int column_supernode_size =
           factorization->supernode_sizes[column_supernode];
-      const Int column_supernode_beg =
-          factorization->supernode_offsets[column_supernode];
-      const Int rel_column = column - column_supernode_beg;
+      const Int column_supernode_start =
+          factorization->supernode_starts[column_supernode];
+      const Int rel_column = column - column_supernode_start;
       const Int value_index = column_value_beg +
                               rel_index_index * column_supernode_size +
                               rel_column;
@@ -421,13 +521,13 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void InitializeLeftLookingFactors(
     const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
-    std::vector<Int>* degrees,
+    const std::vector<Int>& degrees,
     SupernodalLDLFactorization<Field>* factorization) {
   SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
   SupernodalDiagonalFactor<Field>& diagonal_factor =
       factorization->diagonal_factor;
   const Int num_supernodes = factorization->supernode_sizes.size();
-  CATAMARI_ASSERT(static_cast<Int>(degrees->size()) == num_supernodes,
+  CATAMARI_ASSERT(static_cast<Int>(degrees.size()) == num_supernodes,
                   "Invalid degrees size.");
 
   // Set up the column offsets and allocate space (initializing the values of
@@ -443,7 +543,7 @@ void InitializeLeftLookingFactors(
     lower_factor.value_offsets[supernode] = num_entries;
     diagonal_factor.value_offsets[supernode] = num_diagonal_entries;
 
-    const Int degree = (*degrees)[supernode];
+    const Int degree = degrees[supernode];
     const Int supernode_size = factorization->supernode_sizes[supernode];
     degree_sum += degree;
     num_entries += degree * supernode_size;
@@ -462,30 +562,6 @@ void InitializeLeftLookingFactors(
   FillIntersections(factorization);
 }
 
-template <class Field>
-void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
-                      std::vector<Int>* supernode_parents,
-                      SupernodalLDLFactorization<Field>* factorization) {
-  const Int num_supernodes = factorization->supernode_sizes.size();
-
-  SupernodeOffsets(
-      factorization->supernode_sizes, &factorization->supernode_offsets);
-  SupernodeContainers(matrix.NumRows(), factorization->supernode_offsets,
-                      &factorization->supernode_container);
-
-  std::vector<Int> parents;
-  std::vector<Int> degrees;
-  EliminationForestAndDegrees(
-      matrix, factorization->permutation, factorization->inverse_permutation,
-      factorization->supernode_sizes, factorization->supernode_offsets,
-      factorization->supernode_container, &parents, &degrees);
-  InitializeLeftLookingFactors(matrix, parents, &degrees, factorization);
-
-  ConvertFromScalarToSupernodalEliminationForest(
-      num_supernodes, parents, factorization->supernode_container,
-      supernode_parents);
-}
-
 // Computes the supernodal nonzero pattern of L(row, :) in
 // row_structure[0 : num_packed - 1].
 template <class Field>
@@ -493,8 +569,8 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
                       const std::vector<Int>& permutation,
                       const std::vector<Int>& inverse_permutation,
                       const std::vector<Int>& supernode_sizes,
-                      const std::vector<Int>& supernode_offsets,
-                      const std::vector<Int>& supernode_container,
+                      const std::vector<Int>& supernode_starts,
+                      const std::vector<Int>& member_to_index,
                       const std::vector<Int>& supernode_parents,
                       Int main_supernode, Int* pattern_flags,
                       Int* row_structure) {
@@ -504,9 +580,9 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
 
   // Take the union of the row patterns of each row in the supernode.
   const Int main_supernode_size = supernode_sizes[main_supernode];
-  const Int main_supernode_beg = supernode_offsets[main_supernode];
-  for (Int row = main_supernode_beg;
-      row < main_supernode_beg + main_supernode_size; ++row) {
+  const Int main_supernode_start = supernode_starts[main_supernode];
+  for (Int row = main_supernode_start;
+      row < main_supernode_start + main_supernode_size; ++row) {
     const Int orig_row = have_permutation ? inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
@@ -515,7 +591,7 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
       const Int descendant = have_permutation ? permutation[entry.column] :
           entry.column;
 
-      Int descendant_supernode = supernode_container[descendant];
+      Int descendant_supernode = member_to_index[descendant];
       if (descendant_supernode >= main_supernode) {
         break;
       }
@@ -603,45 +679,29 @@ void UpdateDiagonalBlock(Int main_supernode, Int descendant_supernode,
       &diagonal_factor.values[diagonal_factor.value_offsets[main_supernode]];
   Field* update_block = inplace_update ? main_diag_block : update_buffer;
 
-  // TODO(Jack Poulson): Switch to a level 3 BLAS implementation after
-  // verifying correctness.
   const Field* descendant_main_block =
       &lower_factor.values[descendant_main_value_beg];
-  for (Int j = 0; j < descendant_main_intersect_size; ++j) {
-    const Field* right_col =
-        &scaled_adjoint_buffer[j * descendant_supernode_size];
-    Field* update_col = &update_block[j * descendant_main_intersect_size];
-    for (Int i = j; i < descendant_main_intersect_size; ++i) {
-      const Field* left_row =
-          &descendant_main_block[i * descendant_supernode_size];
-      Field& update_entry = update_col[i];
-
-      // L(m_beg + i, m_beg + j) -=
-      //     L(m_beg + i, d) * (D(d, d) * conj(L(m_beg + j, d))) =
-      //     L(m_beg + i, d) * Z(:, j).
-      for (Int k = 0; k < descendant_supernode_size; ++k) {
-        const Field& lambda_left = left_row[k];
-        const Field& eta = right_col[k];
-        update_entry -= lambda_left * eta;
-      }
-    }
-  }
+  HermitianMatrixMultiplyTransposeNormalLower(
+      descendant_main_intersect_size, descendant_supernode_size,
+      Field{-1}, descendant_main_block, descendant_supernode_size,
+      scaled_adjoint_buffer, descendant_supernode_size,
+      Field{1}, update_block, descendant_main_intersect_size);
 
   if (!inplace_update) {
     // Apply the out-of-place update and zero the buffer.
-    const Int main_supernode_beg =
-        factorization->supernode_offsets[main_supernode];
+    const Int main_supernode_start =
+        factorization->supernode_starts[main_supernode];
     const Int* descendant_main_indices =
         &lower_factor.indices[descendant_main_index_beg];
     for (Int j = 0; j < descendant_main_intersect_size; ++j) {
       const Int column = descendant_main_indices[j];
-      const Int j_rel = column - main_supernode_beg;
+      const Int j_rel = column - main_supernode_start;
       Field* main_diag_col = &main_diag_block[j_rel * main_supernode_size];
       Field* update_col = &update_buffer[j * descendant_main_intersect_size];
 
       for (Int i = j; i < descendant_main_intersect_size; ++i) {
         const Int row = descendant_main_indices[i];
-        const Int i_rel = row - main_supernode_beg;
+        const Int i_rel = row - main_supernode_start;
         main_diag_col[i_rel] += update_col[i];
         update_col[i] = 0;
       }
@@ -675,10 +735,11 @@ void UpdateSubdiagonalBlock(
 
   // Move the pointers for the main supernode down to the active supernode of
   // the descendant column block.
-  const Int descendant_active_supernode_beg =
+  const Int descendant_active_supernode_start =
       lower_factor.indices[descendant_active_index_beg];
   const Int active_supernode =
-      factorization->supernode_container[descendant_active_supernode_beg];
+      factorization->supernode_member_to_index[
+          descendant_active_supernode_start];
   CATAMARI_ASSERT(active_supernode > main_supernode,
                   "Active supernode was <= the main supernode in update.");
 
@@ -686,8 +747,8 @@ void UpdateSubdiagonalBlock(
       lower_factor.intersect_sizes[*main_active_intersect_size_beg];
   while (
       factorization
-          ->supernode_container[lower_factor.indices[*main_active_index_beg]] <
-      active_supernode) {
+          ->supernode_member_to_index[lower_factor.indices[
+              *main_active_index_beg]] < active_supernode) {
     *main_active_index_beg += main_active_intersect_size;
     *main_active_value_beg += main_active_intersect_size * main_supernode_size;
     ++*main_active_intersect_size_beg;
@@ -696,10 +757,10 @@ void UpdateSubdiagonalBlock(
         lower_factor.intersect_sizes[*main_active_intersect_size_beg];
   }
 #ifdef CATAMARI_DEBUG
-  const Int main_active_supernode_beg =
+  const Int main_active_supernode_start =
       lower_factor.indices[*main_active_index_beg];
   const Int main_active_supernode =
-      factorization->supernode_container[main_active_supernode_beg];
+      factorization->supernode_member_to_index[main_active_supernode_start];
   if (main_active_supernode != active_supernode) {
     std::cerr << "main_supernode=" << main_supernode
               << ", descendant_supernode=" << descendant_supernode
@@ -721,48 +782,46 @@ void UpdateSubdiagonalBlock(
   const Field* descendant_active_block =
       &lower_factor.values[descendant_active_value_beg];
 
-  for (Int i = 0; i < descendant_active_intersect_size; ++i) {
-    const Field* left_row =
-        &descendant_active_block[i * descendant_supernode_size];
-    Field* update_row = &update_block[i];
-
-    for (Int j = 0; j < descendant_main_intersect_size; ++j) {
-      const Field* right_col =
-          &scaled_adjoint_buffer[j * descendant_supernode_size];
-      Field& update_entry = update_row[j * descendant_active_intersect_size];
-
-      // L(a_beg + i, m_beg + j) -=
-      //     L(a_beg + i, d) * (D(d, d) * conj(L(m_beg + j, d))) =
-      //     L(a_beg + i, d) * Z(:, j).
-      for (Int k = 0; k < descendant_supernode_size; ++k) {
-        const Field& lambda_left = left_row[k];
-        const Field& eta = right_col[k];
-        update_entry -= lambda_left * eta;
-      }
-    }
-  }
+  GeneralMatrixMultiplyTransposeNormal(
+      descendant_main_intersect_size, descendant_active_intersect_size,
+      descendant_supernode_size, Field{-1},
+      scaled_adjoint_buffer, descendant_supernode_size,
+      descendant_active_block, descendant_supernode_size,
+      Field{1}, update_block, descendant_main_intersect_size);
 
   if (!inplace_update) {
-    const Int main_supernode_beg =
-        factorization->supernode_offsets[main_supernode];
-    const Int active_supernode_beg =
-        factorization->supernode_offsets[active_supernode];
+    Int main_active_index_offset = 0;
+    const Int* main_active_indices =
+        &lower_factor.indices[*main_active_index_beg];
+    const Int main_supernode_start =
+        factorization->supernode_starts[main_supernode];
     const Int* descendant_main_indices =
         &lower_factor.indices[descendant_main_index_beg];
     const Int* descendant_active_indices =
         &lower_factor.indices[descendant_active_index_beg];
     for (Int i = 0; i < descendant_active_intersect_size; ++i) {
       const Int row = descendant_active_indices[i];
-      const Int i_rel = row - active_supernode_beg;
-      Field* main_active_row = &main_active_block[i_rel];
-      Field* update_row = &update_buffer[i];
+
+      // Both the main and descendant supernodal intersections can be sparse,
+      // and different. Thus, we must scan through the intersection indices to
+      // find the appropriate relative index here.
+      //
+      // Scan downwards in the main active indices until we find the equivalent
+      // row from the descendant active indices.
+      while (main_active_indices[main_active_index_offset] != row) {
+        ++main_active_index_offset;
+      }
+
+      Field* main_active_row =
+          &main_active_block[main_active_index_offset * main_supernode_size];
+      Field* update_row = &update_buffer[i * descendant_main_intersect_size];
 
       for (Int j = 0; j < descendant_main_intersect_size; ++j) {
         const Int column = descendant_main_indices[j];
-        const Int j_rel = column - main_supernode_beg;
-        Field& main_active_entry =
-            main_active_row[j_rel * main_active_intersect_size];
-        Field& update_entry = update_row[j * descendant_active_intersect_size];
+        const Int j_rel = column - main_supernode_start;
+        Field& main_active_entry = main_active_row[j_rel];
+        Field& update_entry = update_row[j];
+
         main_active_entry += update_entry;
         update_entry = 0;
       }
@@ -780,30 +839,8 @@ Int FactorDiagonalBlock(Int supernode,
       factorization->diagonal_factor.value_offsets[supernode];
   Field* diag_block = &factorization->diagonal_factor.values[diag_value_beg];
 
-  // TODO(Jack Poulson): Use a level-3 BLAS version of this routine.
-  for (Int i = 0; i < supernode_size; ++i) {
-    const Field& delta = diag_block[i + i * supernode_size];
-    const Field delta_conj = Conjugate(delta);
-    if (delta == Field{0}) {
-      return i;
-    }
-
-    // Solve for the remainder of the i'th column of L.
-    for (Int k = i + 1; k < supernode_size; ++k) {
-      diag_block[k + i * supernode_size] /= delta_conj;
-    }
-
-    // Perform the rank-one update.
-    for (Int j = i + 1; j < supernode_size; ++j) {
-      const Field eta = delta * Conjugate(diag_block[j + i * supernode_size]);
-      for (Int k = j; k < supernode_size; ++k) {
-        const Field& lambda_left = diag_block[k + i * supernode_size];
-        diag_block[k + j * supernode_size] -= lambda_left * eta;
-      }
-    }
-  }
-
-  return supernode_size;
+  return LowerLDLAdjointFactorization(
+      supernode_size, diag_block, supernode_size);
 }
 
 // L(KNext:n, K) /= D(K, K) L(K, K)'.
@@ -822,33 +859,558 @@ void SolveAgainstDiagonalBlock(
   const Int value_beg = lower_factor.value_offsets[supernode];
   const Int degree = lower_factor.index_offsets[supernode + 1] - index_beg;
 
-  // TODO(Jack Poulson): Switch to a level-3 BLAS implementation.
   Field* lower_block = &lower_factor.values[value_beg];
-  for (Int i = 0; i < degree; ++i) {
-    Field* lower_row = &lower_block[i * supernode_size];
 
-    // Solve against the unit-lower matrix L(K, K)', which is equivalent to
-    // solving     conj(L(K, K)) x = y.
-    //
-    // Interleave with a subsequent solve against D(K, K).
-    for (Int j = 0; j < supernode_size; ++j) {
-      const Field* l_column = &diag_block[j * supernode_size];
-      for (Int k = j + 1; k < supernode_size; ++k) {
-        lower_row[k] -= Conjugate(l_column[k]) * lower_row[j];
+  // Solve against the D(K, K) times the unit-lower matrix L(K, K)' from the
+  // right using row-major storage of the input matrix, which is equivalent to
+  // solving D(K, K) conj(L(K, K)) X = Y using column-major storage.
+  DiagonalTimesConjugateUnitLowerTriangularSolves(
+      supernode_size, degree, diag_block, supernode_size, lower_block,
+      supernode_size);
+}
+
+// Checks that a valid set of supernodes has been provided by explicitly
+// computing each row pattern and ensuring that each intersects entire
+// supernodes.
+template <class Field>
+bool ValidFundamentalSupernodes(
+    const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& supernode_sizes) {
+  const Int num_rows = matrix.NumRows();
+
+  std::vector<Int> parents, degrees;
+  ldl::EliminationForestAndDegrees(matrix, &parents, &degrees);
+
+  std::vector<Int> supernode_starts, member_to_index;
+  SupernodeStarts(supernode_sizes, &supernode_starts);
+  MemberToIndex(num_rows, supernode_starts, &member_to_index);
+
+  std::vector<Int> row_structure(num_rows);
+  std::vector<Int> pattern_flags(num_rows);
+
+  bool valid = true;
+  for (Int row = 0; row < num_rows; ++row) {
+    const Int row_supernode = member_to_index[row];
+
+    pattern_flags[row] = row;
+    const Int num_packed = ldl::ComputeRowPattern(
+        matrix, parents, row, pattern_flags.data(), row_structure.data());
+    std::sort(row_structure.data(), row_structure.data() + num_packed);
+
+    // TODO(Jack Poulson): Extend the tests to ensure that the diagonal blocks
+    // of the supernodes are dense.
+
+    // Check that the pattern of this row intersects entire supernodes that
+    // are not the current row's supernode.
+    Int index = 0;
+    while (index < num_packed) {
+      const Int column = row_structure[index];
+      const Int supernode = member_to_index[column];
+      if (supernode == row_supernode) {
+        break;
       }
-      lower_row[j] /= l_column[j];
+
+      const Int supernode_start = supernode_starts[supernode];
+      const Int supernode_size = supernode_sizes[supernode];
+      if (num_packed < index + supernode_size) {
+        std::cerr << "Did not pack enough indices to hold supernode "
+                  << supernode << " of size " << supernode_size << " in row "
+                  << row << std::endl;
+        return false;
+      }
+      for (Int j = 0; j < supernode_size; ++j) {
+        if (row_structure[index++] != supernode_start + j) {
+          std::cerr << "Missed column " << supernode_start + j << " in row "
+                    << row << " and supernode " << supernode_start << ":"
+                    << supernode_start + supernode_size << std::endl;
+          valid = false;
+        }
+      }
     }
+  }
+  return valid;
+}
+
+// Compute an unrelaxed supernodal partition using the existing ordering.
+// We require that supernodes have dense diagonal blocks and equal structures
+// below the diagonal block.
+template <class Field>
+void FormFundamentalSupernodes(
+    const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& parents,
+    const std::vector<Int>& degrees,
+    std::vector<Int>* supernode_sizes,
+    LowerStructure* scalar_structure) {
+  const Int num_rows = matrix.NumRows();
+
+  // We will only fill the indices and offsets of the factorization.
+  ldl::FillStructureIndices(matrix, parents, degrees, scalar_structure);
+
+  supernode_sizes->clear();
+  if (!num_rows) {
+    return;
+  }
+
+  // We will iterate down each column structure to determine the supernodes.
+  std::vector<Int> column_ptrs = scalar_structure->column_offsets;
+
+  Int supernode_start = 0;
+  supernode_sizes->reserve(num_rows);
+  supernode_sizes->push_back(1);
+  for (Int column = 1; column < num_rows; ++column) {
+    // Ensure that the diagonal block would be fully-connected. Due to the
+    // loop invariant, each column pointer in the current supernode would need
+    // to be pointing to index 'column'.
+    bool dense_diagonal_block = true;
+    for (Int j = supernode_start; j < column; ++j) {
+      const Int index = column_ptrs[j];
+      const Int next_column_beg = scalar_structure->column_offsets[j + 1];
+      if (index < next_column_beg &&
+          scalar_structure->indices[index] == column) {
+        ++column_ptrs[j];
+      } else {
+        dense_diagonal_block = false;
+        break;
+      }
+    }
+    if (!dense_diagonal_block) {
+      // This column begins a new supernode.
+			supernode_start = column;
+      supernode_sizes->push_back(1);
+      continue;
+    }
+
+    // Test if the structure of this supernode matches that of the previous
+    // column (with all indices up to this column removed). We first test that
+    // the set sizes are equal and then test the individual entries.
+
+    // Test that the set sizes match.
+    const Int column_beg = column_ptrs[column];
+    const Int structure_size = column_ptrs[column + 1] - column_beg;
+    const Int prev_column_ptr = column_ptrs[column - 1];
+    const Int prev_remaining_structure_size = column_beg - prev_column_ptr;
+    if (structure_size != prev_remaining_structure_size) {
+      // This column begins a new supernode.
+      supernode_start = column;
+      supernode_sizes->push_back(1);
+      continue;
+    }
+
+    // Test that the individual entries match.
+    bool equal_structures = true;
+    for (Int i = 0; i < structure_size; ++i) {
+      const Int row = scalar_structure->indices[column_beg + i];
+      const Int prev_row = scalar_structure->indices[prev_column_ptr + i];
+      if (prev_row != row) {
+        equal_structures = false;
+        break;
+      }
+    }
+    if (!equal_structures) {
+      // This column begins a new supernode.
+      supernode_start = column;
+      supernode_sizes->push_back(1);
+      continue;
+    }
+
+    // All tests passed, so we may extend the current supernode to incorporate
+    // this column.
+    ++supernode_sizes->back();
+  }
+
+#ifdef CATAMARI_DEBUG
+  if (!ValidFundamentalSupernodes(matrix, *supernode_sizes)) {
+    std::cerr << "Invalid fundamental supernodes." << std::endl;
+    return;
+  }
+#endif
+}
+
+// A data structure for representing whether or not a child supernode can be
+// merged with its parent and, if so, how many explicit zeros would be in the
+// combined supernode's block column.
+struct MergableStatus {
+  // Whether or not the supernode can be merged.
+  bool mergable;
+
+  // How many explicit zeros would be stored in the merged supernode.
+  Int num_merged_zeros;
+};
+
+// Returns whether or not the child supernode can be merged into its parent by
+// counting the number of explicit zeros that would be introduced by the
+// merge.
+//
+// Consider the possibility of merging a child supernode '0' with parent
+// supernode '1', which would result in an expanded supernode of the form:
+//
+//    -------------
+//   | L00  |      |
+//   |------|------|
+//   | L10  | L11  |
+//   ---------------
+//   |      |      |
+//   | L20  | L21  |
+//   |      |      |
+//    -------------
+//
+// Because it is assumed that supernode 1 is the parent of supernode 0,
+// the only places explicit nonzeros can be introduced are in:
+//   * L10: if supernode 0 was not fully-connected to supernode 1.
+//   * L20: if supernode 0's structure (with supernode 1 removed) does not
+//     contain every member of the structure of supernode 1.
+//
+// Counting the number of explicit zeros that would be introduced is thus
+// simply a matter of counting these mismatches.
+//
+// The reason that downstream explicit zeros would not be introduced is the
+// same as the reason explicit zeros are not introduced into L21; supernode
+// 1 is the parent of supernode 0.
+//
+inline MergableStatus MergableSupernode(
+    Int child_start,
+    Int parent_start,
+    const std::vector<Int>& supernode_sizes,
+    const std::vector<Int>& member_to_start,
+    const LowerStructure& scalar_structure,
+    const std::vector<Int>& num_explicit_zeros,
+    const SupernodalLDLControl& control) {
+  const Int child_size = supernode_sizes[child_start];
+  const Int parent_size = supernode_sizes[parent_start];
+
+  const Int child_structure_beg = scalar_structure.column_offsets[child_start];
+  const Int child_structure_end =
+      scalar_structure.column_offsets[child_start + 1];
+  const Int parent_structure_beg =
+      scalar_structure.column_offsets[parent_start];
+  const Int parent_structure_end =
+      scalar_structure.column_offsets[parent_start + 1];
+  const Int child_structure_size = child_structure_end - child_structure_beg;
+  const Int parent_structure_size = parent_structure_end - parent_structure_beg;
+
+  MergableStatus status;
+
+  // Count the number of intersections of the child's structure with the
+  // parent supernode (and then leave the child structure pointer after the
+  // parent supernode.
+  //
+  // We know that any intersections of the child with the parent occur at the
+  // beginning of the child's structure.
+  Int num_child_parent_intersections = 0;
+  {
+    Int child_structure_ptr = child_structure_beg;
+    while (child_structure_ptr < child_structure_end &&
+           member_to_start[scalar_structure.indices[child_structure_ptr]] ==
+               parent_start) {
+      ++child_structure_ptr;
+      ++num_child_parent_intersections;
+    }
+  }
+  const Int num_missing_parent_intersections =
+      parent_size - num_child_parent_intersections;
+
+  // Since the structure of L21 contains the structure of L20, we need only
+  // compare the sizes of the structure of the parent supernode to the
+  // remaining structure size to know how many indices will need to be
+  // introduced into L20.
+  const Int remaining_child_structure_size =
+      child_structure_size - num_child_parent_intersections;
+  const Int num_missing_structure_indices =
+      parent_structure_size - remaining_child_structure_size;
+
+  const Int num_new_zeros =
+      (num_missing_parent_intersections + num_missing_structure_indices) *
+      child_size;
+  const Int num_old_zeros =
+      num_explicit_zeros[child_start] + num_explicit_zeros[parent_start];
+  const Int num_zeros = num_new_zeros + num_old_zeros;
+
+  // Check if the merge would meet the absolute merge criterion.
+  if (num_zeros <= control.allowable_supernode_zeros) {
+    status.mergable = false;
+    return status;
+  }
+
+  // Check if the merge would meet the relative merge criterion.
+  const Int num_expanded_entries =
+      /* num_nonzeros(L00) */
+      (child_size + (child_size + 1)) / 2 +
+      /* num_nonzeros(L10) */
+      parent_size * child_size +
+      /* num_nonzeros(L20) */
+      remaining_child_structure_size * child_size +
+      /* num_nonzeros(L11) */
+      (parent_size + (parent_size + 1)) / 2 +
+      /* num_nonzeros(L21) */
+      parent_structure_size * parent_size;
+  if (num_zeros <=
+      control.allowable_supernode_zero_ratio * num_expanded_entries) {
+    status.mergable = false;
+    return status;
+  }
+
+  status.mergable = true;
+  status.num_merged_zeros = num_zeros;
+  return status;
+}
+
+template <class Field>
+void RelaxSupernodes(
+    const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& orig_supernode_sizes,
+    const std::vector<Int>& orig_supernode_starts,
+    const std::vector<Int>& orig_supernode_parents,
+    const std::vector<Int>& orig_supernode_degrees,
+    const LowerStructure& scalar_structure,
+    const SupernodalLDLControl& control,
+    std::vector<Int>* supernode_parents,
+    std::vector<Int>* supernode_degrees,
+    SupernodalLDLFactorization<Field>* factorization) {
+  const Int num_rows = matrix.NumRows();
+  const Int num_supernodes = orig_supernode_sizes.size();
+
+  // Construct the down-links for the elimination forest.
+  std::vector<Int> num_supernode_children(num_supernodes, 0);
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int parent = orig_supernode_parents[supernode];
+    if (parent >= 0) {
+      ++num_supernode_children[parent];
+    }
+  }
+  std::vector<Int> child_start_offsets(num_supernodes + 1);
+  Int child_offset = 0;
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    child_start_offsets[supernode] = child_offset;
+    child_offset += num_supernode_children[supernode];
+  }
+  child_start_offsets[num_supernodes] = child_offset;
+  std::vector<Int> child_starts(num_supernodes);
+  {
+    auto offsets_copy = child_start_offsets;
+    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+      const Int parent = orig_supernode_parents[supernode];
+      if (parent >= 0) {
+        child_starts[offsets_copy[parent]++] = orig_supernode_starts[supernode];
+      }
+    }
+  }
+
+  // Set up singly-linked lists for each supernode, packed into a single array.
+  // The end of a supernode is marked with a -1 entry. Simultaneously, set up
+  // an array of length num_rows, where each index is the principal member of
+  // the containing supernode.
+  std::vector<Int> next_member(num_rows, -1);
+  std::vector<Int> last_member(num_rows, -1);
+  std::vector<Int> member_to_start(num_rows);
+  std::vector<Int> member_to_supernode_size(num_rows, 0);
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int supernode_size = orig_supernode_sizes[supernode];
+    const Int supernode_start = orig_supernode_starts[supernode];
+    last_member[supernode_start] = supernode_start + supernode_size - 1;
+    member_to_supernode_size[supernode_start] = supernode_size;
+    for (Int index = 0; index < supernode_size - 1; ++index) {
+      next_member[supernode_start + index] = supernode_start + index + 1;
+    }
+    for (Int index = 0; index < supernode_size; ++index) {
+      member_to_start[supernode_start + index] = supernode_start;
+    }
+  }
+
+  // Initialize the number of explicit zeros stored in the supernode of each
+  // principal member.
+  std::vector<Int> num_explicit_zeros(num_rows, 0);
+
+  // TODO(Jack Poulson): Fill in supernode_parents in/after the following loop.
+
+  // Walk up the tree in the original postordering, merging supernodes as we
+  // progress.
+  const Int kMergableChildrenReservation = 10;
+  std::vector<Int> mergable_children;
+  mergable_children.reserve(kMergableChildrenReservation);
+  std::vector<Int> num_merged_zeros;
+  num_merged_zeros.reserve(kMergableChildrenReservation);
+  supernode_degrees->reserve(num_supernodes);
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int child_start_beg = child_start_offsets[supernode];
+    const Int num_children =
+        child_start_offsets[supernode + 1] - child_start_beg;
+
+    Int parent_start = orig_supernode_starts[supernode];
+    std::vector<Int> merged_child(num_children, false);
+
+    // The following loop can execute at most 'num_children' times.
+    while (true) {
+      // Compute the list of child indices that can be merged.
+      for (Int child_index = 0; child_index < num_children; ++child_index) {
+        if (merged_child[child_index]) {
+          continue;
+        }
+        const Int child_start = child_starts[child_start_beg + child_index];
+
+        const MergableStatus status = MergableSupernode(
+            child_start, parent_start, member_to_supernode_size,
+            member_to_start, scalar_structure, num_explicit_zeros, control);
+        if (status.mergable) {
+          mergable_children.push_back(child_index);
+          num_merged_zeros.push_back(status.num_merged_zeros);
+        }
+      }
+
+      // Skip this supernode if no children can be merged into it.
+      if (mergable_children.empty()) {
+        break;
+      }
+
+      // Select the largest mergable supernode.
+      Int merging_index = 0;
+      Int largest_mergable_size =
+          member_to_supernode_size[child_starts[
+              child_start_beg + mergable_children[0]]];
+      for (std::size_t mergable_index = 1;
+          mergable_index < mergable_children.size(); ++mergable_index) {
+        const Int child_index = mergable_children[mergable_index];
+        const Int child_start = child_starts[child_start_beg + child_index];
+        const Int child_size = member_to_supernode_size[child_start];
+        if (child_size > largest_mergable_size) {
+          merging_index = mergable_index;
+          largest_mergable_size = child_size;
+        }
+      }
+      const Int child_start =
+          child_starts[child_start_beg + mergable_children[merging_index]];
+
+       // Update the number of explicit zeros in the merged supernode.
+      num_explicit_zeros[child_start] = num_merged_zeros[merging_index];
+
+     // Merge the child and parent supernodes in 'next_member' by connecting
+      // the two chains.
+      next_member[last_member[child_start]] = parent_start;
+
+      // Merge the child and parent supernodes in 'last_member'.
+      last_member[child_start] = last_member[parent_start];
+
+      // Merge the child and parent supernodes in 'supernode_sizes'.
+      member_to_supernode_size[child_start] +=
+          member_to_supernode_size[parent_start];
+      member_to_supernode_size[parent_start] = 0;
+
+      // Point the members of the parent supernode to the child supernode start.
+      {
+        Int index = parent_start;
+        member_to_start[index] = child_start;
+        while (next_member[index] != -1) {
+          index = next_member[index];
+          member_to_start[index] = child_start;
+        }
+      }
+
+      // Move the start of the parent supernode to the merged start.
+      parent_start = child_start;
+
+      // Mark the child as merged.
+      merged_child[merging_index] = true;
+
+      // Clear the mergable children information since it is now stale.
+      mergable_children.clear();
+      num_merged_zeros.clear();
+    }
+
+    supernode_degrees->push_back(orig_supernode_degrees[supernode]);
+  }
+
+  // TODO(Jack Poulson): Fill permutation and inverse_permutation using the
+  // post-ordering of the relaxed supernodal elimination forest.
+  std::cerr << "This relaxation code is not yet finished." << std::endl;
+}
+
+// Form the (possibly relaxed) supernodes for the factorization.
+template <class Field>
+void FormSupernodes(
+    const CoordinateMatrix<Field>& matrix,
+    const SupernodalLDLControl& control,
+    std::vector<Int>* parents,
+    std::vector<Int>* degrees,
+    std::vector<Int>* supernode_parents,
+    SupernodalLDLFactorization<Field>* factorization) {
+
+  // Compute the non-supernodal elimination tree using the original ordering.
+  std::vector<Int> orig_parents, orig_degrees;
+  ldl::EliminationForestAndDegrees(matrix, &orig_parents, &orig_degrees);
+
+  // Greedily compute a supernodal partition using the original ordering.
+  std::vector<Int> orig_supernode_sizes;
+  LowerStructure scalar_structure;
+  FormFundamentalSupernodes(
+      matrix, orig_parents, orig_degrees, &orig_supernode_sizes,
+      &scalar_structure);
+
+#ifdef CATAMARI_DEBUG
+  {
+    Int supernode_size_sum = 0;
+    for (const Int& supernode_size : orig_supernode_sizes) {
+      supernode_size_sum += supernode_size;
+    }
+    CATAMARI_ASSERT(supernode_size_sum == matrix.NumRows(),
+                    "Supernodes did not sum to the matrix size.");
+  }
+#endif
+
+  std::vector<Int> orig_supernode_starts;
+  SupernodeStarts(orig_supernode_sizes, &orig_supernode_starts);
+
+  std::vector<Int> orig_member_to_index;
+  MemberToIndex(
+      matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
+
+  // TODO(Jack Poulson): Avoid recomputing orig_parents and orig_degrees.
+  std::vector<Int> trivial_permutation;
+  EliminationForestAndDegrees(
+      matrix, trivial_permutation, trivial_permutation, orig_supernode_sizes,
+      orig_supernode_starts, orig_member_to_index, &orig_parents,
+      &orig_degrees);
+
+  const Int num_orig_supernodes = orig_supernode_sizes.size();
+  std::vector<Int> orig_supernode_parents;
+  ConvertFromScalarToSupernodalEliminationForest(
+      num_orig_supernodes, orig_parents, orig_member_to_index,
+      &orig_supernode_parents);
+
+  if (control.relax_supernodes) {
+    std::vector<Int> supernode_degrees;
+    RelaxSupernodes(
+        matrix, orig_supernode_sizes, orig_supernode_starts,
+        orig_supernode_parents, orig_degrees, scalar_structure,
+        control, supernode_parents, &supernode_degrees, factorization);
+
+    // TODO(Jack Poulson): Form parents.
+    // TODO(Jack Poulson): Form degrees.
+    // TODO(Jack Poulson): Form supernode_parents.
+    // TODO(Jack Poulson): Form whatever is needed of factorization, including
+    //    the permutation associated with the supernodal merges.
+  } else {
+    *parents = orig_parents;
+    *degrees = orig_degrees;
+    *supernode_parents = orig_supernode_parents;
+    factorization->supernode_sizes = orig_supernode_sizes;
+    factorization->supernode_starts = orig_supernode_starts;
+    factorization->supernode_member_to_index = orig_member_to_index;
   }
 }
 
 template <class Field>
 Int LeftLooking(const CoordinateMatrix<Field>& matrix,
+                const SupernodalLDLControl& control,
                 SupernodalLDLFactorization<Field>* factorization) {
+  std::vector<Int> parents;
+  std::vector<Int> degrees;
+  std::vector<Int> supernode_parents;
+  FormSupernodes(
+      matrix, control, &parents, &degrees, &supernode_parents, factorization);
+
   const Int num_supernodes = factorization->supernode_sizes.size();
   SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
 
-  std::vector<Int> supernode_parents;
-  LeftLookingSetup(matrix, &supernode_parents, factorization);
+  InitializeLeftLookingFactors(matrix, parents, degrees, factorization);
 
   // Set up a buffer for supernodal updates.
   Int max_supernode_size = 0;
@@ -892,9 +1454,9 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
     // Compute the supernodal row pattern.
     const Int num_packed = ComputeRowPattern(
         matrix, factorization->permutation, factorization->inverse_permutation,
-        factorization->supernode_sizes, factorization->supernode_offsets,
-        factorization->supernode_container, supernode_parents, main_supernode,
-        pattern_flags.data(), row_structure.data());
+        factorization->supernode_sizes, factorization->supernode_starts,
+        factorization->supernode_member_to_index, supernode_parents,
+        main_supernode, pattern_flags.data(), row_structure.data());
 
     // for J = find(L(K, :))
     //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
@@ -972,156 +1534,13 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
   return num_pivots;
 }
 
-// Compute an unrelaxed supernodal partition using the existing ordering.
-template <class Field>
-void FormFundamentalSupernodes(
-    const CoordinateMatrix<Field>& matrix,
-    SupernodalLDLFactorization<Field>* factorization) {
-  const Int num_rows = matrix.NumRows();
-
-  std::vector<Int> parents, degrees;
-  ldl::EliminationForestAndDegrees(matrix, &parents, &degrees);
-  
-  LDLFactorization<Field> scalar_factorization;
-  LowerFactor<Field>& lower_factor = scalar_factorization.lower_factor;
-  ldl::FillStructureIndices(matrix, parents, degrees, &scalar_factorization);
-
-  factorization->supernode_sizes.clear();
-  if (!num_rows) {
-    return;
-  }
-
-  factorization->supernode_sizes.reserve(num_rows);
-  factorization->supernode_sizes.push_back(1);
-  for (Int column = 1; column < num_rows; ++column) {
-    // Test if the structure of this supernode matches that of the previous
-    // column (with all indices up to this column removed).
-    const Int last_column_beg = lower_factor.column_offsets[column - 1];
-    const Int column_beg = lower_factor.column_offsets[column];
-    const Int column_end = lower_factor.column_offsets[column + 1]; 
-
-    // Move the pointer for the last column's structure past row 'column'.
-    Int last_column_ptr = last_column_beg;
-    while (last_column_ptr < column_beg &&
-        lower_factor.indices[last_column_ptr] <= column) { 
-      ++last_column_ptr;
-    }
-
-    // Test if both of the remaining column structures are equal.
-    bool equal_structures = true;
-    for (Int index = column_beg; index < column_end; ++index) { 
-      const Int row = lower_factor.indices[index];
-      if (last_column_ptr == column_beg || 
-          lower_factor.indices[last_column_ptr] != row) {
-        equal_structures = false;
-        break;
-      }
-    }
-
-    if (equal_structures) {
-      ++factorization->supernode_sizes.back();
-    } else {
-      factorization->supernode_sizes.push_back(1);
-    }
-  }
-
-#ifdef CATAMARI_DEBUG
-  if (!ValidFundamentalSupernodes(matrix, factorization->supernode_sizes)) {
-    std::cerr << "Invalid fundamental supernodes." << std::endl;
-    return 0;
-  }
-#endif
-}
-
-// Checks that a valid set of supernodes has been provided by explicitly
-// computing each row pattern and ensuring that each intersects entire
-// supernodes.
-template <class Field>
-bool ValidFundamentalSupernodes(
-    const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& supernode_sizes) {
-  const Int num_rows = matrix.NumRows();
-
-  std::vector<Int> parents, degrees;
-  ldl::EliminationForestAndDegrees(matrix, &parents, &degrees);
-
-  std::vector<Int> supernode_offsets, supernode_container;
-  SupernodeOffsets(supernode_sizes, &supernode_offsets);
-  SupernodeContainers(num_rows, supernode_offsets, &supernode_container);
-
-  std::vector<Int> row_structure(num_rows);
-  std::vector<Int> pattern_flags(num_rows);
-
-  bool valid = true;
-  for (Int row = 0; row < num_rows; ++row) {
-    const Int row_supernode = supernode_container[row];
-
-    pattern_flags[row] = row;
-    const Int num_packed = ldl::ComputeRowPattern(
-        matrix, parents, row, pattern_flags.data(), row_structure.data());
-    std::sort(row_structure.data(), row_structure.data() + num_packed);
-
-    // Check that the pattern of this row intersects entire supernodes that
-    // are not the current row's supernode.
-    Int index = 0;
-    while (index < num_packed) {
-      const Int column = row_structure[index];
-      const Int supernode = supernode_container[column];
-      if (supernode == row_supernode) {
-        break;
-      }
-
-      const Int supernode_beg = supernode_offsets[supernode];
-      const Int supernode_size = supernode_sizes[supernode];
-      if (num_packed < index + supernode_size) {
-        std::cerr << "Did not pack enough indices to hold supernode "
-                  << supernode << " of size " << supernode_size << " in row "
-                  << row << std::endl;
-        return false;
-      }
-      for (Int j = 0; j < supernode_size; ++j) {
-        if (row_structure[index++] != supernode_beg + j) {
-          std::cerr << "Missed column " << supernode_beg + j << " in row "
-                    << row << " and supernode " << supernode_beg << ":"
-                    << supernode_beg + supernode_size << std::endl;
-          valid = false;
-        }
-      }
-    }
-  }
-  return valid;
-}
-
-template <class Field>
-void RelaxSupernodes(
-    const CoordinateMatrix<Field>& matrix,
-    const SupernodalLDLControl& control,
-    SupernodalLDLFactorization<Field>* factorization) {
-  // DO_NOT_SUBMIT
-  // TODO(Jack Poulson): Decide if the fundamental supernodal elimination tree
-  // should be passed in as an argument.
-  // HERE
-}
-
-template <class Field>
-void FormSupernodes(
-    const CoordinateMatrix<Field>& matrix,
-    const SupernodalLDLControl& control,
-    SupernodalLDLFactorization<Field>* factorization) {
-  FormFundamentalSupernodes(matrix, factorization);
-  if (control.relax_supernodes) { 
-    RelaxSupernodes(matrix, control, factorization);
-  }
-}
-
 }  // namespace supernodal_ldl
 
 template <class Field>
 Int LDL(const CoordinateMatrix<Field>& matrix,
         const SupernodalLDLControl& control,
         SupernodalLDLFactorization<Field>* factorization) {
-  supernodal_ldl::FormSupernodes(matrix, control, factorization);
-  return supernodal_ldl::LeftLooking(matrix, factorization);
+  return supernodal_ldl::LeftLooking(matrix, control, factorization);
 }
 
 template <class Field>
@@ -1134,7 +1553,7 @@ void LDLSolve(const SupernodalLDLFactorization<Field>& factorization,
   if (have_permutation) {
     std::vector<Field> vector_copy = *vector;
     for (Int row = 0; row < num_rows; ++row) {
-      (*vector)[factorization.permutation[row]] = vector_copy[row]; 
+      (*vector)[factorization.permutation[row]] = vector_copy[row];
     }
   }
 
@@ -1158,7 +1577,7 @@ void UnitLowerTriangularSolve(
   const Int num_supernodes = factorization.supernode_sizes.size();
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
-    const Int supernode_beg = factorization.supernode_offsets[supernode];
+    const Int supernode_start = factorization.supernode_starts[supernode];
 
     const Int diag_value_beg =
         factorization.diagonal_factor.value_offsets[supernode];
@@ -1171,12 +1590,12 @@ void UnitLowerTriangularSolve(
     const Int value_beg = factorization.lower_factor.value_offsets[supernode];
 
     for (Int j = 0; j < supernode_size; ++j) {
-      const Int column = supernode_beg + j;
+      const Int column = supernode_start + j;
       const Field& eta = (*vector)[column];
 
       // Handle the diagonal-block portion of the supernode.
       for (Int i = j + 1; i < supernode_size; ++i) {
-        const Int row = supernode_beg + i;
+        const Int row = supernode_start + i;
         const Field& value = diag_block[i + j * supernode_size];
         (*vector)[row] -= value * eta;
       }
@@ -1199,7 +1618,7 @@ void DiagonalSolve(const SupernodalLDLFactorization<Field>& factorization,
   const Int num_supernodes = factorization.supernode_sizes.size();
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
-    const Int supernode_beg = factorization.supernode_offsets[supernode];
+    const Int supernode_start = factorization.supernode_starts[supernode];
 
     // Handle the diagonal-block portion of the supernode.
     const Int diag_value_beg =
@@ -1207,7 +1626,7 @@ void DiagonalSolve(const SupernodalLDLFactorization<Field>& factorization,
     const Field* diag_block =
         &factorization.diagonal_factor.values[diag_value_beg];
     for (Int j = 0; j < supernode_size; ++j) {
-      const Int column = supernode_beg + j;
+      const Int column = supernode_start + j;
       const Field& value = diag_block[j + j * supernode_size];
       (*vector)[column] /= value;
     }
@@ -1221,7 +1640,7 @@ void UnitLowerAdjointTriangularSolve(
   const Int num_supernodes = factorization.supernode_sizes.size();
   for (Int supernode = num_supernodes - 1; supernode >= 0; --supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
-    const Int supernode_beg = factorization.supernode_offsets[supernode];
+    const Int supernode_start = factorization.supernode_starts[supernode];
 
     const Int diag_value_beg =
         factorization.diagonal_factor.value_offsets[supernode];
@@ -1234,13 +1653,13 @@ void UnitLowerAdjointTriangularSolve(
     const Int value_beg = factorization.lower_factor.value_offsets[supernode];
 
     for (Int j = supernode_size - 1; j >= 0; --j) {
-      const Int column = supernode_beg + j;
+      const Int column = supernode_start + j;
        Field& eta = (*vector)[column];
 
       // Handle the diagonal-block portion of the supernode.
       const Field* diag_column = &diag_block[j * supernode_size];
       for (Int i = j + 1; i < supernode_size; ++i) {
-        const Int row = supernode_beg + i;
+        const Int row = supernode_start + i;
         const Field& value = diag_column[i];
         eta -= Conjugate(value) * (*vector)[row];
       }
@@ -1273,7 +1692,7 @@ void PrintLowerFactor(
   os << label << ": \n";
   const Int num_supernodes = factorization.supernode_sizes.size();
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int supernode_beg = factorization.supernode_offsets[supernode];
+    const Int supernode_start = factorization.supernode_starts[supernode];
     const Int supernode_size = factorization.supernode_sizes[supernode];
 
     const Int index_beg = lower_factor.index_offsets[supernode];
@@ -1286,13 +1705,13 @@ void PrintLowerFactor(
     const Field* diag_block = &diag_factor.values[diag_offset];
 
     for (Int j = 0; j < supernode_size; ++j) {
-      const Int column = supernode_beg + j;
+      const Int column = supernode_start + j;
 
       // Print the portion in the diagonal block.
       print_entry(column, column, Field{1});
       for (Int k = j + 1; k < supernode_size; ++k) {
-        const Int row = supernode_beg + k;
-        const Field& value = diag_block[k + j * supernode_size]; 
+        const Int row = supernode_start + k;
+        const Field& value = diag_block[k + j * supernode_size];
         print_entry(row, column, value);
       }
 
