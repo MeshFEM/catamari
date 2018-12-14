@@ -8,48 +8,12 @@
 #ifndef CATAMARI_SUPERNODAL_LDL_IMPL_H_
 #define CATAMARI_SUPERNODAL_LDL_IMPL_H_
 
+#include "catamari/blas.hpp"
 #include "catamari/supernodal_ldl.hpp"
 
 namespace catamari {
 
-template <class Field>
-void GeneralMatrixMultiplyTransposeNormal(
-    Int output_height, Int output_width, Int contraction_size,
-    const Field& alpha, const Field* A, Int leading_dim_of_A,
-    const Field* B, Int leading_dim_of_B, const Field& beta, Field* C,
-    Int leading_dim_of_C) {
-  // TODO(Jack Poulson): Substitute an optimized version of this routine.
-  for (Int j = 0; j < output_width; ++j) {
-    for (Int i = 0; i < output_height; ++i) {
-      Field& output_entry = C[i + j * leading_dim_of_C];
-      output_entry *= beta;
-      for (Int k = 0; k < contraction_size; ++k) {
-        output_entry +=
-            alpha * A[k + i * leading_dim_of_A] * B[k + j * leading_dim_of_B];
-      }
-    }
-  }
-}
-
-template <class Field>
-void HermitianMatrixMultiplyTransposeNormalLower(
-    Int output_height, Int contraction_size,
-    const Field& alpha, const Field* A, Int leading_dim_of_A,
-    const Field* B, Int leading_dim_of_B, const Field& beta, Field* C,
-    Int leading_dim_of_C) {
-  // TODO(Jack Poulson): Substitute an optimized version of this routine.
-  for (Int j = 0; j < output_height; ++j) {
-    for (Int i = j; i < output_height; ++i) {
-      Field& output_entry = C[i + j * leading_dim_of_C];
-      output_entry *= beta;
-      for (Int k = 0; k < contraction_size; ++k) {
-        output_entry +=
-            alpha * A[k + i * leading_dim_of_A] * B[k + j * leading_dim_of_B];
-      }
-    }
-  }
-}
-
+// TODO(Jack Poulson): Move into an lapack.hpp file.
 template <class Field>
 Int LowerLDLAdjointFactorization(Int height, Field* A, Int leading_dim) {
   // TODO(Jack Poulson): Substitute an optimized version of this routine.
@@ -75,25 +39,6 @@ Int LowerLDLAdjointFactorization(Int height, Field* A, Int leading_dim) {
     }
   }
   return height;
-}
-
-template <class Field>
-void DiagonalTimesConjugateUnitLowerTriangularSolves(
-  Int height, Int width, const Field* L, Int leading_dim_of_L, Field* A,
-  Int leading_dim_of_A) {
-  // TODO(Jack Poulson): Switch to a level-3 BLAS implementation.
-  for (Int j = 0; j < width; ++j) {
-    Field* input_column = &A[j * leading_dim_of_A];
-
-    // Interleave with a subsequent solve against D.
-    for (Int i = 0; i < height; ++i) {
-      const Field* l_column = &L[i * leading_dim_of_L];
-      for (Int k = i + 1; k < height; ++k) {
-        input_column[k] -= Conjugate(l_column[k]) * input_column[i];
-      }
-      input_column[i] /= l_column[i];
-    }
-  }
 }
 
 namespace supernodal_ldl {
@@ -697,7 +642,7 @@ void UpdateDiagonalBlock(Int main_supernode, Int descendant_supernode,
 
   const Field* descendant_main_block =
       &lower_factor.values[descendant_main_value_beg];
-  HermitianMatrixMultiplyTransposeNormalLower(
+  MatrixMultiplyTransposeNormalLower(
       descendant_main_intersect_size, descendant_supernode_size,
       Field{-1}, descendant_main_block, descendant_supernode_size,
       scaled_adjoint_buffer, descendant_supernode_size,
@@ -798,7 +743,7 @@ void UpdateSubdiagonalBlock(
   const Field* descendant_active_block =
       &lower_factor.values[descendant_active_value_beg];
 
-  GeneralMatrixMultiplyTransposeNormal(
+  MatrixMultiplyTransposeNormal(
       descendant_main_intersect_size, descendant_active_intersect_size,
       descendant_supernode_size, Field{-1},
       scaled_adjoint_buffer, descendant_supernode_size,

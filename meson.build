@@ -18,6 +18,15 @@ cxx = meson.get_compiler('cpp')
 deps = []
 cxx_args = []
 
+openblas_lib = cxx.find_library('libopenblas', required : false)
+if openblas_lib.found()
+  message('Found OpenBLAS')
+  cxx_args += '-DCATAMARI_HAVE_OPENBLAS'
+  deps += openblas_lib
+
+  # TODO(Jack Poulson): Detect a compatible LAPACK library.
+endif
+
 # Test if quotient is installed.
 found_quotient = cxx.has_header('quotient.hpp')
 if not found_quotient
