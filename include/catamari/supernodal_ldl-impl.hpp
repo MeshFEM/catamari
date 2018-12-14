@@ -90,19 +90,17 @@ inline void InitializeEliminationForest(
   }
 }
 
-// Computes the elimination forest (via the 'parents' array) and sizes of the
-// structures of a supernodal LDL' factorization.
+// Computes the sizes of the structures of a supernodal LDL' factorization.
 template <class Field>
-void EliminationForestAndDegrees(
+void SupernodalDegrees(
     const CoordinateMatrix<Field>& matrix,
     const std::vector<Int>& supernode_sizes,
     const std::vector<Int>& supernode_starts,
-    const std::vector<Int>& member_to_index, std::vector<Int>* parents,
+    const std::vector<Int>& member_to_index,
+    const std::vector<Int>& parents,
     std::vector<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = supernode_sizes.size();
-
-  InitializeEliminationForest(supernode_starts, member_to_index, parents);
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -153,16 +151,10 @@ void EliminationForestAndDegrees(
           }
         }
 
-        if ((*parents)[descendant] == -1) {
-          // This is the first occurrence of 'descendant' in a row pattern.
-          // This can only occur for the last member of a supernode.
-          (*parents)[descendant] = row;
-        }
-
         // Move up to the parent in this subtree of the elimination forest.
         // Moving to the parent will increase the index (but remain bounded
         // from above by 'row').
-        descendant = (*parents)[descendant];
+        descendant = parents[descendant];
       }
     }
   }
@@ -452,14 +444,14 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void InitializeLeftLookingFactors(
     const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
-    const std::vector<Int>& degrees,
+    const std::vector<Int>& supernode_degrees,
     SupernodalLDLFactorization<Field>* factorization) {
   SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
   SupernodalDiagonalFactor<Field>& diagonal_factor =
       factorization->diagonal_factor;
   const Int num_supernodes = factorization->supernode_sizes.size();
-  CATAMARI_ASSERT(static_cast<Int>(degrees.size()) == num_supernodes,
-                  "Invalid degrees size.");
+  CATAMARI_ASSERT(static_cast<Int>(supernode_degrees.size()) == num_supernodes,
+                  "Invalid supernode degrees size.");
 
   // Set up the column offsets and allocate space (initializing the values of
   // the unit-lower and diagonal and all zeros).
@@ -474,7 +466,7 @@ void InitializeLeftLookingFactors(
     lower_factor.value_offsets[supernode] = num_entries;
     diagonal_factor.value_offsets[supernode] = num_diagonal_entries;
 
-    const Int degree = degrees[supernode];
+    const Int degree = supernode_degrees[supernode];
     const Int supernode_size = factorization->supernode_sizes[supernode];
     degree_sum += degree;
     num_entries += degree * supernode_size;
@@ -1131,8 +1123,6 @@ inline MergableStatus MergableSupernode(
   return status;
 }
 
-// TODO(Jack Poulson): Recognize that 'orig_supernode_starts' is incorrect
-// if a child has already been merged.
 inline void MergeChildren(
     Int parent, const std::vector<Int>& orig_supernode_starts,
     const std::vector<Int>& orig_supernode_sizes,
@@ -1245,13 +1235,7 @@ inline void EliminationForestFromParents(
     }
   }
 
-  child_offsets->resize(num_indices + 1);
-  Int child_offset = 0;
-  for (Int index = 0; index < num_indices; ++index) {
-    (*child_offsets)[index] = child_offset;
-    child_offset += num_children[index];
-  }
-  (*child_offsets)[num_indices] = child_offset;
+  OffsetScan(num_children, child_offsets);
 
   children->resize(num_indices);
   auto offsets_copy = *child_offsets;
@@ -1405,7 +1389,7 @@ void FormSupernodes(
     const CoordinateMatrix<Field>& matrix,
     const SupernodalLDLControl& control,
     std::vector<Int>* parents,
-    std::vector<Int>* degrees,
+    std::vector<Int>* supernode_degrees,
     std::vector<Int>* supernode_parents,
     SupernodalLDLFactorization<Field>* factorization) {
 
@@ -1438,11 +1422,10 @@ void FormSupernodes(
   MemberToIndex(
       matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
 
-  // TODO(Jack Poulson): Avoid recomputing orig_parents. While it may appear
-  // that 'orig_degrees' was recomputed, this time it is supernodal.
-  EliminationForestAndDegrees(
+  std::vector<Int> orig_supernode_degrees;
+  SupernodalDegrees(
       matrix, orig_supernode_sizes, orig_supernode_starts, orig_member_to_index,
-      &orig_parents, &orig_degrees);
+      orig_parents, &orig_supernode_degrees);
 
   const Int num_orig_supernodes = orig_supernode_sizes.size();
   std::vector<Int> orig_supernode_parents;
@@ -1453,14 +1436,15 @@ void FormSupernodes(
   if (control.relax_supernodes) {
     RelaxSupernodes(
         orig_supernode_sizes, orig_supernode_starts,
-        orig_supernode_parents, orig_degrees, orig_member_to_index,
-        scalar_structure, control, supernode_parents, degrees, factorization);
+        orig_supernode_parents, orig_supernode_degrees, orig_member_to_index,
+        scalar_structure, control, supernode_parents, supernode_degrees,
+        factorization);
 
     // We keep the 'parents' array in the original (unrelaxed) ordering.
     *parents = orig_parents;
   } else {
     *parents = orig_parents;
-    *degrees = orig_degrees;
+    *supernode_degrees = orig_supernode_degrees;
     *supernode_parents = orig_supernode_parents;
     factorization->supernode_sizes = orig_supernode_sizes;
     factorization->supernode_starts = orig_supernode_starts;
@@ -1473,15 +1457,17 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
                 const SupernodalLDLControl& control,
                 SupernodalLDLFactorization<Field>* factorization) {
   std::vector<Int> parents;
-  std::vector<Int> degrees;
+  std::vector<Int> supernode_degrees;
   std::vector<Int> supernode_parents;
   FormSupernodes(
-      matrix, control, &parents, &degrees, &supernode_parents, factorization);
+      matrix, control, &parents, &supernode_degrees, &supernode_parents,
+      factorization);
 
   const Int num_supernodes = factorization->supernode_sizes.size();
   SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
 
-  InitializeLeftLookingFactors(matrix, parents, degrees, factorization);
+  InitializeLeftLookingFactors(
+      matrix, parents, supernode_degrees, factorization);
 
   // Set up a buffer for supernodal updates.
   Int max_supernode_size = 0;
