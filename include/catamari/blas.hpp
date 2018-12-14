@@ -20,11 +20,22 @@ void MatrixMultiplyTransposeNormal(
     Field* output_matrix, Int output_leading_dim);
 
 template <class Field>
+void HermitianOuterProductTransposeLower(
+    Int output_height, Int contraction_size,
+    const Field& alpha, const Field* left_matrix, Int left_leading_dim,
+    const Field& beta, Field* output_matrix, Int output_leading_dim);
+
+template <class Field>
 void MatrixMultiplyTransposeNormalLower(
     Int output_height, Int contraction_size,
     const Field& alpha, const Field* left_matrix, Int left_leading_dim,
     const Field* right_matrix, Int right_leading_dim, const Field& beta,
     Field* output_matrix, Int output_leading_dim);
+
+template <class Field>
+void ConjugateLowerTriangularSolves(
+  Int height, Int width, const Field* triangular_matrix, Int triang_leading_dim,
+  Field* matrix, Int leading_dim);
 
 template <class Field>
 void DiagonalTimesConjugateUnitLowerTriangularSolves(

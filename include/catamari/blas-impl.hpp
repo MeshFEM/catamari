@@ -11,40 +11,72 @@
 #include "catamari/blas.hpp"
 
 #ifdef CATAMARI_HAVE_OPENBLAS
-extern "C" {
 
 // TODO(Jack Poulson): Attempt to support 64-bit BLAS when Int = long long int.
+typedef int BlasInt;
 
-void dgemm_(
+#define CATAMARI_HAVE_BLAS
+#define BLAS_SYMBOL(name) name ## _
+
+#endif  // ifdef CATAMARI_HAVE_OPENBLAS
+
+#ifdef CATAMARI_HAVE_BLAS
+extern "C" {
+
+void BLAS_SYMBOL(ssyr)(
+    const char* uplo, const BlasInt* height, const float* alpha, const float* x,
+    const BlasInt* inc_x, float* matrix, const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(dsyr)(
+    const char* uplo, const BlasInt* height, const double* alpha,
+    const double* x, const BlasInt* inc_x, double* matrix,
+    const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(dgemm)(
     const char* trans_left, const char* trans_right,
-    const int* output_height, const int* output_width,
-    const int* contraction_size, const double* alpha, const double* left_matrix,
-    const int* left_leading_dim, const double* right_matrix,
-    const int* right_leading_dim, const double* beta, double* output_matrix,
-    const int* output_leading_dim);
+    const BlasInt* output_height, const BlasInt* output_width,
+    const BlasInt* contraction_size, const double* alpha,
+    const double* left_matrix, const BlasInt* left_leading_dim,
+    const double* right_matrix, const BlasInt* right_leading_dim,
+    const double* beta, double* output_matrix,
+    const BlasInt* output_leading_dim);
 
-void sgemm_(
+void BLAS_SYMBOL(sgemm)(
     const char* trans_left, const char* trans_right,
-    const int* output_height, const int* output_width,
-    const int* contraction_size, const float* alpha, const float* left_matrix,
-    const int* left_leading_dim, const float* right_matrix,
-    const int* right_leading_dim, const float* beta, float* output_matrix,
-    const int* output_leading_dim);
+    const BlasInt* output_height, const BlasInt* output_width,
+    const BlasInt* contraction_size, const float* alpha,
+    const float* left_matrix, const BlasInt* left_leading_dim,
+    const float* right_matrix, const BlasInt* right_leading_dim,
+    const float* beta, float* output_matrix, const BlasInt* output_leading_dim);
 
-void dtrsm_(
-    const char* side, const char* uplo, const char* trans_triang,
-    const char* diag, const int* height, const int* width, const double* alpha,
-    const double* triang_matrix, const int* triang_leading_dim, double* matrix,
-    const int* leading_dim);
+void BLAS_SYMBOL(dsyrk)(
+    const char* uplo, const char* trans, const BlasInt* height,
+    const BlasInt* rank, const double* alpha, const double* factor,
+    const BlasInt* factor_leading_dim, const double* beta, double* matrix,
+    const BlasInt* leading_dim);
 
-void strsm_(
+void BLAS_SYMBOL(ssyrk)(
+    const char* uplo, const char* trans, const BlasInt* height,
+    const BlasInt* rank, const float* alpha, const float* factor,
+    const BlasInt* factor_leading_dim, const float* beta, float* matrix,
+    const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(dtrsm)(
     const char* side, const char* uplo, const char* trans_triang,
-    const char* diag, const int* height, const int* width, const float* alpha,
-    const float* triang_matrix, const int* triang_leading_dim, float* matrix,
-    const int* leading_dim);
+    const char* diag, const BlasInt* height, const BlasInt* width,
+    const double* alpha, const double* triang_matrix,
+    const BlasInt* triang_leading_dim, double* matrix,
+    const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(strsm)(
+    const char* side, const char* uplo, const char* trans_triang,
+    const char* diag, const BlasInt* height, const BlasInt* width,
+    const float* alpha, const float* triang_matrix,
+    const BlasInt* triang_leading_dim, float* matrix,
+    const BlasInt* leading_dim);
 
 }
-#endif
+#endif  // ifdef CATAMARI_HAVE_BLAS
 
 namespace catamari {
 
@@ -67,7 +99,7 @@ void MatrixMultiplyTransposeNormal(
   }
 }
 
-#ifdef CATAMARI_HAVE_OPENBLAS
+#ifdef CATAMARI_HAVE_BLAS
 template <>
 void MatrixMultiplyTransposeNormal(
     Int output_height, Int output_width, Int contraction_size,
@@ -76,17 +108,17 @@ void MatrixMultiplyTransposeNormal(
     float* output_matrix, Int output_leading_dim) {
   const char trans_left = 'T';
   const char trans_right = 'N';
-  const int output_height_32 = output_height;
-  const int output_width_32 = output_width;
-  const int contraction_size_32 = contraction_size;
-  const int left_leading_dim_32 = left_leading_dim;
-  const int right_leading_dim_32 = right_leading_dim;
-  const int output_leading_dim_32 = output_leading_dim;
-  sgemm_(
-      &trans_left, &trans_right, &output_height_32, &output_width_32,
-      &contraction_size_32, &alpha, left_matrix, &left_leading_dim_32,
-      right_matrix, &right_leading_dim_32, &beta, output_matrix,
-      &output_leading_dim_32);
+  const BlasInt output_height_blas = output_height;
+  const BlasInt output_width_blas = output_width;
+  const BlasInt contraction_size_blas = contraction_size;
+  const BlasInt left_leading_dim_blas = left_leading_dim;
+  const BlasInt right_leading_dim_blas = right_leading_dim;
+  const BlasInt output_leading_dim_blas = output_leading_dim;
+  BLAS_SYMBOL(sgemm)(
+      &trans_left, &trans_right, &output_height_blas, &output_width_blas,
+      &contraction_size_blas, &alpha, left_matrix, &left_leading_dim_blas,
+      right_matrix, &right_leading_dim_blas, &beta, output_matrix,
+      &output_leading_dim_blas);
 }
 
 template <>
@@ -97,19 +129,71 @@ void MatrixMultiplyTransposeNormal(
     double* output_matrix, Int output_leading_dim) {
   const char trans_left = 'T';
   const char trans_right = 'N';
-  const int output_height_32 = output_height;
-  const int output_width_32 = output_width;
-  const int contraction_size_32 = contraction_size;
-  const int left_leading_dim_32 = left_leading_dim;
-  const int right_leading_dim_32 = right_leading_dim;
-  const int output_leading_dim_32 = output_leading_dim;
-  dgemm_(
-      &trans_left, &trans_right, &output_height_32, &output_width_32,
-      &contraction_size_32, &alpha, left_matrix, &left_leading_dim_32,
-      right_matrix, &right_leading_dim_32, &beta, output_matrix,
-      &output_leading_dim_32);
+  const BlasInt output_height_blas = output_height;
+  const BlasInt output_width_blas = output_width;
+  const BlasInt contraction_size_blas = contraction_size;
+  const BlasInt left_leading_dim_blas = left_leading_dim;
+  const BlasInt right_leading_dim_blas = right_leading_dim;
+  const BlasInt output_leading_dim_blas = output_leading_dim;
+  BLAS_SYMBOL(dgemm)(
+      &trans_left, &trans_right, &output_height_blas, &output_width_blas,
+      &contraction_size_blas, &alpha, left_matrix, &left_leading_dim_blas,
+      right_matrix, &right_leading_dim_blas, &beta, output_matrix,
+      &output_leading_dim_blas);
 }
-#endif
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
+void HermitianOuterProductTransposeLower(
+    Int output_height, Int contraction_size,
+    const Field& alpha, const Field* left_matrix, Int left_leading_dim,
+    const Field& beta, Field* output_matrix, Int output_leading_dim) {
+  for (Int j = 0; j < output_height; ++j) {
+    for (Int i = j; i < output_height; ++i) {
+      Field& output_entry = output_matrix[i + j * output_leading_dim];
+      output_entry *= beta;
+      for (Int k = 0; k < contraction_size; ++k) {
+        output_entry +=
+            alpha * left_matrix[k + i * left_leading_dim] *
+            Conjugate(left_matrix[k + j * left_leading_dim]);
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+void HermitianOuterProductTransposeLower(
+    Int output_height, Int contraction_size,
+    const float& alpha, const float* left_matrix, Int left_leading_dim,
+    const float& beta, float* output_matrix, Int output_leading_dim) {
+  const char uplo = 'L';
+  const char trans = 'T';
+  const BlasInt height_blas = output_height;
+  const BlasInt rank_blas = contraction_size;
+  const BlasInt factor_leading_dim_blas = left_leading_dim;
+  const BlasInt leading_dim_blas = output_leading_dim;
+  BLAS_SYMBOL(ssyrk)(
+      &uplo, &trans, &height_blas, &rank_blas, &alpha, left_matrix,
+      &factor_leading_dim_blas, &beta, output_matrix, &leading_dim_blas);
+}
+
+template <>
+void HermitianOuterProductTransposeLower(
+    Int output_height, Int contraction_size,
+    const double& alpha, const double* left_matrix, Int left_leading_dim,
+    const double& beta, double* output_matrix, Int output_leading_dim) {
+  const char uplo = 'L';
+  const char trans = 'T';
+  const BlasInt height_blas = output_height;
+  const BlasInt rank_blas = contraction_size;
+  const BlasInt factor_leading_dim_blas = left_leading_dim;
+  const BlasInt leading_dim_blas = output_leading_dim;
+  BLAS_SYMBOL(dsyrk)(
+      &uplo, &trans, &height_blas, &rank_blas, &alpha, left_matrix,
+      &factor_leading_dim_blas, &beta, output_matrix, &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
 void MatrixMultiplyTransposeNormalLower(
@@ -130,7 +214,7 @@ void MatrixMultiplyTransposeNormalLower(
   }
 }
 
-#ifdef CATAMARI_HAVE_OPENBLAS
+#ifdef CATAMARI_HAVE_BLAS
 template <>
 void MatrixMultiplyTransposeNormalLower(
     Int output_height, Int contraction_size,
@@ -170,7 +254,65 @@ void MatrixMultiplyTransposeNormalLower(
     }
   }
 }
-#endif
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
+void ConjugateLowerTriangularSolves(
+  Int height, Int width, const Field* triangular_matrix, Int triang_leading_dim,
+  Field* matrix, Int leading_dim) {
+  for (Int j = 0; j < width; ++j) {
+    Field* input_column = &matrix[j * leading_dim];
+
+    // Interleave with a subsequent solve against D.
+    for (Int i = 0; i < height; ++i) {
+      const Field* l_column = &triangular_matrix[i * triang_leading_dim];
+      input_column[i] /= Conjugate(l_column[i]);
+      for (Int k = i + 1; k < height; ++k) {
+        input_column[k] -= Conjugate(l_column[k]) * input_column[i];
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+void ConjugateLowerTriangularSolves(
+  Int height, Int width, const float* triangular_matrix, Int triang_leading_dim,
+  float* matrix, Int leading_dim) {
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = height;
+  const BlasInt width_blas = width;
+  const float alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triang_leading_dim;
+  const BlasInt leading_dim_blas = leading_dim;
+
+  BLAS_SYMBOL(strsm)(
+      &side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+      triangular_matrix, &triang_leading_dim_blas, matrix, &leading_dim_blas);
+}
+
+template <>
+void ConjugateLowerTriangularSolves(
+  Int height, Int width, const double* triangular_matrix,
+  Int triang_leading_dim, double* matrix, Int leading_dim) {
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = height;
+  const BlasInt width_blas = width;
+  const double alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triang_leading_dim;
+  const BlasInt leading_dim_blas = leading_dim;
+
+  BLAS_SYMBOL(dtrsm)(
+      &side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+      triangular_matrix, &triang_leading_dim_blas, matrix, &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
 void DiagonalTimesConjugateUnitLowerTriangularSolves(
@@ -190,25 +332,24 @@ void DiagonalTimesConjugateUnitLowerTriangularSolves(
   }
 }
 
-#ifdef CATAMARI_HAVE_OPENBLAS
+#ifdef CATAMARI_HAVE_BLAS
 template <>
 void DiagonalTimesConjugateUnitLowerTriangularSolves(
   Int height, Int width, const float* triangular_matrix, Int triang_leading_dim,
   float* matrix, Int leading_dim) {
-
   const char side = 'L';
   const char uplo = 'L';
   const char trans_triang = 'N';
   const char diag = 'U';
-  const int height_32 = height;
-  const int width_32 = width;
+  const BlasInt height_blas = height;
+  const BlasInt width_blas = width;
   const float alpha = 1.f;
-  const int triang_leading_dim_32 = triang_leading_dim;
-  const int leading_dim_32 = leading_dim;
+  const BlasInt triang_leading_dim_blas = triang_leading_dim;
+  const BlasInt leading_dim_blas = leading_dim;
 
-  strsm_(
-      &side, &uplo, &trans_triang, &diag, &height_32, &width_32, &alpha,
-      triangular_matrix, &triang_leading_dim_32, matrix, &leading_dim_32);
+  BLAS_SYMBOL(strsm)(
+      &side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+      triangular_matrix, &triang_leading_dim_blas, matrix, &leading_dim_blas);
 
   // Solve against the diagonal.
   for (Int j = 0; j < width; ++j) {
@@ -221,22 +362,22 @@ void DiagonalTimesConjugateUnitLowerTriangularSolves(
 
 template <>
 void DiagonalTimesConjugateUnitLowerTriangularSolves(
-  Int height, Int width, const double* triangular_matrix, Int triang_leading_dim,
+  Int height, Int width, const double* triangular_matrix,
+  Int triang_leading_dim,
   double* matrix, Int leading_dim) {
-
   const char side = 'L';
   const char uplo = 'L';
   const char trans_triang = 'N';
   const char diag = 'U';
-  const int height_32 = height;
-  const int width_32 = width;
+  const BlasInt height_blas = height;
+  const BlasInt width_blas = width;
   const double alpha = 1.;
-  const int triang_leading_dim_32 = triang_leading_dim;
-  const int leading_dim_32 = leading_dim;
+  const BlasInt triang_leading_dim_blas = triang_leading_dim;
+  const BlasInt leading_dim_blas = leading_dim;
 
-  dtrsm_(
-      &side, &uplo, &trans_triang, &diag, &height_32, &width_32, &alpha,
-      triangular_matrix, &triang_leading_dim_32, matrix, &leading_dim_32);
+  BLAS_SYMBOL(dtrsm)(
+      &side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+      triangular_matrix, &triang_leading_dim_blas, matrix, &leading_dim_blas);
 
   // Solve against the diagonal.
   for (Int j = 0; j < width; ++j) {
@@ -246,7 +387,7 @@ void DiagonalTimesConjugateUnitLowerTriangularSolves(
     }
   }
 }
-#endif
+#endif  // ifdef CATAMARI_HAVE_BLAS
 
 }  // namespace catamari
 

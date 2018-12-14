@@ -62,6 +62,9 @@ struct SupernodalDiagonalFactor {
 // The user-facing data structure for storing a supernodal LDL' factorization.
 template <class Field>
 struct SupernodalLDLFactorization {
+  // Marks whether a Cholesky or traditional LDL' factorization was employed.
+  bool is_cholesky;
+
   // An array of length 'num_supernodes'; the i'th member is the size of the
   // i'th supernode.
   std::vector<Int> supernode_sizes;
@@ -84,14 +87,20 @@ struct SupernodalLDLFactorization {
   // Creating relaxed supernodes generally involves a permutation; if the
   // following is nonempty, then, if the permutation is a matrix P, the matrix
   // P A P' has been factored.
-  std::vector<Int> permutation;
+  std::vector<Int> relaxation_permutation;
 
   // The inverse of the above permutation (if it is nontrivial).
-  std::vector<Int> inverse_permutation;
+  std::vector<Int> relaxation_inverse_permutation;
 };
 
 // Configuration options for supernodal LDL' factorization.
 struct SupernodalLDLControl {
+  // Assume that the matrix is numerically Hermitian Positive-Definite so that
+  // square-roots of the diagonal can be taken and we may choose D = I. If this
+  // option is enabled, L is lower-triangular with a positive diagonal;
+  // otherwise, L has a unit diagonal.
+  bool use_cholesky = false;
+
   // If true, relaxed supernodes are created in a manner similar to the
   // suggestion from:
   //   Ashcraft and Grime, "The impact of relaxed supernode partitions on the
@@ -122,9 +131,9 @@ template <class Field>
 void LDLSolve(const SupernodalLDLFactorization<Field>& factorization,
               std::vector<Field>* vector);
 
-// Solves L x = b using a unit-lower triangular matrix L.
+// Solves L x = b using a lower triangular matrix L.
 template <class Field>
-void UnitLowerTriangularSolve(
+void LowerTriangularSolve(
     const SupernodalLDLFactorization<Field>& factorization,
     std::vector<Field>* vector);
 
@@ -133,9 +142,9 @@ template <class Field>
 void DiagonalSolve(const SupernodalLDLFactorization<Field>& factorization,
                    std::vector<Field>* vector);
 
-// Solves L' x = b using a unit-lower triangular matrix L.
+// Solves L' x = b using a lower triangular matrix L.
 template <class Field>
-void UnitLowerAdjointTriangularSolve(
+void LowerAdjointTriangularSolve(
     const SupernodalLDLFactorization<Field>& factorization,
     std::vector<Field>* vector);
 

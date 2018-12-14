@@ -302,6 +302,8 @@ int main(int argc, char** argv) {
       "disable_reordering", "Disable the AMD reordering?", false);
   const bool force_symmetry = parser.OptionalInput<bool>(
       "force_symmetry", "Use the nonzero pattern of A + A'?", true);
+  const bool use_cholesky = parser.OptionalInput<bool>(
+      "use_cholesky", "Use a Cholesky factorization?", false);
   const bool relax_supernodes = parser.OptionalInput<bool>(
       "relax_supernodes", "Relax the supernodes?", true);
   const Int allowable_supernode_zeros = parser.OptionalInput<Int>(
@@ -362,6 +364,7 @@ int main(int argc, char** argv) {
   amd_control.dense_sqrt_multiple = dense_sqrt_multiple;
 
   catamari::SupernodalLDLControl ldl_control;
+  ldl_control.use_cholesky = use_cholesky;
   ldl_control.relax_supernodes = relax_supernodes;
   ldl_control.allowable_supernode_zeros = allowable_supernode_zeros;
   /*

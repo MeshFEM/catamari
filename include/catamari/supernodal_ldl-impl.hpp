@@ -9,54 +9,26 @@
 #define CATAMARI_SUPERNODAL_LDL_IMPL_H_
 
 #include "catamari/blas.hpp"
+#include "catamari/lapack.hpp"
 #include "catamari/supernodal_ldl.hpp"
 
 namespace catamari {
 
-// TODO(Jack Poulson): Move into an lapack.hpp file.
-template <class Field>
-Int LowerLDLAdjointFactorization(Int height, Field* A, Int leading_dim) {
-  // TODO(Jack Poulson): Substitute an optimized version of this routine.
-  for (Int i = 0; i < height; ++i) {
-    const Field& delta = A[i + i * leading_dim];
-    const Field delta_conj = Conjugate(delta);
-    if (delta == Field{0}) {
-      return i;
-    }
-
-    // Solve for the remainder of the i'th column of L.
-    for (Int k = i + 1; k < height; ++k) {
-      A[k + i * leading_dim] /= delta_conj;
-    }
-
-    // Perform the rank-one update.
-    for (Int j = i + 1; j < height; ++j) {
-      const Field eta = delta * Conjugate(A[j + i * leading_dim]);
-      for (Int k = j; k < height; ++k) {
-        const Field& lambda_left = A[k + i * leading_dim];
-        A[k + j * height] -= lambda_left * eta;
-      }
-    }
-  }
-  return height;
-}
-
 namespace supernodal_ldl {
 
-// Fills 'supernode_starts' with a length 'num_supernodes + 1' array whose
-// i'th index is the sum of the supernode sizes whose indices are less than i.
-inline void SupernodeStarts(const std::vector<Int>& supernode_sizes,
-                            std::vector<Int>* supernode_starts) {
-  const Int num_supernodes = supernode_sizes.size();
-  supernode_starts->resize(num_supernodes + 1);
+// Fills 'offsets' with a length 'num_indices + 1' array whose i'th index is
+// the sum of the sizes whose indices are less than i.
+inline void OffsetScan(
+    const std::vector<Int>& sizes, std::vector<Int>* offsets) {
+  const Int num_indices = sizes.size();
+  offsets->resize(num_indices + 1);
 
   Int offset = 0;
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    (*supernode_starts)[supernode] = offset;
-    CATAMARI_ASSERT(supernode_sizes[supernode], "Supernode was empty.");
-    offset += supernode_sizes[supernode];
+  for (Int index = 0; index < num_indices; ++index) {
+    (*offsets)[index] = offset;
+    offset += sizes[index];
   }
-  (*supernode_starts)[num_supernodes] = offset;
+  (*offsets)[num_indices] = offset;
 }
 
 // Fills 'member_to_index' with a length 'num_rows' array whose i'th index
@@ -206,8 +178,9 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           SupernodalLDLFactorization<Field>* factorization) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = factorization->supernode_sizes.size();
-  const std::vector<Int>& perm = factorization->permutation;
-  const std::vector<Int>& inverse_perm = factorization->inverse_permutation;
+  const std::vector<Int>& perm = factorization->relaxation_permutation;
+  const std::vector<Int>& inverse_perm =
+      factorization->relaxation_inverse_permutation;
   const bool have_permutation = !perm.empty();
   SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
 
@@ -387,8 +360,9 @@ template <class Field>
 void FillNonzeros(const CoordinateMatrix<Field>& matrix,
                   SupernodalLDLFactorization<Field>* factorization) {
   const Int num_rows = matrix.NumRows();
-  const std::vector<Int>& perm = factorization->permutation;
-  const std::vector<Int>& inverse_perm = factorization->inverse_permutation;
+  const std::vector<Int>& perm = factorization->relaxation_permutation;
+  const std::vector<Int>& inverse_perm =
+      factorization->relaxation_inverse_permutation;
   const bool have_permutation = !perm.empty();
   SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
   SupernodalDiagonalFactor<Field>& diagonal_factor =
@@ -589,21 +563,34 @@ void FormScaledAdjoint(const SupernodalLDLFactorization<Field>& factorization,
       factorization.diagonal_factor;
   const Int descendant_supernode_size =
       factorization.supernode_sizes[descendant_supernode];
+  const bool is_cholesky = factorization.is_cholesky;
 
-  const Field* descendant_diag_block =
-      &diagonal_factor
-           .values[diagonal_factor.value_offsets[descendant_supernode]];
   const Field* descendant_main_block =
       &lower_factor.values[descendant_main_value_beg];
-  for (Int i = 0; i < descendant_supernode_size; ++i) {
-    const Field& delta =
-        descendant_diag_block[i + i * descendant_supernode_size];
-    for (Int j_rel = 0; j_rel < descendant_main_intersect_size; ++j_rel) {
-      // Recall that lower_insersect_block is row-major.
-      const Field& lambda_right_conj = Conjugate(
-          descendant_main_block[i + j_rel * descendant_supernode_size]);
-      scaled_adjoint_buffer[i + j_rel * descendant_supernode_size] =
-          delta * lambda_right_conj;
+  if (is_cholesky) {
+    for (Int i = 0; i < descendant_supernode_size; ++i) {
+      for (Int j_rel = 0; j_rel < descendant_main_intersect_size; ++j_rel) {
+        // Recall that lower_insersect_block is row-major.
+        const Field& lambda_right_conj = Conjugate(
+            descendant_main_block[i + j_rel * descendant_supernode_size]);
+        scaled_adjoint_buffer[i + j_rel * descendant_supernode_size] =
+            lambda_right_conj;
+      }
+    }
+  } else {
+    const Field* descendant_diag_block =
+        &diagonal_factor
+             .values[diagonal_factor.value_offsets[descendant_supernode]];
+    for (Int i = 0; i < descendant_supernode_size; ++i) {
+      const Field& delta =
+          descendant_diag_block[i + i * descendant_supernode_size];
+      for (Int j_rel = 0; j_rel < descendant_main_intersect_size; ++j_rel) {
+        // Recall that lower_insersect_block is row-major.
+        const Field& lambda_right_conj = Conjugate(
+            descendant_main_block[i + j_rel * descendant_supernode_size]);
+        scaled_adjoint_buffer[i + j_rel * descendant_supernode_size] =
+            delta * lambda_right_conj;
+      }
     }
   }
 }
@@ -642,11 +629,18 @@ void UpdateDiagonalBlock(Int main_supernode, Int descendant_supernode,
 
   const Field* descendant_main_block =
       &lower_factor.values[descendant_main_value_beg];
-  MatrixMultiplyTransposeNormalLower(
-      descendant_main_intersect_size, descendant_supernode_size,
-      Field{-1}, descendant_main_block, descendant_supernode_size,
-      scaled_adjoint_buffer, descendant_supernode_size,
-      Field{1}, update_block, descendant_main_intersect_size);
+  if (factorization->is_cholesky) {
+    HermitianOuterProductTransposeLower(
+        descendant_main_intersect_size, descendant_supernode_size,
+        Field{-1}, descendant_main_block, descendant_supernode_size,
+        Field{1}, update_block, descendant_main_intersect_size);
+  } else {
+    MatrixMultiplyTransposeNormalLower(
+        descendant_main_intersect_size, descendant_supernode_size,
+        Field{-1}, descendant_main_block, descendant_supernode_size,
+        scaled_adjoint_buffer, descendant_supernode_size,
+        Field{1}, update_block, descendant_main_intersect_size);
+  }
 
   if (!inplace_update) {
     // Apply the out-of-place update and zero the buffer.
@@ -800,8 +794,16 @@ Int FactorDiagonalBlock(Int supernode,
       factorization->diagonal_factor.value_offsets[supernode];
   Field* diag_block = &factorization->diagonal_factor.values[diag_value_beg];
 
-  return LowerLDLAdjointFactorization(
-      supernode_size, diag_block, supernode_size);
+  Int num_pivots; 
+  if (factorization->is_cholesky) {
+    num_pivots = LowerCholeskyFactorization(
+        supernode_size, diag_block, supernode_size);
+  } else {
+    num_pivots = LowerLDLAdjointFactorization(
+        supernode_size, diag_block, supernode_size);
+  }
+
+  return num_pivots;
 }
 
 // L(KNext:n, K) /= D(K, K) L(K, K)'.
@@ -822,12 +824,21 @@ void SolveAgainstDiagonalBlock(
 
   Field* lower_block = &lower_factor.values[value_beg];
 
-  // Solve against the D(K, K) times the unit-lower matrix L(K, K)' from the
-  // right using row-major storage of the input matrix, which is equivalent to
-  // solving D(K, K) conj(L(K, K)) X = Y using column-major storage.
-  DiagonalTimesConjugateUnitLowerTriangularSolves(
-      supernode_size, degree, diag_block, supernode_size, lower_block,
-      supernode_size);
+  if (factorization->is_cholesky) {
+    // Solve against the lower-triangular matrix L(K, K)' from the right using
+    // row-major storage of the input matrix, which is equivalent to solving
+    // conj(L(K, K)) X = Y using column-major storage.
+    ConjugateLowerTriangularSolves(
+        supernode_size, degree, diag_block, supernode_size, lower_block,
+        supernode_size);
+  } else {
+    // Solve against the D(K, K) times the unit-lower matrix L(K, K)' from the
+    // right using row-major storage of the input matrix, which is equivalent to
+    // solving D(K, K) conj(L(K, K)) X = Y using column-major storage.
+    DiagonalTimesConjugateUnitLowerTriangularSolves(
+        supernode_size, degree, diag_block, supernode_size, lower_block,
+        supernode_size);
+  }
 }
 
 // Checks that a valid set of supernodes has been provided by explicitly
@@ -843,7 +854,7 @@ bool ValidFundamentalSupernodes(
   ldl::EliminationForestAndDegrees(matrix, &parents, &degrees);
 
   std::vector<Int> supernode_starts, member_to_index;
-  SupernodeStarts(supernode_sizes, &supernode_starts);
+  OffsetScan(supernode_sizes, &supernode_starts);
   MemberToIndex(num_rows, supernode_starts, &member_to_index);
 
   std::vector<Int> row_structure(num_rows);
@@ -1337,7 +1348,7 @@ void RelaxSupernodes(
   // Fill the inverse permutation, the supernode sizes, and the supernode
   // offsets.
   {
-    factorization->inverse_permutation.resize(num_rows);
+    factorization->relaxation_inverse_permutation.resize(num_rows);
     factorization->supernode_sizes.resize(num_relaxed_supernodes);
     factorization->supernode_starts.resize(num_relaxed_supernodes + 1);
     factorization->supernode_member_to_index.resize(num_rows);
@@ -1364,7 +1375,8 @@ void RelaxSupernodes(
         for (Int j = 0; j < size; ++j) {
           factorization->supernode_member_to_index[pack_offset] =
               relaxed_supernode;
-          factorization->inverse_permutation[pack_offset++] = start + j;
+          factorization->relaxation_inverse_permutation[pack_offset++] =
+              start + j;
         }
         supernode_size += size;
 
@@ -1379,10 +1391,11 @@ void RelaxSupernodes(
     factorization->supernode_starts[num_relaxed_supernodes] = num_rows;
   }
 
-  // Fill the permutation from the inverse permutation.
-  factorization->permutation.resize(num_rows);
+  // Fill the relaxation permutation from the inverse permutation.
+  factorization->relaxation_permutation.resize(num_rows);
   for (Int row = 0; row < num_rows; ++row) {
-    factorization->permutation[factorization->inverse_permutation[row]] = row;
+    factorization->relaxation_permutation[
+        factorization->relaxation_inverse_permutation[row]] = row;
   }
 }
 
@@ -1419,7 +1432,7 @@ void FormSupernodes(
 #endif
 
   std::vector<Int> orig_supernode_starts;
-  SupernodeStarts(orig_supernode_sizes, &orig_supernode_starts);
+  OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
 
   std::vector<Int> orig_member_to_index;
   MemberToIndex(
@@ -1511,7 +1524,8 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 
     // Compute the supernodal row pattern.
     const Int num_packed = ComputeRowPattern(
-        matrix, factorization->permutation, factorization->inverse_permutation,
+        matrix, factorization->relaxation_permutation,
+        factorization->relaxation_inverse_permutation,
         factorization->supernode_sizes, factorization->supernode_starts,
         factorization->supernode_member_to_index, supernode_parents,
         main_supernode, pattern_flags.data(), row_structure.data());
@@ -1595,75 +1609,89 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 }  // namespace supernodal_ldl
 
 template <class Field>
+void Permute(const std::vector<Int>& permutation, std::vector<Field>* vector) {
+  std::vector<Field> vector_copy = *vector;
+  for (std::size_t row = 0; row < vector->size(); ++row) {
+    (*vector)[permutation[row]] = vector_copy[row];
+  }
+}
+
+template <class Field>
 Int LDL(const CoordinateMatrix<Field>& matrix,
         const SupernodalLDLControl& control,
         SupernodalLDLFactorization<Field>* factorization) {
+  factorization->is_cholesky = control.use_cholesky;
   return supernodal_ldl::LeftLooking(matrix, control, factorization);
 }
 
 template <class Field>
 void LDLSolve(const SupernodalLDLFactorization<Field>& factorization,
               std::vector<Field>* vector) {
-  const bool have_permutation = !factorization.permutation.empty();
-  const Int num_rows = vector->size();
+  const bool have_permutation = !factorization.relaxation_permutation.empty();
 
-  // Reorder the input into the permutation of the factorization.
+  // Reorder the input into the relaxation permutation of the factorization.
   if (have_permutation) {
-    std::vector<Field> vector_copy = *vector;
-    for (Int row = 0; row < num_rows; ++row) {
-      (*vector)[factorization.permutation[row]] = vector_copy[row];
-    }
+    Permute(factorization.relaxation_permutation, vector);
   }
 
-  UnitLowerTriangularSolve(factorization, vector);
+  LowerTriangularSolve(factorization, vector);
   DiagonalSolve(factorization, vector);
-  UnitLowerAdjointTriangularSolve(factorization, vector);
+  LowerAdjointTriangularSolve(factorization, vector);
 
-  // Reverse the factorization permutation.
+  // Reverse the factorization relxation permutation.
   if (have_permutation) {
-    std::vector<Field> vector_copy = *vector;
-    for (Int row = 0; row < num_rows; ++row) {
-      (*vector)[factorization.inverse_permutation[row]] = vector_copy[row];
-    }
+    Permute(factorization.relaxation_inverse_permutation, vector);
   }
 }
 
 template <class Field>
-void UnitLowerTriangularSolve(
+void LowerTriangularSolve(
     const SupernodalLDLFactorization<Field>& factorization,
     std::vector<Field>* vector) {
   const Int num_supernodes = factorization.supernode_sizes.size();
+  const SupernodalLowerFactor<Field>& lower_factor = factorization.lower_factor;
+  const SupernodalDiagonalFactor<Field>& diagonal_factor =
+      factorization.diagonal_factor;
+  const bool is_cholesky = factorization.is_cholesky;
+
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
     const Int supernode_start = factorization.supernode_starts[supernode];
 
-    const Int diag_value_beg =
-        factorization.diagonal_factor.value_offsets[supernode];
-    const Field* diag_block =
-        &factorization.diagonal_factor.values[diag_value_beg];
+    const Int diag_value_beg = diagonal_factor.value_offsets[supernode];
+    const Field* diag_block = &diagonal_factor.values[diag_value_beg];
 
-    const Int index_beg = factorization.lower_factor.index_offsets[supernode];
-    const Int degree =
-        factorization.lower_factor.index_offsets[supernode + 1] - index_beg;
-    const Int value_beg = factorization.lower_factor.value_offsets[supernode];
+    const Int index_beg = lower_factor.index_offsets[supernode];
+    const Int degree = lower_factor.index_offsets[supernode + 1] - index_beg;
+    const Int value_beg = lower_factor.value_offsets[supernode];
 
+    // Solve against the diagonal block of the supernode.
+    // TODO(Jack Poulson): Replace with a TRSV LLN.
     for (Int j = 0; j < supernode_size; ++j) {
       const Int column = supernode_start + j;
       const Field& eta = (*vector)[column];
 
-      // Handle the diagonal-block portion of the supernode.
+      if (is_cholesky) {
+        const Int row = supernode_start + j;
+        (*vector)[row] /= diag_block[j + j * supernode_size];
+      }
       for (Int i = j + 1; i < supernode_size; ++i) {
         const Int row = supernode_start + i;
         const Field& value = diag_block[i + j * supernode_size];
         (*vector)[row] -= value * eta;
       }
+    }
 
-      // Handle the below-diagonal portion of this supernode.
+    // Handle the external updates for this supernode.
+    // TODO(Jack Poulson): Replace with a GEMV.
+    for (Int j = 0; j < supernode_size; ++j) {
+      const Int column = supernode_start + j;
+      const Field& eta = (*vector)[column];
+
       for (Int i = 0; i < degree; ++i) {
-        const Int row = factorization.lower_factor.indices[index_beg + i];
+        const Int row = lower_factor.indices[index_beg + i];
         const Field& value =
-            factorization.lower_factor.values[
-                value_beg + i * supernode_size + j];
+            lower_factor.values[value_beg + i * supernode_size + j];
         (*vector)[row] -= value * eta;
       }
     }
@@ -1674,15 +1702,21 @@ template <class Field>
 void DiagonalSolve(const SupernodalLDLFactorization<Field>& factorization,
                    std::vector<Field>* vector) {
   const Int num_supernodes = factorization.supernode_sizes.size();
+  const SupernodalDiagonalFactor<Field>& diagonal_factor =
+      factorization.diagonal_factor;
+  const bool is_cholesky = factorization.is_cholesky;
+  if (is_cholesky) {
+    // D is the identity.
+    return;
+  }
+
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
     const Int supernode_start = factorization.supernode_starts[supernode];
 
     // Handle the diagonal-block portion of the supernode.
-    const Int diag_value_beg =
-        factorization.diagonal_factor.value_offsets[supernode];
-    const Field* diag_block =
-        &factorization.diagonal_factor.values[diag_value_beg];
+    const Int diag_value_beg = diagonal_factor.value_offsets[supernode];
+    const Field* diag_block = &diagonal_factor.values[diag_value_beg];
     for (Int j = 0; j < supernode_size; ++j) {
       const Int column = supernode_start + j;
       const Field& value = diag_block[j + j * supernode_size];
@@ -1692,27 +1726,46 @@ void DiagonalSolve(const SupernodalLDLFactorization<Field>& factorization,
 }
 
 template <class Field>
-void UnitLowerAdjointTriangularSolve(
+void LowerAdjointTriangularSolve(
     const SupernodalLDLFactorization<Field>& factorization,
     std::vector<Field>* vector) {
   const Int num_supernodes = factorization.supernode_sizes.size();
+  const SupernodalLowerFactor<Field>& lower_factor = factorization.lower_factor;
+  const SupernodalDiagonalFactor<Field>& diagonal_factor =
+      factorization.diagonal_factor;
+  const bool is_cholesky = factorization.is_cholesky;
+
   for (Int supernode = num_supernodes - 1; supernode >= 0; --supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
     const Int supernode_start = factorization.supernode_starts[supernode];
 
-    const Int diag_value_beg =
-        factorization.diagonal_factor.value_offsets[supernode];
-    const Field* diag_block =
-        &factorization.diagonal_factor.values[diag_value_beg];
+    const Int diag_value_beg = diagonal_factor.value_offsets[supernode];
+    const Field* diag_block = &diagonal_factor.values[diag_value_beg];
 
-    const Int index_beg = factorization.lower_factor.index_offsets[supernode];
-    const Int degree =
-        factorization.lower_factor.index_offsets[supernode + 1] - index_beg;
-    const Int value_beg = factorization.lower_factor.value_offsets[supernode];
+    const Int index_beg = lower_factor.index_offsets[supernode];
+    const Int degree = lower_factor.index_offsets[supernode + 1] - index_beg;
+    const Int value_beg = lower_factor.value_offsets[supernode];
 
+    // Handle the external updates for this supernode.
+    // TODO(Jack Poulson): Replace with a GEMV.
     for (Int j = supernode_size - 1; j >= 0; --j) {
       const Int column = supernode_start + j;
        Field& eta = (*vector)[column];
+
+      // Handle the below-diagonal portion of this supernode.
+      const Field* value_column = &lower_factor.values[value_beg + j];
+      for (Int i = 0; i < degree; ++i) {
+        const Int row = lower_factor.indices[index_beg + i];
+        const Field& value = value_column[i * supernode_size];
+        eta -= Conjugate(value) * (*vector)[row];
+      }
+    }
+
+    // Solve against the diagonal block of this supernode.
+    // TODO(Jack Poulson): Replace with a TRSV LLH.
+    for (Int j = supernode_size - 1; j >= 0; --j) {
+      const Int column = supernode_start + j;
+      Field& eta = (*vector)[column];
 
       // Handle the diagonal-block portion of the supernode.
       const Field* diag_column = &diag_block[j * supernode_size];
@@ -1722,13 +1775,8 @@ void UnitLowerAdjointTriangularSolve(
         eta -= Conjugate(value) * (*vector)[row];
       }
 
-      // Handle the below-diagonal portion of this supernode.
-      const Field* value_column =
-          &factorization.lower_factor.values[value_beg + j];
-      for (Int i = 0; i < degree; ++i) {
-        const Int row = factorization.lower_factor.indices[index_beg + i];
-        const Field& value = value_column[i * supernode_size];
-        eta -= Conjugate(value) * (*vector)[row];
+      if (is_cholesky) {
+        eta /= diag_column[j];
       }
     }
   }
@@ -1741,6 +1789,7 @@ void PrintLowerFactor(
   const SupernodalLowerFactor<Field>& lower_factor = factorization.lower_factor;
   const SupernodalDiagonalFactor<Field>& diag_factor =
       factorization.diagonal_factor;
+  const bool is_cholesky = factorization.is_cholesky;
 
   auto print_entry = [&](
       const Int& row, const Int& column, const Field& value) {
@@ -1766,7 +1815,11 @@ void PrintLowerFactor(
       const Int column = supernode_start + j;
 
       // Print the portion in the diagonal block.
-      print_entry(column, column, Field{1});
+      if (is_cholesky) {
+        print_entry(column, column, diag_block[j + j * supernode_size]);
+      } else {
+        print_entry(column, column, Field{1});
+      }
       for (Int k = j + 1; k < supernode_size; ++k) {
         const Int row = supernode_start + k;
         const Field& value = diag_block[k + j * supernode_size];
@@ -1791,6 +1844,10 @@ void PrintDiagonalFactor(
     const std::string& label, std::ostream& os) {
   const SupernodalDiagonalFactor<Field>& diag_factor =
       factorization.diagonal_factor;
+  if (factorization.is_cholesky) {
+    // TODO(Jack Poulson): Print the identity.
+    return;
+  }
 
   os << label << ": \n";
   const Int num_supernodes = factorization.supernode_sizes.size();
