@@ -8,7 +8,7 @@
 #ifndef CATAMARI_SUPERNODAL_LDL_H_
 #define CATAMARI_SUPERNODAL_LDL_H_
 
-#include "catamari/ldl.hpp"
+#include "catamari/scalar_ldl.hpp"
 
 namespace catamari {
 

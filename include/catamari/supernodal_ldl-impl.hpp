@@ -904,7 +904,7 @@ void FormFundamentalSupernodes(
     const std::vector<Int>& parents,
     const std::vector<Int>& degrees,
     std::vector<Int>* supernode_sizes,
-    LowerStructure* scalar_structure) {
+    ScalarLowerStructure* scalar_structure) {
   const Int num_rows = matrix.NumRows();
 
   // We will only fill the indices and offsets of the factorization.
@@ -1039,7 +1039,7 @@ inline MergableStatus MergableSupernode(
     Int num_child_explicit_zeros,
     Int num_parent_explicit_zeros,
     const std::vector<Int>& orig_member_to_index,
-    const LowerStructure& scalar_structure,
+    const ScalarLowerStructure& scalar_structure,
     const SupernodalLDLControl& control) {
   const Int parent = orig_member_to_index[parent_tail];
   const Int child_structure_beg = scalar_structure.column_offsets[child_tail];
@@ -1128,7 +1128,8 @@ inline void MergeChildren(
     const std::vector<Int>& orig_supernode_sizes,
     const std::vector<Int>& orig_member_to_index,
     const std::vector<Int>& children, const std::vector<Int>& child_offsets,
-    const LowerStructure& scalar_structure, const SupernodalLDLControl& control,
+    const ScalarLowerStructure& scalar_structure,
+    const SupernodalLDLControl& control,
     std::vector<Int>* supernode_sizes, std::vector<Int>* num_explicit_zeros,
     std::vector<Int>* last_merged_child, std::vector<Int>* merge_parents) {
   const Int child_beg = child_offsets[parent];
@@ -1256,7 +1257,7 @@ void RelaxSupernodes(
     const std::vector<Int>& orig_supernode_parents,
     const std::vector<Int>& orig_supernode_degrees,
     const std::vector<Int>& orig_member_to_index,
-    const LowerStructure& scalar_structure,
+    const ScalarLowerStructure& scalar_structure,
     const SupernodalLDLControl& control,
     std::vector<Int>* relaxed_supernode_parents,
     std::vector<Int>* relaxed_supernode_degrees,
@@ -1399,7 +1400,7 @@ void FormSupernodes(
 
   // Greedily compute a supernodal partition using the original ordering.
   std::vector<Int> orig_supernode_sizes;
-  LowerStructure scalar_structure;
+  ScalarLowerStructure scalar_structure;
   FormFundamentalSupernodes(
       matrix, orig_parents, orig_degrees, &orig_supernode_sizes,
       &scalar_structure);

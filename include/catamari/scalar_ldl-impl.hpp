@@ -5,18 +5,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_LDL_IMPL_H_
-#define CATAMARI_LDL_IMPL_H_
+#ifndef CATAMARI_SCALAR_LDL_IMPL_H_
+#define CATAMARI_SCALAR_LDL_IMPL_H_
 
-#include "catamari/ldl.hpp"
+#include "catamari/scalar_ldl.hpp"
 #include "quotient/io_utils.hpp"
 
 namespace catamari {
 
 template <class Field>
-void PrintLowerFactor(const LowerFactor<Field>& lower_factor,
+void PrintLowerFactor(const ScalarLowerFactor<Field>& lower_factor,
                       const std::string& label, std::ostream& os) {
-  const LowerStructure& lower_structure = lower_factor.structure;
+  const ScalarLowerStructure& lower_structure = lower_factor.structure;
   os << label << ":\n";
   const Int num_columns = lower_structure.column_offsets.size() - 1;
   for (Int column = 0; column < num_columns; ++column) {
@@ -32,7 +32,7 @@ void PrintLowerFactor(const LowerFactor<Field>& lower_factor,
 }
 
 template <class Field>
-void PrintDiagonalFactor(const DiagonalFactor<Field>& diagonal_factor,
+void PrintDiagonalFactor(const ScalarDiagonalFactor<Field>& diagonal_factor,
                          const std::string& label, std::ostream& os) {
   quotient::PrintVector(diagonal_factor.values, label, os);
 }
@@ -105,7 +105,7 @@ template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const std::vector<Int>& parents,
                           const std::vector<Int>& degrees,
-                          LowerStructure* lower_structure) {
+                          ScalarLowerStructure* lower_structure) {
   const Int num_rows = matrix.NumRows();
 
   // Set up the column offsets and allocate space (initializing the values of
@@ -163,10 +163,10 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 // Fill the factorization with the nonzeros from the input matrix.
 template <class Field>
 void FillNonzeros(const CoordinateMatrix<Field>& matrix,
-                  LDLFactorization<Field>* factorization) {
-  LowerFactor<Field>& lower_factor = factorization->lower_factor;
-  LowerStructure& lower_structure = lower_factor.structure;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
+                  ScalarLDLFactorization<Field>* factorization) {
+  ScalarLowerFactor<Field>& lower_factor = factorization->lower_factor;
+  ScalarLowerStructure& lower_structure = lower_factor.structure;
+  ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
   const Int num_rows = matrix.NumRows();
   const Int num_entries = lower_structure.indices.size();
 
@@ -205,10 +205,10 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
 // Fills in the structures of each column of the lower-triangular Cholesky
 // factor.
 template <class Field>
-void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
-                                  const std::vector<Int>& parents,
-                                  const std::vector<Int>& degrees,
-                                  LDLFactorization<Field>* factorization) {
+void InitializeLeftLookingFactors(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
+    const std::vector<Int>& degrees,
+    ScalarLDLFactorization<Field>* factorization) {
   FillStructureIndices(
       matrix, parents, degrees, &factorization->lower_factor.structure);
   FillNonzeros(matrix, factorization);
@@ -220,10 +220,10 @@ void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
                     std::vector<Int>* parents,
-                    LDLFactorization<Field>* factorization) {
-  LowerFactor<Field>& lower_factor = factorization->lower_factor;
-  LowerStructure& lower_structure = lower_factor.structure;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
+                    ScalarLDLFactorization<Field>* factorization) {
+  ScalarLowerFactor<Field>& lower_factor = factorization->lower_factor;
+  ScalarLowerStructure& lower_structure = lower_factor.structure;
+  ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
 
   std::vector<Int> degrees;
   EliminationForestAndDegrees(matrix, parents, &degrees);
@@ -245,7 +245,7 @@ void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
                       std::vector<Int>* parents,
-                      LDLFactorization<Field>* factorization) {
+                      ScalarLDLFactorization<Field>* factorization) {
   std::vector<Int> degrees;
   EliminationForestAndDegrees(matrix, parents, &degrees);
   InitializeLeftLookingFactors(matrix, *parents, degrees, factorization);
@@ -330,11 +330,11 @@ Int ComputeTopologicalRowPatternAndScatterNonzeros(
 // L(row, row) is similarly updated, within d, then L(row, column) is finalized.
 template <class Field>
 void UpLookingRowUpdate(Int row, Int column,
-                        LDLFactorization<Field>* factorization,
+                        ScalarLDLFactorization<Field>* factorization,
                         Int* column_update_ptrs, Field* row_workspace) {
-  LowerFactor<Field>& lower_factor = factorization->lower_factor;
-  LowerStructure& lower_structure = lower_factor.structure;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
+  ScalarLowerFactor<Field>& lower_factor = factorization->lower_factor;
+  ScalarLowerStructure& lower_structure = lower_factor.structure;
+  ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
 
   // Load eta := L(row, column) * d(column) from the workspace.
   const Field eta = row_workspace[column];
@@ -381,15 +381,15 @@ void UpLookingRowUpdate(Int row, Int column,
 //   end
 template <class Field>
 Int LeftLooking(const CoordinateMatrix<Field>& matrix,
-                LDLFactorization<Field>* factorization) {
+                ScalarLDLFactorization<Field>* factorization) {
   const Int num_rows = matrix.NumRows();
 
   std::vector<Int> parents;
   ldl::LeftLookingSetup(matrix, &parents, factorization);
 
-  LowerFactor<Field>& lower_factor = factorization->lower_factor;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
-  const LowerStructure& lower_structure = lower_factor.structure;
+  ScalarLowerFactor<Field>& lower_factor = factorization->lower_factor;
+  ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
+  const ScalarLowerStructure& lower_structure = lower_factor.structure;
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -483,12 +483,13 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 // Cf. Section 4.7 of Tim Davis, "Direct Methods for Sparse Linear Systems".
 template <class Field>
 Int UpLooking(const CoordinateMatrix<Field>& matrix,
-              LDLFactorization<Field>* factorization) {
+              ScalarLDLFactorization<Field>* factorization) {
   const Int num_rows = matrix.NumRows();
 
   std::vector<Int> parents;
   ldl::UpLookingSetup(matrix, &parents, factorization);
-  const LowerStructure& lower_structure = factorization->lower_factor.structure;
+  const ScalarLowerStructure& lower_structure =
+      factorization->lower_factor.structure;
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -539,8 +540,8 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
 }  // namespace ldl
 
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
-        LDLFactorization<Field>* factorization) {
+Int LDL(const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
+        ScalarLDLFactorization<Field>* factorization) {
   if (control.algorithm == kLeftLookingLDL) {
     return ldl::LeftLooking(matrix, factorization);
   } else {
@@ -549,7 +550,7 @@ Int LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
 }
 
 template <class Field>
-void LDLSolve(const LDLFactorization<Field>& factorization,
+void LDLSolve(const ScalarLDLFactorization<Field>& factorization,
               std::vector<Field>* vector) {
   UnitLowerTriangularSolve(factorization.lower_factor, vector);
   DiagonalSolve(factorization.diagonal_factor, vector);
@@ -557,9 +558,9 @@ void LDLSolve(const LDLFactorization<Field>& factorization,
 }
 
 template <class Field>
-void UnitLowerTriangularSolve(const LowerFactor<Field>& unit_lower_factor,
+void UnitLowerTriangularSolve(const ScalarLowerFactor<Field>& unit_lower_factor,
                               std::vector<Field>* vector) {
-  const LowerStructure& lower_structure = unit_lower_factor.structure;
+  const ScalarLowerStructure& lower_structure = unit_lower_factor.structure;
   const Int num_rows = lower_structure.column_offsets.size() - 1;
   CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
                   "Vector was of the incorrect size.");
@@ -577,7 +578,7 @@ void UnitLowerTriangularSolve(const LowerFactor<Field>& unit_lower_factor,
 }
 
 template <class Field>
-void DiagonalSolve(const DiagonalFactor<Field>& diagonal_factor,
+void DiagonalSolve(const ScalarDiagonalFactor<Field>& diagonal_factor,
                    std::vector<Field>* vector) {
   const Int num_rows = diagonal_factor.values.size();
   CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
@@ -589,8 +590,9 @@ void DiagonalSolve(const DiagonalFactor<Field>& diagonal_factor,
 
 template <class Field>
 void UnitLowerAdjointTriangularSolve(
-    const LowerFactor<Field>& unit_lower_factor, std::vector<Field>* vector) {
-  const LowerStructure& lower_structure = unit_lower_factor.structure;
+    const ScalarLowerFactor<Field>& unit_lower_factor,
+    std::vector<Field>* vector) {
+  const ScalarLowerStructure& lower_structure = unit_lower_factor.structure;
   const Int num_rows = lower_structure.column_offsets.size() - 1;
   CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
                   "Vector was of the incorrect size.");
@@ -609,4 +611,4 @@ void UnitLowerAdjointTriangularSolve(
 
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_LDL_IMPL_H_
+#endif  // ifndef CATAMARI_SCALAR_LDL_IMPL_H_

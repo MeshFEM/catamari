@@ -5,8 +5,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_LDL_H_
-#define CATAMARI_LDL_H_
+#ifndef CATAMARI_SCALAR_LDL_H_
+#define CATAMARI_SCALAR_LDL_H_
 
 #include <ostream>
 
@@ -26,7 +26,7 @@ enum LDLAlgorithm {
 };
 
 // The nonzero patterns below the diagonal of the lower-triangular factor.
-struct LowerStructure {
+struct ScalarLowerStructure {
   // A vector of length 'num_rows + 1'; each entry corresponds to the offset
   // in 'indices' and 'values' of the corresponding column of the matrix.
   std::vector<Int> column_offsets;
@@ -38,9 +38,9 @@ struct LowerStructure {
 
 // A column-major lower-triangular sparse matrix.
 template <class Field>
-struct LowerFactor {
+struct ScalarLowerFactor {
   // The nonzero structure of each column in the factor.
-  LowerStructure structure;
+  ScalarLowerStructure structure;
 
   // A vector of length 'num_entries'; each segment, column_offsets[j] to
   // column_offsets[j + 1] - 1, contains the (typically nonzero) entries for
@@ -50,64 +50,65 @@ struct LowerFactor {
 
 // A diagonal matrix representing the 'D' in an L D L' factorization.
 template <class Field>
-struct DiagonalFactor {
+struct ScalarDiagonalFactor {
   std::vector<Field> values;
 };
 
 // A representation of a non-supernodal LDL' factorization.
 template <class Field>
-struct LDLFactorization {
+struct ScalarLDLFactorization {
   // The unit lower-triangular factor, L.
-  LowerFactor<Field> lower_factor;
+  ScalarLowerFactor<Field> lower_factor;
 
   // The diagonal factor, D.
-  DiagonalFactor<Field> diagonal_factor;
+  ScalarDiagonalFactor<Field> diagonal_factor;
 };
 
 // Configuration options for non-supernodal LDL' factorization.
-struct LDLControl {
+struct ScalarLDLControl {
   // The choice of either left-looking or up-looking LDL' factorization.
   LDLAlgorithm algorithm = kUpLookingLDL;
 };
 
 // Pretty-prints a column-oriented sparse lower-triangular matrix.
 template <class Field>
-void PrintLowerFactor(const LowerFactor<Field>& lower_factor,
+void PrintLowerFactor(const ScalarLowerFactor<Field>& lower_factor,
                       const std::string& label, std::ostream& os);
 
 // Pretty-prints the diagonal factor of the L D L' factorization.
 template <class Field>
-void PrintDiagonalFactor(const DiagonalFactor<Field>& diagonal_factor,
+void PrintDiagonalFactor(const ScalarDiagonalFactor<Field>& diagonal_factor,
                          const std::string& label, std::ostream& os);
 
 // Performs a non-supernodal LDL' factorization in the natural ordering.
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
-        LDLFactorization<Field>* factorization);
+Int LDL(const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
+        ScalarLDLFactorization<Field>* factorization);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
 template <class Field>
-void LDLSolve(const LDLFactorization<Field>& factorization,
+void LDLSolve(const ScalarLDLFactorization<Field>& factorization,
               std::vector<Field>* vector);
 
 // Solves L x = b using a unit-lower triangular matrix L.
 template <class Field>
-void UnitLowerTriangularSolve(const LowerFactor<Field>& unit_lower_factor,
+void UnitLowerTriangularSolve(const ScalarLowerFactor<Field>& unit_lower_factor,
                               std::vector<Field>* vector);
 
 // Solves D x = b using a diagonal matrix D.
 template <class Field>
-void DiagonalSolve(const DiagonalFactor<Field>& diagonal_factor,
+void DiagonalSolve(const ScalarDiagonalFactor<Field>& diagonal_factor,
                    std::vector<Field>* vector);
 
 // Solves L' x = b using a unit-lower triangular matrix L.
 template <class Field>
 void UnitLowerAdjointTriangularSolve(
-    const LowerFactor<Field>& unit_lower_factor, std::vector<Field>* vector);
+    const ScalarLowerFactor<Field>& unit_lower_factor,
+    std::vector<Field>* vector);
 
 }  // namespace catamari
 
-#include "catamari/ldl-impl.hpp"
+#include "catamari/scalar_ldl-impl.hpp"
 
-#endif  // ifndef CATAMARI_LDL_H_
+#endif  // ifndef CATAMARI_SCALAR_LDL_H_
