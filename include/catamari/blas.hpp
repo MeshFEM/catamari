@@ -13,6 +13,26 @@
 namespace catamari {
 
 template <class Field>
+void TriangularSolveLeftLower(
+    Int height, const Field* triangular_matrix, Int triang_leading_dim,
+    Field* vector);
+
+template <class Field>
+void TriangularSolveLeftLowerUnit(
+    Int height, const Field* triangular_matrix, Int triang_leading_dim,
+    Field* vector);
+
+template <class Field>
+void TriangularSolveLeftLowerAdjoint(
+    Int height, const Field* triangular_matrix, Int triang_leading_dim,
+    Field* vector);
+
+template <class Field>
+void TriangularSolveLeftLowerAdjointUnit(
+    Int height, const Field* triangular_matrix, Int triang_leading_dim,
+    Field* vector);
+
+template <class Field>
 void MatrixMultiplyTransposeNormal(
     Int output_height, Int output_width, Int contraction_size,
     const Field& alpha, const Field* left_matrix, Int left_leading_dim,

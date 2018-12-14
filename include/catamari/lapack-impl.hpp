@@ -48,7 +48,7 @@ Int LowerCholeskyFactorization(Int height, Field* A, Int leading_dim) {
 
 #ifdef CATAMARI_HAVE_BLAS
 template <>
-Int LowerCholeskyFactorization(Int height, float* A, Int leading_dim) {
+inline Int LowerCholeskyFactorization(Int height, float* A, Int leading_dim) {
   for (Int i = 0; i < height; ++i) {
     const float delta = A[i + i * leading_dim];
     if (delta <= 0) {
@@ -80,7 +80,7 @@ Int LowerCholeskyFactorization(Int height, float* A, Int leading_dim) {
 }
 
 template <>
-Int LowerCholeskyFactorization(Int height, double* A, Int leading_dim) {
+inline Int LowerCholeskyFactorization(Int height, double* A, Int leading_dim) {
   for (Int i = 0; i < height; ++i) {
     const double delta = A[i + i * leading_dim];
     if (delta <= 0) {

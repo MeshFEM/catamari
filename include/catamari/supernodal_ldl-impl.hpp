@@ -786,7 +786,7 @@ Int FactorDiagonalBlock(Int supernode,
       factorization->diagonal_factor.value_offsets[supernode];
   Field* diag_block = &factorization->diagonal_factor.values[diag_value_beg];
 
-  Int num_pivots; 
+  Int num_pivots;
   if (factorization->is_cholesky) {
     num_pivots = LowerCholeskyFactorization(
         supernode_size, diag_block, supernode_size);
@@ -1154,7 +1154,7 @@ inline void MergeChildren(
 
       const Int child_size = (*supernode_sizes)[child];
       const Int parent_size = (*supernode_sizes)[parent];
-      
+
       const Int num_child_explicit_zeros = (*num_explicit_zeros)[child];
       const Int num_parent_explicit_zeros = (*num_explicit_zeros)[parent];
 
@@ -1269,7 +1269,7 @@ void RelaxSupernodes(
   std::vector<Int> child_offsets;
   EliminationForestFromParents(
       orig_supernode_parents, &children, &child_offsets);
-  
+
   // Initialize the sizes of the merged supernodes, using the original indexing
   // and absorbing child sizes into the parents.
   std::vector<Int> supernode_sizes = orig_supernode_sizes;
@@ -1306,7 +1306,7 @@ void RelaxSupernodes(
   Int relaxed_offset = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     if (merge_parents[supernode] != -1) {
-      continue; 
+      continue;
     }
     (*relaxed_supernode_degrees)[relaxed_offset] =
         orig_supernode_degrees[supernode];
@@ -1652,24 +1652,18 @@ void LowerTriangularSolve(
     const Int value_beg = lower_factor.value_offsets[supernode];
 
     // Solve against the diagonal block of the supernode.
-    // TODO(Jack Poulson): Replace with a TRSV LLN.
-    for (Int j = 0; j < supernode_size; ++j) {
-      const Int column = supernode_start + j;
-      const Field& eta = (*vector)[column];
-
-      if (is_cholesky) {
-        const Int row = supernode_start + j;
-        (*vector)[row] /= diag_block[j + j * supernode_size];
-      }
-      for (Int i = j + 1; i < supernode_size; ++i) {
-        const Int row = supernode_start + i;
-        const Field& value = diag_block[i + j * supernode_size];
-        (*vector)[row] -= value * eta;
-      }
+    if (is_cholesky) {
+      TriangularSolveLeftLower(
+          supernode_size, diag_block, supernode_size,
+          &(*vector)[supernode_start]);
+    } else {
+      TriangularSolveLeftLowerUnit(
+          supernode_size, diag_block, supernode_size,
+          &(*vector)[supernode_start]);
     }
 
     // Handle the external updates for this supernode.
-    // TODO(Jack Poulson): Replace with a GEMV.
+    // TODO(Jack Poulson): Replace with an out-of-place GEMV.
     for (Int j = 0; j < supernode_size; ++j) {
       const Int column = supernode_start + j;
       const Field& eta = (*vector)[column];
@@ -1733,7 +1727,7 @@ void LowerAdjointTriangularSolve(
     const Int value_beg = lower_factor.value_offsets[supernode];
 
     // Handle the external updates for this supernode.
-    // TODO(Jack Poulson): Replace with a GEMV.
+    // TODO(Jack Poulson): Replace with an out-of-place GEMV.
     for (Int j = supernode_size - 1; j >= 0; --j) {
       const Int column = supernode_start + j;
        Field& eta = (*vector)[column];
@@ -1748,22 +1742,14 @@ void LowerAdjointTriangularSolve(
     }
 
     // Solve against the diagonal block of this supernode.
-    // TODO(Jack Poulson): Replace with a TRSV LLH.
-    for (Int j = supernode_size - 1; j >= 0; --j) {
-      const Int column = supernode_start + j;
-      Field& eta = (*vector)[column];
-
-      // Handle the diagonal-block portion of the supernode.
-      const Field* diag_column = &diag_block[j * supernode_size];
-      for (Int i = j + 1; i < supernode_size; ++i) {
-        const Int row = supernode_start + i;
-        const Field& value = diag_column[i];
-        eta -= Conjugate(value) * (*vector)[row];
-      }
-
-      if (is_cholesky) {
-        eta /= diag_column[j];
-      }
+    if (is_cholesky) {
+      TriangularSolveLeftLowerAdjoint(
+          supernode_size, diag_block, supernode_size,
+          &(*vector)[supernode_start]);
+    } else {
+      TriangularSolveLeftLowerAdjointUnit(
+          supernode_size, diag_block, supernode_size,
+          &(*vector)[supernode_start]);
     }
   }
 }
