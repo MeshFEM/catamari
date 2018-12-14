@@ -178,15 +178,12 @@ inline void InitializeEliminationForest(
 template <class Field>
 void EliminationForestAndDegrees(
     const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation,
     const std::vector<Int>& supernode_sizes,
     const std::vector<Int>& supernode_starts,
     const std::vector<Int>& member_to_index, std::vector<Int>* parents,
     std::vector<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = supernode_sizes.size();
-  const bool have_permutation = !permutation.empty();
 
   InitializeEliminationForest(supernode_starts, member_to_index, parents);
 
@@ -208,13 +205,11 @@ void EliminationForestAndDegrees(
     pattern_flags[row] = row;
     supernode_pattern_flags[main_supernode] = row;
 
-    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
-    const Int row_beg = matrix.RowEntryOffset(orig_row);
-    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+    const Int row_beg = matrix.RowEntryOffset(row);
+    const Int row_end = matrix.RowEntryOffset(row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int descendant = have_permutation ? permutation[entry.column] :
-          entry.column;
+      Int descendant = entry.column;
       Int descendant_supernode = member_to_index[descendant];
 
       // We are traversing the strictly lower triangle and know that the
@@ -257,13 +252,18 @@ void EliminationForestAndDegrees(
 }
 
 // Fills in the structure indices for the lower factor.
+//
+// The 'parents' array is in the original ordering of the matrix; each index
+// points to the parent in the original elimination tree.
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const std::vector<Int>& parents,
                           SupernodalLDLFactorization<Field>* factorization) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = factorization->supernode_sizes.size();
-  const bool have_permutation = !factorization->permutation.empty();
+  const std::vector<Int>& perm = factorization->permutation;
+  const std::vector<Int>& inverse_perm = factorization->inverse_permutation;
+  const bool have_permutation = !perm.empty();
   SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
 
   // A data structure for marking whether or not a node is in the pattern of
@@ -288,21 +288,23 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     pattern_flags[row] = row;
     supernode_pattern_flags[main_supernode] = row;
 
-    const Int orig_row = have_permutation ?
-        factorization->inverse_permutation[row] : row;
+    const Int orig_row = have_permutation ? inverse_perm[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int descendant = have_permutation ?
-          factorization->permutation[entry.column] : entry.column;
+      Int descendant = have_permutation ? perm[entry.column] : entry.column;
       Int descendant_supernode =
           factorization->supernode_member_to_index[descendant];
 
-      // We are traversing the strictly lower triangle and know that the
-      // indices are sorted.
       if (descendant >= row) {
-        break;
+        if (have_permutation) {
+          continue;
+        } else {
+          // We are traversing the strictly lower triangle and know that the
+          // indices are sorted.
+          break;
+        }
       }
 
       // Look for new entries in the pattern by walking up to the root of this
@@ -336,7 +338,8 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
         // Move up to the parent in this subtree of the elimination forest.
         // Moving to the parent will increase the index (but remain bounded
         // from above by 'row').
-        descendant = parents[descendant];
+        descendant = have_permutation ?
+            perm[parents[inverse_perm[descendant]]] : parents[descendant];
       }
     }
   }
@@ -439,6 +442,9 @@ template <class Field>
 void FillNonzeros(const CoordinateMatrix<Field>& matrix,
                   SupernodalLDLFactorization<Field>* factorization) {
   const Int num_rows = matrix.NumRows();
+  const std::vector<Int>& perm = factorization->permutation;
+  const std::vector<Int>& inverse_perm = factorization->inverse_permutation;
+  const bool have_permutation = !perm.empty();
   SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
   SupernodalDiagonalFactor<Field>& diagonal_factor =
       factorization->diagonal_factor;
@@ -449,11 +455,12 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
     const Int supernode_start= factorization->supernode_starts[supernode];
     const Int supernode_size = factorization->supernode_sizes[supernode];
 
-    const Int row_beg = matrix.RowEntryOffset(row);
-    const Int row_end = matrix.RowEntryOffset(row + 1);
+    const Int orig_row = have_permutation ? inverse_perm[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      const Int column = entry.column;
+      const Int column = have_permutation ? perm[entry.column] : entry.column;
       const Int column_supernode =
           factorization->supernode_member_to_index[column];
 
@@ -469,8 +476,13 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
         diag_block[rel_index] = entry.value;
         continue;
       }
+
       if (column_supernode > supernode) {
-        break;
+        if (have_permutation) {
+          continue;
+        } else {
+          break;
+        }
       }
 
       // Compute the relative index of 'row' in this column supernode.
@@ -593,7 +605,11 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
 
       Int descendant_supernode = member_to_index[descendant];
       if (descendant_supernode >= main_supernode) {
-        break;
+        if (have_permutation) {
+          continue;
+        } else {
+          break;
+        }
       }
 
       // Walk up to the root of the current subtree of the elimination
@@ -1068,23 +1084,22 @@ struct MergableStatus {
 // 1 is the parent of supernode 0.
 //
 inline MergableStatus MergableSupernode(
-    Int child_start,
-    Int parent_start,
-    const std::vector<Int>& supernode_sizes,
-    const std::vector<Int>& member_to_start,
+    Int child_tail,
+    Int parent_tail,
+    Int child_size,
+    Int parent_size,
+    Int num_child_explicit_zeros,
+    Int num_parent_explicit_zeros,
+    const std::vector<Int>& orig_member_to_index,
     const LowerStructure& scalar_structure,
-    const std::vector<Int>& num_explicit_zeros,
     const SupernodalLDLControl& control) {
-  const Int child_size = supernode_sizes[child_start];
-  const Int parent_size = supernode_sizes[parent_start];
-
-  const Int child_structure_beg = scalar_structure.column_offsets[child_start];
+  const Int parent = orig_member_to_index[parent_tail];
+  const Int child_structure_beg = scalar_structure.column_offsets[child_tail];
   const Int child_structure_end =
-      scalar_structure.column_offsets[child_start + 1];
-  const Int parent_structure_beg =
-      scalar_structure.column_offsets[parent_start];
+      scalar_structure.column_offsets[child_tail + 1];
+  const Int parent_structure_beg = scalar_structure.column_offsets[parent_tail];
   const Int parent_structure_end =
-      scalar_structure.column_offsets[parent_start + 1];
+      scalar_structure.column_offsets[parent_tail + 1];
   const Int child_structure_size = child_structure_end - child_structure_beg;
   const Int parent_structure_size = parent_structure_end - parent_structure_beg;
 
@@ -1099,11 +1114,17 @@ inline MergableStatus MergableSupernode(
   Int num_child_parent_intersections = 0;
   {
     Int child_structure_ptr = child_structure_beg;
-    while (child_structure_ptr < child_structure_end &&
-           member_to_start[scalar_structure.indices[child_structure_ptr]] ==
-               parent_start) {
-      ++child_structure_ptr;
-      ++num_child_parent_intersections;
+    while (child_structure_ptr < child_structure_end) {
+      const Int row = scalar_structure.indices[child_structure_ptr];
+      const Int orig_row_supernode = orig_member_to_index[row];
+      CATAMARI_ASSERT(orig_row_supernode >= parent,
+                      "There was an intersection before the parent.");
+      if (orig_row_supernode == parent) {
+        ++child_structure_ptr;
+        ++num_child_parent_intersections;
+      } else {
+        break;
+      }
     }
   }
   const Int num_missing_parent_intersections =
@@ -1122,12 +1143,13 @@ inline MergableStatus MergableSupernode(
       (num_missing_parent_intersections + num_missing_structure_indices) *
       child_size;
   const Int num_old_zeros =
-      num_explicit_zeros[child_start] + num_explicit_zeros[parent_start];
+      num_child_explicit_zeros + num_parent_explicit_zeros;
   const Int num_zeros = num_new_zeros + num_old_zeros;
+  status.num_merged_zeros = num_zeros;
 
   // Check if the merge would meet the absolute merge criterion.
   if (num_zeros <= control.allowable_supernode_zeros) {
-    status.mergable = false;
+    status.mergable = true;
     return status;
   }
 
@@ -1145,182 +1167,278 @@ inline MergableStatus MergableSupernode(
       parent_structure_size * parent_size;
   if (num_zeros <=
       control.allowable_supernode_zero_ratio * num_expanded_entries) {
-    status.mergable = false;
+    status.mergable = true;
     return status;
   }
 
-  status.mergable = true;
-  status.num_merged_zeros = num_zeros;
+  status.mergable = false;
   return status;
 }
 
+// TODO(Jack Poulson): Recognize that 'orig_supernode_starts' is incorrect
+// if a child has already been merged.
+inline void MergeChildren(
+    Int parent, const std::vector<Int>& orig_supernode_starts,
+    const std::vector<Int>& orig_supernode_sizes,
+    const std::vector<Int>& orig_member_to_index,
+    const std::vector<Int>& children, const std::vector<Int>& child_offsets,
+    const LowerStructure& scalar_structure, const SupernodalLDLControl& control,
+    std::vector<Int>* supernode_sizes, std::vector<Int>* num_explicit_zeros,
+    std::vector<Int>* last_merged_child, std::vector<Int>* merge_parents) {
+  const Int child_beg = child_offsets[parent];
+  const Int num_children = child_offsets[parent + 1] - child_beg;
+
+  // TODO(Jack Poulson): Reserve a default size for these arrays.
+  std::vector<Int> mergable_children;
+  std::vector<Int> num_merged_zeros;
+
+  // The following loop can execute at most 'num_children' times.
+  while (true) {
+    // Compute the list of child indices that can be merged.
+    for (Int child_index = 0; child_index < num_children; ++child_index) {
+      const Int child = children[child_beg + child_index];
+      if ((*merge_parents)[child] != -1) {
+        continue;
+      }
+
+      const Int child_tail =
+          orig_supernode_starts[child] + orig_supernode_sizes[child] - 1;
+      const Int parent_tail =
+          orig_supernode_starts[parent] + orig_supernode_sizes[parent] - 1;
+
+      const Int child_size = (*supernode_sizes)[child];
+      const Int parent_size = (*supernode_sizes)[parent];
+      
+      const Int num_child_explicit_zeros = (*num_explicit_zeros)[child];
+      const Int num_parent_explicit_zeros = (*num_explicit_zeros)[parent];
+
+      const MergableStatus status = MergableSupernode(
+          child_tail, parent_tail, child_size, parent_size,
+          num_child_explicit_zeros, num_parent_explicit_zeros,
+          orig_member_to_index, scalar_structure, control);
+      if (status.mergable) {
+        mergable_children.push_back(child_index);
+        num_merged_zeros.push_back(status.num_merged_zeros);
+      }
+    }
+
+    // Skip this supernode if no children can be merged into it.
+    if (mergable_children.empty()) {
+      break;
+    }
+    const Int first_mergable_child = children[child_beg + mergable_children[0]];
+
+    // Select the largest mergable supernode.
+    Int merging_index = 0;
+    Int largest_mergable_size = (*supernode_sizes)[first_mergable_child];
+    for (std::size_t mergable_index = 1;
+        mergable_index < mergable_children.size(); ++mergable_index) {
+      const Int child_index = mergable_children[mergable_index];
+      const Int child = children[child_beg + child_index];
+      const Int child_size = (*supernode_sizes)[child];
+      if (child_size > largest_mergable_size) {
+        merging_index = mergable_index;
+        largest_mergable_size = child_size;
+      }
+    }
+    const Int child_index = mergable_children[merging_index];
+    const Int child = children[child_beg + child_index];
+
+    // Absorb the child size into the parent.
+    (*supernode_sizes)[parent] += (*supernode_sizes)[child];
+    (*supernode_sizes)[child] = 0;
+
+    // Update the number of explicit zeros in the merged supernode.
+    (*num_explicit_zeros)[parent] = num_merged_zeros[merging_index];
+
+    // Mark the child as merged.
+    //
+    // TODO(Jack Poulson): Consider following a similar strategy as quotient
+    // and using SYMMETRIC_INDEX to pack a parent into the negative indices.
+
+    if ((*last_merged_child)[parent] == -1) {
+      (*merge_parents)[child] = parent;
+    } else {
+      (*merge_parents)[child] = (*last_merged_child)[parent];
+    }
+
+    if ((*last_merged_child)[child] == -1) {
+      (*last_merged_child)[parent] = child;
+    } else {
+      (*last_merged_child)[parent] = (*last_merged_child)[child];
+    }
+
+    // Clear the mergable children information since it is now stale.
+    mergable_children.clear();
+    num_merged_zeros.clear();
+  }
+}
+
+// Builds a packed set of child links for an elimination forest given the
+// parent links (with root nodes having their parent set to -1).
+inline void EliminationForestFromParents(
+    const std::vector<Int>& parents, std::vector<Int>* children,
+    std::vector<Int>* child_offsets) {
+  const Int num_indices = parents.size();
+
+  std::vector<Int> num_children(num_indices, 0);
+  for (Int index = 0; index < num_indices; ++index) {
+    const Int parent = parents[index];
+    if (parent >= 0) {
+      ++num_children[parent];
+    }
+  }
+
+  child_offsets->resize(num_indices + 1);
+  Int child_offset = 0;
+  for (Int index = 0; index < num_indices; ++index) {
+    (*child_offsets)[index] = child_offset;
+    child_offset += num_children[index];
+  }
+  (*child_offsets)[num_indices] = child_offset;
+
+  children->resize(num_indices);
+  auto offsets_copy = *child_offsets;
+  for (Int index = 0; index < num_indices; ++index) {
+    const Int parent = parents[index];
+    if (parent >= 0) {
+      (*children)[offsets_copy[parent]++] = index;
+    }
+  }
+}
+
+// Walk up the tree in the original postordering, merging supernodes as we
+// progress.
 template <class Field>
 void RelaxSupernodes(
-    const CoordinateMatrix<Field>& matrix,
     const std::vector<Int>& orig_supernode_sizes,
     const std::vector<Int>& orig_supernode_starts,
     const std::vector<Int>& orig_supernode_parents,
     const std::vector<Int>& orig_supernode_degrees,
+    const std::vector<Int>& orig_member_to_index,
     const LowerStructure& scalar_structure,
     const SupernodalLDLControl& control,
-    std::vector<Int>* supernode_parents,
-    std::vector<Int>* supernode_degrees,
+    std::vector<Int>* relaxed_supernode_parents,
+    std::vector<Int>* relaxed_supernode_degrees,
     SupernodalLDLFactorization<Field>* factorization) {
-  const Int num_rows = matrix.NumRows();
+  const Int num_rows = orig_supernode_starts.back();
   const Int num_supernodes = orig_supernode_sizes.size();
 
   // Construct the down-links for the elimination forest.
-  std::vector<Int> num_supernode_children(num_supernodes, 0);
+  std::vector<Int> children;
+  std::vector<Int> child_offsets;
+  EliminationForestFromParents(
+      orig_supernode_parents, &children, &child_offsets);
+  
+  // Initialize the sizes of the merged supernodes, using the original indexing
+  // and absorbing child sizes into the parents.
+  std::vector<Int> supernode_sizes = orig_supernode_sizes;
+
+  // Initialize the number of explicit zeros stored in each original supernode.
+  std::vector<Int> num_explicit_zeros(num_supernodes, 0);
+
+  std::vector<Int> last_merged_children(num_supernodes, -1);
+  std::vector<Int> merge_parents(num_supernodes, -1);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int parent = orig_supernode_parents[supernode];
-    if (parent >= 0) {
-      ++num_supernode_children[parent];
+    MergeChildren(
+        supernode, orig_supernode_starts, orig_supernode_sizes,
+        orig_member_to_index, children, child_offsets, scalar_structure,
+        control, &supernode_sizes, &num_explicit_zeros, &last_merged_children,
+        &merge_parents);
+  }
+
+  // Count the number of remaining supernodes and construct a map from the
+  // original to relaxed indices.
+  std::vector<Int> original_to_relaxed(num_supernodes, -1);
+  Int num_relaxed_supernodes = 0;
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    if (merge_parents[supernode] != -1) {
+      continue;
     }
+    original_to_relaxed[supernode] = num_relaxed_supernodes++;
   }
-  std::vector<Int> child_start_offsets(num_supernodes + 1);
-  Int child_offset = 0;
+
+  // Fill in the parents for the relaxed supernodal elimination forest.
+  // Simultaneously, fill in the degrees of the relaxed supernodes (which are
+  // the same as the degrees of the parents of each merge tree).
+  relaxed_supernode_parents->resize(num_relaxed_supernodes);
+  relaxed_supernode_degrees->resize(num_relaxed_supernodes);
+  Int relaxed_offset = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    child_start_offsets[supernode] = child_offset;
-    child_offset += num_supernode_children[supernode];
+    if (merge_parents[supernode] != -1) {
+      continue; 
+    }
+    (*relaxed_supernode_degrees)[relaxed_offset] =
+        orig_supernode_degrees[supernode];
+
+    Int parent = orig_supernode_parents[supernode];
+    if (parent == -1) {
+      // This is a root node, so mark it as such in the relaxation.
+      (*relaxed_supernode_parents)[relaxed_offset++] = -1;
+      continue;
+    }
+
+    // Compute the root of the merge sequence of our parent.
+    while (merge_parents[parent] != -1) {
+      parent = merge_parents[parent];
+    }
+
+    // Convert the root of the merge sequence of our parent from the original
+    // to the relaxed indexing.
+    const Int relaxed_parent = original_to_relaxed[parent];
+    (*relaxed_supernode_parents)[relaxed_offset++] = relaxed_parent;
   }
-  child_start_offsets[num_supernodes] = child_offset;
-  std::vector<Int> child_starts(num_supernodes);
+
+  // Fill the inverse permutation, the supernode sizes, and the supernode
+  // offsets.
   {
-    auto offsets_copy = child_start_offsets;
+    factorization->inverse_permutation.resize(num_rows);
+    factorization->supernode_sizes.resize(num_relaxed_supernodes);
+    factorization->supernode_starts.resize(num_relaxed_supernodes + 1);
+    factorization->supernode_member_to_index.resize(num_rows);
+    Int pack_offset = 0;
     for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-      const Int parent = orig_supernode_parents[supernode];
-      if (parent >= 0) {
-        child_starts[offsets_copy[parent]++] = orig_supernode_starts[supernode];
+      if (merge_parents[supernode] != -1) {
+        continue;
       }
+      const Int relaxed_supernode = original_to_relaxed[supernode];
+
+      // Get the leaf of the merge sequence to pack.
+      Int leaf_of_merge = supernode;
+      if (last_merged_children[supernode] != -1) {
+        leaf_of_merge = last_merged_children[supernode];
+      }
+
+      // Pack the merge sequence and count its total size.
+      factorization->supernode_starts[relaxed_supernode] = pack_offset;
+      Int supernode_size = 0;
+      Int supernode_to_pack = leaf_of_merge;
+      while (true) {
+        const Int start = orig_supernode_starts[supernode_to_pack];
+        const Int size = orig_supernode_sizes[supernode_to_pack];
+        for (Int j = 0; j < size; ++j) {
+          factorization->supernode_member_to_index[pack_offset] =
+              relaxed_supernode;
+          factorization->inverse_permutation[pack_offset++] = start + j;
+        }
+        supernode_size += size;
+
+        if (merge_parents[supernode_to_pack] == -1) {
+          break;
+        }
+        supernode_to_pack = merge_parents[supernode_to_pack];
+      }
+      factorization->supernode_sizes[relaxed_supernode] = supernode_size;
     }
+    CATAMARI_ASSERT(num_rows == pack_offset, "Did not pack num_rows indices.");
+    factorization->supernode_starts[num_relaxed_supernodes] = num_rows;
   }
 
-  // Set up singly-linked lists for each supernode, packed into a single array.
-  // The end of a supernode is marked with a -1 entry. Simultaneously, set up
-  // an array of length num_rows, where each index is the principal member of
-  // the containing supernode.
-  std::vector<Int> next_member(num_rows, -1);
-  std::vector<Int> last_member(num_rows, -1);
-  std::vector<Int> member_to_start(num_rows);
-  std::vector<Int> member_to_supernode_size(num_rows, 0);
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int supernode_size = orig_supernode_sizes[supernode];
-    const Int supernode_start = orig_supernode_starts[supernode];
-    last_member[supernode_start] = supernode_start + supernode_size - 1;
-    member_to_supernode_size[supernode_start] = supernode_size;
-    for (Int index = 0; index < supernode_size - 1; ++index) {
-      next_member[supernode_start + index] = supernode_start + index + 1;
-    }
-    for (Int index = 0; index < supernode_size; ++index) {
-      member_to_start[supernode_start + index] = supernode_start;
-    }
+  // Fill the permutation from the inverse permutation.
+  factorization->permutation.resize(num_rows);
+  for (Int row = 0; row < num_rows; ++row) {
+    factorization->permutation[factorization->inverse_permutation[row]] = row;
   }
-
-  // Initialize the number of explicit zeros stored in the supernode of each
-  // principal member.
-  std::vector<Int> num_explicit_zeros(num_rows, 0);
-
-  // TODO(Jack Poulson): Fill in supernode_parents in/after the following loop.
-
-  // Walk up the tree in the original postordering, merging supernodes as we
-  // progress.
-  const Int kMergableChildrenReservation = 10;
-  std::vector<Int> mergable_children;
-  mergable_children.reserve(kMergableChildrenReservation);
-  std::vector<Int> num_merged_zeros;
-  num_merged_zeros.reserve(kMergableChildrenReservation);
-  supernode_degrees->reserve(num_supernodes);
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int child_start_beg = child_start_offsets[supernode];
-    const Int num_children =
-        child_start_offsets[supernode + 1] - child_start_beg;
-
-    Int parent_start = orig_supernode_starts[supernode];
-    std::vector<Int> merged_child(num_children, false);
-
-    // The following loop can execute at most 'num_children' times.
-    while (true) {
-      // Compute the list of child indices that can be merged.
-      for (Int child_index = 0; child_index < num_children; ++child_index) {
-        if (merged_child[child_index]) {
-          continue;
-        }
-        const Int child_start = child_starts[child_start_beg + child_index];
-
-        const MergableStatus status = MergableSupernode(
-            child_start, parent_start, member_to_supernode_size,
-            member_to_start, scalar_structure, num_explicit_zeros, control);
-        if (status.mergable) {
-          mergable_children.push_back(child_index);
-          num_merged_zeros.push_back(status.num_merged_zeros);
-        }
-      }
-
-      // Skip this supernode if no children can be merged into it.
-      if (mergable_children.empty()) {
-        break;
-      }
-
-      // Select the largest mergable supernode.
-      Int merging_index = 0;
-      Int largest_mergable_size =
-          member_to_supernode_size[child_starts[
-              child_start_beg + mergable_children[0]]];
-      for (std::size_t mergable_index = 1;
-          mergable_index < mergable_children.size(); ++mergable_index) {
-        const Int child_index = mergable_children[mergable_index];
-        const Int child_start = child_starts[child_start_beg + child_index];
-        const Int child_size = member_to_supernode_size[child_start];
-        if (child_size > largest_mergable_size) {
-          merging_index = mergable_index;
-          largest_mergable_size = child_size;
-        }
-      }
-      const Int child_start =
-          child_starts[child_start_beg + mergable_children[merging_index]];
-
-       // Update the number of explicit zeros in the merged supernode.
-      num_explicit_zeros[child_start] = num_merged_zeros[merging_index];
-
-     // Merge the child and parent supernodes in 'next_member' by connecting
-      // the two chains.
-      next_member[last_member[child_start]] = parent_start;
-
-      // Merge the child and parent supernodes in 'last_member'.
-      last_member[child_start] = last_member[parent_start];
-
-      // Merge the child and parent supernodes in 'supernode_sizes'.
-      member_to_supernode_size[child_start] +=
-          member_to_supernode_size[parent_start];
-      member_to_supernode_size[parent_start] = 0;
-
-      // Point the members of the parent supernode to the child supernode start.
-      {
-        Int index = parent_start;
-        member_to_start[index] = child_start;
-        while (next_member[index] != -1) {
-          index = next_member[index];
-          member_to_start[index] = child_start;
-        }
-      }
-
-      // Move the start of the parent supernode to the merged start.
-      parent_start = child_start;
-
-      // Mark the child as merged.
-      merged_child[merging_index] = true;
-
-      // Clear the mergable children information since it is now stale.
-      mergable_children.clear();
-      num_merged_zeros.clear();
-    }
-
-    supernode_degrees->push_back(orig_supernode_degrees[supernode]);
-  }
-
-  // TODO(Jack Poulson): Fill permutation and inverse_permutation using the
-  // post-ordering of the relaxed supernodal elimination forest.
-  std::cerr << "This relaxation code is not yet finished." << std::endl;
 }
 
 // Form the (possibly relaxed) supernodes for the factorization.
@@ -1362,12 +1480,11 @@ void FormSupernodes(
   MemberToIndex(
       matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
 
-  // TODO(Jack Poulson): Avoid recomputing orig_parents and orig_degrees.
-  std::vector<Int> trivial_permutation;
+  // TODO(Jack Poulson): Avoid recomputing orig_parents. While it may appear
+  // that 'orig_degrees' was recomputed, this time it is supernodal.
   EliminationForestAndDegrees(
-      matrix, trivial_permutation, trivial_permutation, orig_supernode_sizes,
-      orig_supernode_starts, orig_member_to_index, &orig_parents,
-      &orig_degrees);
+      matrix, orig_supernode_sizes, orig_supernode_starts, orig_member_to_index,
+      &orig_parents, &orig_degrees);
 
   const Int num_orig_supernodes = orig_supernode_sizes.size();
   std::vector<Int> orig_supernode_parents;
@@ -1376,17 +1493,13 @@ void FormSupernodes(
       &orig_supernode_parents);
 
   if (control.relax_supernodes) {
-    std::vector<Int> supernode_degrees;
     RelaxSupernodes(
-        matrix, orig_supernode_sizes, orig_supernode_starts,
-        orig_supernode_parents, orig_degrees, scalar_structure,
-        control, supernode_parents, &supernode_degrees, factorization);
+        orig_supernode_sizes, orig_supernode_starts,
+        orig_supernode_parents, orig_degrees, orig_member_to_index,
+        scalar_structure, control, supernode_parents, degrees, factorization);
 
-    // TODO(Jack Poulson): Form parents.
-    // TODO(Jack Poulson): Form degrees.
-    // TODO(Jack Poulson): Form supernode_parents.
-    // TODO(Jack Poulson): Form whatever is needed of factorization, including
-    //    the permutation associated with the supernodal merges.
+    // We keep the 'parents' array in the original (unrelaxed) ordering.
+    *parents = orig_parents;
   } else {
     *parents = orig_parents;
     *degrees = orig_degrees;
