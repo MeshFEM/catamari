@@ -842,8 +842,10 @@ bool ValidFundamentalSupernodes(
     const std::vector<Int>& supernode_sizes) {
   const Int num_rows = matrix.NumRows();
 
+  std::vector<Int> permutation, inverse_permutation;
   std::vector<Int> parents, degrees;
-  ldl::EliminationForestAndDegrees(matrix, &parents, &degrees);
+  ldl::EliminationForestAndDegrees(
+      matrix, permutation, inverse_permutation, &parents, &degrees);
 
   std::vector<Int> supernode_starts, member_to_index;
   OffsetScan(supernode_sizes, &supernode_starts);
@@ -858,7 +860,8 @@ bool ValidFundamentalSupernodes(
 
     pattern_flags[row] = row;
     const Int num_packed = ldl::ComputeRowPattern(
-        matrix, parents, row, pattern_flags.data(), row_structure.data());
+        matrix, permutation, inverse_permutation, parents, row,
+        pattern_flags.data(), row_structure.data());
     std::sort(row_structure.data(), row_structure.data() + num_packed);
 
     // TODO(Jack Poulson): Extend the tests to ensure that the diagonal blocks
@@ -908,7 +911,10 @@ void FormFundamentalSupernodes(
   const Int num_rows = matrix.NumRows();
 
   // We will only fill the indices and offsets of the factorization.
-  ldl::FillStructureIndices(matrix, parents, degrees, scalar_structure);
+  std::vector<Int> permutation, inverse_permutation;
+  ldl::FillStructureIndices(
+      matrix, permutation, inverse_permutation, parents, degrees,
+      scalar_structure);
 
   supernode_sizes->clear();
   if (!num_rows) {
@@ -1395,8 +1401,10 @@ void FormSupernodes(
     SupernodalLDLFactorization<Field>* factorization) {
 
   // Compute the non-supernodal elimination tree using the original ordering.
+  std::vector<Int> permutation, inverse_permutation;
   std::vector<Int> orig_parents, orig_degrees;
-  ldl::EliminationForestAndDegrees(matrix, &orig_parents, &orig_degrees);
+  ldl::EliminationForestAndDegrees(
+      matrix, permutation, inverse_permutation, &orig_parents, &orig_degrees);
 
   // Greedily compute a supernodal partition using the original ordering.
   std::vector<Int> orig_supernode_sizes;
@@ -1594,14 +1602,6 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 }
 
 }  // namespace supernodal_ldl
-
-template <class Field>
-void Permute(const std::vector<Int>& permutation, std::vector<Field>* vector) {
-  std::vector<Field> vector_copy = *vector;
-  for (std::size_t row = 0; row < vector->size(); ++row) {
-    (*vector)[permutation[row]] = vector_copy[row];
-  }
-}
 
 template <class Field>
 Int LDL(const CoordinateMatrix<Field>& matrix,

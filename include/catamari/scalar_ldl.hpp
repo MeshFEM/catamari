@@ -65,6 +65,14 @@ struct ScalarLDLFactorization {
 
   // The diagonal factor, D.
   ScalarDiagonalFactor<Field> diagonal_factor;
+
+  // If non-empty, the permutation mapping the original matrix ordering into the
+  // factorization ordering.
+  std::vector<Int> permutation;
+
+  // If non-empty, the inverse of the permutation mapping the original matrix
+  // ordering into the factorization ordering.
+  std::vector<Int> inverse_permutation;
 };
 
 // Configuration options for non-supernodal LDL' factorization.

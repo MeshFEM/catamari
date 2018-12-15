@@ -66,10 +66,12 @@ namespace ldl {
 //
 // Cf. Tim Davis's "LDL"'s symbolic factorization.
 template <class Field>
-void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
-                                 std::vector<Int>* parents,
-                                 std::vector<Int>* degrees) {
+void EliminationForestAndDegrees(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation, std::vector<Int>* parents,
+    std::vector<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
+  const bool have_permutation = !permutation.empty();
 
   // Initialize all of the parent indices as unset.
   parents->resize(num_rows, -1);
@@ -87,11 +89,12 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
   for (Int row = 0; row < num_rows; ++row) {
     pattern_flags[row] = row;
 
-    const Int row_beg = matrix.RowEntryOffset(row);
-    const Int row_end = matrix.RowEntryOffset(row + 1);
+    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int column = entry.column;
+      Int column = have_permutation ? permutation[entry.column] : entry.column;
 
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
@@ -124,11 +127,13 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
 
 // Fills in the structure indices for the lower factor.
 template <class Field>
-void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
-                          const std::vector<Int>& parents,
-                          const std::vector<Int>& degrees,
-                          ScalarLowerStructure* lower_structure) {
+void FillStructureIndices(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation,
+    const std::vector<Int>& parents, const std::vector<Int>& degrees,
+    ScalarLowerStructure* lower_structure) {
   const Int num_rows = matrix.NumRows();
+  const bool have_permutation = !permutation.empty();
 
   // Set up the column offsets and allocate space (initializing the values of
   // the unit-lower and diagonal and all zeros).
@@ -154,11 +159,12 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     pattern_flags[row] = row;
     column_ptrs[row] = lower_structure->column_offsets[row];
 
-    const Int row_beg = matrix.RowEntryOffset(row);
-    const Int row_end = matrix.RowEntryOffset(row + 1);
+    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int column = entry.column;
+      Int column = have_permutation ? permutation[entry.column] : entry.column;
 
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
@@ -184,24 +190,31 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
 // Fill the factorization with the nonzeros from the input matrix.
 template <class Field>
-void FillNonzeros(const CoordinateMatrix<Field>& matrix,
-                  ScalarLDLFactorization<Field>* factorization) {
+void FillNonzeros(
+    const CoordinateMatrix<Field>& matrix,
+    ScalarLDLFactorization<Field>* factorization) {
   ScalarLowerFactor<Field>& lower_factor = factorization->lower_factor;
   ScalarLowerStructure& lower_structure = lower_factor.structure;
   ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
+  const std::vector<Int>& permutation = factorization->permutation;
+  const std::vector<Int>& inverse_permutation =
+      factorization->inverse_permutation;
   const Int num_rows = matrix.NumRows();
   const Int num_entries = lower_structure.indices.size();
+  const bool have_permutation = !permutation.empty();
 
   lower_factor.values.resize(num_entries, Field{0});
   diagonal_factor.values.resize(num_rows, Field{0});
 
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
-    const Int row_beg = matrix.RowEntryOffset(row);
-    const Int row_end = matrix.RowEntryOffset(row + 1);
+    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int column = entry.column;
+      Int column = have_permutation ? permutation[entry.column] : entry.column;
+
       if (column == row) {
         diagonal_factor.values[column] = entry.value;
       }
@@ -228,11 +241,12 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
 // factor.
 template <class Field>
 void InitializeLeftLookingFactors(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
-    const std::vector<Int>& degrees,
+    const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& parents, const std::vector<Int>& degrees,
     ScalarLDLFactorization<Field>* factorization) {
   FillStructureIndices(
-      matrix, parents, degrees, &factorization->lower_factor.structure);
+      matrix, factorization->permutation, factorization->inverse_permutation,
+      parents, degrees, &factorization->lower_factor.structure);
   FillNonzeros(matrix, factorization);
 }
 
@@ -240,15 +254,17 @@ void InitializeLeftLookingFactors(
 // factorization: the elimination forest and structure sizes are computed,
 // and the memory for the factors is allocated.
 template <class Field>
-void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
-                    std::vector<Int>* parents,
-                    ScalarLDLFactorization<Field>* factorization) {
+void UpLookingSetup(
+    const CoordinateMatrix<Field>& matrix, std::vector<Int>* parents,
+    ScalarLDLFactorization<Field>* factorization) {
   ScalarLowerFactor<Field>& lower_factor = factorization->lower_factor;
   ScalarLowerStructure& lower_structure = lower_factor.structure;
   ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
 
   std::vector<Int> degrees;
-  EliminationForestAndDegrees(matrix, parents, &degrees);
+  EliminationForestAndDegrees(
+      matrix, factorization->permutation, factorization->inverse_permutation,
+      parents, &degrees);
 
   const Int num_rows = matrix.NumRows();
   lower_structure.column_offsets.resize(num_rows + 1);
@@ -265,27 +281,35 @@ void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
-                      std::vector<Int>* parents,
-                      ScalarLDLFactorization<Field>* factorization) {
+void LeftLookingSetup(
+    const CoordinateMatrix<Field>& matrix, std::vector<Int>* parents,
+    ScalarLDLFactorization<Field>* factorization) {
   std::vector<Int> degrees;
-  EliminationForestAndDegrees(matrix, parents, &degrees);
+  EliminationForestAndDegrees(
+      matrix, factorization->permutation, factorization->inverse_permutation,
+      parents, &degrees);
   InitializeLeftLookingFactors(matrix, *parents, degrees, factorization);
 }
 
 // Computes the nonzero pattern of L(row, :) in
 // row_structure[0 : num_packed - 1].
 template <class Field>
-Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
-                      const std::vector<Int>& parents, Int row,
-                      Int* pattern_flags, Int* row_structure) {
-  const Int row_beg = matrix.RowEntryOffset(row);
-  const Int row_end = matrix.RowEntryOffset(row + 1);
+Int ComputeRowPattern(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation,
+    const std::vector<Int>& parents, Int row, Int* pattern_flags,
+    Int* row_structure) {
+  const bool have_permutation = !permutation.empty();
+
+  const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+  const Int row_beg = matrix.RowEntryOffset(orig_row);
+  const Int row_end = matrix.RowEntryOffset(orig_row + 1);
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   Int num_packed = 0;
   for (Int index = row_beg; index < row_end; ++index) {
     const MatrixEntry<Field>& entry = entries[index];
-    Int column = entry.column;
+    Int column = have_permutation ? permutation[entry.column] : entry.column;
+
     if (column >= row) {
       break;
     }
@@ -310,15 +334,21 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
 // row_workspace.
 template <class Field>
 Int ComputeTopologicalRowPatternAndScatterNonzeros(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
-    Int row, Int* pattern_flags, Int* row_structure, Field* row_workspace) {
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation,
+    const std::vector<Int>& parents, Int row, Int* pattern_flags,
+    Int* row_structure, Field* row_workspace) {
+  const bool have_permutation = !permutation.empty();
   Int start = matrix.NumRows();
-  const Int row_beg = matrix.RowEntryOffset(row);
-  const Int row_end = matrix.RowEntryOffset(row + 1);
+
+  const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+  const Int row_beg = matrix.RowEntryOffset(orig_row);
+  const Int row_end = matrix.RowEntryOffset(orig_row + 1);
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int index = row_beg; index < row_end; ++index) {
     const MatrixEntry<Field>& entry = entries[index];
-    Int column = entry.column;
+    Int column = have_permutation ? permutation[entry.column] : entry.column;
+
     if (column > row) {
       break;
     }
@@ -436,8 +466,9 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
     column_update_ptrs[column] = lower_structure.column_offsets[column];
 
     // Compute the row pattern.
-    const Int num_packed = ldl::ComputeRowPattern(
-        matrix, parents, column, pattern_flags.data(), row_structure.data());
+    const Int num_packed = ComputeRowPattern(
+        matrix, factorization->permutation, factorization->inverse_permutation,
+        parents, column, pattern_flags.data(), row_structure.data());
 
     // for j = find(L(column, :))
     //   L(column:n, column) -= L(column:n, j) * (d(j) * conj(L(column, j)))
@@ -521,8 +552,9 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 // Performs a non-supernodal up-looking LDL' factorization.
 // Cf. Section 4.7 of Tim Davis, "Direct Methods for Sparse Linear Systems".
 template <class Field>
-Int UpLooking(const CoordinateMatrix<Field>& matrix,
-              ScalarLDLFactorization<Field>* factorization) {
+Int UpLooking(
+    const CoordinateMatrix<Field>& matrix,
+    ScalarLDLFactorization<Field>* factorization) {
   typedef ComplexBase<Field> Real;
   ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
   const Int num_rows = matrix.NumRows();
@@ -555,7 +587,8 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
     const Int start = ldl::ComputeTopologicalRowPatternAndScatterNonzeros(
-        matrix, parents, row, pattern_flags.data(), row_structure.data(),
+        matrix, factorization->permutation, factorization->inverse_permutation,
+        parents, row, pattern_flags.data(), row_structure.data(),
         row_workspace.data());
 
     // Pull the diagonal entry out of the workspace.
@@ -592,10 +625,24 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
 }  // namespace ldl
 
 template <class Field>
+void Permute(const std::vector<Int>& permutation, std::vector<Field>* vector) {
+  std::vector<Field> vector_copy = *vector;
+  for (std::size_t row = 0; row < vector->size(); ++row) {
+    (*vector)[permutation[row]] = vector_copy[row];
+  }
+}
+
+template <class Field>
 Int LDL(
-    const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
+    const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation,
+    const ScalarLDLControl& control,
     ScalarLDLFactorization<Field>* factorization) {
+  factorization->permutation = permutation;
+  factorization->inverse_permutation = inverse_permutation;
   factorization->is_cholesky = control.use_cholesky;
+
   if (control.algorithm == kLeftLookingLDL) {
     return ldl::LeftLooking(matrix, factorization);
   } else {
@@ -604,12 +651,32 @@ Int LDL(
 }
 
 template <class Field>
+Int LDL(
+    const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
+    ScalarLDLFactorization<Field>* factorization) {
+  std::vector<Int> permutation, inverse_permutation;
+  return LDL(matrix, permutation, inverse_permutation, control, factorization);
+}
+
+template <class Field>
 void LDLSolve(
     const ScalarLDLFactorization<Field>& factorization,
     std::vector<Field>* vector) {
+  const bool have_permutation = !factorization.permutation.empty();
+
+  // Reorder the input into the relaxation permutation of the factorization.
+  if (have_permutation) {
+    Permute(factorization.permutation, vector);
+  }
+
   LowerTriangularSolve(factorization, vector);
   DiagonalSolve(factorization, vector);
   LowerAdjointTriangularSolve(factorization, vector);
+
+  // Reverse the factorization relxation permutation.
+  if (have_permutation) {
+    Permute(factorization.inverse_permutation, vector);
+  }
 }
 
 template <class Field>
