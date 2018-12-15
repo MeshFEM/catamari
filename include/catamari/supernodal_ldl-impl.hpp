@@ -120,7 +120,11 @@ void SupernodalDegrees(
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
       if (descendant >= row) {
-        break;
+        if (have_permutation) {
+          continue;
+        } else {
+          break;
+        }
       }
 
       // Look for new entries in the pattern by walking up to the root of this
@@ -1396,7 +1400,10 @@ void RelaxSupernodes(
     factorization->permutation = relaxation_permutation;
     factorization->inverse_permutation = relaxation_inverse_permutation;
   } else {
-    Permute(relaxation_permutation, &factorization->permutation);
+    std::vector<Int> perm_copy = factorization->permutation;
+    for (Int row = 0; row < num_rows; ++row) {
+      factorization->permutation[row] = relaxation_permutation[perm_copy[row]];
+    }
 
     // Invert the composed permutation.
     for (Int row = 0; row < num_rows; ++row) {

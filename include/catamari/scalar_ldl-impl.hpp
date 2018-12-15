@@ -114,7 +114,11 @@ void EliminationForestAndDegrees(
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
       if (column >= row) {
-        break;
+        if (have_permutation) {
+          continue;
+        } else {
+          break;
+        }
       }
 
       // Look for new entries in the pattern by walking up to the root of this
@@ -178,7 +182,11 @@ void FillStructureIndices(
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
       if (column >= row) {
-        break;
+        if (have_permutation) {
+          continue;
+        } else {
+          break;
+        }
       }
 
       // Look for new entries in the pattern by walking up to the root of this
@@ -228,7 +236,11 @@ void FillNonzeros(
         diagonal_factor.values[column] = entry.value;
       }
       if (column >= row) {
-        break;
+        if (have_permutation) {
+          continue;
+        } else {
+          break;
+        }
       }
 
       const Int column_beg = lower_structure.column_offsets[column];
@@ -280,6 +292,7 @@ void UpLookingSetup(
 
   OffsetScan(degrees, &lower_structure.column_offsets);
   const Int num_entries = lower_structure.column_offsets.back();
+
   lower_structure.indices.resize(num_entries);
   lower_factor.values.resize(num_entries);
 }
@@ -315,7 +328,11 @@ Int ComputeRowPattern(
     Int column = have_permutation ? permutation[entry.column] : entry.column;
 
     if (column >= row) {
-      break;
+      if (have_permutation) {
+        continue;
+      } else {
+        break;
+      }
     }
 
     // Walk up to the root of the current subtree of the elimination
@@ -354,7 +371,11 @@ Int ComputeTopologicalRowPatternAndScatterNonzeros(
     Int column = have_permutation ? permutation[entry.column] : entry.column;
 
     if (column > row) {
-      break;
+      if (have_permutation) {
+        continue;
+      } else {
+        break;
+      }
     }
 
     // Scatter matrix(row, column) into row_workspace.

@@ -136,10 +136,8 @@ Experiment RunMatrixMarketTest(
   // Produce a graph from the loaded matrix.
   std::unique_ptr<quotient::CoordinateGraph> graph = matrix->CoordinateGraph();
 
-  catamari::CoordinateMatrix<Field> permuted_matrix;
-  if (disable_reordering) {
-    permuted_matrix = *matrix;
-  } else {
+  std::vector<Int> permutation, inverse_permutation;
+  if (!disable_reordering) {
     if (print_progress) {
       std::cout << "  Running analysis..." << std::endl;
     }
@@ -163,16 +161,24 @@ Experiment RunMatrixMarketTest(
     }
 #endif
 
-    // Form the permuted matrix.
-    const std::vector<Int> permutation = analysis.Permutation();
-    permuted_matrix.Resize(matrix->NumRows(), matrix->NumColumns());
-    permuted_matrix.ReserveEntryAdditions(matrix->NumEntries());
-    for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
-      permuted_matrix.QueueEntryAddition(
-          permutation[entry.row], permutation[entry.column], entry.value);
+    // Form the permutation and its inverse.
+    permutation = analysis.Permutation();
+    inverse_permutation.resize(num_rows);
+    for (Int row = 0; row < num_rows; ++row) {
+      inverse_permutation[permutation[row]] = row;
     }
-    permuted_matrix.FlushEntryQueues();
+
     if (write_permuted_matrix) {
+      // Form the permuted matrix.
+      catamari::CoordinateMatrix<double> permuted_matrix;
+      permuted_matrix.Resize(matrix->NumRows(), matrix->NumColumns());
+      permuted_matrix.ReserveEntryAdditions(matrix->NumEntries());
+      for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
+        permuted_matrix.QueueEntryAddition(
+            permutation[entry.row], permutation[entry.column], entry.value);
+      }
+      permuted_matrix.FlushEntryQueues();
+
       const std::string new_filename = filename + "-perm.mtx";
       permuted_matrix.ToMatrixMarket(new_filename);
     }
@@ -186,7 +192,8 @@ Experiment RunMatrixMarketTest(
   factorization_timer.Start();
   catamari::LDLFactorization<Field> ldl_factorization;
   const Int num_pivots = catamari::LDL(
-      permuted_matrix, ldl_control, &ldl_factorization);
+      *matrix, permutation, inverse_permutation, ldl_control,
+      &ldl_factorization);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (num_pivots < num_rows) {
     std::cout << "  Failed factorization after " << num_pivots << " pivots."
@@ -215,8 +222,8 @@ Experiment RunMatrixMarketTest(
 
   // Compute the residual.
   auto residual = right_hand_side;
-  catamari::MatrixVectorProduct(Field{-1}, permuted_matrix, solution, Field{1},
-                                &residual);
+  catamari::MatrixVectorProduct(
+      Field{-1}, *matrix, solution, Field{1}, &residual);
   const BaseField residual_norm = EuclideanNorm(residual);
   std::cout << "  || b - A x ||_F / || b ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
@@ -311,6 +318,9 @@ int main(int argc, char** argv) {
   const Int allowable_supernode_zeros = parser.OptionalInput<Int>(
       "allowable_supernode_zeros", "Number of zeros allowed in relaxations.",
       128);
+  const float allowable_supernode_zero_ratio = parser.OptionalInput<float>(
+      "allowable_supernode_zero_ratio",
+      "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const double diagonal_shift = parser.OptionalInput<BaseField>(
       "diagonal_shift", "The value to add to the diagonal.", 1e6);
   const int ldl_algorithm_int =
@@ -373,6 +383,8 @@ int main(int argc, char** argv) {
   ldl_control.supernodal_control.relax_supernodes = relax_supernodes;
   ldl_control.supernodal_control.allowable_supernode_zeros =
       allowable_supernode_zeros;
+  ldl_control.supernodal_control.allowable_supernode_zero_ratio =
+      allowable_supernode_zero_ratio;
 
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =

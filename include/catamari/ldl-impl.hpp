@@ -16,7 +16,8 @@ namespace catamari {
 
 template <class Field>
 Int LDL(
-    const CoordinateMatrix<Field>& matrix, const LDLControl& control,
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation, const LDLControl& control,
     LDLFactorization<Field>* factorization) {
   bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {
@@ -33,14 +34,23 @@ Int LDL(
     factorization->supernodal_factorization.reset(
         new SupernodalLDLFactorization<Field>);
     return LDL(
-        matrix, control.supernodal_control,
+        matrix, permutation, inverse_permutation, control.supernodal_control,
         factorization->supernodal_factorization.get());
   } else {
     factorization->scalar_factorization.reset(
         new ScalarLDLFactorization<Field>);
-    return LDL(matrix, control.scalar_control,
+    return LDL(
+        matrix, permutation, inverse_permutation, control.scalar_control,
         factorization->scalar_factorization.get());
   }
+}
+
+template <class Field>
+Int LDL(
+    const CoordinateMatrix<Field>& matrix, const LDLControl& control,
+    LDLFactorization<Field>* factorization) {
+  std::vector<Int> permutation, inverse_permutation;
+  return LDL(matrix, permutation, inverse_permutation, control, factorization);
 }
 
 template <class Field>
