@@ -11,9 +11,8 @@
 #include "catamari/complex.hpp"
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"
-#include "catamari/supernodal_ldl.hpp"
+#include "catamari/ldl.hpp"
 #include "catamari/macros.hpp"
 #include "catamari/matrix_vector_product.hpp"
-#include "catamari/supernodal_ldl.hpp"
 
 #endif  // ifndef CATAMARI_H_

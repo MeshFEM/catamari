@@ -13,8 +13,8 @@
 #include <numeric>
 #include <vector>
 
+#include "catamari/ldl.hpp"
 #include "catamari/matrix_vector_product.hpp"
-#include "catamari/supernodal_ldl.hpp"
 #include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
 
@@ -77,7 +77,7 @@ Experiment RunMatrixMarketTest(
     const std::string& filename, bool skip_explicit_zeros,
     quotient::EntryMask mask, const quotient::MinimumDegreeControl& amd_control,
     bool disable_reordering, bool force_symmetry, double diagonal_shift,
-    const catamari::SupernodalLDLControl& ldl_control, bool print_progress,
+    const catamari::LDLControl& ldl_control, bool print_progress,
     bool write_permuted_matrix) {
   typedef double Field;
   typedef catamari::ComplexBase<Field> BaseField;
@@ -184,7 +184,7 @@ Experiment RunMatrixMarketTest(
   }
   quotient::Timer factorization_timer;
   factorization_timer.Start();
-  catamari::SupernodalLDLFactorization<Field> ldl_factorization;
+  catamari::LDLFactorization<Field> ldl_factorization;
   const Int num_pivots = catamari::LDL(
       permuted_matrix, ldl_control, &ldl_factorization);
   experiment.factorization_seconds = factorization_timer.Stop();
@@ -239,7 +239,7 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, const quotient::MinimumDegreeControl& amd_control,
     bool disable_reordering, double diagonal_shift,
-    const catamari::SupernodalLDLControl& ldl_control, bool print_progress,
+    const catamari::LDLControl& ldl_control, bool print_progress,
     bool write_permuted_matrix) {
   const std::vector<std::string> matrix_names{
       "appu",     "bbmat",    "bcsstk30", "bcsstk31", "bcsstk32", "bcsstk33",
@@ -303,6 +303,9 @@ int main(int argc, char** argv) {
       "force_symmetry", "Use the nonzero pattern of A + A'?", true);
   const bool use_cholesky = parser.OptionalInput<bool>(
       "use_cholesky", "Use a Cholesky factorization?", false);
+  const int supernodal_strategy_int = parser.OptionalInput<int>(
+      "supernodal_strategy_int", "The SupernodalStrategy int.\n"
+      "0:scalar, 1:supernodal, 2:adaptive", 2);
   const bool relax_supernodes = parser.OptionalInput<bool>(
       "relax_supernodes", "Relax the supernodes?", true);
   const Int allowable_supernode_zeros = parser.OptionalInput<Int>(
@@ -310,13 +313,11 @@ int main(int argc, char** argv) {
       128);
   const double diagonal_shift = parser.OptionalInput<BaseField>(
       "diagonal_shift", "The value to add to the diagonal.", 1e6);
-  /*
   const int ldl_algorithm_int =
       parser.OptionalInput<int>("ldl_algorithm_int",
                                 "The LDL algorithm type.\n"
                                 "0:left-looking, 1:up-looking",
                                 1);
-  */
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
   const bool write_permuted_matrix = parser.OptionalInput<bool>(
@@ -362,14 +363,16 @@ int main(int argc, char** argv) {
   amd_control.min_dense_threshold = min_dense_threshold;
   amd_control.dense_sqrt_multiple = dense_sqrt_multiple;
 
-  catamari::SupernodalLDLControl ldl_control;
-  ldl_control.use_cholesky = use_cholesky;
-  ldl_control.relax_supernodes = relax_supernodes;
-  ldl_control.allowable_supernode_zeros = allowable_supernode_zeros;
-  /*
-  ldl_control.algorithm =
+  catamari::LDLControl ldl_control;
+  ldl_control.supernodal_strategy =
+      static_cast<catamari::SupernodalStrategy>(supernodal_strategy_int);
+  ldl_control.scalar_control.use_cholesky = use_cholesky;
+  ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
-  */
+  ldl_control.supernodal_control.use_cholesky = use_cholesky;
+  ldl_control.supernodal_control.relax_supernodes = relax_supernodes;
+  ldl_control.supernodal_control.allowable_supernode_zeros =
+      allowable_supernode_zeros;
 
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
