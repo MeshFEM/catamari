@@ -14,27 +14,49 @@
 namespace catamari {
 
 template <class Field>
-void PrintLowerFactor(const ScalarLowerFactor<Field>& lower_factor,
-                      const std::string& label, std::ostream& os) {
+void PrintLowerFactor(
+    const ScalarLDLFactorization<Field>& factorization,
+    const std::string& label, std::ostream& os) {
+  const ScalarLowerFactor<Field>& lower_factor = factorization.lower_factor;
   const ScalarLowerStructure& lower_structure = lower_factor.structure;
+  const ScalarDiagonalFactor<Field>& diagonal_factor =
+      factorization.diagonal_factor;
+  const bool is_cholesky = factorization.is_cholesky;
+
+  auto print_entry = [&](
+      const Int& row, const Int& column, const Field& value) {
+    os << row << " " << column << " " << value << "\n";
+  };
+
   os << label << ":\n";
   const Int num_columns = lower_structure.column_offsets.size() - 1;
   for (Int column = 0; column < num_columns; ++column) {
+    if (is_cholesky) {
+      print_entry(column, column, diagonal_factor.values[column]);
+    } else {
+      print_entry(column, column, Field{1}); 
+    }
+
     const Int column_beg = lower_structure.column_offsets[column];
     const Int column_end = lower_structure.column_offsets[column + 1];
     for (Int index = column_beg; index < column_end; ++index) {
       const Int row = lower_structure.indices[index];
       const Field& value = lower_factor.values[index];
-      os << row << " " << column << " " << value << "\n";
+      print_entry(row, column, value);
     }
   }
   os << std::endl;
 }
 
 template <class Field>
-void PrintDiagonalFactor(const ScalarDiagonalFactor<Field>& diagonal_factor,
-                         const std::string& label, std::ostream& os) {
-  quotient::PrintVector(diagonal_factor.values, label, os);
+void PrintDiagonalFactor(
+    const ScalarLDLFactorization<Field>& factorization,
+    const std::string& label, std::ostream& os) {
+  if (factorization.is_cholesky) {
+    // TODO(Jack Poulson): Print the identity.
+    return;
+  }
+  quotient::PrintVector(factorization.diagonal_factor.values, label, os);
 }
 
 namespace ldl {
@@ -332,12 +354,16 @@ template <class Field>
 void UpLookingRowUpdate(Int row, Int column,
                         ScalarLDLFactorization<Field>* factorization,
                         Int* column_update_ptrs, Field* row_workspace) {
+  typedef ComplexBase<Field> Real;
   ScalarLowerFactor<Field>& lower_factor = factorization->lower_factor;
   ScalarLowerStructure& lower_structure = lower_factor.structure;
   ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
+  const bool is_cholesky = factorization->is_cholesky;
+  const Real pivot = RealPart(diagonal_factor.values[column]);
 
   // Load eta := L(row, column) * d(column) from the workspace.
-  const Field eta = row_workspace[column];
+  const Field eta =
+      is_cholesky ? row_workspace[column] / pivot : row_workspace[column];
   row_workspace[column] = Field{0};
 
   // Update
@@ -361,7 +387,7 @@ void UpLookingRowUpdate(Int row, Int column,
   }
 
   // Compute L(row, column) from eta = L(row, column) * d(column).
-  const Field lambda = eta / diagonal_factor.values[column];
+  const Field lambda = is_cholesky ? eta : eta / pivot;
 
   // Update L(row, row) -= (L(row, column) * d(column)) * conj(L(row, column)).
   diagonal_factor.values[row] -= eta * Conjugate(lambda);
@@ -382,7 +408,9 @@ void UpLookingRowUpdate(Int row, Int column,
 template <class Field>
 Int LeftLooking(const CoordinateMatrix<Field>& matrix,
                 ScalarLDLFactorization<Field>* factorization) {
+  typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
+  const bool is_cholesky = factorization->is_cholesky;
 
   std::vector<Int> parents;
   ldl::LeftLookingSetup(matrix, &parents, factorization);
@@ -425,7 +453,10 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
                       "Did not find L(column, j)");
 
       const Field lambda_k_j = lower_factor.values[j_ptr];
-      const Field eta = diagonal_factor.values[j] * Conjugate(lambda_k_j);
+      const Field eta =
+          is_cholesky ?
+          Conjugate(lambda_k_j) :
+          diagonal_factor.values[j] * Conjugate(lambda_k_j);
 
       // L(column, column) -= L(column, j) * eta.
       diagonal_factor.values[column] -= lambda_k_j * eta;
@@ -461,9 +492,17 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
     }
 
     // Early exit if solving would involve division by zero.
-    const Field pivot = diagonal_factor.values[column];
-    if (pivot == Field{0}) {
-      return column;
+    Real pivot = RealPart(diagonal_factor.values[column]);
+    if (is_cholesky) {
+      if (pivot <= Real{0}) {
+        return column;
+      }
+      pivot = std::sqrt(pivot);
+      diagonal_factor.values[column] = pivot;
+    } else {
+      if (pivot == Real{0}) {
+        return column;
+      }
     }
 
     // L(column+1:n, column) /= d(column).
@@ -484,7 +523,10 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 Int UpLooking(const CoordinateMatrix<Field>& matrix,
               ScalarLDLFactorization<Field>* factorization) {
+  typedef ComplexBase<Field> Real;
+  ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
   const Int num_rows = matrix.NumRows();
+  const bool is_cholesky = factorization->is_cholesky;
 
   std::vector<Int> parents;
   ldl::UpLookingSetup(matrix, &parents, factorization);
@@ -517,20 +559,30 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
         row_workspace.data());
 
     // Pull the diagonal entry out of the workspace.
-    factorization->diagonal_factor.values[row] = row_workspace[row];
+    diagonal_factor.values[row] = row_workspace[row];
     row_workspace[row] = Field{0};
 
     // Compute L(row, :) using a sparse triangular solve. In particular,
     //   L(row, :) := matrix(row, :) / L(0 : row - 1, 0 : row - 1)'.
     for (Int index = start; index < num_rows; ++index) {
       const Int column = row_structure[index];
-      ldl::UpLookingRowUpdate(row, column, factorization,
-                              column_update_ptrs.data(), row_workspace.data());
+      ldl::UpLookingRowUpdate(
+          row, column, factorization, column_update_ptrs.data(),
+          row_workspace.data());
     }
 
     // Early exit if solving would involve division by zero.
-    if (factorization->diagonal_factor.values[row] == Field{0}) {
-      return row;
+    Real pivot = RealPart(diagonal_factor.values[row]);
+    if (is_cholesky) {
+      if (pivot <= Real{0}) {
+        return row;
+      }
+      pivot = std::sqrt(pivot);
+      diagonal_factor.values[row] = pivot;
+    } else {
+      if (pivot == Real{0}) {
+        return row;
+      }
     }
   }
 
@@ -540,8 +592,10 @@ Int UpLooking(const CoordinateMatrix<Field>& matrix,
 }  // namespace ldl
 
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
-        ScalarLDLFactorization<Field>* factorization) {
+Int LDL(
+    const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
+    ScalarLDLFactorization<Field>* factorization) {
+  factorization->is_cholesky = control.use_cholesky;
   if (control.algorithm == kLeftLookingLDL) {
     return ldl::LeftLooking(matrix, factorization);
   } else {
@@ -550,52 +604,78 @@ Int LDL(const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
 }
 
 template <class Field>
-void LDLSolve(const ScalarLDLFactorization<Field>& factorization,
-              std::vector<Field>* vector) {
-  UnitLowerTriangularSolve(factorization.lower_factor, vector);
-  DiagonalSolve(factorization.diagonal_factor, vector);
-  UnitLowerAdjointTriangularSolve(factorization.lower_factor, vector);
+void LDLSolve(
+    const ScalarLDLFactorization<Field>& factorization,
+    std::vector<Field>* vector) {
+  LowerTriangularSolve(factorization, vector);
+  DiagonalSolve(factorization, vector);
+  LowerAdjointTriangularSolve(factorization, vector);
 }
 
 template <class Field>
-void UnitLowerTriangularSolve(const ScalarLowerFactor<Field>& unit_lower_factor,
-                              std::vector<Field>* vector) {
-  const ScalarLowerStructure& lower_structure = unit_lower_factor.structure;
+void LowerTriangularSolve(
+    const ScalarLDLFactorization<Field>& factorization,
+    std::vector<Field>* vector) {
+  const ScalarLowerFactor<Field>& lower_factor = factorization.lower_factor;
+  const ScalarLowerStructure& lower_structure = lower_factor.structure;
+  const ScalarDiagonalFactor<Field>& diagonal_factor =
+      factorization.diagonal_factor;
   const Int num_rows = lower_structure.column_offsets.size() - 1;
+  const bool is_cholesky = factorization.is_cholesky;
+
   CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
                   "Vector was of the incorrect size.");
+
   for (Int column = 0; column < num_rows; ++column) {
-    const Field& eta = (*vector)[column];
+    Field& eta = (*vector)[column];
+    if (is_cholesky) {
+      eta /= diagonal_factor.values[column];
+    }
 
     const Int factor_column_beg = lower_structure.column_offsets[column];
     const Int factor_column_end = lower_structure.column_offsets[column + 1];
     for (Int index = factor_column_beg; index < factor_column_end; ++index) {
       const Int i = lower_structure.indices[index];
-      const Field& value = unit_lower_factor.values[index];
+      const Field& value = lower_factor.values[index];
       (*vector)[i] -= value * eta;
     }
   }
 }
 
 template <class Field>
-void DiagonalSolve(const ScalarDiagonalFactor<Field>& diagonal_factor,
-                   std::vector<Field>* vector) {
+void DiagonalSolve(
+    const ScalarLDLFactorization<Field>& factorization,
+    std::vector<Field>* vector) {
+  if (factorization.is_cholesky) {
+    return;
+  }
+
+  const ScalarDiagonalFactor<Field>& diagonal_factor =
+      factorization.diagonal_factor;
   const Int num_rows = diagonal_factor.values.size();
+
   CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
                   "Vector was of the incorrect size.");
+
   for (Int column = 0; column < num_rows; ++column) {
     (*vector)[column] /= diagonal_factor.values[column];
   }
 }
 
 template <class Field>
-void UnitLowerAdjointTriangularSolve(
-    const ScalarLowerFactor<Field>& unit_lower_factor,
+void LowerAdjointTriangularSolve(
+    const ScalarLDLFactorization<Field>& factorization,
     std::vector<Field>* vector) {
-  const ScalarLowerStructure& lower_structure = unit_lower_factor.structure;
+  const ScalarLowerFactor<Field>& lower_factor = factorization.lower_factor;
+  const ScalarLowerStructure& lower_structure = lower_factor.structure;
+  const ScalarDiagonalFactor<Field>& diagonal_factor =
+      factorization.diagonal_factor;
   const Int num_rows = lower_structure.column_offsets.size() - 1;
+  const bool is_cholesky = factorization.is_cholesky;
+
   CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
                   "Vector was of the incorrect size.");
+
   for (Int column = num_rows - 1; column >= 0; --column) {
     Field& eta = (*vector)[column];
 
@@ -603,8 +683,12 @@ void UnitLowerAdjointTriangularSolve(
     const Int factor_column_end = lower_structure.column_offsets[column + 1];
     for (Int index = factor_column_beg; index < factor_column_end; ++index) {
       const Int i = lower_structure.indices[index];
-      const Field& value = unit_lower_factor.values[index];
+      const Field& value = lower_factor.values[index];
       eta -= Conjugate(value) * (*vector)[i];
+    }
+
+    if (is_cholesky) {
+      eta /= Conjugate(diagonal_factor.values[column]);
     }
   }
 }

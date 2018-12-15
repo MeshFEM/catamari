@@ -57,6 +57,9 @@ struct ScalarDiagonalFactor {
 // A representation of a non-supernodal LDL' factorization.
 template <class Field>
 struct ScalarLDLFactorization {
+  // Marks whether a Cholesky or traditional LDL' factorization was employed.
+  bool is_cholesky;
+
   // The unit lower-triangular factor, L.
   ScalarLowerFactor<Field> lower_factor;
 
@@ -66,45 +69,57 @@ struct ScalarLDLFactorization {
 
 // Configuration options for non-supernodal LDL' factorization.
 struct ScalarLDLControl {
+  // Assume that the matrix is numerically Hermitian Positive-Definite so that
+  // square-roots of the diagonal can be taken and we may choose D = I. If this
+  // option is enabled, L is lower-triangular with a positive diagonal;
+  // otherwise, L has a unit diagonal.
+  bool use_cholesky = false;
+
   // The choice of either left-looking or up-looking LDL' factorization.
   LDLAlgorithm algorithm = kUpLookingLDL;
 };
 
 // Pretty-prints a column-oriented sparse lower-triangular matrix.
 template <class Field>
-void PrintLowerFactor(const ScalarLowerFactor<Field>& lower_factor,
-                      const std::string& label, std::ostream& os);
+void PrintLowerFactor(
+    const ScalarLDLFactorization<Field>& factorization,
+    const std::string& label, std::ostream& os);
 
 // Pretty-prints the diagonal factor of the L D L' factorization.
 template <class Field>
-void PrintDiagonalFactor(const ScalarDiagonalFactor<Field>& diagonal_factor,
-                         const std::string& label, std::ostream& os);
+void PrintDiagonalFactor(
+    const ScalarLDLFactorization<Field>& factorization,
+    const std::string& label, std::ostream& os);
 
 // Performs a non-supernodal LDL' factorization in the natural ordering.
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
-        ScalarLDLFactorization<Field>* factorization);
+Int LDL(
+    const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
+    ScalarLDLFactorization<Field>* factorization);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
 template <class Field>
-void LDLSolve(const ScalarLDLFactorization<Field>& factorization,
-              std::vector<Field>* vector);
+void LDLSolve(
+    const ScalarLDLFactorization<Field>& factorization,
+    std::vector<Field>* vector);
 
 // Solves L x = b using a unit-lower triangular matrix L.
 template <class Field>
-void UnitLowerTriangularSolve(const ScalarLowerFactor<Field>& unit_lower_factor,
-                              std::vector<Field>* vector);
+void LowerTriangularSolve(
+    const ScalarLDLFactorization<Field>& factorization,
+    std::vector<Field>* vector);
 
 // Solves D x = b using a diagonal matrix D.
 template <class Field>
-void DiagonalSolve(const ScalarDiagonalFactor<Field>& diagonal_factor,
-                   std::vector<Field>* vector);
+void DiagonalSolve(
+    const ScalarLDLFactorization<Field>& factorization,
+    std::vector<Field>* vector);
 
 // Solves L' x = b using a unit-lower triangular matrix L.
 template <class Field>
-void UnitLowerAdjointTriangularSolve(
-    const ScalarLowerFactor<Field>& unit_lower_factor,
+void LowerAdjointTriangularSolve(
+    const ScalarLDLFactorization<Field>& factorization,
     std::vector<Field>* vector);
 
 }  // namespace catamari
