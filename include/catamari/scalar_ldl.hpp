@@ -105,6 +105,14 @@ Int LDL(
     const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
     ScalarLDLFactorization<Field>* factorization);
 
+// Performs a non-supernodal LDL' factorization in a permuted ordering.
+template <class Field>
+Int LDL(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation,
+    const ScalarLDLControl& control,
+    ScalarLDLFactorization<Field>* factorization);
+
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
 template <class Field>

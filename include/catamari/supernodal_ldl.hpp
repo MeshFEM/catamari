@@ -84,13 +84,14 @@ struct SupernodalLDLFactorization {
   // The block-diagonal factor.
   SupernodalDiagonalFactor<Field> diagonal_factor;
 
-  // Creating relaxed supernodes generally involves a permutation; if the
-  // following is nonempty, then, if the permutation is a matrix P, the matrix
-  // P A P' has been factored.
-  std::vector<Int> relaxation_permutation;
+  // If the following is nonempty, then, if the permutation is a matrix P, the
+  // matrix P A P' has been factored. Typically, this permutation is the
+  // composition of a fill-reducing ordering and a supernodal relaxation
+  // permutation.
+  std::vector<Int> permutation;
 
   // The inverse of the above permutation (if it is nontrivial).
-  std::vector<Int> relaxation_inverse_permutation;
+  std::vector<Int> inverse_permutation;
 };
 
 // Configuration options for supernodal LDL' factorization.
@@ -122,6 +123,14 @@ struct SupernodalLDLControl {
 // Performs a supernodal LDL' factorization in the natural ordering.
 template <class Field>
 Int LDL(const CoordinateMatrix<Field>& matrix,
+        const SupernodalLDLControl& control,
+        SupernodalLDLFactorization<Field>* factorization);
+
+// Performs a supernodal LDL' factorization in a permuted ordering.
+template <class Field>
+Int LDL(const CoordinateMatrix<Field>& matrix,
+        const std::vector<Int>& permutation,
+        const std::vector<Int>& inverse_permutation,
         const SupernodalLDLControl& control,
         SupernodalLDLFactorization<Field>* factorization);
 

@@ -61,6 +61,21 @@ void PrintDiagonalFactor(
 
 namespace ldl {
 
+// Fills 'offsets' with a length 'num_indices + 1' array whose i'th index is
+// the sum of the sizes whose indices are less than i.
+inline void OffsetScan(
+    const std::vector<Int>& sizes, std::vector<Int>* offsets) {
+  const Int num_indices = sizes.size();
+  offsets->resize(num_indices + 1);
+
+  Int offset = 0;
+  for (Int index = 0; index < num_indices; ++index) {
+    (*offsets)[index] = offset;
+    offset += sizes[index];
+  }
+  (*offsets)[num_indices] = offset;
+}
+
 // Computes the elimination forest (via the 'parents' array) and sizes of the
 // structures of a scalar (simplicial) LDL' factorization.
 //
@@ -137,14 +152,8 @@ void FillStructureIndices(
 
   // Set up the column offsets and allocate space (initializing the values of
   // the unit-lower and diagonal and all zeros).
-  lower_structure->column_offsets.resize(num_rows + 1);
-  Int num_entries = 0;
-  for (Int column = 0; column < num_rows; ++column) {
-    lower_structure->column_offsets[column] = num_entries;
-    num_entries += degrees[column];
-  }
-  lower_structure->column_offsets[num_rows] = num_entries;
-  lower_structure->indices.resize(num_entries);
+  OffsetScan(degrees, &lower_structure->column_offsets);
+  lower_structure->indices.resize(lower_structure->column_offsets.back());
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -267,17 +276,12 @@ void UpLookingSetup(
       parents, &degrees);
 
   const Int num_rows = matrix.NumRows();
-  lower_structure.column_offsets.resize(num_rows + 1);
-  Int num_entries = 0;
-  for (Int column = 0; column < num_rows; ++column) {
-    lower_structure.column_offsets[column] = num_entries;
-    num_entries += degrees[column];
-  }
-  lower_structure.column_offsets[num_rows] = num_entries;
-  lower_structure.indices.resize(num_entries);
-
-  lower_factor.values.resize(num_entries);
   diagonal_factor.values.resize(num_rows);
+
+  OffsetScan(degrees, &lower_structure.column_offsets);
+  const Int num_entries = lower_structure.column_offsets.back();
+  lower_structure.indices.resize(num_entries);
+  lower_factor.values.resize(num_entries);
 }
 
 template <class Field>

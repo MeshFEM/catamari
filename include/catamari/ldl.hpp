@@ -61,6 +61,13 @@ Int LDL(
     const CoordinateMatrix<Field>& matrix, const LDLControl& control,
     LDLFactorization<Field>* factorization);
 
+// Performs an LDL' factorization in a permuted ordering.
+template <class Field>
+Int LDL(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation, const LDLControl& control,
+    LDLFactorization<Field>* factorization);
+
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
 template <class Field>
