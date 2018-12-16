@@ -610,7 +610,7 @@ void UpdateDiagonalBlock(Int main_supernode, Int descendant_supernode,
   const Field* descendant_main_block =
       &lower_factor.values[descendant_main_value_beg];
   if (factorization->is_cholesky) {
-    HermitianOuterProductTransposeLower(
+    LowerTransposeHermitianOuterProduct(
         descendant_main_intersect_size, descendant_supernode_size, Field{-1},
         descendant_main_block, descendant_supernode_size, Field{1},
         update_block, descendant_main_intersect_size);
@@ -807,13 +807,14 @@ void SolveAgainstDiagonalBlock(
     // Solve against the lower-triangular matrix L(K, K)' from the right using
     // row-major storage of the input matrix, which is equivalent to solving
     // conj(L(K, K)) X = Y using column-major storage.
-    ConjugateLowerTriangularSolves(supernode_size, degree, diag_block,
-                                   supernode_size, lower_block, supernode_size);
+    LeftLowerConjugateTriangularSolves(
+        supernode_size, degree, diag_block, supernode_size, lower_block,
+        supernode_size);
   } else {
     // Solve against the D(K, K) times the unit-lower matrix L(K, K)' from the
     // right using row-major storage of the input matrix, which is equivalent to
     // solving D(K, K) conj(L(K, K)) X = Y using column-major storage.
-    DiagonalTimesConjugateUnitLowerTriangularSolves(
+    DiagonalTimesLeftLowerConjugateUnitTriangularSolves(
         supernode_size, degree, diag_block, supernode_size, lower_block,
         supernode_size);
   }
