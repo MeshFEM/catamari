@@ -117,22 +117,23 @@ struct SupernodalLDLControl {
   // equal to 'allowable_supernode_zeros', *or* the ratio of explicit zeros to
   // nonzeros is bounded by 'allowable_supernode_zero_ratio', then the merge
   // can procede.
-  float allowable_supernode_zero_ratio = 0.01;;
+  float allowable_supernode_zero_ratio = 0.01;
+  ;
 };
 
 // Performs a supernodal LDL' factorization in the natural ordering.
 template <class Field>
-LDLResult LDL(
-    const CoordinateMatrix<Field>& matrix, const SupernodalLDLControl& control,
-    SupernodalLDLFactorization<Field>* factorization);
+LDLResult LDL(const CoordinateMatrix<Field>& matrix,
+              const SupernodalLDLControl& control,
+              SupernodalLDLFactorization<Field>* factorization);
 
 // Performs a supernodal LDL' factorization in a permuted ordering.
 template <class Field>
-LDLResult LDL(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation,
-    const SupernodalLDLControl& control,
-    SupernodalLDLFactorization<Field>* factorization);
+LDLResult LDL(const CoordinateMatrix<Field>& matrix,
+              const std::vector<Int>& permutation,
+              const std::vector<Int>& inverse_permutation,
+              const SupernodalLDLControl& control,
+              SupernodalLDLFactorization<Field>* factorization);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
@@ -159,15 +160,13 @@ void LowerAdjointTriangularSolve(
 
 // Prints the unit-diagonal lower-triangular factor of the LDL' factorization.
 template <class Field>
-void PrintLowerFactor(
-    const SupernodalLDLFactorization<Field>& factorization,
-    const std::string& label, std::ostream& os);
+void PrintLowerFactor(const SupernodalLDLFactorization<Field>& factorization,
+                      const std::string& label, std::ostream& os);
 
 // Prints the diagonal factor of the LDL' factorization.
 template <class Field>
-void PrintDiagonalFactor(
-    const SupernodalLDLFactorization<Field>& factorization,
-    const std::string& label, std::ostream& os);
+void PrintDiagonalFactor(const SupernodalLDLFactorization<Field>& factorization,
+                         const std::string& label, std::ostream& os);
 
 }  // namespace catamari
 

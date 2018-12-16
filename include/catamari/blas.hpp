@@ -13,24 +13,21 @@
 namespace catamari {
 
 template <class Field>
-void TriangularSolveLeftLower(
-    Int height, const Field* triangular_matrix, Int triang_leading_dim,
-    Field* vector);
+void TriangularSolveLeftLower(Int height, const Field* triangular_matrix,
+                              Int triang_leading_dim, Field* vector);
 
 template <class Field>
-void TriangularSolveLeftLowerUnit(
-    Int height, const Field* triangular_matrix, Int triang_leading_dim,
-    Field* vector);
+void TriangularSolveLeftLowerUnit(Int height, const Field* triangular_matrix,
+                                  Int triang_leading_dim, Field* vector);
 
 template <class Field>
-void TriangularSolveLeftLowerAdjoint(
-    Int height, const Field* triangular_matrix, Int triang_leading_dim,
-    Field* vector);
+void TriangularSolveLeftLowerAdjoint(Int height, const Field* triangular_matrix,
+                                     Int triang_leading_dim, Field* vector);
 
 template <class Field>
-void TriangularSolveLeftLowerAdjointUnit(
-    Int height, const Field* triangular_matrix, Int triang_leading_dim,
-    Field* vector);
+void TriangularSolveLeftLowerAdjointUnit(Int height,
+                                         const Field* triangular_matrix,
+                                         Int triang_leading_dim, Field* vector);
 
 template <class Field>
 void MatrixMultiplyTransposeNormal(
@@ -41,26 +38,27 @@ void MatrixMultiplyTransposeNormal(
 
 template <class Field>
 void HermitianOuterProductTransposeLower(
-    Int output_height, Int contraction_size,
-    const Field& alpha, const Field* left_matrix, Int left_leading_dim,
-    const Field& beta, Field* output_matrix, Int output_leading_dim);
-
-template <class Field>
-void MatrixMultiplyTransposeNormalLower(
-    Int output_height, Int contraction_size,
-    const Field& alpha, const Field* left_matrix, Int left_leading_dim,
-    const Field* right_matrix, Int right_leading_dim, const Field& beta,
+    Int output_height, Int contraction_size, const Field& alpha,
+    const Field* left_matrix, Int left_leading_dim, const Field& beta,
     Field* output_matrix, Int output_leading_dim);
 
 template <class Field>
-void ConjugateLowerTriangularSolves(
-  Int height, Int width, const Field* triangular_matrix, Int triang_leading_dim,
-  Field* matrix, Int leading_dim);
+void MatrixMultiplyTransposeNormalLower(
+    Int output_height, Int contraction_size, const Field& alpha,
+    const Field* left_matrix, Int left_leading_dim, const Field* right_matrix,
+    Int right_leading_dim, const Field& beta, Field* output_matrix,
+    Int output_leading_dim);
+
+template <class Field>
+void ConjugateLowerTriangularSolves(Int height, Int width,
+                                    const Field* triangular_matrix,
+                                    Int triang_leading_dim, Field* matrix,
+                                    Int leading_dim);
 
 template <class Field>
 void DiagonalTimesConjugateUnitLowerTriangularSolves(
-  Int height, Int width, const Field* triangular_matrix,
-  Int triangular_leading_dim, Field* matrix, Int leading_dim);
+    Int height, Int width, const Field* triangular_matrix,
+    Int triangular_leading_dim, Field* matrix, Int leading_dim);
 
 }  // namespace catamari
 

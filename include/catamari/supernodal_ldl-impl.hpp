@@ -18,9 +18,9 @@ namespace supernodal_ldl {
 
 // Fills 'member_to_index' with a length 'num_rows' array whose i'th index
 // is the index of the supernode containing column 'i'.
-inline void MemberToIndex(
-    Int num_rows, const std::vector<Int>& supernode_starts,
-    std::vector<Int>* member_to_index) {
+inline void MemberToIndex(Int num_rows,
+                          const std::vector<Int>& supernode_starts,
+                          std::vector<Int>* member_to_index) {
   member_to_index->resize(num_rows);
 
   Int supernode = 0;
@@ -40,8 +40,7 @@ inline void MemberToIndex(
 // Builds an elimination forest over the supernodes from an elimination forest
 // over the nodes.
 inline void ConvertFromScalarToSupernodalEliminationForest(
-    Int num_supernodes,
-    const std::vector<Int>& parents,
+    Int num_supernodes, const std::vector<Int>& parents,
     const std::vector<Int>& member_to_index,
     std::vector<Int>* supernode_parents) {
   const Int num_rows = parents.size();
@@ -77,15 +76,14 @@ inline void InitializeEliminationForest(
 
 // Computes the sizes of the structures of a supernodal LDL' factorization.
 template <class Field>
-void SupernodalDegrees(
-    const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation,
-    const std::vector<Int>& supernode_sizes,
-    const std::vector<Int>& supernode_starts,
-    const std::vector<Int>& member_to_index,
-    const std::vector<Int>& parents,
-    std::vector<Int>* supernode_degrees) {
+void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
+                       const std::vector<Int>& permutation,
+                       const std::vector<Int>& inverse_permutation,
+                       const std::vector<Int>& supernode_sizes,
+                       const std::vector<Int>& supernode_starts,
+                       const std::vector<Int>& member_to_index,
+                       const std::vector<Int>& parents,
+                       std::vector<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = supernode_sizes.size();
   const bool have_permutation = !permutation.empty();
@@ -231,9 +229,9 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
               "Descendant supernode was as large as main supernode.");
           CATAMARI_ASSERT(
               supernode_ptrs[descendant_supernode] >=
-                  lower_factor.index_offsets[descendant_supernode] &&
+                      lower_factor.index_offsets[descendant_supernode] &&
                   supernode_ptrs[descendant_supernode] <
-                  lower_factor.index_offsets[descendant_supernode + 1],
+                      lower_factor.index_offsets[descendant_supernode + 1],
               "Left supernode's indices.");
           lower_factor.indices[supernode_ptrs[descendant_supernode]++] = row;
         }
@@ -264,8 +262,8 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     }
 
     if (!sorted) {
-      std::cerr << "Supernode " << supernode
-                << " did not have sorted indices." << std::endl;
+      std::cerr << "Supernode " << supernode << " did not have sorted indices."
+                << std::endl;
       for (Int index = index_beg; index < index_end; ++index) {
         const Int row = lower_factor.indices[index];
         std::cout << row << " ";
@@ -330,8 +328,7 @@ void FillIntersections(SupernodalLDLFactorization<Field>* factorization) {
     }
     if (last_supernode != -1) {
       // Close out the last intersection count for this column supernode.
-      lower_factor.intersect_sizes[num_supernode_intersects++] =
-          intersect_size;
+      lower_factor.intersect_sizes[num_supernode_intersects++] = intersect_size;
     }
   }
   CATAMARI_ASSERT(num_supernode_intersects ==
@@ -354,7 +351,7 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
     const Int supernode = factorization->supernode_member_to_index[row];
-    const Int supernode_start= factorization->supernode_starts[supernode];
+    const Int supernode_start = factorization->supernode_starts[supernode];
     const Int supernode_size = factorization->supernode_sizes[supernode];
 
     const Int orig_row = have_permutation ? inverse_perm[row] : row;
@@ -391,8 +388,8 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
       Int* column_index_beg =
           &lower_factor.indices[lower_factor.index_offsets[column_supernode]];
       Int* column_index_end =
-          &lower_factor.indices[
-              lower_factor.index_offsets[column_supernode + 1]];
+          &lower_factor
+               .indices[lower_factor.index_offsets[column_supernode + 1]];
       Int* iter = std::lower_bound(column_index_beg, column_index_end, row);
       CATAMARI_ASSERT(iter != column_index_end, "Exceeded column indices.");
       CATAMARI_ASSERT(*iter == row, "Did not find index.");
@@ -408,8 +405,8 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
                   << ", column_supernode_size=" << column_supernode_size
                   << ", rel_index_index=" << rel_index_index;
         if (rel_index_index > 0) {
-          std::cerr << ", *(iter - 1)=" << *(iter - 1) << ", *iter="
-                    << *iter << ", *(iter + 1)=" << *(iter + 1) << std::endl;
+          std::cerr << ", *(iter - 1)=" << *(iter - 1) << ", *iter=" << *iter
+                    << ", *(iter + 1)=" << *(iter + 1) << std::endl;
         } else {
           std::cerr << ", *iter=" << *iter << std::endl;
         }
@@ -496,14 +493,14 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
   const Int main_supernode_size = supernode_sizes[main_supernode];
   const Int main_supernode_start = supernode_starts[main_supernode];
   for (Int row = main_supernode_start;
-      row < main_supernode_start + main_supernode_size; ++row) {
+       row < main_supernode_start + main_supernode_size; ++row) {
     const Int orig_row = have_permutation ? inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      const Int descendant = have_permutation ? permutation[entry.column] :
-          entry.column;
+      const Int descendant =
+          have_permutation ? permutation[entry.column] : entry.column;
 
       Int descendant_supernode = member_to_index[descendant];
       if (descendant_supernode >= main_supernode) {
@@ -614,15 +611,15 @@ void UpdateDiagonalBlock(Int main_supernode, Int descendant_supernode,
       &lower_factor.values[descendant_main_value_beg];
   if (factorization->is_cholesky) {
     HermitianOuterProductTransposeLower(
-        descendant_main_intersect_size, descendant_supernode_size,
-        Field{-1}, descendant_main_block, descendant_supernode_size,
-        Field{1}, update_block, descendant_main_intersect_size);
+        descendant_main_intersect_size, descendant_supernode_size, Field{-1},
+        descendant_main_block, descendant_supernode_size, Field{1},
+        update_block, descendant_main_intersect_size);
   } else {
     MatrixMultiplyTransposeNormalLower(
-        descendant_main_intersect_size, descendant_supernode_size,
-        Field{-1}, descendant_main_block, descendant_supernode_size,
-        scaled_adjoint_buffer, descendant_supernode_size,
-        Field{1}, update_block, descendant_main_intersect_size);
+        descendant_main_intersect_size, descendant_supernode_size, Field{-1},
+        descendant_main_block, descendant_supernode_size, scaled_adjoint_buffer,
+        descendant_supernode_size, Field{1}, update_block,
+        descendant_main_intersect_size);
   }
 
   if (!inplace_update) {
@@ -676,17 +673,16 @@ void UpdateSubdiagonalBlock(
   const Int descendant_active_supernode_start =
       lower_factor.indices[descendant_active_index_beg];
   const Int active_supernode =
-      factorization->supernode_member_to_index[
-          descendant_active_supernode_start];
+      factorization
+          ->supernode_member_to_index[descendant_active_supernode_start];
   CATAMARI_ASSERT(active_supernode > main_supernode,
                   "Active supernode was <= the main supernode in update.");
 
   Int main_active_intersect_size =
       lower_factor.intersect_sizes[*main_active_intersect_size_beg];
-  while (
-      factorization
-          ->supernode_member_to_index[lower_factor.indices[
-              *main_active_index_beg]] < active_supernode) {
+  while (factorization->supernode_member_to_index
+             [lower_factor.indices[*main_active_index_beg]] <
+         active_supernode) {
     *main_active_index_beg += main_active_intersect_size;
     *main_active_value_beg += main_active_intersect_size * main_supernode_size;
     ++*main_active_intersect_size_beg;
@@ -722,10 +718,10 @@ void UpdateSubdiagonalBlock(
 
   MatrixMultiplyTransposeNormal(
       descendant_main_intersect_size, descendant_active_intersect_size,
-      descendant_supernode_size, Field{-1},
-      scaled_adjoint_buffer, descendant_supernode_size,
-      descendant_active_block, descendant_supernode_size,
-      Field{1}, update_block, descendant_main_intersect_size);
+      descendant_supernode_size, Field{-1}, scaled_adjoint_buffer,
+      descendant_supernode_size, descendant_active_block,
+      descendant_supernode_size, Field{1}, update_block,
+      descendant_main_intersect_size);
 
   if (!inplace_update) {
     Int main_active_index_offset = 0;
@@ -779,11 +775,11 @@ Int FactorDiagonalBlock(Int supernode,
 
   Int num_pivots;
   if (factorization->is_cholesky) {
-    num_pivots = LowerCholeskyFactorization(
-        supernode_size, diag_block, supernode_size);
+    num_pivots =
+        LowerCholeskyFactorization(supernode_size, diag_block, supernode_size);
   } else {
-    num_pivots = LowerLDLAdjointFactorization(
-        supernode_size, diag_block, supernode_size);
+    num_pivots = LowerLDLAdjointFactorization(supernode_size, diag_block,
+                                              supernode_size);
   }
 
   return num_pivots;
@@ -811,9 +807,8 @@ void SolveAgainstDiagonalBlock(
     // Solve against the lower-triangular matrix L(K, K)' from the right using
     // row-major storage of the input matrix, which is equivalent to solving
     // conj(L(K, K)) X = Y using column-major storage.
-    ConjugateLowerTriangularSolves(
-        supernode_size, degree, diag_block, supernode_size, lower_block,
-        supernode_size);
+    ConjugateLowerTriangularSolves(supernode_size, degree, diag_block,
+                                   supernode_size, lower_block, supernode_size);
   } else {
     // Solve against the D(K, K) times the unit-lower matrix L(K, K)' from the
     // right using row-major storage of the input matrix, which is equivalent to
@@ -828,16 +823,15 @@ void SolveAgainstDiagonalBlock(
 // computing each row pattern and ensuring that each intersects entire
 // supernodes.
 template <class Field>
-bool ValidFundamentalSupernodes(
-    const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation,
-    const std::vector<Int>& supernode_sizes) {
+bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
+                                const std::vector<Int>& permutation,
+                                const std::vector<Int>& inverse_permutation,
+                                const std::vector<Int>& supernode_sizes) {
   const Int num_rows = matrix.NumRows();
 
   std::vector<Int> parents, degrees;
-  ldl::EliminationForestAndDegrees(
-      matrix, permutation, inverse_permutation, &parents, &degrees);
+  ldl::EliminationForestAndDegrees(matrix, permutation, inverse_permutation,
+                                   &parents, &degrees);
 
   std::vector<Int> supernode_starts, member_to_index;
   ldl::OffsetScan(supernode_sizes, &supernode_starts);
@@ -894,20 +888,18 @@ bool ValidFundamentalSupernodes(
 // We require that supernodes have dense diagonal blocks and equal structures
 // below the diagonal block.
 template <class Field>
-void FormFundamentalSupernodes(
-    const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation,
-    const std::vector<Int>& parents,
-    const std::vector<Int>& degrees,
-    std::vector<Int>* supernode_sizes,
-    ScalarLowerStructure* scalar_structure) {
+void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
+                               const std::vector<Int>& permutation,
+                               const std::vector<Int>& inverse_permutation,
+                               const std::vector<Int>& parents,
+                               const std::vector<Int>& degrees,
+                               std::vector<Int>* supernode_sizes,
+                               ScalarLowerStructure* scalar_structure) {
   const Int num_rows = matrix.NumRows();
 
   // We will only fill the indices and offsets of the factorization.
-  ldl::FillStructureIndices(
-      matrix, permutation, inverse_permutation, parents, degrees,
-      scalar_structure);
+  ldl::FillStructureIndices(matrix, permutation, inverse_permutation, parents,
+                            degrees, scalar_structure);
 
   supernode_sizes->clear();
   if (!num_rows) {
@@ -938,7 +930,7 @@ void FormFundamentalSupernodes(
     }
     if (!dense_diagonal_block) {
       // This column begins a new supernode.
-			supernode_start = column;
+      supernode_start = column;
       supernode_sizes->push_back(1);
       continue;
     }
@@ -982,8 +974,8 @@ void FormFundamentalSupernodes(
   }
 
 #ifdef CATAMARI_DEBUG
-  if (!ValidFundamentalSupernodes(
-      matrix, permutation, inverse_permutation, *supernode_sizes)) {
+  if (!ValidFundamentalSupernodes(matrix, permutation, inverse_permutation,
+                                  *supernode_sizes)) {
     std::cerr << "Invalid fundamental supernodes." << std::endl;
     return;
   }
@@ -1032,12 +1024,8 @@ struct MergableStatus {
 // 1 is the parent of supernode 0.
 //
 inline MergableStatus MergableSupernode(
-    Int child_tail,
-    Int parent_tail,
-    Int child_size,
-    Int parent_size,
-    Int num_child_explicit_zeros,
-    Int num_parent_explicit_zeros,
+    Int child_tail, Int parent_tail, Int child_size, Int parent_size,
+    Int num_child_explicit_zeros, Int num_parent_explicit_zeros,
     const std::vector<Int>& orig_member_to_index,
     const ScalarLowerStructure& scalar_structure,
     const SupernodalLDLControl& control) {
@@ -1129,9 +1117,9 @@ inline void MergeChildren(
     const std::vector<Int>& orig_member_to_index,
     const std::vector<Int>& children, const std::vector<Int>& child_offsets,
     const ScalarLowerStructure& scalar_structure,
-    const SupernodalLDLControl& control,
-    std::vector<Int>* supernode_sizes, std::vector<Int>* num_explicit_zeros,
-    std::vector<Int>* last_merged_child, std::vector<Int>* merge_parents) {
+    const SupernodalLDLControl& control, std::vector<Int>* supernode_sizes,
+    std::vector<Int>* num_explicit_zeros, std::vector<Int>* last_merged_child,
+    std::vector<Int>* merge_parents) {
   const Int child_beg = child_offsets[parent];
   const Int num_children = child_offsets[parent + 1] - child_beg;
 
@@ -1159,10 +1147,10 @@ inline void MergeChildren(
       const Int num_child_explicit_zeros = (*num_explicit_zeros)[child];
       const Int num_parent_explicit_zeros = (*num_explicit_zeros)[parent];
 
-      const MergableStatus status = MergableSupernode(
-          child_tail, parent_tail, child_size, parent_size,
-          num_child_explicit_zeros, num_parent_explicit_zeros,
-          orig_member_to_index, scalar_structure, control);
+      const MergableStatus status =
+          MergableSupernode(child_tail, parent_tail, child_size, parent_size,
+                            num_child_explicit_zeros, num_parent_explicit_zeros,
+                            orig_member_to_index, scalar_structure, control);
       if (status.mergable) {
         mergable_children.push_back(child_index);
         num_merged_zeros.push_back(status.num_merged_zeros);
@@ -1179,7 +1167,7 @@ inline void MergeChildren(
     Int merging_index = 0;
     Int largest_mergable_size = (*supernode_sizes)[first_mergable_child];
     for (std::size_t mergable_index = 1;
-        mergable_index < mergable_children.size(); ++mergable_index) {
+         mergable_index < mergable_children.size(); ++mergable_index) {
       const Int child_index = mergable_children[mergable_index];
       const Int child = children[child_beg + child_index];
       const Int child_size = (*supernode_sizes)[child];
@@ -1223,9 +1211,9 @@ inline void MergeChildren(
 
 // Builds a packed set of child links for an elimination forest given the
 // parent links (with root nodes having their parent set to -1).
-inline void EliminationForestFromParents(
-    const std::vector<Int>& parents, std::vector<Int>* children,
-    std::vector<Int>* child_offsets) {
+inline void EliminationForestFromParents(const std::vector<Int>& parents,
+                                         std::vector<Int>* children,
+                                         std::vector<Int>* child_offsets) {
   const Int num_indices = parents.size();
 
   std::vector<Int> num_children(num_indices, 0);
@@ -1251,27 +1239,26 @@ inline void EliminationForestFromParents(
 // Walk up the tree in the original postordering, merging supernodes as we
 // progress.
 template <class Field>
-void RelaxSupernodes(
-    const std::vector<Int>& orig_parents,
-    const std::vector<Int>& orig_supernode_sizes,
-    const std::vector<Int>& orig_supernode_starts,
-    const std::vector<Int>& orig_supernode_parents,
-    const std::vector<Int>& orig_supernode_degrees,
-    const std::vector<Int>& orig_member_to_index,
-    const ScalarLowerStructure& scalar_structure,
-    const SupernodalLDLControl& control,
-    std::vector<Int>* relaxed_parents,
-    std::vector<Int>* relaxed_supernode_parents,
-    std::vector<Int>* relaxed_supernode_degrees,
-    SupernodalLDLFactorization<Field>* factorization) {
+void RelaxSupernodes(const std::vector<Int>& orig_parents,
+                     const std::vector<Int>& orig_supernode_sizes,
+                     const std::vector<Int>& orig_supernode_starts,
+                     const std::vector<Int>& orig_supernode_parents,
+                     const std::vector<Int>& orig_supernode_degrees,
+                     const std::vector<Int>& orig_member_to_index,
+                     const ScalarLowerStructure& scalar_structure,
+                     const SupernodalLDLControl& control,
+                     std::vector<Int>* relaxed_parents,
+                     std::vector<Int>* relaxed_supernode_parents,
+                     std::vector<Int>* relaxed_supernode_degrees,
+                     SupernodalLDLFactorization<Field>* factorization) {
   const Int num_rows = orig_supernode_starts.back();
   const Int num_supernodes = orig_supernode_sizes.size();
 
   // Construct the down-links for the elimination forest.
   std::vector<Int> children;
   std::vector<Int> child_offsets;
-  EliminationForestFromParents(
-      orig_supernode_parents, &children, &child_offsets);
+  EliminationForestFromParents(orig_supernode_parents, &children,
+                               &child_offsets);
 
   // Initialize the sizes of the merged supernodes, using the original indexing
   // and absorbing child sizes into the parents.
@@ -1283,11 +1270,10 @@ void RelaxSupernodes(
   std::vector<Int> last_merged_children(num_supernodes, -1);
   std::vector<Int> merge_parents(num_supernodes, -1);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    MergeChildren(
-        supernode, orig_supernode_starts, orig_supernode_sizes,
-        orig_member_to_index, children, child_offsets, scalar_structure,
-        control, &supernode_sizes, &num_explicit_zeros, &last_merged_children,
-        &merge_parents);
+    MergeChildren(supernode, orig_supernode_starts, orig_supernode_sizes,
+                  orig_member_to_index, children, child_offsets,
+                  scalar_structure, control, &supernode_sizes,
+                  &num_explicit_zeros, &last_merged_children, &merge_parents);
   }
 
   // Count the number of remaining supernodes and construct a map from the
@@ -1414,19 +1400,17 @@ void RelaxSupernodes(
 
 // Form the (possibly relaxed) supernodes for the factorization.
 template <class Field>
-void FormSupernodes(
-    const CoordinateMatrix<Field>& matrix,
-    const SupernodalLDLControl& control,
-    std::vector<Int>* parents,
-    std::vector<Int>* supernode_degrees,
-    std::vector<Int>* supernode_parents,
-    SupernodalLDLFactorization<Field>* factorization) {
-
+void FormSupernodes(const CoordinateMatrix<Field>& matrix,
+                    const SupernodalLDLControl& control,
+                    std::vector<Int>* parents,
+                    std::vector<Int>* supernode_degrees,
+                    std::vector<Int>* supernode_parents,
+                    SupernodalLDLFactorization<Field>* factorization) {
   // Compute the non-supernodal elimination tree using the original ordering.
   std::vector<Int> orig_parents, orig_degrees;
-  ldl::EliminationForestAndDegrees(
-      matrix, factorization->permutation, factorization->inverse_permutation,
-      &orig_parents, &orig_degrees);
+  ldl::EliminationForestAndDegrees(matrix, factorization->permutation,
+                                   factorization->inverse_permutation,
+                                   &orig_parents, &orig_degrees);
 
   // Greedily compute a supernodal partition using the original ordering.
   std::vector<Int> orig_supernode_sizes;
@@ -1450,14 +1434,13 @@ void FormSupernodes(
   ldl::OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
 
   std::vector<Int> orig_member_to_index;
-  MemberToIndex(
-      matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
+  MemberToIndex(matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
 
   std::vector<Int> orig_supernode_degrees;
-  SupernodalDegrees(
-      matrix, factorization->permutation, factorization->inverse_permutation,
-      orig_supernode_sizes, orig_supernode_starts, orig_member_to_index,
-      orig_parents, &orig_supernode_degrees);
+  SupernodalDegrees(matrix, factorization->permutation,
+                    factorization->inverse_permutation, orig_supernode_sizes,
+                    orig_supernode_starts, orig_member_to_index, orig_parents,
+                    &orig_supernode_degrees);
 
   const Int num_orig_supernodes = orig_supernode_sizes.size();
   std::vector<Int> orig_supernode_parents;
@@ -1466,11 +1449,10 @@ void FormSupernodes(
       &orig_supernode_parents);
 
   if (control.relax_supernodes) {
-    RelaxSupernodes(
-        orig_parents, orig_supernode_sizes, orig_supernode_starts,
-        orig_supernode_parents, orig_supernode_degrees, orig_member_to_index,
-        scalar_structure, control, parents, supernode_parents,
-        supernode_degrees, factorization);
+    RelaxSupernodes(orig_parents, orig_supernode_sizes, orig_supernode_starts,
+                    orig_supernode_parents, orig_supernode_degrees,
+                    orig_member_to_index, scalar_structure, control, parents,
+                    supernode_parents, supernode_degrees, factorization);
   } else {
     *parents = orig_parents;
     *supernode_degrees = orig_supernode_degrees;
@@ -1482,22 +1464,20 @@ void FormSupernodes(
 }
 
 template <class Field>
-LDLResult LeftLooking(
-    const CoordinateMatrix<Field>& matrix,
-    const SupernodalLDLControl& control,
-    SupernodalLDLFactorization<Field>* factorization) {
+LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
+                      const SupernodalLDLControl& control,
+                      SupernodalLDLFactorization<Field>* factorization) {
   std::vector<Int> parents;
   std::vector<Int> supernode_degrees;
   std::vector<Int> supernode_parents;
-  FormSupernodes(
-      matrix, control, &parents, &supernode_degrees, &supernode_parents,
-      factorization);
+  FormSupernodes(matrix, control, &parents, &supernode_degrees,
+                 &supernode_parents, factorization);
 
   const Int num_supernodes = factorization->supernode_sizes.size();
   SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
 
-  InitializeLeftLookingFactors(
-      matrix, parents, supernode_degrees, factorization);
+  InitializeLeftLookingFactors(matrix, parents, supernode_degrees,
+                               factorization);
 
   // Set up a buffer for supernodal updates.
   Int max_supernode_size = 0;
@@ -1561,16 +1541,14 @@ LDLResult LeftLooking(
       const Int descendant_main_intersect_size =
           lower_factor.intersect_sizes[descendant_main_intersect_size_beg];
 
-      FormScaledAdjoint(*factorization, descendant_supernode,
-                        descendant_main_intersect_size,
-                        descendant_main_value_beg,
-                        scaled_adjoint_buffer.data());
+      FormScaledAdjoint(
+          *factorization, descendant_supernode, descendant_main_intersect_size,
+          descendant_main_value_beg, scaled_adjoint_buffer.data());
 
-      UpdateDiagonalBlock(main_supernode, descendant_supernode,
-                          descendant_main_intersect_size,
-                          descendant_main_index_beg, descendant_main_value_beg,
-                          scaled_adjoint_buffer.data(), factorization,
-                          update_buffer.data());
+      UpdateDiagonalBlock(
+          main_supernode, descendant_supernode, descendant_main_intersect_size,
+          descendant_main_index_beg, descendant_main_value_beg,
+          scaled_adjoint_buffer.data(), factorization, update_buffer.data());
 
       intersect_ptrs[descendant_supernode]++;
       index_ptrs[descendant_supernode] += descendant_main_intersect_size;
@@ -1618,9 +1596,8 @@ LDLResult LeftLooking(
     SolveAgainstDiagonalBlock(main_supernode, factorization);
 
     // Finish updating the result structure.
-    const Int degree =
-        lower_factor.index_offsets[main_supernode + 1] -
-        lower_factor.index_offsets[main_supernode];
+    const Int degree = lower_factor.index_offsets[main_supernode + 1] -
+                       lower_factor.index_offsets[main_supernode];
     result.largest_supernode =
         std::max(result.largest_supernode, main_supernode_size);
     result.num_factorization_entries +=
@@ -1637,11 +1614,11 @@ LDLResult LeftLooking(
 }  // namespace supernodal_ldl
 
 template <class Field>
-LDLResult LDL(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation,
-    const SupernodalLDLControl& control,
-    SupernodalLDLFactorization<Field>* factorization) {
+LDLResult LDL(const CoordinateMatrix<Field>& matrix,
+              const std::vector<Int>& permutation,
+              const std::vector<Int>& inverse_permutation,
+              const SupernodalLDLControl& control,
+              SupernodalLDLFactorization<Field>* factorization) {
   factorization->permutation = permutation;
   factorization->inverse_permutation = inverse_permutation;
   factorization->is_cholesky = control.use_cholesky;
@@ -1649,9 +1626,9 @@ LDLResult LDL(
 }
 
 template <class Field>
-LDLResult LDL(
-    const CoordinateMatrix<Field>& matrix, const SupernodalLDLControl& control,
-    SupernodalLDLFactorization<Field>* factorization) {
+LDLResult LDL(const CoordinateMatrix<Field>& matrix,
+              const SupernodalLDLControl& control,
+              SupernodalLDLFactorization<Field>* factorization) {
   std::vector<Int> permutation, inverse_permutation;
   return LDL(matrix, permutation, inverse_permutation, control, factorization);
 }
@@ -1699,13 +1676,11 @@ void LowerTriangularSolve(
 
     // Solve against the diagonal block of the supernode.
     if (is_cholesky) {
-      TriangularSolveLeftLower(
-          supernode_size, diag_block, supernode_size,
-          &(*vector)[supernode_start]);
+      TriangularSolveLeftLower(supernode_size, diag_block, supernode_size,
+                               &(*vector)[supernode_start]);
     } else {
-      TriangularSolveLeftLowerUnit(
-          supernode_size, diag_block, supernode_size,
-          &(*vector)[supernode_start]);
+      TriangularSolveLeftLowerUnit(supernode_size, diag_block, supernode_size,
+                                   &(*vector)[supernode_start]);
     }
 
     // Handle the external updates for this supernode.
@@ -1776,7 +1751,7 @@ void LowerAdjointTriangularSolve(
     // TODO(Jack Poulson): Replace with an out-of-place GEMV.
     for (Int j = supernode_size - 1; j >= 0; --j) {
       const Int column = supernode_start + j;
-       Field& eta = (*vector)[column];
+      Field& eta = (*vector)[column];
 
       // Handle the below-diagonal portion of this supernode.
       const Field* value_column = &lower_factor.values[value_beg + j];
@@ -1789,28 +1764,27 @@ void LowerAdjointTriangularSolve(
 
     // Solve against the diagonal block of this supernode.
     if (is_cholesky) {
-      TriangularSolveLeftLowerAdjoint(
-          supernode_size, diag_block, supernode_size,
-          &(*vector)[supernode_start]);
+      TriangularSolveLeftLowerAdjoint(supernode_size, diag_block,
+                                      supernode_size,
+                                      &(*vector)[supernode_start]);
     } else {
-      TriangularSolveLeftLowerAdjointUnit(
-          supernode_size, diag_block, supernode_size,
-          &(*vector)[supernode_start]);
+      TriangularSolveLeftLowerAdjointUnit(supernode_size, diag_block,
+                                          supernode_size,
+                                          &(*vector)[supernode_start]);
     }
   }
 }
 
 template <class Field>
-void PrintLowerFactor(
-    const SupernodalLDLFactorization<Field>& factorization,
-    const std::string& label, std::ostream& os) {
+void PrintLowerFactor(const SupernodalLDLFactorization<Field>& factorization,
+                      const std::string& label, std::ostream& os) {
   const SupernodalLowerFactor<Field>& lower_factor = factorization.lower_factor;
   const SupernodalDiagonalFactor<Field>& diag_factor =
       factorization.diagonal_factor;
   const bool is_cholesky = factorization.is_cholesky;
 
-  auto print_entry = [&](
-      const Int& row, const Int& column, const Field& value) {
+  auto print_entry = [&](const Int& row, const Int& column,
+                         const Field& value) {
     os << row << " " << column << " " << value << "\n";
   };
 
@@ -1857,9 +1831,8 @@ void PrintLowerFactor(
 }
 
 template <class Field>
-void PrintDiagonalFactor(
-    const SupernodalLDLFactorization<Field>& factorization,
-    const std::string& label, std::ostream& os) {
+void PrintDiagonalFactor(const SupernodalLDLFactorization<Field>& factorization,
+                         const std::string& label, std::ostream& os) {
   const SupernodalDiagonalFactor<Field>& diag_factor =
       factorization.diagonal_factor;
   if (factorization.is_cholesky) {

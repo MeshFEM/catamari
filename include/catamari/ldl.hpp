@@ -54,56 +54,54 @@ struct LDLControl {
 
 // Performs an LDL' factorization in the minimum-degree ordering.
 template <class Field>
-LDLResult LDL(
-    const CoordinateMatrix<Field>& matrix,
-    const quotient::MinimumDegreeControl& md_control, const LDLControl& control,
-    LDLFactorization<Field>* factorization);
+LDLResult LDL(const CoordinateMatrix<Field>& matrix,
+              const quotient::MinimumDegreeControl& md_control,
+              const LDLControl& control,
+              LDLFactorization<Field>* factorization);
 
 // Performs an LDL' factorization in the natural ordering.
 template <class Field>
-LDLResult LDL(
-    const CoordinateMatrix<Field>& matrix, const LDLControl& control,
-    LDLFactorization<Field>* factorization);
+LDLResult LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
+              LDLFactorization<Field>* factorization);
 
 // Performs an LDL' factorization in a permuted ordering.
 template <class Field>
-LDLResult LDL(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation, const LDLControl& control,
-    LDLFactorization<Field>* factorization);
+LDLResult LDL(const CoordinateMatrix<Field>& matrix,
+              const std::vector<Int>& permutation,
+              const std::vector<Int>& inverse_permutation,
+              const LDLControl& control,
+              LDLFactorization<Field>* factorization);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
 template <class Field>
-void LDLSolve(
-    const LDLFactorization<Field>& factorization, std::vector<Field>* vector);
+void LDLSolve(const LDLFactorization<Field>& factorization,
+              std::vector<Field>* vector);
 
 // Solves L x = b using a lower triangular matrix L.
 template <class Field>
-void LowerTriangularSolve(
-    const LDLFactorization<Field>& factorization, std::vector<Field>* vector);
+void LowerTriangularSolve(const LDLFactorization<Field>& factorization,
+                          std::vector<Field>* vector);
 
 // Solves D x = b using a diagonal matrix D.
 template <class Field>
-void DiagonalSolve(
-    const LDLFactorization<Field>& factorization, std::vector<Field>* vector);
+void DiagonalSolve(const LDLFactorization<Field>& factorization,
+                   std::vector<Field>* vector);
 
 // Solves L' x = b using a lower triangular matrix L.
 template <class Field>
-void LowerAdjointTriangularSolve(
-    const LDLFactorization<Field>& factorization, std::vector<Field>* vector);
+void LowerAdjointTriangularSolve(const LDLFactorization<Field>& factorization,
+                                 std::vector<Field>* vector);
 
 // Prints the unit-diagonal lower-triangular factor of the LDL' factorization.
 template <class Field>
-void PrintLowerFactor(
-    const LDLFactorization<Field>& factorization, const std::string& label,
-    std::ostream& os);
+void PrintLowerFactor(const LDLFactorization<Field>& factorization,
+                      const std::string& label, std::ostream& os);
 
 // Prints the diagonal factor of the LDL' factorization.
 template <class Field>
-void PrintDiagonalFactor(
-    const LDLFactorization<Field>& factorization, const std::string& label,
-    std::ostream& os);
+void PrintDiagonalFactor(const LDLFactorization<Field>& factorization,
+                         const std::string& label, std::ostream& os);
 
 }  // namespace catamari
 

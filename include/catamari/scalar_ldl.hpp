@@ -107,48 +107,43 @@ struct LDLResult {
 
 // Pretty-prints a column-oriented sparse lower-triangular matrix.
 template <class Field>
-void PrintLowerFactor(
-    const ScalarLDLFactorization<Field>& factorization,
-    const std::string& label, std::ostream& os);
+void PrintLowerFactor(const ScalarLDLFactorization<Field>& factorization,
+                      const std::string& label, std::ostream& os);
 
 // Pretty-prints the diagonal factor of the L D L' factorization.
 template <class Field>
-void PrintDiagonalFactor(
-    const ScalarLDLFactorization<Field>& factorization,
-    const std::string& label, std::ostream& os);
+void PrintDiagonalFactor(const ScalarLDLFactorization<Field>& factorization,
+                         const std::string& label, std::ostream& os);
 
 // Performs a non-supernodal LDL' factorization in the natural ordering.
 template <class Field>
-LDLResult LDL(
-    const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
-    ScalarLDLFactorization<Field>* factorization);
+LDLResult LDL(const CoordinateMatrix<Field>& matrix,
+              const ScalarLDLControl& control,
+              ScalarLDLFactorization<Field>* factorization);
 
 // Performs a non-supernodal LDL' factorization in a permuted ordering.
 template <class Field>
-LDLResult LDL(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation,
-    const ScalarLDLControl& control,
-    ScalarLDLFactorization<Field>* factorization);
+LDLResult LDL(const CoordinateMatrix<Field>& matrix,
+              const std::vector<Int>& permutation,
+              const std::vector<Int>& inverse_permutation,
+              const ScalarLDLControl& control,
+              ScalarLDLFactorization<Field>* factorization);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).
 template <class Field>
-void LDLSolve(
-    const ScalarLDLFactorization<Field>& factorization,
-    std::vector<Field>* vector);
+void LDLSolve(const ScalarLDLFactorization<Field>& factorization,
+              std::vector<Field>* vector);
 
 // Solves L x = b using a unit-lower triangular matrix L.
 template <class Field>
-void LowerTriangularSolve(
-    const ScalarLDLFactorization<Field>& factorization,
-    std::vector<Field>* vector);
+void LowerTriangularSolve(const ScalarLDLFactorization<Field>& factorization,
+                          std::vector<Field>* vector);
 
 // Solves D x = b using a diagonal matrix D.
 template <class Field>
-void DiagonalSolve(
-    const ScalarLDLFactorization<Field>& factorization,
-    std::vector<Field>* vector);
+void DiagonalSolve(const ScalarLDLFactorization<Field>& factorization,
+                   std::vector<Field>* vector);
 
 // Solves L' x = b using a unit-lower triangular matrix L.
 template <class Field>

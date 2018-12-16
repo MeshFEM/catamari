@@ -104,8 +104,7 @@ class CoordinateMatrix {
   CoordinateMatrix(const CoordinateMatrix<Field>& matrix);
 
   // The assignment operator.
-  const CoordinateMatrix<Field>& operator=(
-      const CoordinateMatrix<Field>& matrix);
+  CoordinateMatrix<Field>& operator=(const CoordinateMatrix<Field>& matrix);
 
   // Builds and returns a CoordinateMatrix from a Matrix Market description.
   static std::unique_ptr<CoordinateMatrix<Field>> FromMatrixMarket(

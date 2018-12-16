@@ -37,7 +37,7 @@ CoordinateMatrix<Field>::CoordinateMatrix(
 }
 
 template <class Field>
-const CoordinateMatrix<Field>& CoordinateMatrix<Field>::operator=(
+CoordinateMatrix<Field>& CoordinateMatrix<Field>::operator=(
     const CoordinateMatrix<Field>& matrix) {
   if (&matrix == this) {
     return *this;
