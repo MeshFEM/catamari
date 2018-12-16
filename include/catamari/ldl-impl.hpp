@@ -10,9 +10,55 @@
 
 #include <memory>
 
-#include "catamari/supernodal_ldl.hpp"
+#include "catamari/ldl.hpp"
 
 namespace catamari {
+
+template <class Field>
+Int LDL(
+    const CoordinateMatrix<Field>& matrix,
+    const quotient::MinimumDegreeControl& md_control,
+    const LDLControl& ldl_control,
+    LDLFactorization<Field>* factorization) {
+  std::unique_ptr<quotient::CoordinateGraph> graph = matrix.CoordinateGraph();
+  const quotient::MinimumDegreeResult analysis =
+      quotient::MinimumDegree(*graph, md_control);
+  graph.reset();
+  const std::vector<Int> permutation = analysis.Permutation();
+
+  const Int num_rows = permutation.size();
+  std::vector<Int> inverse_permutation(num_rows);
+  for (Int row = 0; row < num_rows; ++row) {
+    inverse_permutation[permutation[row]] = row;
+  }
+
+  bool use_supernodal;
+  if (ldl_control.supernodal_strategy == kScalarFactorization) {
+    use_supernodal = false;
+  } else if (ldl_control.supernodal_strategy == kSupernodalFactorization) {
+    use_supernodal = true;
+  } else {
+    // TODO(Jack Poulson): Use a more intelligent means of selecting based upon
+    // the floating-point count.
+    use_supernodal = true;
+  }
+
+  factorization->is_supernodal = use_supernodal;
+  if (use_supernodal) {
+    factorization->supernodal_factorization.reset(
+        new SupernodalLDLFactorization<Field>);
+    return LDL(
+        matrix, permutation, inverse_permutation,
+        ldl_control.supernodal_control,
+        factorization->supernodal_factorization.get());
+  } else {
+    factorization->scalar_factorization.reset(
+        new ScalarLDLFactorization<Field>);
+    return LDL(
+        matrix, permutation, inverse_permutation, ldl_control.scalar_control,
+        factorization->scalar_factorization.get());
+  }
+}
 
 template <class Field>
 Int LDL(

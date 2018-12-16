@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "catamari/supernodal_ldl.hpp"
+#include "quotient/minimum_degree.hpp"
 
 namespace catamari {
 
@@ -54,6 +55,13 @@ struct LDLControl {
   // The configuration options for the supernodal LDL factorization.
   SupernodalLDLControl supernodal_control;
 };
+
+// Performs an LDL' factorization in the minimum-degree ordering.
+template <class Field>
+Int LDL(
+    const CoordinateMatrix<Field>& matrix,
+    const quotient::MinimumDegreeControl& md_control, const LDLControl& control,
+    LDLFactorization<Field>* factorization);
 
 // Performs an LDL' factorization in the natural ordering.
 template <class Field>

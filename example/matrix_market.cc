@@ -75,7 +75,7 @@ Real EuclideanNorm(const std::vector<catamari::Complex<Real>>& vector) {
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 Experiment RunMatrixMarketTest(
     const std::string& filename, bool skip_explicit_zeros,
-    quotient::EntryMask mask, const quotient::MinimumDegreeControl& amd_control,
+    quotient::EntryMask mask, const quotient::MinimumDegreeControl& md_control,
     bool disable_reordering, bool force_symmetry, double diagonal_shift,
     const catamari::LDLControl& ldl_control, bool print_progress,
     bool write_permuted_matrix) {
@@ -133,58 +133,7 @@ Experiment RunMatrixMarketTest(
               << densest_row_size << " connections." << std::endl;
   }
 
-  // Produce a graph from the loaded matrix.
-  std::unique_ptr<quotient::CoordinateGraph> graph = matrix->CoordinateGraph();
-
-  std::vector<Int> permutation, inverse_permutation;
-  if (!disable_reordering) {
-    if (print_progress) {
-      std::cout << "  Running analysis..." << std::endl;
-    }
-    quotient::Timer timer;
-    timer.Start();
-    const quotient::MinimumDegreeResult analysis =
-        quotient::MinimumDegree(*graph, amd_control);
-    experiment.analysis_seconds = timer.Stop();
-    experiment.num_nonzeros = analysis.num_cholesky_nonzeros;
-    experiment.num_flops = analysis.num_cholesky_flops;
-    if (print_progress) {
-      std::cout << "  Finished analysis in " << experiment.analysis_seconds
-                << " seconds. There were " << experiment.num_nonzeros
-                << " nonzeros." << std::endl;
-    }
-#ifdef QUOTIENT_ENABLE_TIMERS
-    for (const std::pair<std::string, double>& pairing :
-         analysis.elapsed_seconds) {
-      std::cout << "    " << pairing.first << ": " << pairing.second
-                << " seconds." << std::endl;
-    }
-#endif
-
-    // Form the permutation and its inverse.
-    permutation = analysis.Permutation();
-    inverse_permutation.resize(num_rows);
-    for (Int row = 0; row < num_rows; ++row) {
-      inverse_permutation[permutation[row]] = row;
-    }
-
-    if (write_permuted_matrix) {
-      // Form the permuted matrix.
-      catamari::CoordinateMatrix<double> permuted_matrix;
-      permuted_matrix.Resize(matrix->NumRows(), matrix->NumColumns());
-      permuted_matrix.ReserveEntryAdditions(matrix->NumEntries());
-      for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
-        permuted_matrix.QueueEntryAddition(
-            permutation[entry.row], permutation[entry.column], entry.value);
-      }
-      permuted_matrix.FlushEntryQueues();
-
-      const std::string new_filename = filename + "-perm.mtx";
-      permuted_matrix.ToMatrixMarket(new_filename);
-    }
-  }
-
-  // Factor the permuted matrix.
+  // Factor the matrix.
   if (print_progress) {
     std::cout << "  Running factorization..." << std::endl;
   }
@@ -192,8 +141,7 @@ Experiment RunMatrixMarketTest(
   factorization_timer.Start();
   catamari::LDLFactorization<Field> ldl_factorization;
   const Int num_pivots = catamari::LDL(
-      *matrix, permutation, inverse_permutation, ldl_control,
-      &ldl_factorization);
+      *matrix, md_control, ldl_control, &ldl_factorization);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (num_pivots < num_rows) {
     std::cout << "  Failed factorization after " << num_pivots << " pivots."
@@ -244,7 +192,7 @@ Experiment RunMatrixMarketTest(
 //
 std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
-    quotient::EntryMask mask, const quotient::MinimumDegreeControl& amd_control,
+    quotient::EntryMask mask, const quotient::MinimumDegreeControl& md_control,
     bool disable_reordering, double diagonal_shift,
     const catamari::LDLControl& ldl_control, bool print_progress,
     bool write_permuted_matrix) {
@@ -262,7 +210,7 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string filename = matrix_market_directory + "/" + matrix_name +
                                  "/" + matrix_name + ".mtx";
     experiments[matrix_name] = RunMatrixMarketTest(
-        filename, skip_explicit_zeros, mask, amd_control, disable_reordering,
+        filename, skip_explicit_zeros, mask, md_control, disable_reordering,
         force_symmetry, diagonal_shift, ldl_control, print_progress,
         write_permuted_matrix);
   }
@@ -367,11 +315,11 @@ int main(int argc, char** argv) {
   }
 #endif
 
-  quotient::MinimumDegreeControl amd_control;
-  amd_control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
-  amd_control.aggressive_absorption = aggressive_absorption;
-  amd_control.min_dense_threshold = min_dense_threshold;
-  amd_control.dense_sqrt_multiple = dense_sqrt_multiple;
+  quotient::MinimumDegreeControl md_control;
+  md_control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
+  md_control.aggressive_absorption = aggressive_absorption;
+  md_control.min_dense_threshold = min_dense_threshold;
+  md_control.dense_sqrt_multiple = dense_sqrt_multiple;
 
   catamari::LDLControl ldl_control;
   ldl_control.supernodal_strategy =
@@ -389,14 +337,14 @@ int main(int argc, char** argv) {
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
         RunADD96Tests(matrix_market_directory, skip_explicit_zeros, mask,
-                      amd_control, disable_reordering, diagonal_shift,
+                      md_control, disable_reordering, diagonal_shift,
                       ldl_control, print_progress, write_permuted_matrix);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
     }
   } else {
     const Experiment experiment = RunMatrixMarketTest(
-        filename, skip_explicit_zeros, mask, amd_control, disable_reordering,
+        filename, skip_explicit_zeros, mask, md_control, disable_reordering,
         force_symmetry, diagonal_shift, ldl_control, print_progress,
         write_permuted_matrix);
     PrintExperiment(experiment, filename);
