@@ -12,53 +12,158 @@
 
 namespace catamari {
 
-template <class Field>
-void TriangularSolveLeftLower(Int height, const Field* triangular_matrix,
-                              Int triang_leading_dim, Field* vector);
+template <class T>
+struct ConstBlasMatrix {
+  // The number of rows of the matrix.
+  Int height;
+
+  // The number of columns of the matrix.
+  Int width;
+
+  // The stride between consecutive entries in the same row of the matrix.
+  Int leading_dim;
+
+  // The pointer to the top-left entry of the matrix.
+  const T* data;
+
+  // Returns a const pointer to the entry in position (row, column).
+  const T* Pointer(Int row, Int column) const {
+    return &data[row + column * leading_dim];
+  }
+
+  // Returns a const reference to the entry in position (row, column).
+  const T& operator()(Int row, Int column) const {
+    return data[row + column * leading_dim];
+  }
+
+  // Returns a const reference to the entry in position (row, column).
+  const T& Entry(Int row, Int column) const {
+    return data[row + column * leading_dim];
+  }
+
+  // Returns a representation of the submatrix starting at position
+  // (row_beg, column_beg) that has the given number of rows and columns.
+  ConstBlasMatrix<T> Submatrix(Int row_beg, Int column_beg, Int num_rows,
+                               Int num_columns) const {
+    ConstBlasMatrix<T> submatrix;
+    submatrix.height = num_rows;
+    submatrix.width = num_columns;
+    submatrix.leading_dim = leading_dim;
+    submatrix.data = Pointer(row_beg, column_beg);
+    return submatrix;
+  }
+};
+
+template <class T>
+struct BlasMatrix {
+  // The number of rows of the matrix.
+  Int height;
+
+  // The number of columns of the matrix.
+  Int width;
+
+  // The stride between consecutive entries in the same row of the matrix.
+  Int leading_dim;
+
+  // The pointer to the top-left entry of the matrix.
+  T* data;
+
+  // Returns a pointer to the entry in position (row, column).
+  T* Pointer(Int row, Int column) { return &data[row + column * leading_dim]; }
+
+  // Returns a const pointer to the entry in position (row, column).
+  const T* Pointer(Int row, Int column) const {
+    return &data[row + column * leading_dim];
+  }
+
+  // Returns a reference to the entry in position (row, column).
+  T& operator()(Int row, Int column) {
+    return data[row + column * leading_dim];
+  }
+
+  // Returns a const reference to the entry in position (row, column).
+  const T& operator()(Int row, Int column) const {
+    return data[row + column * leading_dim];
+  }
+
+  // Returns a reference to the entry in position (row, column).
+  T& Entry(Int row, Int column) { return data[row + column * leading_dim]; }
+
+  // Returns a const reference to the entry in position (row, column).
+  const T& Entry(Int row, Int column) const {
+    return data[row + column * leading_dim];
+  }
+
+  // Returns a representation of the submatrix starting at position
+  // (row_beg, column_beg) that has the given number of rows and columns.
+  BlasMatrix<T> Submatrix(Int row_beg, Int column_beg, Int num_rows,
+                          Int num_columns) {
+    BlasMatrix<T> submatrix;
+    submatrix.height = num_rows;
+    submatrix.width = num_columns;
+    submatrix.leading_dim = leading_dim;
+    submatrix.data = Pointer(row_beg, column_beg);
+    return submatrix;
+  }
+
+  // Returns a constant representation of the submatrix starting at position
+  // (row_beg, column_beg) that has the given number of rows and columns.
+  ConstBlasMatrix<T> Submatrix(Int row_beg, Int column_beg, Int num_rows,
+                               Int num_columns) const {
+    ConstBlasMatrix<T> submatrix;
+    submatrix.height = num_rows;
+    submatrix.width = num_columns;
+    submatrix.leading_dim = leading_dim;
+    submatrix.data = Pointer(row_beg, column_beg);
+    return submatrix;
+  }
+};
 
 template <class Field>
-void TriangularSolveLeftLowerUnit(Int height, const Field* triangular_matrix,
-                                  Int triang_leading_dim, Field* vector);
+void TriangularSolveLeftLower(const ConstBlasMatrix<Field>& triangular_matrix,
+                              Field* vector);
 
 template <class Field>
-void TriangularSolveLeftLowerAdjoint(Int height, const Field* triangular_matrix,
-                                     Int triang_leading_dim, Field* vector);
+void TriangularSolveLeftLowerUnit(
+    const ConstBlasMatrix<Field>& triangular_matrix, Field* vector);
 
 template <class Field>
-void TriangularSolveLeftLowerAdjointUnit(Int height,
-                                         const Field* triangular_matrix,
-                                         Int triang_leading_dim, Field* vector);
+void TriangularSolveLeftLowerAdjoint(
+    const ConstBlasMatrix<Field>& triangular_matrix, Field* vector);
 
 template <class Field>
-void MatrixMultiplyTransposeNormal(
-    Int output_height, Int output_width, Int contraction_size,
-    const Field& alpha, const Field* left_matrix, Int left_leading_dim,
-    const Field* right_matrix, Int right_leading_dim, const Field& beta,
-    Field* output_matrix, Int output_leading_dim);
+void TriangularSolveLeftLowerAdjointUnit(
+    const ConstBlasMatrix<Field>& triangular_matrix, Field* vector);
 
 template <class Field>
-void HermitianOuterProductTransposeLower(
-    Int output_height, Int contraction_size, const Field& alpha,
-    const Field* left_matrix, Int left_leading_dim, const Field& beta,
-    Field* output_matrix, Int output_leading_dim);
+void MatrixMultiplyTransposeNormal(const Field& alpha,
+                                   const ConstBlasMatrix<Field>& left_matrix,
+                                   const ConstBlasMatrix<Field>& right_matrix,
+                                   const Field& beta,
+                                   BlasMatrix<Field>* output_matrix);
+
+template <class Field>
+void LowerTransposeHermitianOuterProduct(
+    const Field& alpha, const ConstBlasMatrix<Field>& left_matrix,
+    const Field& beta, BlasMatrix<Field>* output_matrix);
 
 template <class Field>
 void MatrixMultiplyTransposeNormalLower(
-    Int output_height, Int contraction_size, const Field& alpha,
-    const Field* left_matrix, Int left_leading_dim, const Field* right_matrix,
-    Int right_leading_dim, const Field& beta, Field* output_matrix,
-    Int output_leading_dim);
+    const Field& alpha, const ConstBlasMatrix<Field>& left_matrix,
+    const ConstBlasMatrix<Field>& right_matrix, const Field& beta,
+    BlasMatrix<Field>* output_matrix);
 
 template <class Field>
-void ConjugateLowerTriangularSolves(Int height, Int width,
-                                    const Field* triangular_matrix,
-                                    Int triang_leading_dim, Field* matrix,
-                                    Int leading_dim);
+void LeftLowerConjugateTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
 template <class Field>
-void DiagonalTimesConjugateUnitLowerTriangularSolves(
-    Int height, Int width, const Field* triangular_matrix,
-    Int triangular_leading_dim, Field* matrix, Int leading_dim);
+void DiagonalTimesLeftLowerConjugateTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+
+template <class Field>
+void RightLowerAdjointTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
 }  // namespace catamari
 

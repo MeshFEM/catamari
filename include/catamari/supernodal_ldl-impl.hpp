@@ -603,23 +603,38 @@ void UpdateDiagonalBlock(Int main_supernode, Int descendant_supernode,
   const bool inplace_update =
       descendant_main_intersect_size == main_supernode_size;
 
+  const Field* descendant_main_block =
+      &lower_factor.values[descendant_main_value_beg];
+
   Field* main_diag_block =
       &diagonal_factor.values[diagonal_factor.value_offsets[main_supernode]];
   Field* update_block = inplace_update ? main_diag_block : update_buffer;
 
-  const Field* descendant_main_block =
-      &lower_factor.values[descendant_main_value_beg];
+  ConstBlasMatrix<Field> descendant_main_matrix;
+  descendant_main_matrix.height = descendant_supernode_size;
+  descendant_main_matrix.width = descendant_main_intersect_size;
+  descendant_main_matrix.leading_dim = descendant_supernode_size;
+  descendant_main_matrix.data = descendant_main_block;
+
+  ConstBlasMatrix<Field> scaled_adjoint;
+  scaled_adjoint.height = descendant_supernode_size;
+  scaled_adjoint.width = descendant_main_intersect_size;
+  scaled_adjoint.leading_dim = descendant_supernode_size;
+  scaled_adjoint.data = scaled_adjoint_buffer;
+
+  BlasMatrix<Field> update_matrix;
+  update_matrix.height = descendant_main_intersect_size;
+  update_matrix.width = descendant_main_intersect_size;
+  update_matrix.leading_dim = descendant_main_intersect_size;
+  update_matrix.data = update_block;
+
   if (factorization->is_cholesky) {
-    LowerTransposeHermitianOuterProduct(
-        descendant_main_intersect_size, descendant_supernode_size, Field{-1},
-        descendant_main_block, descendant_supernode_size, Field{1},
-        update_block, descendant_main_intersect_size);
+    LowerTransposeHermitianOuterProduct(Field{-1}, descendant_main_matrix,
+                                        Field{1}, &update_matrix);
   } else {
-    MatrixMultiplyTransposeNormalLower(
-        descendant_main_intersect_size, descendant_supernode_size, Field{-1},
-        descendant_main_block, descendant_supernode_size, scaled_adjoint_buffer,
-        descendant_supernode_size, Field{1}, update_block,
-        descendant_main_intersect_size);
+    MatrixMultiplyTransposeNormalLower(Field{-1}, descendant_main_matrix,
+                                       scaled_adjoint, Field{1},
+                                       &update_matrix);
   }
 
   if (!inplace_update) {
@@ -711,17 +726,29 @@ void UpdateSubdiagonalBlock(
       main_supernode_size == descendant_main_intersect_size;
 
   Field* main_active_block = &lower_factor.values[*main_active_value_beg];
-  Field* update_block = inplace_update ? main_active_block : update_buffer;
 
-  const Field* descendant_active_block =
+  ConstBlasMatrix<Field> scaled_adjoint;
+  scaled_adjoint.height = descendant_supernode_size;
+  scaled_adjoint.width = descendant_main_intersect_size;
+  scaled_adjoint.leading_dim = descendant_supernode_size;
+  scaled_adjoint.data = scaled_adjoint_buffer;
+
+  ConstBlasMatrix<Field> descendant_active_matrix;
+  descendant_active_matrix.height = descendant_supernode_size;
+  descendant_active_matrix.width = descendant_active_intersect_size;
+  descendant_active_matrix.leading_dim = descendant_supernode_size;
+  descendant_active_matrix.data =
       &lower_factor.values[descendant_active_value_beg];
 
-  MatrixMultiplyTransposeNormal(
-      descendant_main_intersect_size, descendant_active_intersect_size,
-      descendant_supernode_size, Field{-1}, scaled_adjoint_buffer,
-      descendant_supernode_size, descendant_active_block,
-      descendant_supernode_size, Field{1}, update_block,
-      descendant_main_intersect_size);
+  BlasMatrix<Field> update_matrix;
+  update_matrix.height = descendant_main_intersect_size;
+  update_matrix.width = descendant_active_intersect_size;
+  update_matrix.leading_dim = descendant_main_intersect_size;
+  update_matrix.data = inplace_update ? main_active_block : update_buffer;
+
+  MatrixMultiplyTransposeNormal(Field{-1}, scaled_adjoint,
+                                descendant_active_matrix, Field{1},
+                                &update_matrix);
 
   if (!inplace_update) {
     Int main_active_index_offset = 0;
@@ -769,17 +796,19 @@ Int FactorDiagonalBlock(Int supernode,
                         SupernodalLDLFactorization<Field>* factorization) {
   const Int supernode_size = factorization->supernode_sizes[supernode];
 
-  const Int diag_value_beg =
-      factorization->diagonal_factor.value_offsets[supernode];
-  Field* diag_block = &factorization->diagonal_factor.values[diag_value_beg];
+  BlasMatrix<Field> diagonal_block;
+  diagonal_block.height = supernode_size;
+  diagonal_block.width = supernode_size;
+  diagonal_block.leading_dim = supernode_size;
+  diagonal_block.data =
+      &factorization->diagonal_factor
+           .values[factorization->diagonal_factor.value_offsets[supernode]];
 
   Int num_pivots;
   if (factorization->is_cholesky) {
-    num_pivots =
-        LowerCholeskyFactorization(supernode_size, diag_block, supernode_size);
+    num_pivots = LowerCholeskyFactorization(&diagonal_block);
   } else {
-    num_pivots = LowerLDLAdjointFactorization(supernode_size, diag_block,
-                                              supernode_size);
+    num_pivots = LowerLDLAdjointFactorization(&diagonal_block);
   }
 
   return num_pivots;
@@ -794,29 +823,34 @@ void SolveAgainstDiagonalBlock(
       factorization->diagonal_factor;
   const Int supernode_size = factorization->supernode_sizes[supernode];
 
-  const Int diag_value_beg = diagonal_factor.value_offsets[supernode];
-  const Field* diag_block = &diagonal_factor.values[diag_value_beg];
-
   const Int index_beg = lower_factor.index_offsets[supernode];
   const Int value_beg = lower_factor.value_offsets[supernode];
   const Int degree = lower_factor.index_offsets[supernode + 1] - index_beg;
 
-  Field* lower_block = &lower_factor.values[value_beg];
+  ConstBlasMatrix<Field> triangular_matrix;
+  triangular_matrix.height = supernode_size;
+  triangular_matrix.width = supernode_size;
+  triangular_matrix.leading_dim = supernode_size;
+  triangular_matrix.data =
+      &diagonal_factor.values[diagonal_factor.value_offsets[supernode]];
+
+  BlasMatrix<Field> lower_matrix;
+  lower_matrix.height = supernode_size;
+  lower_matrix.width = degree;
+  lower_matrix.leading_dim = supernode_size;
+  lower_matrix.data = &lower_factor.values[value_beg];
 
   if (factorization->is_cholesky) {
     // Solve against the lower-triangular matrix L(K, K)' from the right using
     // row-major storage of the input matrix, which is equivalent to solving
     // conj(L(K, K)) X = Y using column-major storage.
-    LeftLowerConjugateTriangularSolves(
-        supernode_size, degree, diag_block, supernode_size, lower_block,
-        supernode_size);
+    LeftLowerConjugateTriangularSolves(triangular_matrix, &lower_matrix);
   } else {
     // Solve against the D(K, K) times the unit-lower matrix L(K, K)' from the
     // right using row-major storage of the input matrix, which is equivalent to
     // solving D(K, K) conj(L(K, K)) X = Y using column-major storage.
-    DiagonalTimesLeftLowerConjugateUnitTriangularSolves(
-        supernode_size, degree, diag_block, supernode_size, lower_block,
-        supernode_size);
+    DiagonalTimesLeftLowerConjugateUnitTriangularSolves(triangular_matrix,
+                                                        &lower_matrix);
   }
 }
 
@@ -1668,19 +1702,22 @@ void LowerTriangularSolve(
     const Int supernode_size = factorization.supernode_sizes[supernode];
     const Int supernode_start = factorization.supernode_starts[supernode];
 
-    const Int diag_value_beg = diagonal_factor.value_offsets[supernode];
-    const Field* diag_block = &diagonal_factor.values[diag_value_beg];
-
     const Int index_beg = lower_factor.index_offsets[supernode];
     const Int degree = lower_factor.index_offsets[supernode + 1] - index_beg;
     const Int value_beg = lower_factor.value_offsets[supernode];
 
+    ConstBlasMatrix<Field> triangular_matrix;
+    triangular_matrix.height = supernode_size;
+    triangular_matrix.width = supernode_size;
+    triangular_matrix.leading_dim = supernode_size;
+    triangular_matrix.data =
+        &diagonal_factor.values[diagonal_factor.value_offsets[supernode]];
+
     // Solve against the diagonal block of the supernode.
     if (is_cholesky) {
-      TriangularSolveLeftLower(supernode_size, diag_block, supernode_size,
-                               &(*vector)[supernode_start]);
+      TriangularSolveLeftLower(triangular_matrix, &(*vector)[supernode_start]);
     } else {
-      TriangularSolveLeftLowerUnit(supernode_size, diag_block, supernode_size,
+      TriangularSolveLeftLowerUnit(triangular_matrix,
                                    &(*vector)[supernode_start]);
     }
 
@@ -1741,9 +1778,6 @@ void LowerAdjointTriangularSolve(
     const Int supernode_size = factorization.supernode_sizes[supernode];
     const Int supernode_start = factorization.supernode_starts[supernode];
 
-    const Int diag_value_beg = diagonal_factor.value_offsets[supernode];
-    const Field* diag_block = &diagonal_factor.values[diag_value_beg];
-
     const Int index_beg = lower_factor.index_offsets[supernode];
     const Int degree = lower_factor.index_offsets[supernode + 1] - index_beg;
     const Int value_beg = lower_factor.value_offsets[supernode];
@@ -1763,14 +1797,19 @@ void LowerAdjointTriangularSolve(
       }
     }
 
+    ConstBlasMatrix<Field> triangular_matrix;
+    triangular_matrix.height = supernode_size;
+    triangular_matrix.width = supernode_size;
+    triangular_matrix.leading_dim = supernode_size;
+    triangular_matrix.data =
+        &diagonal_factor.values[diagonal_factor.value_offsets[supernode]];
+
     // Solve against the diagonal block of this supernode.
     if (is_cholesky) {
-      TriangularSolveLeftLowerAdjoint(supernode_size, diag_block,
-                                      supernode_size,
+      TriangularSolveLeftLowerAdjoint(triangular_matrix,
                                       &(*vector)[supernode_start]);
     } else {
-      TriangularSolveLeftLowerAdjointUnit(supernode_size, diag_block,
-                                          supernode_size,
+      TriangularSolveLeftLowerAdjointUnit(triangular_matrix,
                                           &(*vector)[supernode_start]);
     }
   }

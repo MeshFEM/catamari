@@ -13,10 +13,10 @@
 namespace catamari {
 
 template <class Field>
-Int LowerCholeskyFactorization(Int height, Field* matrix, Int leading_dim);
+Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix);
 
 template <class Field>
-Int LowerLDLAdjointFactorization(Int height, Field* matrix, Int leading_dim);
+Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
 
 }  // namespace catamari
 
