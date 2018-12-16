@@ -18,17 +18,26 @@ cxx = meson.get_compiler('cpp')
 deps = []
 cxx_args = []
 
-openblas_lib = cxx.find_library('libopenblas', required : false)
-if openblas_lib.found()
-  message('Found OpenBLAS')
-  cxx_args += '-DCATAMARI_HAVE_OPENBLAS'
-  deps += openblas_lib
+# Simple BLAS/LAPACK detection.
+mkl_lib = cxx.find_library('libmkl_rt', required : false)
+if mkl_lib.found()
+  message('Found MKL')
+  cxx_args += '-DCATAMARI_HAVE_MKL'
+  cxx_args += '-DCATAMARI_HAVE_LAPACK'
+  deps += mkl_lib
+else
+  openblas_lib = cxx.find_library('libopenblas', required : false)
+  if openblas_lib.found()
+    message('Found OpenBLAS')
+    cxx_args += '-DCATAMARI_HAVE_OPENBLAS'
+    deps += openblas_lib
 
-  lapack_lib = cxx.find_library('liblapack', required : false)
-  if lapack_lib.found()
-    message('Found LAPACK')
-    cxx_args += '-DCATAMARI_HAVE_LAPACK'
-    deps += lapack_lib
+    lapack_lib = cxx.find_library('liblapack', required : false)
+    if lapack_lib.found()
+      message('Found LAPACK')
+      cxx_args += '-DCATAMARI_HAVE_LAPACK'
+      deps += lapack_lib
+    endif
   endif
 endif
 

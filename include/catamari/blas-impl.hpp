@@ -10,7 +10,21 @@
 
 #include "catamari/blas.hpp"
 
-#ifdef CATAMARI_HAVE_OPENBLAS
+#ifdef CATAMARI_HAVE_MKL
+
+// TODO(Jack Poulson): Attempt to support 64-bit BLAS when Int = long long int.
+typedef int BlasInt;
+
+#define CATAMARI_HAVE_BLAS
+
+#define BLAS_SYMBOL(name) name##_
+
+// TODO(Jack Poulson): Decide when to avoid enabling this function. It seems to
+// be slightly slower than doing twice as much work by running Gemm then
+// setting the strictly upper triangle of the result to zero.
+#define CATAMARI_USE_GEMMT
+
+#elif defined(CATAMARI_HAVE_OPENBLAS)
 
 // TODO(Jack Poulson): Attempt to support 64-bit BLAS when Int = long long int.
 typedef int BlasInt;
@@ -61,6 +75,26 @@ void BLAS_SYMBOL(sgemm)(
     const float* left_matrix, const BlasInt* left_leading_dim,
     const float* right_matrix, const BlasInt* right_leading_dim,
     const float* beta, float* output_matrix, const BlasInt* output_leading_dim);
+
+#ifdef CATAMARI_HAVE_MKL
+void BLAS_SYMBOL(dgemmt)(const char* uplo, const char* trans_left,
+                         const char* trans_right, const BlasInt* height,
+                         const BlasInt* rank, const double* alpha,
+                         const double* left_matrix,
+                         const BlasInt* left_leading_dim,
+                         const double* right_matrix,
+                         const BlasInt* right_leading_dim, const double* beta,
+                         double* matrix, const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(sgemmt)(const char* uplo, const char* trans_left,
+                         const char* trans_right, const BlasInt* height,
+                         const BlasInt* rank, const float* alpha,
+                         const float* left_matrix,
+                         const BlasInt* left_leading_dim,
+                         const float* right_matrix,
+                         const BlasInt* right_leading_dim, const float* beta,
+                         float* matrix, const BlasInt* leading_dim);
+#endif  // ifdef CATAMARI_HAVE_MKL
 
 void BLAS_SYMBOL(dsyrk)(const char* uplo, const char* trans,
                         const BlasInt* height, const BlasInt* rank,
@@ -459,7 +493,51 @@ void MatrixMultiplyTransposeNormalLower(
   }
 }
 
-#ifdef CATAMARI_HAVE_BLAS
+#ifdef CATAMARI_USE_GEMMT
+template <>
+inline void MatrixMultiplyTransposeNormalLower(
+    Int output_height, Int contraction_size, const float& alpha,
+    const float* left_matrix, Int left_leading_dim, const float* right_matrix,
+    Int right_leading_dim, const float& beta, float* output_matrix,
+    Int output_leading_dim) {
+  const char uplo = 'L';
+  const char trans_left = 'T';
+  const char trans_right = 'N';
+  const BlasInt output_height_blas = output_height;
+  const BlasInt contraction_size_blas = contraction_size;
+  const BlasInt left_leading_dim_blas = left_leading_dim;
+  const BlasInt right_leading_dim_blas = right_leading_dim;
+  const BlasInt output_leading_dim_blas = output_leading_dim;
+
+  BLAS_SYMBOL(sgemmt)(&uplo, &trans_left, &trans_right, &output_height_blas,
+                      &contraction_size_blas, &alpha, left_matrix,
+                      &left_leading_dim_blas, right_matrix,
+                      &right_leading_dim_blas, &beta, output_matrix,
+                      &output_leading_dim_blas);
+}
+
+template <>
+inline void MatrixMultiplyTransposeNormalLower(
+    Int output_height, Int contraction_size, const double& alpha,
+    const double* left_matrix, Int left_leading_dim, const double* right_matrix,
+    Int right_leading_dim, const double& beta, double* output_matrix,
+    Int output_leading_dim) {
+  const char uplo = 'L';
+  const char trans_left = 'T';
+  const char trans_right = 'N';
+  const BlasInt output_height_blas = output_height;
+  const BlasInt contraction_size_blas = contraction_size;
+  const BlasInt left_leading_dim_blas = left_leading_dim;
+  const BlasInt right_leading_dim_blas = right_leading_dim;
+  const BlasInt output_leading_dim_blas = output_leading_dim;
+
+  BLAS_SYMBOL(dgemmt)(&uplo, &trans_left, &trans_right, &output_height_blas,
+                      &contraction_size_blas, &alpha, left_matrix,
+                      &left_leading_dim_blas, right_matrix,
+                      &right_leading_dim_blas, &beta, output_matrix,
+                      &output_leading_dim_blas);
+}
+#elif defined(CATAMARI_HAVE_BLAS)
 template <>
 inline void MatrixMultiplyTransposeNormalLower(
     Int output_height, Int contraction_size, const float& alpha,
