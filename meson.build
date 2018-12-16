@@ -24,7 +24,12 @@ if openblas_lib.found()
   cxx_args += '-DCATAMARI_HAVE_OPENBLAS'
   deps += openblas_lib
 
-  # TODO(Jack Poulson): Detect a compatible LAPACK library.
+  lapack_lib = cxx.find_library('liblapack', required : false)
+  if lapack_lib.found()
+    message('Found LAPACK')
+    cxx_args += '-DCATAMARI_HAVE_LAPACK'
+    deps += lapack_lib
+  endif
 endif
 
 # Test if quotient is installed.

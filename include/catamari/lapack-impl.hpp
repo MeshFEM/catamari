@@ -13,6 +13,19 @@
 #include "catamari/blas.hpp"
 #include "catamari/lapack.hpp"
 
+#ifdef CATAMARI_HAVE_LAPACK
+extern "C" {
+
+#define LAPACK_SYMBOL(name) name##_
+
+void LAPACK_SYMBOL(spotrf)(const char* uplo, const BlasInt* n, float* matrix,
+                           const BlasInt* leading_dim, BlasInt* info);
+
+void LAPACK_SYMBOL(dpotrf)(const char* uplo, const BlasInt* n, double* matrix,
+                           const BlasInt* leading_dim, BlasInt* info);
+}
+#endif  // ifdef CATAMARI_HAVE_LAPACK
+
 namespace catamari {
 
 // TODO(Jack Poulson): Overload with calls to POTRF.
@@ -48,7 +61,43 @@ Int LowerCholeskyFactorization(Int height, Field* matrix, Int leading_dim) {
   return height;
 }
 
-#ifdef CATAMARI_HAVE_BLAS
+#ifdef CATAMARI_HAVE_LAPACK
+template <>
+inline Int LowerCholeskyFactorization(Int height, float* matrix,
+                                      Int leading_dim) {
+  const char uplo = 'L';
+  const BlasInt height_blas = height;
+  const BlasInt leading_dim_blas = leading_dim;
+  BlasInt info;
+  LAPACK_SYMBOL(spotrf)(&uplo, &height_blas, matrix, &leading_dim_blas, &info);
+  if (info < 0) {
+    std::cerr << "Argument " << -info << " had an illegal value." << std::endl;
+    return 0;
+  } else if (info == 0) {
+    return height;
+  } else {
+    return info;
+  }
+}
+
+template <>
+inline Int LowerCholeskyFactorization(Int height, double* matrix,
+                                      Int leading_dim) {
+  const char uplo = 'L';
+  const BlasInt height_blas = height;
+  const BlasInt leading_dim_blas = leading_dim;
+  BlasInt info;
+  LAPACK_SYMBOL(dpotrf)(&uplo, &height_blas, matrix, &leading_dim_blas, &info);
+  if (info < 0) {
+    std::cerr << "Argument " << -info << " had an illegal value." << std::endl;
+    return 0;
+  } else if (info == 0) {
+    return height;
+  } else {
+    return info;
+  }
+}
+#elif defined(CATAMARI_HAVE_BLAS)
 template <>
 inline Int LowerCholeskyFactorization(Int height, float* matrix,
                                       Int leading_dim) {
@@ -114,7 +163,7 @@ inline Int LowerCholeskyFactorization(Int height, double* matrix,
   }
   return height;
 }
-#endif  // ifdef CATAMARI_HAVE_BLAS
+#endif  // ifdef CATAMARI_HAVE_LAPACK
 
 // TODO(Jack Poulson): Extend with optimized versions of this routine.
 template <class Field>
