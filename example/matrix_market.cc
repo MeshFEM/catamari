@@ -29,9 +29,6 @@ struct Experiment {
   // factorization using the returned ordering.
   double num_flops = 0;
 
-  // The number of seconds that elapsed during the analysis.
-  double analysis_seconds = 0;
-
   // The number of seconds that elapsed during the factorization.
   double factorization_seconds = 0;
 
@@ -44,8 +41,6 @@ void PrintExperiment(const Experiment& experiment, const std::string& label) {
   std::cout << label << ":\n";
   std::cout << "  num_nonzeros:          " << experiment.num_nonzeros << "\n";
   std::cout << "  num_flops:             " << experiment.num_flops << "\n";
-  std::cout << "  analysis_seconds:      " << experiment.analysis_seconds
-            << "\n";
   std::cout << "  factorization_seconds: " << experiment.factorization_seconds
             << "\n";
   std::cout << "  solve_seconds:         " << experiment.solve_seconds << "\n";
@@ -72,6 +67,92 @@ Real EuclideanNorm(const std::vector<catamari::Complex<Real>>& vector) {
   return std::sqrt(squared_norm);
 }
 
+// Overwrites a matrix A with A + A'.
+template <typename Field>
+void MakeHermitian(catamari::CoordinateMatrix<Field>* matrix) {
+  matrix->ReserveEntryAdditions(matrix->NumEntries());
+  for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
+    matrix->QueueEntryAddition(entry.column, entry.row,
+                               catamari::Conjugate(entry.value));
+  }
+  matrix->FlushEntryQueues();
+}
+
+// Adds diagonal_shift to each entry of the diagonal.
+template <typename Field>
+void AddDiagonalShift(
+    Field diagonal_shift, catamari::CoordinateMatrix<Field>* matrix) {
+  const Int num_rows = matrix->NumRows();
+  matrix->ReserveEntryAdditions(num_rows);
+  for (Int i = 0; i < num_rows; ++i) {
+    matrix->QueueEntryAddition(i, i, diagonal_shift);
+  }
+  matrix->FlushEntryQueues();
+}
+
+// Returns the densest row index and the number of entries in the row.
+template <typename Field>
+std::pair<Int, Int> DensestRow(
+    const catamari::CoordinateMatrix<Field>& matrix) {
+  Int densest_row_size = 0;
+  Int densest_row_index = -1;
+  for (Int i = 0; i < matrix.NumRows(); ++i) {
+    if (matrix.NumRowNonzeros(i) > densest_row_size) {
+      densest_row_size = matrix.NumRowNonzeros(i);
+      densest_row_index = i;
+    }
+  }
+  return std::make_pair(densest_row_size, densest_row_index);
+}
+
+template <typename Field>
+std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
+    const std::string& filename, bool skip_explicit_zeros,
+    quotient::EntryMask mask, bool force_symmetry, const Field& diagonal_shift,
+    bool print_progress) {
+  if (print_progress) {
+    std::cout << "Reading CoordinateGraph from " << filename << "..."
+              << std::endl;
+  }
+  std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix =
+      catamari::CoordinateMatrix<Field>::FromMatrixMarket(
+          filename, skip_explicit_zeros, mask);
+  if (!matrix) {
+    std::cerr << "Could not open " << filename << "." << std::endl;
+    return matrix;
+  }
+
+  // Force symmetry since many of the examples are not.
+  if (force_symmetry) {
+    if (print_progress) {
+      std::cout << "Enforcing matrix Hermiticity..." << std::endl;
+    }
+    MakeHermitian(matrix.get());
+  }
+
+  // Adding the diagonal shift.
+  AddDiagonalShift(diagonal_shift, matrix.get());
+
+  if (print_progress) {
+    std::cout << "Matrix had " << matrix->NumRows() << " rows and "
+              << matrix->NumEntries() << " entries." << std::endl;
+
+    std::pair<Int, Int> densest_row_info = DensestRow(*matrix);
+    std::cout << "Densest row is index " << densest_row_info.first << " with "
+              << densest_row_info.second << " connections." << std::endl;
+  }
+  return matrix;
+}
+
+template <typename Field>
+std::vector<Field> GenerateRightHandSide(Int num_rows) {
+  std::vector<Field> right_hand_side(num_rows, 0);
+  for (Int row = 0; row < num_rows; ++row) {
+    right_hand_side[row] = row % 5;
+  }
+  return right_hand_side;
+}
+
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 Experiment RunMatrixMarketTest(
     const std::string& filename, bool skip_explicit_zeros,
@@ -81,57 +162,16 @@ Experiment RunMatrixMarketTest(
     bool write_permuted_matrix) {
   typedef double Field;
   typedef catamari::ComplexBase<Field> BaseField;
-
-  if (print_progress) {
-    std::cout << "Reading CoordinateGraph from " << filename << "..."
-              << std::endl;
-  }
-  std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix =
-      catamari::CoordinateMatrix<Field>::FromMatrixMarket(
-          filename, skip_explicit_zeros, mask);
   Experiment experiment;
+
+  // Read the matrix from file.
+  std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix = LoadMatrix(
+      filename, skip_explicit_zeros, mask, force_symmetry, diagonal_shift,
+      print_progress);
   if (!matrix) {
-    std::cerr << "Could not open " << filename << "." << std::endl;
     return experiment;
   }
-
-  // Force symmetry since many of the examples are not. We form the nonzero
-  // pattern of A + A'.
-  if (force_symmetry) {
-    if (print_progress) {
-      std::cout << "Enforcing matrix Hermiticity..." << std::endl;
-    }
-    matrix->ReserveEntryAdditions(matrix->NumEntries());
-    for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
-      matrix->QueueEntryAddition(entry.column, entry.row,
-                                 catamari::Conjugate(entry.value));
-    }
-    matrix->FlushEntryQueues();
-  }
-
-  // Adding the diagonal shift.
   const Int num_rows = matrix->NumRows();
-  matrix->ReserveEntryAdditions(num_rows);
-  for (Int i = 0; i < num_rows; ++i) {
-    matrix->QueueEntryAddition(i, i, diagonal_shift);
-  }
-  matrix->FlushEntryQueues();
-
-  if (print_progress) {
-    std::cout << "Matrix had " << matrix->NumRows() << " rows and "
-              << matrix->NumEntries() << " entries." << std::endl;
-
-    Int densest_row_size = 0;
-    Int densest_row_index = -1;
-    for (Int i = 0; i < matrix->NumRows(); ++i) {
-      if (matrix->NumRowNonzeros(i) > densest_row_size) {
-        densest_row_size = matrix->NumRowNonzeros(i);
-        densest_row_index = i;
-      }
-    }
-    std::cout << "Densest row is index " << densest_row_index << " with "
-              << densest_row_size << " connections." << std::endl;
-  }
 
   // Factor the matrix.
   if (print_progress) {
@@ -140,27 +180,27 @@ Experiment RunMatrixMarketTest(
   quotient::Timer factorization_timer;
   factorization_timer.Start();
   catamari::LDLFactorization<Field> ldl_factorization;
-  const Int num_pivots = catamari::LDL(
+  const catamari::LDLResult result = catamari::LDL(
       *matrix, md_control, ldl_control, &ldl_factorization);
   experiment.factorization_seconds = factorization_timer.Stop();
-  if (num_pivots < num_rows) {
-    std::cout << "  Failed factorization after " << num_pivots << " pivots."
-              << std::endl;
+  if (result.num_successful_pivots < num_rows) {
+    std::cout << "  Failed factorization after " << result.num_successful_pivots
+              << " pivots." << std::endl;
     return experiment;
+  }
+  experiment.num_nonzeros = result.num_factorization_entries;
+  experiment.num_flops = result.num_factorization_flops;
+
+  // Generate an arbitrary right-hand side.
+  std::vector<Field> right_hand_side = GenerateRightHandSide<Field>(num_rows);
+  const BaseField right_hand_side_norm = EuclideanNorm(right_hand_side);
+  if (print_progress) {
+    std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
   }
 
   // Solve a random linear system.
   if (print_progress) {
     std::cout << "  Running solve..." << std::endl;
-  }
-
-  std::vector<Field> right_hand_side(num_rows, 0);
-  for (Int row = 0; row < num_rows; ++row) {
-    right_hand_side[row] = row % 5;
-  }
-  const BaseField right_hand_side_norm = EuclideanNorm(right_hand_side);
-  if (print_progress) {
-    std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
   }
   auto solution = right_hand_side;
   quotient::Timer solve_timer;

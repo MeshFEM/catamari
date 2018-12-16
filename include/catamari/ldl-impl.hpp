@@ -15,7 +15,7 @@
 namespace catamari {
 
 template <class Field>
-Int LDL(
+LDLResult LDL(
     const CoordinateMatrix<Field>& matrix,
     const quotient::MinimumDegreeControl& md_control,
     const LDLControl& ldl_control,
@@ -61,7 +61,7 @@ Int LDL(
 }
 
 template <class Field>
-Int LDL(
+LDLResult LDL(
     const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
     const std::vector<Int>& inverse_permutation, const LDLControl& control,
     LDLFactorization<Field>* factorization) {
@@ -92,7 +92,7 @@ Int LDL(
 }
 
 template <class Field>
-Int LDL(
+LDLResult LDL(
     const CoordinateMatrix<Field>& matrix, const LDLControl& control,
     LDLFactorization<Field>* factorization) {
   std::vector<Int> permutation, inverse_permutation;

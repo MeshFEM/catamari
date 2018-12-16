@@ -87,6 +87,24 @@ struct ScalarLDLControl {
   LDLAlgorithm algorithm = kUpLookingLDL;
 };
 
+// Statistics from running an LDL' or Cholesky factorization.
+struct LDLResult {
+  // The number of successive legal pivots that were encountered during the
+  // (attempted) factorization. If the factorization was successful, this will
+  // equal the number of rows in the matrix.
+  Int num_successful_pivots = 0;
+
+  // The largest supernode size (after any relaxation).
+  Int largest_supernode = 1;
+
+  // The number of explicit entries in the factor.
+  Int num_factorization_entries = 0;
+
+  // The rough number of floating-point operations required for the
+  // factorization.
+  double num_factorization_flops = 0;
+};
+
 // Pretty-prints a column-oriented sparse lower-triangular matrix.
 template <class Field>
 void PrintLowerFactor(
@@ -101,13 +119,13 @@ void PrintDiagonalFactor(
 
 // Performs a non-supernodal LDL' factorization in the natural ordering.
 template <class Field>
-Int LDL(
+LDLResult LDL(
     const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
     ScalarLDLFactorization<Field>* factorization);
 
 // Performs a non-supernodal LDL' factorization in a permuted ordering.
 template <class Field>
-Int LDL(
+LDLResult LDL(
     const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
     const std::vector<Int>& inverse_permutation,
     const ScalarLDLControl& control,

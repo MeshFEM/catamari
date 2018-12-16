@@ -461,8 +461,9 @@ void UpLookingRowUpdate(Int row, Int column,
 //     L(k+1:n, k) = (A(k+1:n, k) - L(k+1:n, 1:k-1) * L(k, 1:k-1)') / L(k, k);
 //   end
 template <class Field>
-Int LeftLooking(const CoordinateMatrix<Field>& matrix,
-                ScalarLDLFactorization<Field>* factorization) {
+LDLResult LeftLooking(
+    const CoordinateMatrix<Field>& matrix,
+    ScalarLDLFactorization<Field>* factorization) {
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
   const bool is_cholesky = factorization->is_cholesky;
@@ -486,6 +487,7 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
   // binary search by maintaining a separate counter for each column.
   std::vector<Int> column_update_ptrs(num_rows);
 
+  LDLResult result;
   for (Int column = 0; column < num_rows; ++column) {
     pattern_flags[column] = column;
     column_update_ptrs[column] = lower_structure.column_offsets[column];
@@ -551,13 +553,13 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
     Real pivot = RealPart(diagonal_factor.values[column]);
     if (is_cholesky) {
       if (pivot <= Real{0}) {
-        return column;
+        return result;
       }
       pivot = std::sqrt(pivot);
       diagonal_factor.values[column] = pivot;
     } else {
       if (pivot == Real{0}) {
-        return column;
+        return result;
       }
     }
 
@@ -569,15 +571,23 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
         lower_factor.values[index] /= pivot;
       }
     }
+
+    // Update the result structure.
+    const Int degree =
+        lower_structure.column_offsets[column + 1] -
+        lower_structure.column_offsets[column];
+    result.num_factorization_entries += 1 + degree;
+    result.num_factorization_flops += std::pow(1. * degree, 2.);
+    ++result.num_successful_pivots;
   }
 
-  return num_rows;
+  return result;
 }
 
 // Performs a non-supernodal up-looking LDL' factorization.
 // Cf. Section 4.7 of Tim Davis, "Direct Methods for Sparse Linear Systems".
 template <class Field>
-Int UpLooking(
+LDLResult UpLooking(
     const CoordinateMatrix<Field>& matrix,
     ScalarLDLFactorization<Field>* factorization) {
   typedef ComplexBase<Field> Real;
@@ -605,6 +615,7 @@ Int UpLooking(
   // input matrix.
   std::vector<Field> row_workspace(num_rows, Field{0});
 
+  LDLResult result;
   for (Int row = 0; row < num_rows; ++row) {
     pattern_flags[row] = row;
     column_update_ptrs[row] = lower_structure.column_offsets[row];
@@ -633,18 +644,26 @@ Int UpLooking(
     Real pivot = RealPart(diagonal_factor.values[row]);
     if (is_cholesky) {
       if (pivot <= Real{0}) {
-        return row;
+        return result;
       }
       pivot = std::sqrt(pivot);
       diagonal_factor.values[row] = pivot;
     } else {
       if (pivot == Real{0}) {
-        return row;
+        return result;
       }
     }
+
+    // Update the result structure.
+    const Int degree =
+        lower_structure.column_offsets[row + 1] -
+        lower_structure.column_offsets[row];
+    result.num_factorization_entries += 1 + degree;
+    result.num_factorization_flops += std::pow(1. * degree, 2.);
+    ++result.num_successful_pivots;
   }
 
-  return num_rows;
+  return result;
 }
 
 }  // namespace ldl
@@ -658,7 +677,7 @@ void Permute(const std::vector<Int>& permutation, std::vector<Field>* vector) {
 }
 
 template <class Field>
-Int LDL(
+LDLResult LDL(
     const CoordinateMatrix<Field>& matrix,
     const std::vector<Int>& permutation,
     const std::vector<Int>& inverse_permutation,
@@ -676,7 +695,7 @@ Int LDL(
 }
 
 template <class Field>
-Int LDL(
+LDLResult LDL(
     const CoordinateMatrix<Field>& matrix, const ScalarLDLControl& control,
     ScalarLDLFactorization<Field>* factorization) {
   std::vector<Int> permutation, inverse_permutation;

@@ -122,17 +122,17 @@ struct SupernodalLDLControl {
 
 // Performs a supernodal LDL' factorization in the natural ordering.
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix,
-        const SupernodalLDLControl& control,
-        SupernodalLDLFactorization<Field>* factorization);
+LDLResult LDL(
+    const CoordinateMatrix<Field>& matrix, const SupernodalLDLControl& control,
+    SupernodalLDLFactorization<Field>* factorization);
 
 // Performs a supernodal LDL' factorization in a permuted ordering.
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix,
-        const std::vector<Int>& permutation,
-        const std::vector<Int>& inverse_permutation,
-        const SupernodalLDLControl& control,
-        SupernodalLDLFactorization<Field>* factorization);
+LDLResult LDL(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation,
+    const SupernodalLDLControl& control,
+    SupernodalLDLFactorization<Field>* factorization);
 
 // Solve A x = b via the substitution (L D L') x = b and the sequence:
 //   x := L' \ (D \ (L \ b)).

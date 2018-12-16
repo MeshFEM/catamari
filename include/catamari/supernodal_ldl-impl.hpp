@@ -1482,9 +1482,10 @@ void FormSupernodes(
 }
 
 template <class Field>
-Int LeftLooking(const CoordinateMatrix<Field>& matrix,
-                const SupernodalLDLControl& control,
-                SupernodalLDLFactorization<Field>* factorization) {
+LDLResult LeftLooking(
+    const CoordinateMatrix<Field>& matrix,
+    const SupernodalLDLControl& control,
+    SupernodalLDLFactorization<Field>* factorization) {
   std::vector<Int> parents;
   std::vector<Int> supernode_degrees;
   std::vector<Int> supernode_parents;
@@ -1524,7 +1525,7 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
   std::vector<Int> index_ptrs(num_supernodes);
   std::vector<Int> value_ptrs(num_supernodes);
 
-  Int num_pivots = 0;
+  LDLResult result;
   for (Int main_supernode = 0; main_supernode < num_supernodes;
        ++main_supernode) {
     const Int main_supernode_size =
@@ -1609,25 +1610,38 @@ Int LeftLooking(const CoordinateMatrix<Field>& matrix,
 
     const Int num_supernode_pivots =
         FactorDiagonalBlock(main_supernode, factorization);
-    num_pivots += num_supernode_pivots;
+    result.num_successful_pivots += num_supernode_pivots;
     if (num_supernode_pivots < main_supernode_size) {
-      return num_pivots;
+      return result;
     }
 
     SolveAgainstDiagonalBlock(main_supernode, factorization);
+
+    // Finish updating the result structure.
+    const Int degree =
+        lower_factor.index_offsets[main_supernode + 1] -
+        lower_factor.index_offsets[main_supernode];
+    result.largest_supernode =
+        std::max(result.largest_supernode, main_supernode_size);
+    result.num_factorization_entries +=
+        (main_supernode_size * (main_supernode_size + 1)) / 2 +
+        main_supernode_size * degree;
+    result.num_factorization_flops +=
+        std::pow(1. * main_supernode_size, 3.) / 3. +
+        std::pow(1. * degree, 2.) * main_supernode_size;
   }
 
-  return num_pivots;
+  return result;
 }
 
 }  // namespace supernodal_ldl
 
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix,
-        const std::vector<Int>& permutation,
-        const std::vector<Int>& inverse_permutation,
-        const SupernodalLDLControl& control,
-        SupernodalLDLFactorization<Field>* factorization) {
+LDLResult LDL(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation,
+    const SupernodalLDLControl& control,
+    SupernodalLDLFactorization<Field>* factorization) {
   factorization->permutation = permutation;
   factorization->inverse_permutation = inverse_permutation;
   factorization->is_cholesky = control.use_cholesky;
@@ -1635,9 +1649,9 @@ Int LDL(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-Int LDL(const CoordinateMatrix<Field>& matrix,
-        const SupernodalLDLControl& control,
-        SupernodalLDLFactorization<Field>* factorization) {
+LDLResult LDL(
+    const CoordinateMatrix<Field>& matrix, const SupernodalLDLControl& control,
+    SupernodalLDLFactorization<Field>* factorization) {
   std::vector<Int> permutation, inverse_permutation;
   return LDL(matrix, permutation, inverse_permutation, control, factorization);
 }

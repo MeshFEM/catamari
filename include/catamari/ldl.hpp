@@ -27,10 +27,6 @@ enum SupernodalStrategy {
 };
 
 // A wrapper for the scalar and supernodal factorization data structures.
-//
-// TODO(Jack Poulson): Decide how to support the traditional option of using
-// a supernodal LDL for sufficiently dense factorizations and a scalar
-// up-looking approach otherwise.
 template <class Field>
 struct LDLFactorization {
   // Whether or not a supernodal factorization was used. If it is true, only
@@ -58,20 +54,20 @@ struct LDLControl {
 
 // Performs an LDL' factorization in the minimum-degree ordering.
 template <class Field>
-Int LDL(
+LDLResult LDL(
     const CoordinateMatrix<Field>& matrix,
     const quotient::MinimumDegreeControl& md_control, const LDLControl& control,
     LDLFactorization<Field>* factorization);
 
 // Performs an LDL' factorization in the natural ordering.
 template <class Field>
-Int LDL(
+LDLResult LDL(
     const CoordinateMatrix<Field>& matrix, const LDLControl& control,
     LDLFactorization<Field>* factorization);
 
 // Performs an LDL' factorization in a permuted ordering.
 template <class Field>
-Int LDL(
+LDLResult LDL(
     const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
     const std::vector<Int>& inverse_permutation, const LDLControl& control,
     LDLFactorization<Field>* factorization);
