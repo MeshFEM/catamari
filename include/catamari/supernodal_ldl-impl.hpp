@@ -153,19 +153,17 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
 }
 
 // Fills in the structure indices for the lower factor.
-//
-// The 'parents' array is in the original ordering of the matrix; each index
-// points to the parent in the original elimination tree.
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
+                          const std::vector<Int>& permutation,
+                          const std::vector<Int>& inverse_permutation,
                           const std::vector<Int>& parents,
-                          SupernodalLDLFactorization<Field>* factorization) {
+                          const std::vector<Int>& supernode_sizes,
+                          const std::vector<Int>& supernode_member_to_index,
+                          SupernodalLowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
-  const Int num_supernodes = factorization->supernode_sizes.size();
-  const std::vector<Int>& perm = factorization->permutation;
-  const std::vector<Int>& inverse_perm = factorization->inverse_permutation;
-  const bool have_permutation = !perm.empty();
-  SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
+  const Int num_supernodes = supernode_sizes.size();
+  const bool have_permutation = !permutation.empty();
 
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor.
@@ -179,24 +177,24 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
   // indices.
   std::vector<Int> supernode_ptrs(num_supernodes);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    supernode_ptrs[supernode] = lower_factor.index_offsets[supernode];
+    supernode_ptrs[supernode] = lower_factor->index_offsets[supernode];
   }
 
   // Fill in the structure indices.
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
-    const Int main_supernode = factorization->supernode_member_to_index[row];
+    const Int main_supernode = supernode_member_to_index[row];
     pattern_flags[row] = row;
     supernode_pattern_flags[main_supernode] = row;
 
-    const Int orig_row = have_permutation ? inverse_perm[row] : row;
+    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int descendant = have_permutation ? perm[entry.column] : entry.column;
-      Int descendant_supernode =
-          factorization->supernode_member_to_index[descendant];
+      Int descendant =
+          have_permutation ? permutation[entry.column] : entry.column;
+      Int descendant_supernode = supernode_member_to_index[descendant];
 
       if (descendant >= row) {
         if (have_permutation) {
@@ -214,8 +212,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
         // Mark 'descendant' as in the pattern of this row.
         pattern_flags[descendant] = row;
 
-        descendant_supernode =
-            factorization->supernode_member_to_index[descendant];
+        descendant_supernode = supernode_member_to_index[descendant];
         CATAMARI_ASSERT(descendant_supernode <= main_supernode,
                         "Descendant supernode was larger than main supernode.");
         if (descendant_supernode == main_supernode) {
@@ -229,11 +226,11 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
               "Descendant supernode was as large as main supernode.");
           CATAMARI_ASSERT(
               supernode_ptrs[descendant_supernode] >=
-                      lower_factor.index_offsets[descendant_supernode] &&
+                      lower_factor->index_offsets[descendant_supernode] &&
                   supernode_ptrs[descendant_supernode] <
-                      lower_factor.index_offsets[descendant_supernode + 1],
+                      lower_factor->index_offsets[descendant_supernode + 1],
               "Left supernode's indices.");
-          lower_factor.indices[supernode_ptrs[descendant_supernode]++] = row;
+          lower_factor->indices[supernode_ptrs[descendant_supernode]++] = row;
         }
 
         // Move up to the parent in this subtree of the elimination forest.
@@ -246,14 +243,14 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
 #ifdef CATAMARI_DEBUG
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int index_beg = lower_factor.index_offsets[supernode];
-    const Int index_end = lower_factor.index_offsets[supernode + 1];
+    const Int index_beg = lower_factor->index_offsets[supernode];
+    const Int index_end = lower_factor->index_offsets[supernode + 1];
     CATAMARI_ASSERT(supernode_ptrs[supernode] == index_end,
                     "Supernode pointers did not match index offsets.");
     bool sorted = true;
     Int last_row = -1;
     for (Int index = index_beg; index < index_end; ++index) {
-      const Int row = lower_factor.indices[index];
+      const Int row = lower_factor->indices[index];
       if (row <= last_row) {
         sorted = false;
         break;
@@ -265,7 +262,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
       std::cerr << "Supernode " << supernode << " did not have sorted indices."
                 << std::endl;
       for (Int index = index_beg; index < index_end; ++index) {
-        const Int row = lower_factor.indices[index];
+        const Int row = lower_factor->indices[index];
         std::cout << row << " ";
       }
       std::cout << std::endl;
@@ -276,49 +273,51 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
 // Fills in the sizes of the supernodal intersections.
 template <class Field>
-void FillIntersections(SupernodalLDLFactorization<Field>* factorization) {
-  const Int num_supernodes = factorization->supernode_sizes.size();
-  SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
+void FillIntersections(
+    const std::vector<Int>& supernode_sizes,
+    const std::vector<Int>& supernode_member_to_index,
+    SupernodalLowerFactor<Field>* lower_factor) {
+  const Int num_supernodes = supernode_sizes.size();
 
   // Compute the supernode offsets.
   Int num_supernode_intersects = 0;
-  lower_factor.intersect_size_offsets.resize(num_supernodes + 1);
+  lower_factor->intersect_size_offsets.resize(num_supernodes + 1);
   for (Int column_supernode = 0; column_supernode < num_supernodes;
        ++column_supernode) {
-    lower_factor.intersect_size_offsets[column_supernode] =
+    lower_factor->intersect_size_offsets[column_supernode] =
         num_supernode_intersects;
     Int last_supernode = -1;
 
-    const Int index_beg = lower_factor.index_offsets[column_supernode];
-    const Int index_end = lower_factor.index_offsets[column_supernode + 1];
+    const Int index_beg = lower_factor->index_offsets[column_supernode];
+    const Int index_end = lower_factor->index_offsets[column_supernode + 1];
     for (Int index = index_beg; index < index_end; ++index) {
-      const Int row = lower_factor.indices[index];
-      const Int supernode = factorization->supernode_member_to_index[row];
+      const Int row = lower_factor->indices[index];
+      const Int supernode = supernode_member_to_index[row];
       if (supernode != last_supernode) {
         last_supernode = supernode;
         ++num_supernode_intersects;
       }
     }
   }
-  lower_factor.intersect_size_offsets[num_supernodes] =
+  lower_factor->intersect_size_offsets[num_supernodes] =
       num_supernode_intersects;
 
   // Fill the supernode intersection sizes.
-  lower_factor.intersect_sizes.resize(num_supernode_intersects);
+  lower_factor->intersect_sizes.resize(num_supernode_intersects);
   num_supernode_intersects = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     Int last_supernode = -1;
     Int intersect_size = 0;
 
-    const Int index_beg = lower_factor.index_offsets[supernode];
-    const Int index_end = lower_factor.index_offsets[supernode + 1];
+    const Int index_beg = lower_factor->index_offsets[supernode];
+    const Int index_end = lower_factor->index_offsets[supernode + 1];
     for (Int index = index_beg; index < index_end; ++index) {
-      const Int row = lower_factor.indices[index];
-      const Int row_supernode = factorization->supernode_member_to_index[row];
+      const Int row = lower_factor->indices[index];
+      const Int row_supernode = supernode_member_to_index[row];
       if (row_supernode != last_supernode) {
         if (last_supernode != -1) {
           // Close out the supernodal intersection.
-          lower_factor.intersect_sizes[num_supernode_intersects++] =
+          lower_factor->intersect_sizes[num_supernode_intersects++] =
               intersect_size;
         }
         last_supernode = row_supernode;
@@ -328,46 +327,48 @@ void FillIntersections(SupernodalLDLFactorization<Field>* factorization) {
     }
     if (last_supernode != -1) {
       // Close out the last intersection count for this column supernode.
-      lower_factor.intersect_sizes[num_supernode_intersects++] = intersect_size;
+      lower_factor->intersect_sizes[num_supernode_intersects++] =
+          intersect_size;
     }
   }
   CATAMARI_ASSERT(num_supernode_intersects ==
-                      static_cast<Int>(lower_factor.intersect_sizes.size()),
+                      static_cast<Int>(lower_factor->intersect_sizes.size()),
                   "Incorrect number of supernode intersections");
 }
 
 // Fill in the nonzeros from the original sparse matrix.
 template <class Field>
 void FillNonzeros(const CoordinateMatrix<Field>& matrix,
-                  SupernodalLDLFactorization<Field>* factorization) {
+                  const std::vector<Int>& permutation,
+                  const std::vector<Int>& inverse_permutation,
+                  const std::vector<Int>& supernode_starts,
+                  const std::vector<Int>& supernode_sizes,
+                  const std::vector<Int>& supernode_member_to_index,
+                  SupernodalLowerFactor<Field>* lower_factor,
+                  SupernodalDiagonalFactor<Field>* diagonal_factor) {
   const Int num_rows = matrix.NumRows();
-  const std::vector<Int>& perm = factorization->permutation;
-  const std::vector<Int>& inverse_perm = factorization->inverse_permutation;
-  const bool have_permutation = !perm.empty();
-  SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
-  SupernodalDiagonalFactor<Field>& diagonal_factor =
-      factorization->diagonal_factor;
+  const bool have_permutation = !permutation.empty();
 
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
-    const Int supernode = factorization->supernode_member_to_index[row];
-    const Int supernode_start = factorization->supernode_starts[supernode];
-    const Int supernode_size = factorization->supernode_sizes[supernode];
+    const Int supernode = supernode_member_to_index[row];
+    const Int supernode_start = supernode_starts[supernode];
+    const Int supernode_size = supernode_sizes[supernode];
 
-    const Int orig_row = have_permutation ? inverse_perm[row] : row;
+    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      const Int column = have_permutation ? perm[entry.column] : entry.column;
-      const Int column_supernode =
-          factorization->supernode_member_to_index[column];
+      const Int column =
+          have_permutation ? permutation[entry.column] : entry.column;
+      const Int column_supernode = supernode_member_to_index[column];
 
       if (column_supernode == supernode) {
         // Insert the value into the diagonal block.
         const Int diag_supernode_start =
-            diagonal_factor.value_offsets[supernode];
-        Field* diag_block = &diagonal_factor.values[diag_supernode_start];
+            diagonal_factor->value_offsets[supernode];
+        Field* diag_block = &diagonal_factor->values[diag_supernode_start];
 
         const Int rel_row = row - supernode_start;
         const Int rel_column = column - supernode_start;
@@ -386,20 +387,18 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
 
       // Compute the relative index of 'row' in this column supernode.
       Int* column_index_beg =
-          &lower_factor.indices[lower_factor.index_offsets[column_supernode]];
+          &lower_factor->indices[lower_factor->index_offsets[column_supernode]];
       Int* column_index_end =
           &lower_factor
-               .indices[lower_factor.index_offsets[column_supernode + 1]];
+               ->indices[lower_factor->index_offsets[column_supernode + 1]];
       Int* iter = std::lower_bound(column_index_beg, column_index_end, row);
       CATAMARI_ASSERT(iter != column_index_end, "Exceeded column indices.");
       CATAMARI_ASSERT(*iter == row, "Did not find index.");
       const Int rel_index_index = std::distance(column_index_beg, iter);
 #ifdef CATAMARI_DEBUG
       if (*iter != row) {
-        const Int column_supernode_start =
-            factorization->supernode_starts[column_supernode];
-        const Int column_supernode_size =
-            factorization->supernode_sizes[column_supernode];
+        const Int column_supernode_start = supernode_starts[column_supernode];
+        const Int column_supernode_size = supernode_sizes[column_supernode];
         std::cerr << "row=" << row << ", column=" << column
                   << ", column_supernode_start=" << column_supernode_start
                   << ", column_supernode_size=" << column_supernode_size
@@ -415,16 +414,15 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
 
       // Convert the relative row index into the corresponding value index
       // (for column 'column').
-      const Int column_value_beg = lower_factor.value_offsets[column_supernode];
-      const Int column_supernode_size =
-          factorization->supernode_sizes[column_supernode];
-      const Int column_supernode_start =
-          factorization->supernode_starts[column_supernode];
+      const Int column_value_beg =
+          lower_factor->value_offsets[column_supernode];
+      const Int column_supernode_size = supernode_sizes[column_supernode];
+      const Int column_supernode_start = supernode_starts[column_supernode];
       const Int rel_column = column - column_supernode_start;
       const Int value_index = column_value_beg +
                               rel_index_index * column_supernode_size +
                               rel_column;
-      lower_factor.values[value_index] = entry.value;
+      lower_factor->values[value_index] = entry.value;
     }
   }
 }
@@ -471,9 +469,19 @@ void InitializeLeftLookingFactors(
   lower_factor.values.resize(num_entries, Field{0});
   diagonal_factor.values.resize(num_diagonal_entries, Field{0});
 
-  FillStructureIndices(matrix, parents, factorization);
-  FillNonzeros(matrix, factorization);
-  FillIntersections(factorization);
+  FillStructureIndices(
+      matrix, factorization->permutation, factorization->inverse_permutation,
+      parents, factorization->supernode_sizes,
+      factorization->supernode_member_to_index, &factorization->lower_factor);
+  FillIntersections(
+      factorization->supernode_sizes, factorization->supernode_member_to_index,
+      &factorization->lower_factor);
+
+  FillNonzeros(
+      matrix, factorization->permutation, factorization->inverse_permutation,
+      factorization->supernode_starts, factorization->supernode_sizes,
+      factorization->supernode_member_to_index, &factorization->lower_factor,
+      &factorization->diagonal_factor);
 }
 
 // Computes the supernodal nonzero pattern of L(row, :) in
