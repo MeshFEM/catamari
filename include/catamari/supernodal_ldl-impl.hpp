@@ -632,7 +632,7 @@ void UpdateDiagonalBlock(Int main_supernode, Int descendant_supernode,
     LowerTransposeHermitianOuterProduct(Field{-1}, descendant_main_matrix,
                                         Field{1}, &update_matrix);
   } else {
-    MatrixMultiplyTransposeNormalLower(Field{-1}, descendant_main_matrix,
+    MatrixMultiplyLowerTransposeNormal(Field{-1}, descendant_main_matrix,
                                        scaled_adjoint, Field{1},
                                        &update_matrix);
   }

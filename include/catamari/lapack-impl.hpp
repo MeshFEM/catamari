@@ -137,36 +137,38 @@ Int LowerBlockedCholeskyFactorization(BlasMatrix<Field>* matrix,
   for (Int i = 0; i < height; i += blocksize) {
     const Int bsize = std::min(height - i, blocksize);
 
-    ConstBlasMatrix<Field> diagonal_block;
+    // Overwrite the diagonal block with its Cholesky factor.
+    BlasMatrix<Field> diagonal_block;
     diagonal_block.height = bsize;
     diagonal_block.width = bsize;
     diagonal_block.leading_dim = leading_dim;
     diagonal_block.data = matrix->Pointer(i, i);
+    const Int num_diag_pivots =
+        LowerUnblockedCholeskyFactorization(&diagonal_block);
+    if (num_diag_pivots < bsize) {
+      return i + num_diag_pivots;
+    }
+    if (height == i + bsize) {
+      break;
+    }
 
+    // Solve for the remainder of the block column of L.
     BlasMatrix<Field> subdiagonal;
     subdiagonal.height = height - (i + bsize);
     subdiagonal.width = bsize;
     subdiagonal.leading_dim = leading_dim;
     subdiagonal.data = matrix->Pointer(i + bsize, i);
+    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
+    RightLowerAdjointTriangularSolves(const_diagonal_block, &subdiagonal);
 
+    // Perform the Hermitian rank-bsize update.
     BlasMatrix<Field> submatrix;
     submatrix.height = height - (i + bsize);
     submatrix.width = height - (i + bsize);
     submatrix.leading_dim = leading_dim;
     submatrix.data = matrix->Pointer(i + bsize, i + bsize);
-
-    // Overwrite the diagonal block with its Cholesky factor.
-    const Int num_diag_pivots =
-        LowerUnblockedCholeskyFactorization(diagonal_block);
-    if (num_diag_pivots < bsize) {
-      return i + num_diag_pivots;
-    }
-
-    // Solve for the remainder of the block column of L.
-    RightLowerAdjointTriangularSolves(diagonal_block, &subdiagonal);
-
-    // Perform the Hermitian rank-bsize update.
-    LowerNormalHermitianOuterProduct(Field{-1}, subdiagonal, Field{1},
+    const ConstBlasMatrix<Field> const_subdiagonal = subdiagonal;
+    LowerNormalHermitianOuterProduct(Field{-1}, const_subdiagonal, Field{1},
                                      &submatrix);
   }
   return height;
@@ -216,9 +218,8 @@ inline Int LowerCholeskyFactorization(BlasMatrix<double>* matrix) {
 }
 #endif  // ifdef CATAMARI_HAVE_LAPACK
 
-// TODO(Jack Poulson): Extend with optimized versions of this routine.
 template <class Field>
-Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
+Int LowerUnblockedLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
   const Int height = matrix->height;
   for (Int i = 0; i < height; ++i) {
     const Field& delta = matrix->Entry(i, i);
@@ -243,6 +244,83 @@ Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
   }
   return height;
 }
+
+template <class Field>
+Int LowerBlockedLDLAdjointFactorization(BlasMatrix<Field>* matrix,
+                                        Int blocksize) {
+  const Int height = matrix->height;
+  const Int leading_dim = matrix->leading_dim;
+
+  std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  BlasMatrix<Field> factor;
+  factor.data = buffer.data();
+
+  for (Int i = 0; i < height; i += blocksize) {
+    const Int bsize = std::min(height - i, blocksize);
+
+    // Overwrite the diagonal block with its LDL' factorization.
+    BlasMatrix<Field> diagonal_block;
+    diagonal_block.height = bsize;
+    diagonal_block.width = bsize;
+    diagonal_block.leading_dim = leading_dim;
+    diagonal_block.data = matrix->Pointer(i, i);
+    const Int num_diag_pivots =
+        LowerUnblockedLDLAdjointFactorization(&diagonal_block);
+    if (num_diag_pivots < bsize) {
+      return i + num_diag_pivots;
+    }
+    if (height == i + bsize) {
+      break;
+    }
+
+    // Solve for the remainder of the block column of L.
+    BlasMatrix<Field> subdiagonal;
+    subdiagonal.height = height - (i + bsize);
+    subdiagonal.width = bsize;
+    subdiagonal.leading_dim = leading_dim;
+    subdiagonal.data = matrix->Pointer(i + bsize, i);
+    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
+    RightLowerAdjointUnitTriangularSolves(const_diagonal_block, &subdiagonal);
+
+    // Copy the conjugate of the current factor.
+    factor.height = subdiagonal.height;
+    factor.width = subdiagonal.width;
+    factor.leading_dim = subdiagonal.height;
+    for (Int j = 0; j < subdiagonal.width; ++j) {
+      for (Int k = 0; k < subdiagonal.height; ++k) {
+        factor(k, j) = Conjugate(subdiagonal(k, j));
+      }
+    }
+
+    // Solve against the diagonal.
+    for (Int j = 0; j < subdiagonal.width; ++j) {
+      const ComplexBase<Field> delta = const_diagonal_block(j, j);
+      for (Int k = 0; k < subdiagonal.height; ++k) {
+        subdiagonal(k, j) /= delta;
+      }
+    }
+
+    // Perform the Hermitian rank-bsize update.
+    const ConstBlasMatrix<Field> const_subdiagonal = subdiagonal;
+    const ConstBlasMatrix<Field> const_factor = factor;
+    BlasMatrix<Field> submatrix;
+    submatrix.height = height - (i + bsize);
+    submatrix.width = height - (i + bsize);
+    submatrix.leading_dim = leading_dim;
+    submatrix.data = matrix->Pointer(i + bsize, i + bsize);
+    MatrixMultiplyLowerNormalTranspose(Field{-1}, const_subdiagonal,
+                                       const_factor, Field{1}, &submatrix);
+  }
+  return height;
+}
+
+template <class Field>
+Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
+  const Int blocksize = 64;
+  return LowerBlockedLDLAdjointFactorization(matrix, blocksize);
+}
+
+// TODO(Jack Poulson): Add BLAS support for LowerLDLAdjointFactorization.
 
 }  // namespace catamari
 

@@ -126,6 +126,106 @@ void BLAS_SYMBOL(strsm)(const char* side, const char* uplo,
 
 namespace catamari {
 
+template <class T>
+inline const T* ConstBlasMatrix<T>::Pointer(Int row, Int column) const {
+  return &data[row + column * leading_dim];
+}
+
+template <class T>
+inline const T& ConstBlasMatrix<T>::operator()(Int row, Int column) const {
+  return data[row + column * leading_dim];
+}
+
+template <class T>
+inline const T& ConstBlasMatrix<T>::Entry(Int row, Int column) const {
+  return data[row + column * leading_dim];
+}
+
+template <class T>
+inline ConstBlasMatrix<T> ConstBlasMatrix<T>::Submatrix(Int row_beg,
+                                                        Int column_beg,
+                                                        Int num_rows,
+                                                        Int num_columns) const {
+  ConstBlasMatrix<T> submatrix;
+  submatrix.height = num_rows;
+  submatrix.width = num_columns;
+  submatrix.leading_dim = leading_dim;
+  submatrix.data = Pointer(row_beg, column_beg);
+  return submatrix;
+}
+
+template <class T>
+inline ConstBlasMatrix<T>::ConstBlasMatrix() {}
+
+template <class T>
+inline ConstBlasMatrix<T>::ConstBlasMatrix(const BlasMatrix<T>& matrix)
+    : height(matrix.height),
+      width(matrix.width),
+      leading_dim(matrix.leading_dim),
+      data(matrix.data) {}
+
+template <class T>
+inline ConstBlasMatrix<T>& ConstBlasMatrix<T>::operator=(
+    const BlasMatrix<T>& matrix) {
+  height = matrix.height;
+  width = matrix.width;
+  leading_dim = matrix.leading_dim;
+  data = matrix.leading_dim;
+}
+
+template <class T>
+inline T* BlasMatrix<T>::Pointer(Int row, Int column) {
+  return &data[row + column * leading_dim];
+}
+
+template <class T>
+inline const T* BlasMatrix<T>::Pointer(Int row, Int column) const {
+  return &data[row + column * leading_dim];
+}
+
+template <class T>
+inline T& BlasMatrix<T>::operator()(Int row, Int column) {
+  return data[row + column * leading_dim];
+}
+
+template <class T>
+inline const T& BlasMatrix<T>::operator()(Int row, Int column) const {
+  return data[row + column * leading_dim];
+}
+
+template <class T>
+inline T& BlasMatrix<T>::Entry(Int row, Int column) {
+  return data[row + column * leading_dim];
+}
+
+template <class T>
+inline const T& BlasMatrix<T>::Entry(Int row, Int column) const {
+  return data[row + column * leading_dim];
+}
+
+template <class T>
+inline BlasMatrix<T> BlasMatrix<T>::Submatrix(Int row_beg, Int column_beg,
+                                              Int num_rows, Int num_columns) {
+  BlasMatrix<T> submatrix;
+  submatrix.height = num_rows;
+  submatrix.width = num_columns;
+  submatrix.leading_dim = leading_dim;
+  submatrix.data = Pointer(row_beg, column_beg);
+  return submatrix;
+}
+
+template <class T>
+inline ConstBlasMatrix<T> BlasMatrix<T>::Submatrix(Int row_beg, Int column_beg,
+                                                   Int num_rows,
+                                                   Int num_columns) const {
+  ConstBlasMatrix<T> submatrix;
+  submatrix.height = num_rows;
+  submatrix.width = num_columns;
+  submatrix.leading_dim = leading_dim;
+  submatrix.data = Pointer(row_beg, column_beg);
+  return submatrix;
+}
+
 template <class Field>
 void TriangularSolveLeftLower(const ConstBlasMatrix<Field>& triangular_matrix,
                               Field* vector) {
@@ -463,7 +563,101 @@ inline void LowerNormalHermitianOuterProduct(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
-void MatrixMultiplyTransposeNormalLower(
+void MatrixMultiplyLowerNormalTranspose(
+    const Field& alpha, const ConstBlasMatrix<Field>& left_matrix,
+    const ConstBlasMatrix<Field>& right_matrix, const Field& beta,
+    BlasMatrix<Field>* output_matrix) {
+  const Int output_height = output_matrix->height;
+  const Int contraction_size = left_matrix.height;
+  for (Int j = 0; j < output_height; ++j) {
+    for (Int i = j; i < output_height; ++i) {
+      Field& output_entry = output_matrix->Entry(i, j);
+      output_entry *= beta;
+      for (Int k = 0; k < contraction_size; ++k) {
+        output_entry += alpha * left_matrix(i, k) * right_matrix(j, k);
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_USE_GEMMT
+template <>
+inline void MatrixMultiplyLowerNormalTranspose(
+    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
+    const ConstBlasMatrix<float>& right_matrix, const float& beta,
+    BlasMatrix<float>* output_matrix) {
+  const char uplo = 'L';
+  const char trans_left = 'N';
+  const char trans_right = 'T';
+  const BlasInt output_height_blas = output_matrix->height;
+  const BlasInt contraction_size_blas = left_matrix.width;
+  const BlasInt left_leading_dim_blas = left_matrix.leading_dim;
+  const BlasInt right_leading_dim_blas = right_matrix.leading_dim;
+  const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
+  BLAS_SYMBOL(sgemmt)
+  (&uplo, &trans_left, &trans_right, &output_height_blas,
+   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
+   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &output_leading_dim_blas);
+}
+
+template <>
+inline void MatrixMultiplyLowerNormalTranspose(
+    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
+    const ConstBlasMatrix<double>& right_matrix, const double& beta,
+    BlasMatrix<double>* output_matrix) {
+  const char uplo = 'L';
+  const char trans_left = 'N';
+  const char trans_right = 'T';
+  const BlasInt output_height_blas = output_matrix->height;
+  const BlasInt contraction_size_blas = left_matrix.width;
+  const BlasInt left_leading_dim_blas = left_matrix.leading_dim;
+  const BlasInt right_leading_dim_blas = right_matrix.leading_dim;
+  const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
+  BLAS_SYMBOL(dgemmt)
+  (&uplo, &trans_left, &trans_right, &output_height_blas,
+   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
+   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &output_leading_dim_blas);
+}
+#elif defined(CATAMARI_HAVE_BLAS)
+template <>
+inline void MatrixMultiplyLowerNormalTranspose(
+    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
+    const ConstBlasMatrix<float>& right_matrix, const float& beta,
+    BlasMatrix<float>* output_matrix) {
+  MatrixMultiplyNormalTranspose(alpha, left_matrix, right_matrix, beta,
+                                output_matrix);
+
+  // Explicitly zero out the strictly-upper triangle of C.
+  const Int output_height = output_matrix->height;
+  for (Int j = 1; j < output_height; ++j) {
+    for (Int i = 0; i < j; ++i) {
+      output_matrix->Entry(i, j) = 0;
+    }
+  }
+}
+
+template <>
+inline void MatrixMultiplyLowerNormalTranspose(
+    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
+    const ConstBlasMatrix<double>& right_matrix, const double& beta,
+    BlasMatrix<double>* output_matrix) {
+  MatrixMultiplyNormalTranspose(alpha, left_matrix, right_matrix, beta,
+                                output_matrix);
+
+  // Explicitly zero out the strictly-upper triangle of C.
+  const Int output_height = output_matrix->height;
+  for (Int j = 1; j < output_height; ++j) {
+    for (Int i = 0; i < j; ++i) {
+      output_matrix->Entry(i, j) = 0;
+    }
+  }
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
+void MatrixMultiplyLowerTransposeNormal(
     const Field& alpha, const ConstBlasMatrix<Field>& left_matrix,
     const ConstBlasMatrix<Field>& right_matrix, const Field& beta,
     BlasMatrix<Field>* output_matrix) {
@@ -482,7 +676,7 @@ void MatrixMultiplyTransposeNormalLower(
 
 #ifdef CATAMARI_USE_GEMMT
 template <>
-inline void MatrixMultiplyTransposeNormalLower(
+inline void MatrixMultiplyLowerTransposeNormal(
     const float& alpha, const ConstBlasMatrix<float>& left_matrix,
     const ConstBlasMatrix<float>& right_matrix, const float& beta,
     BlasMatrix<float>* output_matrix) {
@@ -502,7 +696,7 @@ inline void MatrixMultiplyTransposeNormalLower(
 }
 
 template <>
-inline void MatrixMultiplyTransposeNormalLower(
+inline void MatrixMultiplyLowerTransposeNormal(
     const double& alpha, const ConstBlasMatrix<double>& left_matrix,
     const ConstBlasMatrix<double>& right_matrix, const double& beta,
     BlasMatrix<double>* output_matrix) {
@@ -522,41 +716,35 @@ inline void MatrixMultiplyTransposeNormalLower(
 }
 #elif defined(CATAMARI_HAVE_BLAS)
 template <>
-inline void MatrixMultiplyTransposeNormalLower(
-    Int output_height, Int contraction_size, const float& alpha,
-    const float* left_matrix, Int left_leading_dim, const float* right_matrix,
-    Int right_leading_dim, const float& beta, float* output_matrix,
-    Int output_leading_dim) {
-  // TODO(Jack Poulson): Save a factor of two if we have MKL via GEMMT.
-  MatrixMultiplyTransposeNormal(output_height, output_height, contraction_size,
-                                alpha, left_matrix, left_leading_dim,
-                                right_matrix, right_leading_dim, beta,
-                                output_matrix, output_leading_dim);
+inline void MatrixMultiplyLowerTransposeNormal(
+    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
+    const ConstBlasMatrix<float>& right_matrix, const float& beta,
+    BlasMatrix<float>* output_matrix) {
+  MatrixMultiplyTransposeNormal(alpha, left_matrix, right_matrix, beta,
+                                output_matrix);
 
   // Explicitly zero out the strictly-upper triangle of C.
+  const Int output_height = output_matrix->height;
   for (Int j = 1; j < output_height; ++j) {
     for (Int i = 0; i < j; ++i) {
-      output_matrix[i + j * output_leading_dim] = 0;
+      output_matrix->Entry(i, j) = 0;
     }
   }
 }
 
 template <>
-inline void MatrixMultiplyTransposeNormalLower(
-    Int output_height, Int contraction_size, const double& alpha,
-    const double* left_matrix, Int left_leading_dim, const double* right_matrix,
-    Int right_leading_dim, const double& beta, double* output_matrix,
-    Int output_leading_dim) {
-  // TODO(Jack Poulson): Save a factor of two if we have MKL via GEMMT.
-  MatrixMultiplyTransposeNormal(output_height, output_height, contraction_size,
-                                alpha, left_matrix, left_leading_dim,
-                                right_matrix, right_leading_dim, beta,
-                                output_matrix, output_leading_dim);
+inline void MatrixMultiplyLowerTransposeNormal(
+    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
+    const ConstBlasMatrix<float>& right_matrix, const float& beta,
+    BlasMatrix<float>* output_matrix) {
+  MatrixMultiplyTransposeNormal(alpha, left_matrix, right_matrix, beta,
+                                output_matrix);
 
   // Explicitly zero out the strictly-upper triangle of C.
+  const Int output_height = output_matrix->height;
   for (Int j = 1; j < output_height; ++j) {
     for (Int i = 0; i < j; ++i) {
-      output_matrix[i + j * output_leading_dim] = 0;
+      output_matrix->Entry(i, j) = 0;
     }
   }
 }
@@ -729,7 +917,6 @@ inline void RightLowerAdjointTriangularSolves(
   const float alpha = 1.f;
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
-
   BLAS_SYMBOL(strsm)
   (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
    triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
@@ -749,7 +936,62 @@ inline void RightLowerAdjointTriangularSolves(
   const double alpha = 1.f;
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
+  BLAS_SYMBOL(dtrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
 
+template <class Field>
+void RightLowerAdjointUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* matrix) {
+  const Int height = matrix->height;
+  const Int width = matrix->width;
+  for (Int i = 0; i < height; ++i) {
+    for (Int j = 0; j < width; ++j) {
+      const Field eta = matrix->Entry(i, j);
+      for (Int k = j + 1; k < width; ++k) {
+        matrix->Entry(i, k) -= eta * Conjugate(triangular_matrix(k, j));
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void RightLowerAdjointUnitTriangularSolves(
+    const ConstBlasMatrix<float>& triangular_matrix,
+    BlasMatrix<float>* matrix) {
+  const char side = 'R';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'U';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const float alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BLAS_SYMBOL(strsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void RightLowerAdjointUnitTriangularSolves(
+    const ConstBlasMatrix<double>& triangular_matrix,
+    BlasMatrix<double>* matrix) {
+  const char side = 'R';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'U';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const double alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(dtrsm)
   (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
    triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
