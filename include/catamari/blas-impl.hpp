@@ -47,6 +47,20 @@ void BLAS_SYMBOL(dsyr)(const char* uplo, const BlasInt* height,
                        const BlasInt* stride, double* matrix,
                        const BlasInt* leading_dim);
 
+void BLAS_SYMBOL(dgemv)(const char* trans, const BlasInt* height,
+                        const BlasInt* width, const double* alpha,
+                        const double* matrix, const BlasInt* leading_dim,
+                        const double* input_vector, const BlasInt* input_stride,
+                        const double* beta, double* result,
+                        const BlasInt* result_stride);
+
+void BLAS_SYMBOL(sgemv)(const char* trans, const BlasInt* height,
+                        const BlasInt* width, const float* alpha,
+                        const float* matrix, const BlasInt* leading_dim,
+                        const float* input_vector, const BlasInt* input_stride,
+                        const float* beta, float* result,
+                        const BlasInt* result_stride);
+
 void BLAS_SYMBOL(dtrsv)(const char* uplo, const char* trans, const char* diag,
                         const BlasInt* height, const double* triangular_matrix,
                         const BlasInt* triang_leading_dim, double* vector,
@@ -225,6 +239,127 @@ inline ConstBlasMatrix<T> BlasMatrix<T>::Submatrix(Int row_beg, Int column_beg,
   submatrix.data = Pointer(row_beg, column_beg);
   return submatrix;
 }
+
+template <class Field>
+void MatrixVectorProduct(
+    const Field& alpha, const ConstBlasMatrix<Field>& matrix,
+    const Field* input_vector, Field* result) {
+  const Int height = matrix.height;
+  const Int width = matrix.width;
+  const Int leading_dim = matrix.leading_dim;
+  for (Int j = 0; j < width; ++j) {
+    for (Int i = 0; i < height; ++i) {
+      result[i] += alpha * matrix(i, j) * input_vector[j];
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void MatrixVectorProduct(
+    const float& alpha, const ConstBlasMatrix<float>& matrix,
+    const float* input_vector, float* result) {
+  const char trans = 'N';
+  const BlasInt height_blas = matrix.height;
+  const BlasInt width_blas = matrix.width;
+  const BlasInt leading_dim_blas = matrix.leading_dim;
+  const BlasInt unit_stride_blas = 1; 
+  const float beta = 1;
+  BLAS_SYMBOL(sgemv)(&trans, &height_blas, &width_blas, &alpha, matrix.data,
+                     &leading_dim_blas, input_vector, &unit_stride_blas,
+                     &beta, result, &unit_stride_blas);
+}
+
+template <>
+inline void MatrixVectorProduct(
+    const double& alpha, const ConstBlasMatrix<double>& matrix,
+    const double* input_vector, double* result) {
+  const char trans = 'N';
+  const BlasInt height_blas = matrix.height;
+  const BlasInt width_blas = matrix.width;
+  const BlasInt leading_dim_blas = matrix.leading_dim;
+  const BlasInt unit_stride_blas = 1; 
+  const double beta = 1;
+  BLAS_SYMBOL(dgemv)(&trans, &height_blas, &width_blas, &alpha, matrix.data,
+                     &leading_dim_blas, input_vector, &unit_stride_blas,
+                     &beta, result, &unit_stride_blas);
+}
+#endif
+
+template <class Field>
+void ConjugateMatrixVectorProduct(
+    const Field& alpha, const ConstBlasMatrix<Field>& matrix,
+    const Field* input_vector, Field* result) {
+  const Int height = matrix.height;
+  const Int width = matrix.width;
+  const Int leading_dim = matrix.leading_dim;
+  for (Int j = 0; j < width; ++j) {
+    for (Int i = 0; i < height; ++i) {
+      result[i] += alpha * Conjugate(matrix(i, j)) * input_vector[j];
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void ConjugateMatrixVectorProduct(
+    const float& alpha, const ConstBlasMatrix<float>& matrix,
+    const float* input_vector, float* result) {
+  MatrixVectorProduct(alpha, matrix, input_vector, result);
+}
+
+template <>
+inline void ConjugateMatrixVectorProduct(
+    const double& alpha, const ConstBlasMatrix<double>& matrix,
+    const double* input_vector, double* result) {
+  MatrixVectorProduct(alpha, matrix, input_vector, result);
+}
+#endif
+
+template <class Field>
+void TransposeMatrixVectorProduct(
+    const Field& alpha, const ConstBlasMatrix<Field>& matrix,
+    const Field* input_vector, Field* result) {
+  const Int height = matrix.height;
+  const Int width = matrix.width;
+  for (Int j = 0; j < width; ++j) {
+    for (Int i = 0; i < height; ++i) {
+      result[j] += alpha * matrix(i, j) * input_vector[i];
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void TransposeMatrixVectorProduct(
+    const float& alpha, const ConstBlasMatrix<float>& matrix,
+    const float* input_vector, float* result) {
+  const char trans = 'T';
+  const BlasInt height_blas = matrix.height;
+  const BlasInt width_blas = matrix.width;
+  const BlasInt leading_dim_blas = matrix.leading_dim;
+  const BlasInt unit_stride_blas = 1; 
+  const float beta = 1;
+  BLAS_SYMBOL(sgemv)(&trans, &height_blas, &width_blas, &alpha, matrix.data,
+                     &leading_dim_blas, input_vector, &unit_stride_blas,
+                     &beta, result, &unit_stride_blas);
+}
+
+template <>
+inline void TransposeMatrixVectorProduct(
+    const double& alpha, const ConstBlasMatrix<double>& matrix,
+    const double* input_vector, double* result) {
+  const char trans = 'T';
+  const BlasInt height_blas = matrix.height;
+  const BlasInt width_blas = matrix.width;
+  const BlasInt leading_dim_blas = matrix.leading_dim;
+  const BlasInt unit_stride_blas = 1; 
+  const double beta = 1;
+  BLAS_SYMBOL(dgemv)(&trans, &height_blas, &width_blas, &alpha, matrix.data,
+                     &leading_dim_blas, input_vector, &unit_stride_blas,
+                     &beta, result, &unit_stride_blas);
+}
+#endif
 
 template <class Field>
 void TriangularSolveLeftLower(const ConstBlasMatrix<Field>& triangular_matrix,

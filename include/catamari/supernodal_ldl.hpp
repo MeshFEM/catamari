@@ -78,11 +78,8 @@ struct SupernodalLDLFactorization {
   // supernode containing column 'i'.
   std::vector<Int> supernode_member_to_index;
 
-  // The subdiagonal-block portion of the lower-triangular factor.
-  SupernodalLowerFactor<Field> lower_factor;
-
-  // The block-diagonal factor.
-  SupernodalDiagonalFactor<Field> diagonal_factor;
+  // The largest degree of a supernode in the factorization.
+  Int largest_degree;
 
   // If the following is nonempty, then, if the permutation is a matrix P, the
   // matrix P A P' has been factored. Typically, this permutation is the
@@ -92,6 +89,20 @@ struct SupernodalLDLFactorization {
 
   // The inverse of the above permutation (if it is nontrivial).
   std::vector<Int> inverse_permutation;
+
+  // The subdiagonal-block portion of the lower-triangular factor.
+  SupernodalLowerFactor<Field> lower_factor;
+
+  // The block-diagonal factor.
+  SupernodalDiagonalFactor<Field> diagonal_factor;
+
+  // The minimal supernode size for an out-of-place trapezoidal solve to be
+  // used.
+  Int forward_solve_out_of_place_supernode_threshold;
+
+  // The minimal supernode size for an out-of-place trapezoidal solve to be
+  // used.
+  Int backward_solve_out_of_place_supernode_threshold;
 };
 
 // Configuration options for supernodal LDL' factorization.
@@ -118,7 +129,14 @@ struct SupernodalLDLControl {
   // nonzeros is bounded by 'allowable_supernode_zero_ratio', then the merge
   // can procede.
   float allowable_supernode_zero_ratio = 0.01;
-  ;
+
+  // The minimal supernode size for an out-of-place trapezoidal solve to be
+  // used.
+  Int forward_solve_out_of_place_supernode_threshold = 10;
+
+  // The minimal supernode size for an out-of-place trapezoidal solve to be
+  // used.
+  Int backward_solve_out_of_place_supernode_threshold = 10;
 };
 
 // Performs a supernodal LDL' factorization in the natural ordering.

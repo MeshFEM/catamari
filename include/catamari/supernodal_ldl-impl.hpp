@@ -446,6 +446,7 @@ void InitializeLeftLookingFactors(
   lower_factor.index_offsets.resize(num_supernodes + 1);
   lower_factor.value_offsets.resize(num_supernodes + 1);
   diagonal_factor.value_offsets.resize(num_supernodes + 1);
+  factorization->largest_degree = 0;
   Int degree_sum = 0;
   Int num_entries = 0;
   Int num_diagonal_entries = 0;
@@ -459,6 +460,8 @@ void InitializeLeftLookingFactors(
     degree_sum += degree;
     num_entries += degree * supernode_size;
     num_diagonal_entries += supernode_size * supernode_size;
+    factorization->largest_degree =
+        std::max(factorization->largest_degree, degree);
   }
   lower_factor.index_offsets[num_supernodes] = degree_sum;
   lower_factor.value_offsets[num_supernodes] = num_entries;
@@ -1657,6 +1660,10 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
   factorization->permutation = permutation;
   factorization->inverse_permutation = inverse_permutation;
   factorization->is_cholesky = control.use_cholesky;
+  factorization->forward_solve_out_of_place_supernode_threshold =
+      control.forward_solve_out_of_place_supernode_threshold;
+  factorization->backward_solve_out_of_place_supernode_threshold =
+      control.backward_solve_out_of_place_supernode_threshold;
   return supernodal_ldl::LeftLooking(matrix, control, factorization);
 }
 
@@ -1698,6 +1705,8 @@ void LowerTriangularSolve(
       factorization.diagonal_factor;
   const bool is_cholesky = factorization.is_cholesky;
 
+  std::vector<Field> workspace(factorization.largest_degree, Field{0});
+
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
     const Int supernode_start = factorization.supernode_starts[supernode];
@@ -1722,16 +1731,35 @@ void LowerTriangularSolve(
     }
 
     // Handle the external updates for this supernode.
-    // TODO(Jack Poulson): Replace with an out-of-place GEMV.
-    for (Int j = 0; j < supernode_size; ++j) {
-      const Int column = supernode_start + j;
-      const Field& eta = (*vector)[column];
+    if (supernode_size >=
+        factorization.forward_solve_out_of_place_supernode_threshold) {
+      // Perform an out-of-place GEMV.
+      ConstBlasMatrix<Field> subdiagonal;
+      subdiagonal.height = supernode_size;
+      subdiagonal.width = degree;
+      subdiagonal.leading_dim = supernode_size;
+      subdiagonal.data = &lower_factor.values[value_beg];
+
+      TransposeMatrixVectorProduct(
+          Field{-1}, subdiagonal, vector->data() + supernode_start,
+          workspace.data());
 
       for (Int i = 0; i < degree; ++i) {
         const Int row = lower_factor.indices[index_beg + i];
-        const Field& value =
-            lower_factor.values[value_beg + i * supernode_size + j];
-        (*vector)[row] -= value * eta;
+        (*vector)[row] += workspace[i];
+        workspace[i] = 0;
+      }
+    } else {
+      for (Int j = 0; j < supernode_size; ++j) {
+        const Int column = supernode_start + j;
+        const Field& eta = (*vector)[column];
+  
+        for (Int i = 0; i < degree; ++i) {
+          const Int row = lower_factor.indices[index_beg + i];
+          const Field& value =
+              lower_factor.values[value_beg + i * supernode_size + j];
+          (*vector)[row] -= value * eta;
+        }
       }
     }
   }
@@ -1774,6 +1802,8 @@ void LowerAdjointTriangularSolve(
       factorization.diagonal_factor;
   const bool is_cholesky = factorization.is_cholesky;
 
+  std::vector<Field> workspace(factorization.largest_degree);
+
   for (Int supernode = num_supernodes - 1; supernode >= 0; --supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
     const Int supernode_start = factorization.supernode_starts[supernode];
@@ -1783,17 +1813,34 @@ void LowerAdjointTriangularSolve(
     const Int value_beg = lower_factor.value_offsets[supernode];
 
     // Handle the external updates for this supernode.
-    // TODO(Jack Poulson): Replace with an out-of-place GEMV.
-    for (Int j = supernode_size - 1; j >= 0; --j) {
-      const Int column = supernode_start + j;
-      Field& eta = (*vector)[column];
-
-      // Handle the below-diagonal portion of this supernode.
-      const Field* value_column = &lower_factor.values[value_beg + j];
+    if (supernode_size >=
+        factorization.backward_solve_out_of_place_supernode_threshold) {
       for (Int i = 0; i < degree; ++i) {
         const Int row = lower_factor.indices[index_beg + i];
-        const Field& value = value_column[i * supernode_size];
-        eta -= Conjugate(value) * (*vector)[row];
+        workspace[i] = (*vector)[row];
+      }
+
+      ConstBlasMatrix<Field> subdiagonal;
+      subdiagonal.height = supernode_size;
+      subdiagonal.width = degree;
+      subdiagonal.leading_dim = supernode_size;
+      subdiagonal.data = &lower_factor.values[value_beg];
+
+      ConjugateMatrixVectorProduct(
+          Field{-1}, subdiagonal, workspace.data(),
+          vector->data() + supernode_start);
+    } else {
+      for (Int j = supernode_size - 1; j >= 0; --j) {
+        const Int column = supernode_start + j;
+        Field& eta = (*vector)[column];
+  
+        // Handle the below-diagonal portion of this supernode.
+        const Field* value_column = &lower_factor.values[value_beg + j];
+        for (Int i = 0; i < degree; ++i) {
+          const Int row = lower_factor.indices[index_beg + i];
+          const Field& value = value_column[i * supernode_size];
+          eta -= Conjugate(value) * (*vector)[row];
+        }
       }
     }
 
