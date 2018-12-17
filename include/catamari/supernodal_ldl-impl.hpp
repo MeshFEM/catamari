@@ -1066,7 +1066,7 @@ inline MergableStatus MergableSupernode(
     Int num_child_explicit_zeros, Int num_parent_explicit_zeros,
     const std::vector<Int>& orig_member_to_index,
     const ScalarLowerStructure& scalar_structure,
-    const SupernodalLDLControl& control) {
+    const SupernodalRelaxationControl& control) {
   const Int parent = orig_member_to_index[parent_tail];
   const Int child_structure_beg = scalar_structure.column_offsets[child_tail];
   const Int child_structure_end =
@@ -1155,9 +1155,9 @@ inline void MergeChildren(
     const std::vector<Int>& orig_member_to_index,
     const std::vector<Int>& children, const std::vector<Int>& child_offsets,
     const ScalarLowerStructure& scalar_structure,
-    const SupernodalLDLControl& control, std::vector<Int>* supernode_sizes,
-    std::vector<Int>* num_explicit_zeros, std::vector<Int>* last_merged_child,
-    std::vector<Int>* merge_parents) {
+    const SupernodalRelaxationControl& control,
+    std::vector<Int>* supernode_sizes, std::vector<Int>* num_explicit_zeros,
+    std::vector<Int>* last_merged_child, std::vector<Int>* merge_parents) {
   const Int child_beg = child_offsets[parent];
   const Int num_children = child_offsets[parent + 1] - child_beg;
 
@@ -1275,20 +1275,25 @@ inline void EliminationForestFromParents(const std::vector<Int>& parents,
 }
 
 // Walk up the tree in the original postordering, merging supernodes as we
-// progress.
-template <class Field>
-void RelaxSupernodes(const std::vector<Int>& orig_parents,
-                     const std::vector<Int>& orig_supernode_sizes,
-                     const std::vector<Int>& orig_supernode_starts,
-                     const std::vector<Int>& orig_supernode_parents,
-                     const std::vector<Int>& orig_supernode_degrees,
-                     const std::vector<Int>& orig_member_to_index,
-                     const ScalarLowerStructure& scalar_structure,
-                     const SupernodalLDLControl& control,
-                     std::vector<Int>* relaxed_parents,
-                     std::vector<Int>* relaxed_supernode_parents,
-                     std::vector<Int>* relaxed_supernode_degrees,
-                     SupernodalLDLFactorization<Field>* factorization) {
+// progress. The 'relaxed_permutation' and 'relaxed_inverse_permutation'
+// variables are also inputs.
+inline void RelaxSupernodes(
+    const std::vector<Int>& orig_parents,
+    const std::vector<Int>& orig_supernode_sizes,
+    const std::vector<Int>& orig_supernode_starts,
+    const std::vector<Int>& orig_supernode_parents,
+    const std::vector<Int>& orig_supernode_degrees,
+    const std::vector<Int>& orig_member_to_index,
+    const ScalarLowerStructure& scalar_structure,
+    const SupernodalRelaxationControl& control,
+    std::vector<Int>* relaxed_permutation,
+    std::vector<Int>* relaxed_inverse_permutation,
+    std::vector<Int>* relaxed_parents,
+    std::vector<Int>* relaxed_supernode_parents,
+    std::vector<Int>* relaxed_supernode_degrees,
+    std::vector<Int>* relaxed_supernode_sizes,
+    std::vector<Int>* relaxed_supernode_starts,
+    std::vector<Int>* relaxed_supernode_member_to_index) {
   const Int num_rows = orig_supernode_starts.back();
   const Int num_supernodes = orig_supernode_sizes.size();
 
@@ -1360,9 +1365,9 @@ void RelaxSupernodes(const std::vector<Int>& orig_parents,
   // offsets.
   std::vector<Int> relaxation_inverse_permutation(num_rows);
   {
-    factorization->supernode_sizes.resize(num_relaxed_supernodes);
-    factorization->supernode_starts.resize(num_relaxed_supernodes + 1);
-    factorization->supernode_member_to_index.resize(num_rows);
+    relaxed_supernode_sizes->resize(num_relaxed_supernodes);
+    relaxed_supernode_starts->resize(num_relaxed_supernodes + 1);
+    relaxed_supernode_member_to_index->resize(num_rows);
     Int pack_offset = 0;
     for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
       if (merge_parents[supernode] != -1) {
@@ -1377,15 +1382,14 @@ void RelaxSupernodes(const std::vector<Int>& orig_parents,
       }
 
       // Pack the merge sequence and count its total size.
-      factorization->supernode_starts[relaxed_supernode] = pack_offset;
+      (*relaxed_supernode_starts)[relaxed_supernode] = pack_offset;
       Int supernode_size = 0;
       Int supernode_to_pack = leaf_of_merge;
       while (true) {
         const Int start = orig_supernode_starts[supernode_to_pack];
         const Int size = orig_supernode_sizes[supernode_to_pack];
         for (Int j = 0; j < size; ++j) {
-          factorization->supernode_member_to_index[pack_offset] =
-              relaxed_supernode;
+          (*relaxed_supernode_member_to_index)[pack_offset] = relaxed_supernode;
           relaxation_inverse_permutation[pack_offset++] = start + j;
         }
         supernode_size += size;
@@ -1395,10 +1399,10 @@ void RelaxSupernodes(const std::vector<Int>& orig_parents,
         }
         supernode_to_pack = merge_parents[supernode_to_pack];
       }
-      factorization->supernode_sizes[relaxed_supernode] = supernode_size;
+      (*relaxed_supernode_sizes)[relaxed_supernode] = supernode_size;
     }
     CATAMARI_ASSERT(num_rows == pack_offset, "Did not pack num_rows indices.");
-    factorization->supernode_starts[num_relaxed_supernodes] = num_rows;
+    (*relaxed_supernode_starts)[num_relaxed_supernodes] = num_rows;
   }
 
   // Compute the relaxation permutation.
@@ -1420,18 +1424,18 @@ void RelaxSupernodes(const std::vector<Int>& orig_parents,
   }
 
   // Compose the relaxation permutation with the original permutation.
-  if (factorization->permutation.empty()) {
-    factorization->permutation = relaxation_permutation;
-    factorization->inverse_permutation = relaxation_inverse_permutation;
+  if (relaxed_permutation->empty()) {
+    *relaxed_permutation = relaxation_permutation;
+    *relaxed_inverse_permutation = relaxation_inverse_permutation;
   } else {
-    std::vector<Int> perm_copy = factorization->permutation;
+    std::vector<Int> perm_copy = *relaxed_permutation;
     for (Int row = 0; row < num_rows; ++row) {
-      factorization->permutation[row] = relaxation_permutation[perm_copy[row]];
+      (*relaxed_permutation)[row] = relaxation_permutation[perm_copy[row]];
     }
 
     // Invert the composed permutation.
     for (Int row = 0; row < num_rows; ++row) {
-      factorization->inverse_permutation[factorization->permutation[row]] = row;
+      (*relaxed_inverse_permutation)[(*relaxed_permutation)[row]] = row;
     }
   }
 }
@@ -1486,11 +1490,17 @@ void FormSupernodes(const CoordinateMatrix<Field>& matrix,
       num_orig_supernodes, orig_parents, orig_member_to_index,
       &orig_supernode_parents);
 
-  if (control.relax_supernodes) {
+  if (control.relaxation_control.relax_supernodes) {
     RelaxSupernodes(orig_parents, orig_supernode_sizes, orig_supernode_starts,
                     orig_supernode_parents, orig_supernode_degrees,
-                    orig_member_to_index, scalar_structure, control, parents,
-                    supernode_parents, supernode_degrees, factorization);
+                    orig_member_to_index, scalar_structure,
+                    control.relaxation_control,
+                    &factorization->permutation,
+                    &factorization->inverse_permutation, parents,
+                    supernode_parents, supernode_degrees,
+                    &factorization->supernode_sizes,
+                    &factorization->supernode_starts,
+                    &factorization->supernode_member_to_index);
   } else {
     *parents = orig_parents;
     *supernode_degrees = orig_supernode_degrees;

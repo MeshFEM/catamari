@@ -105,14 +105,7 @@ struct SupernodalLDLFactorization {
   Int backward_solve_out_of_place_supernode_threshold;
 };
 
-// Configuration options for supernodal LDL' factorization.
-struct SupernodalLDLControl {
-  // Assume that the matrix is numerically Hermitian Positive-Definite so that
-  // square-roots of the diagonal can be taken and we may choose D = I. If this
-  // option is enabled, L is lower-triangular with a positive diagonal;
-  // otherwise, L has a unit diagonal.
-  bool use_cholesky = false;
-
+struct SupernodalRelaxationControl {
   // If true, relaxed supernodes are created in a manner similar to the
   // suggestion from:
   //   Ashcraft and Grime, "The impact of relaxed supernode partitions on the
@@ -129,6 +122,18 @@ struct SupernodalLDLControl {
   // nonzeros is bounded by 'allowable_supernode_zero_ratio', then the merge
   // can procede.
   float allowable_supernode_zero_ratio = 0.01;
+};
+
+// Configuration options for supernodal LDL' factorization.
+struct SupernodalLDLControl {
+  // Assume that the matrix is numerically Hermitian Positive-Definite so that
+  // square-roots of the diagonal can be taken and we may choose D = I. If this
+  // option is enabled, L is lower-triangular with a positive diagonal;
+  // otherwise, L has a unit diagonal.
+  bool use_cholesky = false;
+
+  // Configuration for the supernodal relaxation.
+  SupernodalRelaxationControl relaxation_control;
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.

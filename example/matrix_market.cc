@@ -368,11 +368,12 @@ int main(int argc, char** argv) {
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
   ldl_control.supernodal_control.use_cholesky = use_cholesky;
-  ldl_control.supernodal_control.relax_supernodes = relax_supernodes;
-  ldl_control.supernodal_control.allowable_supernode_zeros =
+  ldl_control.supernodal_control.relaxation_control.relax_supernodes =
+      relax_supernodes;
+  ldl_control.supernodal_control.relaxation_control.allowable_supernode_zeros =
       allowable_supernode_zeros;
-  ldl_control.supernodal_control.allowable_supernode_zero_ratio =
-      allowable_supernode_zero_ratio;
+  ldl_control.supernodal_control.relaxation_control.
+      allowable_supernode_zero_ratio = allowable_supernode_zero_ratio;
 
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
