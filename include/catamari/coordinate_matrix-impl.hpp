@@ -385,6 +385,12 @@ const MatrixEntry<Field>& CoordinateMatrix<Field>::Entry(Int entry_index) const
 }
 
 template <class Field>
+std::vector<MatrixEntry<Field>>& CoordinateMatrix<Field>::Entries()
+    CATAMARI_NOEXCEPT {
+  return entries_;
+}
+
+template <class Field>
 const std::vector<MatrixEntry<Field>>& CoordinateMatrix<Field>::Entries() const
     CATAMARI_NOEXCEPT {
   return entries_;

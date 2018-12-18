@@ -18,6 +18,11 @@ Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix);
 template <class Field>
 Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
 
+template <class Field>
+std::vector<Int> LowerFactorAndSampleDPP(
+    BlasMatrix<Field>* matrix, std::mt19937* generator,
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist);
+
 }  // namespace catamari
 
 #include "catamari/lapack-impl.hpp"

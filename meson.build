@@ -102,10 +102,18 @@ coordinate_matrix_test_exe = executable(
     dependencies : deps,
     cpp_args : cxx_args)
 
-# A utility for running the MinimumDegree analysis on a Matrix Market graph.
-matrix_market_exe = executable(
-    'matrix_market',
-    ['example/matrix_market.cc', 'include/catamari.hpp'],
+# A utility for factoring a Matrix Market input.
+factor_matrix_market_exe = executable(
+    'factor_matrix_market',
+    ['example/factor_matrix_market.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps,
+    cpp_args : cxx_args)
+
+# A utility for sampling a DPP from a Matrix Market input.
+dpp_matrix_market_exe = executable(
+    'dpp_matrix_market',
+    ['example/dpp_matrix_market.cc', 'include/catamari.hpp'],
     include_directories : include_dir,
     dependencies : deps,
     cpp_args : cxx_args)

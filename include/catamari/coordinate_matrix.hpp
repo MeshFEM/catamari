@@ -173,6 +173,10 @@ class CoordinateMatrix {
   const MatrixEntry<Field>& Entry(Int entry_index) const CATAMARI_NOEXCEPT;
 
   // Returns a reference to the underlying vector of entries.
+  // NOTE: Only the values are meant to be directly modified.
+  std::vector<MatrixEntry<Field>>& Entries() CATAMARI_NOEXCEPT;
+
+  // Returns a reference to the underlying vector of entries.
   const std::vector<MatrixEntry<Field>>& Entries() const CATAMARI_NOEXCEPT;
 
   // Returns the offset into the entry vector where entries from the given row

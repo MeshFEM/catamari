@@ -80,8 +80,8 @@ void MakeHermitian(catamari::CoordinateMatrix<Field>* matrix) {
 
 // Adds diagonal_shift to each entry of the diagonal.
 template <typename Field>
-void AddDiagonalShift(
-    Field diagonal_shift, catamari::CoordinateMatrix<Field>* matrix) {
+void AddDiagonalShift(Field diagonal_shift,
+                      catamari::CoordinateMatrix<Field>* matrix) {
   const Int num_rows = matrix->NumRows();
   matrix->ReserveEntryAdditions(num_rows);
   for (Int i = 0; i < num_rows; ++i) {
@@ -165,9 +165,9 @@ Experiment RunMatrixMarketTest(
   Experiment experiment;
 
   // Read the matrix from file.
-  std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix = LoadMatrix(
-      filename, skip_explicit_zeros, mask, force_symmetry, diagonal_shift,
-      print_progress);
+  std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix =
+      LoadMatrix(filename, skip_explicit_zeros, mask, force_symmetry,
+                 diagonal_shift, print_progress);
   if (!matrix) {
     return experiment;
   }
@@ -180,8 +180,8 @@ Experiment RunMatrixMarketTest(
   quotient::Timer factorization_timer;
   factorization_timer.Start();
   catamari::LDLFactorization<Field> ldl_factorization;
-  const catamari::LDLResult result = catamari::LDL(
-      *matrix, md_control, ldl_control, &ldl_factorization);
+  const catamari::LDLResult result =
+      catamari::LDL(*matrix, md_control, ldl_control, &ldl_factorization);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (result.num_successful_pivots < num_rows) {
     std::cout << "  Failed factorization after " << result.num_successful_pivots
@@ -210,8 +210,8 @@ Experiment RunMatrixMarketTest(
 
   // Compute the residual.
   auto residual = right_hand_side;
-  catamari::MatrixVectorProduct(
-      Field{-1}, *matrix, solution, Field{1}, &residual);
+  catamari::MatrixVectorProduct(Field{-1}, *matrix, solution, Field{1},
+                                &residual);
   const BaseField residual_norm = EuclideanNorm(residual);
   std::cout << "  || b - A x ||_F / || b ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
@@ -249,10 +249,10 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
   for (const std::string& matrix_name : matrix_names) {
     const std::string filename = matrix_market_directory + "/" + matrix_name +
                                  "/" + matrix_name + ".mtx";
-    experiments[matrix_name] = RunMatrixMarketTest(
-        filename, skip_explicit_zeros, mask, md_control, disable_reordering,
-        force_symmetry, diagonal_shift, ldl_control, print_progress,
-        write_permuted_matrix);
+    experiments[matrix_name] =
+        RunMatrixMarketTest(filename, skip_explicit_zeros, mask, md_control,
+                            disable_reordering, force_symmetry, diagonal_shift,
+                            ldl_control, print_progress, write_permuted_matrix);
   }
 
   return experiments;
@@ -298,14 +298,16 @@ int main(int argc, char** argv) {
       "force_symmetry", "Use the nonzero pattern of A + A'?", true);
   const bool use_cholesky = parser.OptionalInput<bool>(
       "use_cholesky", "Use a Cholesky factorization?", false);
-  const int supernodal_strategy_int = parser.OptionalInput<int>(
-      "supernodal_strategy_int", "The SupernodalStrategy int.\n"
-      "0:scalar, 1:supernodal, 2:adaptive", 2);
+  const int supernodal_strategy_int =
+      parser.OptionalInput<int>("supernodal_strategy_int",
+                                "The SupernodalStrategy int.\n"
+                                "0:scalar, 1:supernodal, 2:adaptive",
+                                2);
   const bool relax_supernodes = parser.OptionalInput<bool>(
       "relax_supernodes", "Relax the supernodes?", true);
-  const Int allowable_supernode_zeros = parser.OptionalInput<Int>(
-      "allowable_supernode_zeros", "Number of zeros allowed in relaxations.",
-      128);
+  const Int allowable_supernode_zeros =
+      parser.OptionalInput<Int>("allowable_supernode_zeros",
+                                "Number of zeros allowed in relaxations.", 128);
   const float allowable_supernode_zero_ratio = parser.OptionalInput<float>(
       "allowable_supernode_zero_ratio",
       "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
@@ -372,8 +374,8 @@ int main(int argc, char** argv) {
       relax_supernodes;
   ldl_control.supernodal_control.relaxation_control.allowable_supernode_zeros =
       allowable_supernode_zeros;
-  ldl_control.supernodal_control.relaxation_control.
-      allowable_supernode_zero_ratio = allowable_supernode_zero_ratio;
+  ldl_control.supernodal_control.relaxation_control
+      .allowable_supernode_zero_ratio = allowable_supernode_zero_ratio;
 
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
@@ -384,10 +386,10 @@ int main(int argc, char** argv) {
       PrintExperiment(pairing.second, pairing.first);
     }
   } else {
-    const Experiment experiment = RunMatrixMarketTest(
-        filename, skip_explicit_zeros, mask, md_control, disable_reordering,
-        force_symmetry, diagonal_shift, ldl_control, print_progress,
-        write_permuted_matrix);
+    const Experiment experiment =
+        RunMatrixMarketTest(filename, skip_explicit_zeros, mask, md_control,
+                            disable_reordering, force_symmetry, diagonal_shift,
+                            ldl_control, print_progress, write_permuted_matrix);
     PrintExperiment(experiment, filename);
   }
 

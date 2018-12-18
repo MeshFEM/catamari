@@ -273,10 +273,9 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
 // Fills in the sizes of the supernodal intersections.
 template <class Field>
-void FillIntersections(
-    const std::vector<Int>& supernode_sizes,
-    const std::vector<Int>& supernode_member_to_index,
-    SupernodalLowerFactor<Field>* lower_factor) {
+void FillIntersections(const std::vector<Int>& supernode_sizes,
+                       const std::vector<Int>& supernode_member_to_index,
+                       SupernodalLowerFactor<Field>* lower_factor) {
   const Int num_supernodes = supernode_sizes.size();
 
   // Compute the supernode offsets.
@@ -473,15 +472,15 @@ void InitializeLeftLookingFactors(
       matrix, factorization->permutation, factorization->inverse_permutation,
       parents, factorization->supernode_sizes,
       factorization->supernode_member_to_index, &factorization->lower_factor);
-  FillIntersections(
-      factorization->supernode_sizes, factorization->supernode_member_to_index,
-      &factorization->lower_factor);
+  FillIntersections(factorization->supernode_sizes,
+                    factorization->supernode_member_to_index,
+                    &factorization->lower_factor);
 
-  FillNonzeros(
-      matrix, factorization->permutation, factorization->inverse_permutation,
-      factorization->supernode_starts, factorization->supernode_sizes,
-      factorization->supernode_member_to_index, &factorization->lower_factor,
-      &factorization->diagonal_factor);
+  FillNonzeros(matrix, factorization->permutation,
+               factorization->inverse_permutation,
+               factorization->supernode_starts, factorization->supernode_sizes,
+               factorization->supernode_member_to_index,
+               &factorization->lower_factor, &factorization->diagonal_factor);
 }
 
 // Computes the supernodal nonzero pattern of L(row, :) in
@@ -544,15 +543,14 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
 // The matrix will be packed into the first
 // descendant_supernode_size x descendant_main_intersect_size entries.
 template <class Field>
-void FormScaledAdjoint(
-    bool is_cholesky,
-    const std::vector<Int>& supernode_sizes,
-    const SupernodalLowerFactor<Field>& lower_factor,
-    const SupernodalDiagonalFactor<Field>& diagonal_factor,
-    Int descendant_supernode,
-    Int descendant_main_intersect_size,
-    Int descendant_main_value_beg,
-    Field* scaled_adjoint_buffer) {
+void FormScaledAdjoint(bool is_cholesky,
+                       const std::vector<Int>& supernode_sizes,
+                       const SupernodalLowerFactor<Field>& lower_factor,
+                       const SupernodalDiagonalFactor<Field>& diagonal_factor,
+                       Int descendant_supernode,
+                       Int descendant_main_intersect_size,
+                       Int descendant_main_value_beg,
+                       Field* scaled_adjoint_buffer) {
   const Int descendant_supernode_size = supernode_sizes[descendant_supernode];
 
   const Field* descendant_main_block =
@@ -596,10 +594,10 @@ template <class Field>
 void UpdateDiagonalBlock(
     bool is_cholesky, const std::vector<Int>& supernode_starts,
     const std::vector<Int>& supernode_sizes,
-    const SupernodalLowerFactor<Field>& lower_factor,
-    Int main_supernode, Int descendant_supernode,
-    Int descendant_main_intersect_size, Int descendant_main_index_beg,
-    Int descendant_main_value_beg, const Field* scaled_adjoint_buffer,
+    const SupernodalLowerFactor<Field>& lower_factor, Int main_supernode,
+    Int descendant_supernode, Int descendant_main_intersect_size,
+    Int descendant_main_index_beg, Int descendant_main_value_beg,
+    const Field* scaled_adjoint_buffer,
     SupernodalDiagonalFactor<Field>* diagonal_factor, Field* update_buffer) {
   const Int main_supernode_size = supernode_sizes[main_supernode];
   const Int descendant_supernode_size = supernode_sizes[descendant_supernode];
@@ -674,11 +672,11 @@ template <class Field>
 void UpdateSubdiagonalBlock(
     const std::vector<Int>& supernode_starts,
     const std::vector<Int>& supernode_sizes,
-    const std::vector<Int>& supernode_member_to_index,
-    Int main_supernode, Int descendant_supernode,
-    Int descendant_main_intersect_size, Int descendant_main_index_beg,
-    Int descendant_active_intersect_size, Int descendant_active_index_beg,
-    Int descendant_active_value_beg, const Field* scaled_adjoint_buffer,
+    const std::vector<Int>& supernode_member_to_index, Int main_supernode,
+    Int descendant_supernode, Int descendant_main_intersect_size,
+    Int descendant_main_index_beg, Int descendant_active_intersect_size,
+    Int descendant_active_index_beg, Int descendant_active_value_beg,
+    const Field* scaled_adjoint_buffer,
     SupernodalLowerFactor<Field>* lower_factor,
     Int* main_active_intersect_size_beg, Int* main_active_index_beg,
     Int* main_active_value_beg, Field* update_buffer) {
@@ -696,8 +694,9 @@ void UpdateSubdiagonalBlock(
 
   Int main_active_intersect_size =
       lower_factor->intersect_sizes[*main_active_intersect_size_beg];
-  while (supernode_member_to_index[lower_factor->indices[
-      *main_active_index_beg]] < active_supernode) {
+  while (
+      supernode_member_to_index[lower_factor->indices[*main_active_index_beg]] <
+      active_supernode) {
     *main_active_index_beg += main_active_intersect_size;
     *main_active_value_beg += main_active_intersect_size * main_supernode_size;
     ++*main_active_intersect_size_beg;
@@ -816,15 +815,14 @@ Int FactorDiagonalBlock(Int supernode,
 // L(KNext:n, K) /= D(K, K) L(K, K)'.
 template <class Field>
 void SolveAgainstDiagonalBlock(
-    Int supernode, SupernodalLDLFactorization<Field>* factorization) {
-  SupernodalLowerFactor<Field>& lower_factor = factorization->lower_factor;
-  const SupernodalDiagonalFactor<Field>& diagonal_factor =
-      factorization->diagonal_factor;
-  const Int supernode_size = factorization->supernode_sizes[supernode];
+    bool is_cholesky, Int supernode, const std::vector<Int>& supernode_sizes,
+    const SupernodalDiagonalFactor<Field>& diagonal_factor,
+    SupernodalLowerFactor<Field>* lower_factor) {
+  const Int supernode_size = supernode_sizes[supernode];
 
-  const Int index_beg = lower_factor.index_offsets[supernode];
-  const Int value_beg = lower_factor.value_offsets[supernode];
-  const Int degree = lower_factor.index_offsets[supernode + 1] - index_beg;
+  const Int index_beg = lower_factor->index_offsets[supernode];
+  const Int value_beg = lower_factor->value_offsets[supernode];
+  const Int degree = lower_factor->index_offsets[supernode + 1] - index_beg;
 
   ConstBlasMatrix<Field> triangular_matrix;
   triangular_matrix.height = supernode_size;
@@ -837,9 +835,9 @@ void SolveAgainstDiagonalBlock(
   lower_matrix.height = supernode_size;
   lower_matrix.width = degree;
   lower_matrix.leading_dim = supernode_size;
-  lower_matrix.data = &lower_factor.values[value_beg];
+  lower_matrix.data = &lower_factor->values[value_beg];
 
-  if (factorization->is_cholesky) {
+  if (is_cholesky) {
     // Solve against the lower-triangular matrix L(K, K)' from the right using
     // row-major storage of the input matrix, which is equivalent to solving
     // conj(L(K, K)) X = Y using column-major storage.
@@ -1487,16 +1485,14 @@ void FormSupernodes(const CoordinateMatrix<Field>& matrix,
       &orig_supernode_parents);
 
   if (control.relaxation_control.relax_supernodes) {
-    RelaxSupernodes(orig_parents, orig_supernode_sizes, orig_supernode_starts,
-                    orig_supernode_parents, orig_supernode_degrees,
-                    orig_member_to_index, scalar_structure,
-                    control.relaxation_control,
-                    &factorization->permutation,
-                    &factorization->inverse_permutation, parents,
-                    supernode_parents, supernode_degrees,
-                    &factorization->supernode_sizes,
-                    &factorization->supernode_starts,
-                    &factorization->supernode_member_to_index);
+    RelaxSupernodes(
+        orig_parents, orig_supernode_sizes, orig_supernode_starts,
+        orig_supernode_parents, orig_supernode_degrees, orig_member_to_index,
+        scalar_structure, control.relaxation_control,
+        &factorization->permutation, &factorization->inverse_permutation,
+        parents, supernode_parents, supernode_degrees,
+        &factorization->supernode_sizes, &factorization->supernode_starts,
+        &factorization->supernode_member_to_index);
   } else {
     *parents = orig_parents;
     *supernode_degrees = orig_supernode_degrees;
@@ -1621,14 +1617,13 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
             lower_factor.intersect_sizes[descendant_active_intersect_size_beg];
         UpdateSubdiagonalBlock(
             factorization->supernode_starts, factorization->supernode_sizes,
-            factorization->supernode_member_to_index,
-            main_supernode, descendant_supernode,
-            descendant_main_intersect_size, descendant_main_index_beg,
-            descendant_active_intersect_size, descendant_active_index_beg,
-            descendant_active_value_beg, scaled_adjoint_buffer.data(),
-            &factorization->lower_factor, &main_active_intersect_size_beg,
-            &main_active_index_beg, &main_active_value_beg,
-            update_buffer.data());
+            factorization->supernode_member_to_index, main_supernode,
+            descendant_supernode, descendant_main_intersect_size,
+            descendant_main_index_beg, descendant_active_intersect_size,
+            descendant_active_index_beg, descendant_active_value_beg,
+            scaled_adjoint_buffer.data(), &factorization->lower_factor,
+            &main_active_intersect_size_beg, &main_active_index_beg,
+            &main_active_value_beg, update_buffer.data());
 
         ++descendant_active_intersect_size_beg;
         descendant_active_index_beg += descendant_active_intersect_size;
@@ -1644,7 +1639,10 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
       return result;
     }
 
-    SolveAgainstDiagonalBlock(main_supernode, factorization);
+    SolveAgainstDiagonalBlock(factorization->is_cholesky, main_supernode,
+                              factorization->supernode_sizes,
+                              factorization->diagonal_factor,
+                              &factorization->lower_factor);
 
     // Finish updating the result structure.
     const Int degree = lower_factor.index_offsets[main_supernode + 1] -
@@ -1753,9 +1751,9 @@ void LowerTriangularSolve(
       subdiagonal.leading_dim = supernode_size;
       subdiagonal.data = &lower_factor.values[value_beg];
 
-      TransposeMatrixVectorProduct(
-          Field{-1}, subdiagonal, vector->data() + supernode_start,
-          workspace.data());
+      TransposeMatrixVectorProduct(Field{-1}, subdiagonal,
+                                   vector->data() + supernode_start,
+                                   workspace.data());
 
       for (Int i = 0; i < degree; ++i) {
         const Int row = lower_factor.indices[index_beg + i];
@@ -1766,7 +1764,7 @@ void LowerTriangularSolve(
       for (Int j = 0; j < supernode_size; ++j) {
         const Int column = supernode_start + j;
         const Field& eta = (*vector)[column];
-  
+
         for (Int i = 0; i < degree; ++i) {
           const Int row = lower_factor.indices[index_beg + i];
           const Field& value =
@@ -1839,14 +1837,13 @@ void LowerAdjointTriangularSolve(
       subdiagonal.leading_dim = supernode_size;
       subdiagonal.data = &lower_factor.values[value_beg];
 
-      ConjugateMatrixVectorProduct(
-          Field{-1}, subdiagonal, workspace.data(),
-          vector->data() + supernode_start);
+      ConjugateMatrixVectorProduct(Field{-1}, subdiagonal, workspace.data(),
+                                   vector->data() + supernode_start);
     } else {
       for (Int j = supernode_size - 1; j >= 0; --j) {
         const Int column = supernode_start + j;
         Field& eta = (*vector)[column];
-  
+
         // Handle the below-diagonal portion of this supernode.
         const Field* value_column = &lower_factor.values[value_beg + j];
         for (Int i = 0; i < degree; ++i) {

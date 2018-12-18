@@ -320,7 +320,44 @@ Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
   return LowerBlockedLDLAdjointFactorization(matrix, blocksize);
 }
 
-// TODO(Jack Poulson): Add BLAS support for LowerLDLAdjointFactorization.
+// TODO(Jack Poulson): Extend to a blocked implementation.
+template <class Field>
+std::vector<Int> LowerFactorAndSampleDPP(
+    BlasMatrix<Field>* matrix, std::mt19937* generator,
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
+  typedef ComplexBase<Field> Real;
+  const Int height = matrix->height;
+  std::vector<Int> sample;
+  sample.reserve(height);
+
+  for (Int i = 0; i < height; ++i) {
+    Real delta = RealPart(matrix->Entry(i, i));
+    CATAMARI_ASSERT(delta >= Real{0} && delta <= Real{1},
+                    "Diagonal value was outside of [0, 1].");
+    const bool keep_index = (*uniform_dist)(*generator) <= delta;
+    if (keep_index) {
+      sample.push_back(i);
+    } else {
+      delta -= Real{1};
+      matrix->Entry(i, i) = delta;
+    }
+
+    // Solve for the remainder of the i'th column of L.
+    for (Int k = i + 1; k < height; ++k) {
+      matrix->Entry(k, i) /= delta;
+    }
+
+    // Perform the rank-one update.
+    for (Int j = i + 1; j < height; ++j) {
+      const Field eta = delta * Conjugate(matrix->Entry(j, i));
+      for (Int k = j; k < height; ++k) {
+        const Field& lambda_left = matrix->Entry(k, i);
+        matrix->Entry(k, j) -= lambda_left * eta;
+      }
+    }
+  }
+  return sample;
+}
 
 }  // namespace catamari
 
