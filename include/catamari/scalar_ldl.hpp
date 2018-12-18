@@ -10,6 +10,7 @@
 
 #include <ostream>
 
+#include "catamari/blas.hpp"
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"
 
@@ -133,23 +134,23 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
 //   x := L' \ (D \ (L \ b)).
 template <class Field>
 void LDLSolve(const ScalarLDLFactorization<Field>& factorization,
-              std::vector<Field>* vector);
+              BlasMatrix<Field>* matrix);
 
 // Solves L x = b using a unit-lower triangular matrix L.
 template <class Field>
 void LowerTriangularSolve(const ScalarLDLFactorization<Field>& factorization,
-                          std::vector<Field>* vector);
+                          BlasMatrix<Field>* matrix);
 
 // Solves D x = b using a diagonal matrix D.
 template <class Field>
 void DiagonalSolve(const ScalarLDLFactorization<Field>& factorization,
-                   std::vector<Field>* vector);
+                   BlasMatrix<Field>* matrix);
 
 // Solves L' x = b using a unit-lower triangular matrix L.
 template <class Field>
 void LowerAdjointTriangularSolve(
     const ScalarLDLFactorization<Field>& factorization,
-    std::vector<Field>* vector);
+    BlasMatrix<Field>* matrix);
 
 }  // namespace catamari
 

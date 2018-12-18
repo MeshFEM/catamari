@@ -70,6 +70,9 @@ struct BlasMatrix {
   // The pointer to the top-left entry of the matrix.
   T* data;
 
+  // Returns a constant equivalent of the current state.
+  ConstBlasMatrix<T> ToConst() const;
+
   // Returns a pointer to the entry in position (row, column).
   T* Pointer(Int row, Int column);
 
@@ -131,6 +134,13 @@ void TriangularSolveLeftLowerAdjointUnit(
     const ConstBlasMatrix<Field>& triangular_matrix, Field* vector);
 
 template <class Field>
+void MatrixMultiplyConjugateNormal(const Field& alpha,
+                                   const ConstBlasMatrix<Field>& left_matrix,
+                                   const ConstBlasMatrix<Field>& right_matrix,
+                                   const Field& beta,
+                                   BlasMatrix<Field>* output_matrix);
+
+template <class Field>
 void MatrixMultiplyTransposeNormal(const Field& alpha,
                                    const ConstBlasMatrix<Field>& left_matrix,
                                    const ConstBlasMatrix<Field>& right_matrix,
@@ -155,7 +165,23 @@ void MatrixMultiplyLowerTransposeNormal(
     BlasMatrix<Field>* output_matrix);
 
 template <class Field>
+void LeftLowerTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+
+template <class Field>
+void LeftLowerUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+
+template <class Field>
 void LeftLowerConjugateTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+
+template <class Field>
+void LeftLowerAdjointTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+
+template <class Field>
+void LeftLowerAdjointUnitTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
 template <class Field>

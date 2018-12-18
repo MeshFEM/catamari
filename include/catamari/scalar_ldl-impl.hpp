@@ -664,10 +664,18 @@ LDLResult UpLooking(const CoordinateMatrix<Field>& matrix,
 }  // namespace ldl
 
 template <class Field>
-void Permute(const std::vector<Int>& permutation, std::vector<Field>* vector) {
-  std::vector<Field> vector_copy = *vector;
-  for (std::size_t row = 0; row < vector->size(); ++row) {
-    (*vector)[permutation[row]] = vector_copy[row];
+void Permute(const std::vector<Int>& permutation, BlasMatrix<Field>* matrix) {
+  for (Int j = 0; j < matrix->width; ++j) {
+    // Make a copy of the current column.
+    std::vector<Field> column_copy(matrix->height);
+    for (Int i = 0; i < matrix->height; ++i) {
+      column_copy[i] = matrix->Entry(i, j);
+    }
+
+    // Apply the permutation.
+    for (Int i = 0; i < matrix->height; ++i) {
+      matrix->Entry(permutation[i], j) = column_copy[i];
+    }
   }
 }
 
@@ -698,27 +706,28 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
 
 template <class Field>
 void LDLSolve(const ScalarLDLFactorization<Field>& factorization,
-              std::vector<Field>* vector) {
+              BlasMatrix<Field>* matrix) {
   const bool have_permutation = !factorization.permutation.empty();
 
   // Reorder the input into the relaxation permutation of the factorization.
   if (have_permutation) {
-    Permute(factorization.permutation, vector);
+    Permute(factorization.permutation, matrix);
   }
 
-  LowerTriangularSolve(factorization, vector);
-  DiagonalSolve(factorization, vector);
-  LowerAdjointTriangularSolve(factorization, vector);
+  LowerTriangularSolve(factorization, matrix);
+  DiagonalSolve(factorization, matrix);
+  LowerAdjointTriangularSolve(factorization, matrix);
 
   // Reverse the factorization relxation permutation.
   if (have_permutation) {
-    Permute(factorization.inverse_permutation, vector);
+    Permute(factorization.inverse_permutation, matrix);
   }
 }
 
 template <class Field>
 void LowerTriangularSolve(const ScalarLDLFactorization<Field>& factorization,
-                          std::vector<Field>* vector) {
+                          BlasMatrix<Field>* matrix) {
+  const Int num_rhs = matrix->width;
   const ScalarLowerFactor<Field>& lower_factor = factorization.lower_factor;
   const ScalarLowerStructure& lower_structure = lower_factor.structure;
   const ScalarDiagonalFactor<Field>& diagonal_factor =
@@ -726,48 +735,57 @@ void LowerTriangularSolve(const ScalarLDLFactorization<Field>& factorization,
   const Int num_rows = lower_structure.column_offsets.size() - 1;
   const bool is_cholesky = factorization.is_cholesky;
 
-  CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
-                  "Vector was of the incorrect size.");
+  CATAMARI_ASSERT(matrix->height == num_rows,
+                  "matrix was an incorrect height.");
 
   for (Int column = 0; column < num_rows; ++column) {
-    Field& eta = (*vector)[column];
     if (is_cholesky) {
-      eta /= diagonal_factor.values[column];
+      const Field delta = diagonal_factor.values[column];
+      for (Int j = 0; j < num_rhs; ++j) {
+        matrix->Entry(column, j) /= delta;
+      }
     }
 
     const Int factor_column_beg = lower_structure.column_offsets[column];
     const Int factor_column_end = lower_structure.column_offsets[column + 1];
-    for (Int index = factor_column_beg; index < factor_column_end; ++index) {
-      const Int i = lower_structure.indices[index];
-      const Field& value = lower_factor.values[index];
-      (*vector)[i] -= value * eta;
+    for (Int j = 0; j < num_rhs; ++j) {
+      const Field eta = matrix->Entry(column, j);
+      for (Int index = factor_column_beg; index < factor_column_end; ++index) {
+        const Int i = lower_structure.indices[index];
+        const Field& value = lower_factor.values[index];
+        matrix->Entry(i, j) -= value * eta;
+      }
     }
   }
 }
 
 template <class Field>
 void DiagonalSolve(const ScalarLDLFactorization<Field>& factorization,
-                   std::vector<Field>* vector) {
+                   BlasMatrix<Field>* matrix) {
   if (factorization.is_cholesky) {
     return;
   }
 
+  const Int num_rhs = matrix->width;
   const ScalarDiagonalFactor<Field>& diagonal_factor =
       factorization.diagonal_factor;
   const Int num_rows = diagonal_factor.values.size();
 
-  CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
-                  "Vector was of the incorrect size.");
+  CATAMARI_ASSERT(matrix->height == num_rows,
+                  "matrix was an incorrect height.");
 
-  for (Int column = 0; column < num_rows; ++column) {
-    (*vector)[column] /= diagonal_factor.values[column];
+  for (Int j = 0; j < num_rhs; ++j) {
+    for (Int column = 0; column < num_rows; ++column) {
+      matrix->Entry(column, j) /= diagonal_factor.values[column];
+    }
   }
 }
 
 template <class Field>
 void LowerAdjointTriangularSolve(
     const ScalarLDLFactorization<Field>& factorization,
-    std::vector<Field>* vector) {
+    BlasMatrix<Field>* matrix) {
+  const Int num_rhs = matrix->width;
   const ScalarLowerFactor<Field>& lower_factor = factorization.lower_factor;
   const ScalarLowerStructure& lower_structure = lower_factor.structure;
   const ScalarDiagonalFactor<Field>& diagonal_factor =
@@ -775,22 +793,26 @@ void LowerAdjointTriangularSolve(
   const Int num_rows = lower_structure.column_offsets.size() - 1;
   const bool is_cholesky = factorization.is_cholesky;
 
-  CATAMARI_ASSERT(static_cast<Int>(vector->size()) == num_rows,
-                  "Vector was of the incorrect size.");
+  CATAMARI_ASSERT(matrix->height == num_rows,
+                  "matrix was an incorrect height.");
 
   for (Int column = num_rows - 1; column >= 0; --column) {
-    Field& eta = (*vector)[column];
-
     const Int factor_column_beg = lower_structure.column_offsets[column];
     const Int factor_column_end = lower_structure.column_offsets[column + 1];
-    for (Int index = factor_column_beg; index < factor_column_end; ++index) {
-      const Int i = lower_structure.indices[index];
-      const Field& value = lower_factor.values[index];
-      eta -= Conjugate(value) * (*vector)[i];
+    for (Int j = 0; j < num_rhs; ++j) {
+      Field& eta = matrix->Entry(column, j);
+      for (Int index = factor_column_beg; index < factor_column_end; ++index) {
+        const Int i = lower_structure.indices[index];
+        const Field& value = lower_factor.values[index];
+        eta -= Conjugate(value) * matrix->Entry(i, j);
+      }
     }
 
     if (is_cholesky) {
-      eta /= Conjugate(diagonal_factor.values[column]);
+      const Field delta = diagonal_factor.values[column];
+      for (Int j = 0; j < num_rhs; ++j) {
+        matrix->Entry(column, j) /= delta;
+      }
     }
   }
 }

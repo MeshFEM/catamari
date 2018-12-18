@@ -9,6 +9,7 @@
 #define CATAMARI_BLAS_IMPL_H_
 
 #include "catamari/blas.hpp"
+#include "catamari/macros.hpp"
 
 #ifdef CATAMARI_HAVE_MKL
 
@@ -37,14 +38,14 @@ typedef int BlasInt;
 #ifdef CATAMARI_HAVE_BLAS
 extern "C" {
 
-void BLAS_SYMBOL(ssyr)(const char* uplo, const BlasInt* height,
-                       const float* alpha, const float* vector,
-                       const BlasInt* stride, float* matrix,
-                       const BlasInt* leading_dim);
-
 void BLAS_SYMBOL(dsyr)(const char* uplo, const BlasInt* height,
                        const double* alpha, const double* vector,
                        const BlasInt* stride, double* matrix,
+                       const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(ssyr)(const char* uplo, const BlasInt* height,
+                       const float* alpha, const float* vector,
+                       const BlasInt* stride, float* matrix,
                        const BlasInt* leading_dim);
 
 void BLAS_SYMBOL(dgemv)(const char* trans, const BlasInt* height,
@@ -185,6 +186,12 @@ inline ConstBlasMatrix<T>& ConstBlasMatrix<T>::operator=(
   width = matrix.width;
   leading_dim = matrix.leading_dim;
   data = matrix.leading_dim;
+}
+
+template <class T>
+inline ConstBlasMatrix<T> BlasMatrix<T>::ToConst() const {
+  ConstBlasMatrix<T> const_matrix = *this;
+  return const_matrix;
 }
 
 template <class T>
@@ -528,6 +535,69 @@ inline void TriangularSolveLeftLowerAdjointUnit(
   BLAS_SYMBOL(dtrsv)
   (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
    &triang_leading_dim_blas, vector, &unit_stride_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
+void MatrixMultiplyConjugateNormal(const Field& alpha,
+                                   const ConstBlasMatrix<Field>& left_matrix,
+                                   const ConstBlasMatrix<Field>& right_matrix,
+                                   const Field& beta,
+                                   BlasMatrix<Field>* output_matrix) {
+  const Int output_height = output_matrix->height;
+  const Int output_width = output_matrix->width;
+  const Int contraction_size = left_matrix.width;
+  for (Int j = 0; j < output_width; ++j) {
+    for (Int i = 0; i < output_height; ++i) {
+      Field& output_entry = output_matrix->Entry(i, j);
+      output_entry *= beta;
+      for (Int k = 0; k < contraction_size; ++k) {
+        output_entry +=
+            alpha * Conjugate(left_matrix(i, k)) * right_matrix(k, j);
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void MatrixMultiplyConjugateNormal(
+    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
+    const ConstBlasMatrix<float>& right_matrix, const float& beta,
+    BlasMatrix<float>* output_matrix) {
+  const char trans_left = 'N';
+  const char trans_right = 'N';
+  const BlasInt output_height_blas = output_matrix->height;
+  const BlasInt output_width_blas = output_matrix->width;
+  const BlasInt contraction_size_blas = left_matrix.width;
+  const BlasInt left_leading_dim_blas = left_matrix.leading_dim;
+  const BlasInt right_leading_dim_blas = right_matrix.leading_dim;
+  const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
+  BLAS_SYMBOL(sgemm)
+  (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
+   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
+   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &output_leading_dim_blas);
+}
+
+template <>
+inline void MatrixMultiplyConjugateNormal(
+    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
+    const ConstBlasMatrix<double>& right_matrix, const double& beta,
+    BlasMatrix<double>* output_matrix) {
+  const char trans_left = 'N';
+  const char trans_right = 'N';
+  const BlasInt output_height_blas = output_matrix->height;
+  const BlasInt output_width_blas = output_matrix->width;
+  const BlasInt contraction_size_blas = left_matrix.width;
+  const BlasInt left_leading_dim_blas = left_matrix.leading_dim;
+  const BlasInt right_leading_dim_blas = right_matrix.leading_dim;
+  const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
+  BLAS_SYMBOL(dgemm)
+  (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
+   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
+   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &output_leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
@@ -886,9 +956,152 @@ inline void MatrixMultiplyLowerTransposeNormal(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
+void LeftLowerTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const Int width = matrix->width;
+  for (Int j = 0; j < width; ++j) {
+    Field* input_column = matrix->Pointer(0, j);
+
+    // Interleave with a subsequent solve against D.
+    for (Int i = 0; i < triangular_matrix.height; ++i) {
+      const Field* l_column = triangular_matrix.Pointer(0, i);
+      input_column[i] /= l_column[i];
+      for (Int k = i + 1; k < triangular_matrix.height; ++k) {
+        input_column[k] -= l_column[k] * input_column[i];
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void LeftLowerTriangularSolves(
+    const ConstBlasMatrix<float>& triangular_matrix,
+    BlasMatrix<float>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const float alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+
+  BLAS_SYMBOL(strsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void LeftLowerTriangularSolves(
+    const ConstBlasMatrix<double>& triangular_matrix,
+    BlasMatrix<double>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const double alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+
+  BLAS_SYMBOL(dtrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
+void LeftLowerUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const Int width = matrix->width;
+  for (Int j = 0; j < width; ++j) {
+    Field* input_column = matrix->Pointer(0, j);
+
+    // Interleave with a subsequent solve against D.
+    for (Int i = 0; i < triangular_matrix.height; ++i) {
+      const Field* l_column = triangular_matrix.Pointer(0, i);
+      for (Int k = i + 1; k < triangular_matrix.height; ++k) {
+        input_column[k] -= l_column[k] * input_column[i];
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void LeftLowerUnitTriangularSolves(
+    const ConstBlasMatrix<float>& triangular_matrix,
+    BlasMatrix<float>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'N';
+  const char diag = 'U';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const float alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+
+  BLAS_SYMBOL(strsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void LeftLowerUnitTriangularSolves(
+    const ConstBlasMatrix<double>& triangular_matrix,
+    BlasMatrix<double>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'N';
+  const char diag = 'U';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const double alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+
+  BLAS_SYMBOL(dtrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+
+template <class Field>
 void LeftLowerConjugateTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix,
     BlasMatrix<Field>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
   const Int width = matrix->width;
   for (Int j = 0; j < width; ++j) {
     Field* input_column = matrix->Pointer(0, j);
@@ -909,6 +1122,9 @@ template <>
 inline void LeftLowerConjugateTriangularSolves(
     const ConstBlasMatrix<float>& triangular_matrix,
     BlasMatrix<float>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
   const char trans_triang = 'N';
@@ -929,10 +1145,148 @@ template <>
 inline void LeftLowerConjugateTriangularSolves(
     const ConstBlasMatrix<double>& triangular_matrix,
     BlasMatrix<double>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
   const char trans_triang = 'N';
   const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const double alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+
+  BLAS_SYMBOL(dtrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
+void LeftLowerAdjointTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const Int width = matrix->width;
+  for (Int j = 0; j < width; ++j) {
+    for (Int k = triangular_matrix.height - 1; k >= 0; --k) {
+      const Field* triang_column = triangular_matrix.Pointer(0, k);
+      Field& eta = matrix->Entry(k, j);
+      for (Int i = k + 1; i < triangular_matrix.height; ++i) {
+        eta -= Conjugate(triang_column[i]) * matrix->Entry(i, j);
+      }
+      eta /= Conjugate(triang_column[k]);
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void LeftLowerAdjointTriangularSolves(
+    const ConstBlasMatrix<float>& triangular_matrix,
+    BlasMatrix<float>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const float alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+
+  BLAS_SYMBOL(strsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void LeftLowerAdjointTriangularSolves(
+    const ConstBlasMatrix<double>& triangular_matrix,
+    BlasMatrix<double>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const double alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+
+  BLAS_SYMBOL(dtrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
+void LeftLowerAdjointUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const Int width = matrix->width;
+  for (Int j = 0; j < width; ++j) {
+    for (Int k = triangular_matrix.height - 1; k >= 0; --k) {
+      const Field* triang_column = triangular_matrix.Pointer(0, k);
+      Field& eta = matrix->Entry(k, j);
+      for (Int i = k + 1; i < triangular_matrix.height; ++i) {
+        eta -= Conjugate(triang_column[i]) * matrix->Entry(i, j);
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void LeftLowerAdjointUnitTriangularSolves(
+    const ConstBlasMatrix<float>& triangular_matrix,
+    BlasMatrix<float>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'U';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const float alpha = 1.f;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+
+  BLAS_SYMBOL(strsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void LeftLowerAdjointUnitTriangularSolves(
+    const ConstBlasMatrix<double>& triangular_matrix,
+    BlasMatrix<double>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                  triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'U';
   const BlasInt height_blas = matrix->height;
   const BlasInt width_blas = matrix->width;
   const double alpha = 1.f;

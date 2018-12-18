@@ -162,24 +162,24 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
 //   x := L' \ (D \ (L \ b)).
 template <class Field>
 void LDLSolve(const SupernodalLDLFactorization<Field>& factorization,
-              std::vector<Field>* vector);
+              BlasMatrix<Field>* matrix);
 
 // Solves L x = b using a lower triangular matrix L.
 template <class Field>
 void LowerTriangularSolve(
     const SupernodalLDLFactorization<Field>& factorization,
-    std::vector<Field>* vector);
+    BlasMatrix<Field>* matrix);
 
 // Solves D x = b using a diagonal matrix D.
 template <class Field>
 void DiagonalSolve(const SupernodalLDLFactorization<Field>& factorization,
-                   std::vector<Field>* vector);
+                   BlasMatrix<Field>* matrix);
 
 // Solves L' x = b using a lower triangular matrix L.
 template <class Field>
 void LowerAdjointTriangularSolve(
     const SupernodalLDLFactorization<Field>& factorization,
-    std::vector<Field>* vector);
+    BlasMatrix<Field>* matrix);
 
 // Prints the unit-diagonal lower-triangular factor of the LDL' factorization.
 template <class Field>

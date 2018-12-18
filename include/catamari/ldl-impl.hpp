@@ -98,43 +98,43 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
 
 template <class Field>
 void LDLSolve(const LDLFactorization<Field>& factorization,
-              std::vector<Field>* vector) {
+              BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
-    LDLSolve(*factorization.supernodal_factorization.get(), vector);
+    LDLSolve(*factorization.supernodal_factorization.get(), matrix);
   } else {
-    LDLSolve(*factorization.scalar_factorization.get(), vector);
+    LDLSolve(*factorization.scalar_factorization.get(), matrix);
   }
 }
 
 template <class Field>
 void LowerTriangularSolve(const LDLFactorization<Field>& factorization,
-                          std::vector<Field>* vector) {
+                          BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
-    LowerTriangularSolve(*factorization.supernodal_factorization.get(), vector);
+    LowerTriangularSolve(*factorization.supernodal_factorization.get(), matrix);
   } else {
-    LowerTriangularSolve(*factorization.scalar_factorization.get(), vector);
+    LowerTriangularSolve(*factorization.scalar_factorization.get(), matrix);
   }
 }
 
 template <class Field>
 void DiagonalSolve(const LDLFactorization<Field>& factorization,
-                   std::vector<Field>* vector) {
+                   BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
-    DiagonalSolve(*factorization.supernodal_factorization.get(), vector);
+    DiagonalSolve(*factorization.supernodal_factorization.get(), matrix);
   } else {
-    DiagonalSolve(*factorization.scalar_factorization.get(), vector);
+    DiagonalSolve(*factorization.scalar_factorization.get(), matrix);
   }
 }
 
 template <class Field>
 void LowerAdjointTriangularSolve(const LDLFactorization<Field>& factorization,
-                                 std::vector<Field>* vector) {
+                                 BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
     LowerAdjointTriangularSolve(*factorization.supernodal_factorization.get(),
-                                vector);
+                                matrix);
   } else {
     LowerAdjointTriangularSolve(*factorization.scalar_factorization.get(),
-                                vector);
+                                matrix);
   }
 }
 

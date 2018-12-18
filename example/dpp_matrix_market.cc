@@ -166,8 +166,9 @@ Experiment RunMatrixMarketTest(
     const std::string& filename, bool skip_explicit_zeros,
     quotient::EntryMask mask, const quotient::MinimumDegreeControl& md_control,
     bool disable_reordering, unsigned int random_seed, bool force_symmetry,
-    double diagonal_shift, const catamari::SupernodalDPPControl& dpp_control,
-    bool print_progress, bool write_permuted_matrix) {
+    double diagonal_shift, Int num_samples,
+    const catamari::SupernodalDPPControl& dpp_control, bool print_progress,
+    bool write_permuted_matrix) {
   typedef double Field;
   Experiment experiment;
 
@@ -212,10 +213,15 @@ Experiment RunMatrixMarketTest(
     std::cout << "  Sampling DPP..." << std::endl;
   }
   quotient::Timer sample_timer;
-  sample_timer.Start();
-  std::vector<quotient::Int> sample = dpp.Sample();
-  experiment.sample_seconds = sample_timer.Stop();
-  quotient::PrintVector(sample, "sample", std::cout);
+  std::vector<Int> sample;
+  for (Int run = 0; run < num_samples; ++run) {
+    sample_timer.Start();
+    sample = dpp.Sample();
+    const double sample_seconds = sample_timer.Stop();
+    std::cout << "  sample took " << sample_seconds << " seconds." << std::endl;
+    quotient::PrintVector(sample, "sample", std::cout);
+  }
+  experiment.sample_seconds = sample_timer.TotalSeconds() / num_samples;
 
   return experiment;
 }
@@ -227,8 +233,8 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, const quotient::MinimumDegreeControl& md_control,
     bool disable_reordering, unsigned int random_seed, double diagonal_shift,
-    const catamari::SupernodalDPPControl& dpp_control, bool print_progress,
-    bool write_permuted_matrix) {
+    Int num_samples, const catamari::SupernodalDPPControl& dpp_control,
+    bool print_progress, bool write_permuted_matrix) {
   const std::vector<std::string> matrix_names{
       "appu",     "bbmat",    "bcsstk30", "bcsstk31", "bcsstk32", "bcsstk33",
       "crystk02", "crystk03", "ct20stif", "ex11",     "ex19",     "ex40",
@@ -245,8 +251,8 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
     experiments[matrix_name] =
         RunMatrixMarketTest(filename, skip_explicit_zeros, mask, md_control,
                             disable_reordering, random_seed, force_symmetry,
-                            diagonal_shift, dpp_control, print_progress,
-                            write_permuted_matrix);
+                            diagonal_shift, num_samples, dpp_control,
+                            print_progress, write_permuted_matrix);
   }
 
   return experiments;
@@ -302,6 +308,8 @@ int main(int argc, char** argv) {
       "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const double diagonal_shift = parser.OptionalInput<Real>(
       "diagonal_shift", "The value to add to the diagonal.", 1e6);
+  const Int num_samples = parser.OptionalInput<Int>(
+      "num_samples", "The number of DPP samples.", 5);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
   const bool write_permuted_matrix = parser.OptionalInput<bool>(
@@ -358,7 +366,7 @@ int main(int argc, char** argv) {
     const std::unordered_map<std::string, Experiment> experiments =
         RunADD96Tests(matrix_market_directory, skip_explicit_zeros, mask,
                       md_control, disable_reordering, random_seed,
-                      diagonal_shift, dpp_control, print_progress,
+                      diagonal_shift, num_samples, dpp_control, print_progress,
                       write_permuted_matrix);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
@@ -367,8 +375,8 @@ int main(int argc, char** argv) {
     const Experiment experiment =
         RunMatrixMarketTest(filename, skip_explicit_zeros, mask, md_control,
                             disable_reordering, random_seed, force_symmetry,
-                            diagonal_shift, dpp_control, print_progress,
-                            write_permuted_matrix);
+                            diagonal_shift, num_samples, dpp_control,
+                            print_progress, write_permuted_matrix);
     PrintExperiment(experiment, filename);
   }
 
