@@ -22,6 +22,9 @@ using catamari::Int;
 
 // A list of properties to measure from DPP sampling.
 struct Experiment {
+  // The number of seconds that elapsed during the reordering.
+  double reordering_seconds = 0;
+
   // The number of seconds that elapsed during the object construction.
   double init_seconds = 0;
 
@@ -32,6 +35,8 @@ struct Experiment {
 // Pretty prints the Experiment structure.
 void PrintExperiment(const Experiment& experiment, const std::string& label) {
   std::cout << label << ":\n";
+  std::cout << "  reordering_seconds: " << experiment.reordering_seconds
+            << "\n";
   std::cout << "  init_seconds: " << experiment.init_seconds << "\n";
   std::cout << "  sample_seconds: " << experiment.sample_seconds << "\n";
   std::cout << std::endl;
@@ -109,6 +114,9 @@ std::pair<Int, Int> DensestRow(
   return std::make_pair(densest_row_size, densest_row_index);
 }
 
+// With a sufficiently large 'diagonal_shift', this routine returns a symmetric
+// positive-definite matrix whose eigenvalues lie in (0, 1]. Such a matrix is
+// called a 'kernel' matrix and defines a Determinantal Point Process.
 template <typename Field>
 std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
     const std::string& filename, bool skip_explicit_zeros,
@@ -153,15 +161,6 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
   return matrix;
 }
 
-template <typename Field>
-std::vector<Field> GenerateRightHandSide(Int num_rows) {
-  std::vector<Field> right_hand_side(num_rows, 0);
-  for (Int row = 0; row < num_rows; ++row) {
-    right_hand_side[row] = row % 5;
-  }
-  return right_hand_side;
-}
-
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 Experiment RunMatrixMarketTest(
     const std::string& filename, bool skip_explicit_zeros,
@@ -181,18 +180,24 @@ Experiment RunMatrixMarketTest(
   }
   const Int num_rows = matrix->NumRows();
 
-  // TODO(Jack Poulson): Compute the AMD reordering.
+  // Compute the AMD reordering.
+  if (print_progress) {
+    std::cout << "  Reordering matrix..." << std::endl;
+  }
+  quotient::Timer reordering_timer;
+  reordering_timer.Start();
   std::unique_ptr<quotient::CoordinateGraph> graph = matrix->CoordinateGraph();
   const quotient::MinimumDegreeResult analysis =
       quotient::MinimumDegree(*graph, md_control);
   graph.reset();
   const std::vector<Int> permutation = analysis.Permutation();
-
   std::vector<Int> inverse_permutation(num_rows);
   for (Int row = 0; row < num_rows; ++row) {
     inverse_permutation[permutation[row]] = row;
   }
+  experiment.reordering_seconds = reordering_timer.Stop();
 
+  // Create the DPP object.
   if (print_progress) {
     std::cout << "  Initializing DPP..." << std::endl;
   }

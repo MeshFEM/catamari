@@ -111,6 +111,9 @@ std::pair<Int, Int> DensestRow(
   return std::make_pair(densest_row_size, densest_row_index);
 }
 
+// With a sufficiently large choice of 'diagonal_shift', this routine returns
+// a symmetric positive-definite sparse matrix corresponding to the Matrix
+// Market example living in the given file.
 template <typename Field>
 std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
     const std::string& filename, bool skip_explicit_zeros,
