@@ -22,6 +22,9 @@ using catamari::Int;
 
 // A list of properties to measure from DPP sampling.
 struct Experiment {
+  // The number of seconds that elapsed during the object construction.
+  double init_seconds = 0;
+
   // The number of seconds that elapsed during the sample.
   double sample_seconds = 0;
 };
@@ -29,6 +32,7 @@ struct Experiment {
 // Pretty prints the Experiment structure.
 void PrintExperiment(const Experiment& experiment, const std::string& label) {
   std::cout << label << ":\n";
+  std::cout << "  init_seconds: " << experiment.init_seconds << "\n";
   std::cout << "  sample_seconds: " << experiment.sample_seconds << "\n";
   std::cout << std::endl;
 }
@@ -176,9 +180,9 @@ std::vector<Field> GenerateRightHandSide(Int num_rows) {
 Experiment RunMatrixMarketTest(
     const std::string& filename, bool skip_explicit_zeros,
     quotient::EntryMask mask, const quotient::MinimumDegreeControl& md_control,
-    bool disable_reordering, bool force_symmetry, double diagonal_shift,
-    const catamari::SupernodalDPPControl& dpp_control, bool print_progress,
-    bool write_permuted_matrix) {
+    bool disable_reordering, unsigned int random_seed, bool force_symmetry,
+    double diagonal_shift, const catamari::SupernodalDPPControl& dpp_control,
+    bool print_progress, bool write_permuted_matrix) {
   typedef double Field;
   Experiment experiment;
 
@@ -203,11 +207,14 @@ Experiment RunMatrixMarketTest(
     inverse_permutation[permutation[row]] = row;
   }
 
-  // TODO(Jack Poulson): Get a better seed.
-  unsigned int random_seed = 17;
-
+  if (print_progress) {
+    std::cout << "  Initializing DPP..." << std::endl;
+  }
+  quotient::Timer init_timer;
+  init_timer.Start();
   catamari::SupernodalDPP<double> dpp(*matrix, permutation, inverse_permutation,
                                       dpp_control, random_seed);
+  experiment.init_seconds = init_timer.Stop(); 
 
   // Sample the matrix.
   if (print_progress) {
@@ -216,8 +223,8 @@ Experiment RunMatrixMarketTest(
   quotient::Timer sample_timer;
   sample_timer.Start();
   std::vector<quotient::Int> sample = dpp.Sample();
-  quotient::PrintVector(sample, "sample", std::cout);
   experiment.sample_seconds = sample_timer.Stop();
+  quotient::PrintVector(sample, "sample", std::cout);
 
   return experiment;
 }
@@ -236,7 +243,7 @@ Experiment RunMatrixMarketTest(
 std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, const quotient::MinimumDegreeControl& md_control,
-    bool disable_reordering, double diagonal_shift,
+    bool disable_reordering, unsigned int random_seed, double diagonal_shift,
     const catamari::SupernodalDPPControl& dpp_control, bool print_progress,
     bool write_permuted_matrix) {
   const std::vector<std::string> matrix_names{
@@ -254,8 +261,9 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
                                  "/" + matrix_name + ".mtx";
     experiments[matrix_name] =
         RunMatrixMarketTest(filename, skip_explicit_zeros, mask, md_control,
-                            disable_reordering, force_symmetry, diagonal_shift,
-                            dpp_control, print_progress, write_permuted_matrix);
+                            disable_reordering, random_seed, force_symmetry,
+                            diagonal_shift, dpp_control, print_progress,
+                            write_permuted_matrix);
   }
 
   return experiments;
@@ -297,6 +305,8 @@ int main(int argc, char** argv) {
       10.f);
   const bool disable_reordering = parser.OptionalInput<bool>(
       "disable_reordering", "Disable the AMD reordering?", false);
+  const unsigned int random_seed = parser.OptionalInput<unsigned int>(
+      "random_seed", "Seed for random number generator.", 17);
   const bool force_symmetry = parser.OptionalInput<bool>(
       "force_symmetry", "Use the nonzero pattern of A + A'?", true);
   const bool relax_supernodes = parser.OptionalInput<bool>(
@@ -364,16 +374,18 @@ int main(int argc, char** argv) {
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
         RunADD96Tests(matrix_market_directory, skip_explicit_zeros, mask,
-                      md_control, disable_reordering, diagonal_shift,
-                      dpp_control, print_progress, write_permuted_matrix);
+                      md_control, disable_reordering, random_seed,
+                      diagonal_shift, dpp_control, print_progress,
+                      write_permuted_matrix);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
     }
   } else {
     const Experiment experiment =
         RunMatrixMarketTest(filename, skip_explicit_zeros, mask, md_control,
-                            disable_reordering, force_symmetry, diagonal_shift,
-                            dpp_control, print_progress, write_permuted_matrix);
+                            disable_reordering, random_seed, force_symmetry,
+                            diagonal_shift, dpp_control, print_progress,
+                            write_permuted_matrix);
     PrintExperiment(experiment, filename);
   }
 
