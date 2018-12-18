@@ -103,19 +103,19 @@ struct BlasMatrix {
 };
 
 template <class Field>
-void MatrixVectorProduct(
-    const Field& alpha, const ConstBlasMatrix<Field>& matrix,
-    const Field* input_vector, Field* result);
+void MatrixVectorProduct(const Field& alpha,
+                         const ConstBlasMatrix<Field>& matrix,
+                         const Field* input_vector, Field* result);
 
 template <class Field>
-void ConjugateMatrixVectorProduct(
-    const Field& alpha, const ConstBlasMatrix<Field>& matrix,
-    const Field* input_vector, Field* result);
+void ConjugateMatrixVectorProduct(const Field& alpha,
+                                  const ConstBlasMatrix<Field>& matrix,
+                                  const Field* input_vector, Field* result);
 
 template <class Field>
-void TransposeMatrixVectorProduct(
-    const Field& alpha, const ConstBlasMatrix<Field>& matrix,
-    const Field* input_vector, Field* result);
+void TransposeMatrixVectorProduct(const Field& alpha,
+                                  const ConstBlasMatrix<Field>& matrix,
+                                  const Field* input_vector, Field* result);
 
 template <class Field>
 void TriangularSolveLeftLower(const ConstBlasMatrix<Field>& triangular_matrix,
@@ -165,8 +165,8 @@ void MatrixMultiplyLowerTransposeNormal(
     BlasMatrix<Field>* output_matrix);
 
 template <class Field>
-void LeftLowerTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+void LeftLowerTriangularSolves(const ConstBlasMatrix<Field>& triangular_matrix,
+                               BlasMatrix<Field>* matrix);
 
 template <class Field>
 void LeftLowerUnitTriangularSolves(

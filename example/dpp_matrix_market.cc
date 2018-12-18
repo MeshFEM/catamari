@@ -206,7 +206,7 @@ Experiment RunMatrixMarketTest(
   init_timer.Start();
   catamari::SupernodalDPP<double> dpp(*matrix, permutation, inverse_permutation,
                                       dpp_control, random_seed);
-  experiment.init_seconds = init_timer.Stop(); 
+  experiment.init_seconds = init_timer.Stop();
 
   // Sample the matrix.
   if (print_progress) {
@@ -248,11 +248,10 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
   for (const std::string& matrix_name : matrix_names) {
     const std::string filename = matrix_market_directory + "/" + matrix_name +
                                  "/" + matrix_name + ".mtx";
-    experiments[matrix_name] =
-        RunMatrixMarketTest(filename, skip_explicit_zeros, mask, md_control,
-                            disable_reordering, random_seed, force_symmetry,
-                            diagonal_shift, num_samples, dpp_control,
-                            print_progress, write_permuted_matrix);
+    experiments[matrix_name] = RunMatrixMarketTest(
+        filename, skip_explicit_zeros, mask, md_control, disable_reordering,
+        random_seed, force_symmetry, diagonal_shift, num_samples, dpp_control,
+        print_progress, write_permuted_matrix);
   }
 
   return experiments;
@@ -308,8 +307,8 @@ int main(int argc, char** argv) {
       "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const double diagonal_shift = parser.OptionalInput<Real>(
       "diagonal_shift", "The value to add to the diagonal.", 1e6);
-  const Int num_samples = parser.OptionalInput<Int>(
-      "num_samples", "The number of DPP samples.", 5);
+  const Int num_samples =
+      parser.OptionalInput<Int>("num_samples", "The number of DPP samples.", 5);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
   const bool write_permuted_matrix = parser.OptionalInput<bool>(
@@ -372,11 +371,10 @@ int main(int argc, char** argv) {
       PrintExperiment(pairing.second, pairing.first);
     }
   } else {
-    const Experiment experiment =
-        RunMatrixMarketTest(filename, skip_explicit_zeros, mask, md_control,
-                            disable_reordering, random_seed, force_symmetry,
-                            diagonal_shift, num_samples, dpp_control,
-                            print_progress, write_permuted_matrix);
+    const Experiment experiment = RunMatrixMarketTest(
+        filename, skip_explicit_zeros, mask, md_control, disable_reordering,
+        random_seed, force_symmetry, diagonal_shift, num_samples, dpp_control,
+        print_progress, write_permuted_matrix);
     PrintExperiment(experiment, filename);
   }
 

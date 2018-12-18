@@ -248,9 +248,9 @@ inline ConstBlasMatrix<T> BlasMatrix<T>::Submatrix(Int row_beg, Int column_beg,
 }
 
 template <class Field>
-void MatrixVectorProduct(
-    const Field& alpha, const ConstBlasMatrix<Field>& matrix,
-    const Field* input_vector, Field* result) {
+void MatrixVectorProduct(const Field& alpha,
+                         const ConstBlasMatrix<Field>& matrix,
+                         const Field* input_vector, Field* result) {
   const Int height = matrix.height;
   const Int width = matrix.width;
   const Int leading_dim = matrix.leading_dim;
@@ -263,40 +263,40 @@ void MatrixVectorProduct(
 
 #ifdef CATAMARI_HAVE_BLAS
 template <>
-inline void MatrixVectorProduct(
-    const float& alpha, const ConstBlasMatrix<float>& matrix,
-    const float* input_vector, float* result) {
+inline void MatrixVectorProduct(const float& alpha,
+                                const ConstBlasMatrix<float>& matrix,
+                                const float* input_vector, float* result) {
   const char trans = 'N';
   const BlasInt height_blas = matrix.height;
   const BlasInt width_blas = matrix.width;
   const BlasInt leading_dim_blas = matrix.leading_dim;
-  const BlasInt unit_stride_blas = 1; 
+  const BlasInt unit_stride_blas = 1;
   const float beta = 1;
-  BLAS_SYMBOL(sgemv)(&trans, &height_blas, &width_blas, &alpha, matrix.data,
-                     &leading_dim_blas, input_vector, &unit_stride_blas,
-                     &beta, result, &unit_stride_blas);
+  BLAS_SYMBOL(sgemv)
+  (&trans, &height_blas, &width_blas, &alpha, matrix.data, &leading_dim_blas,
+   input_vector, &unit_stride_blas, &beta, result, &unit_stride_blas);
 }
 
 template <>
-inline void MatrixVectorProduct(
-    const double& alpha, const ConstBlasMatrix<double>& matrix,
-    const double* input_vector, double* result) {
+inline void MatrixVectorProduct(const double& alpha,
+                                const ConstBlasMatrix<double>& matrix,
+                                const double* input_vector, double* result) {
   const char trans = 'N';
   const BlasInt height_blas = matrix.height;
   const BlasInt width_blas = matrix.width;
   const BlasInt leading_dim_blas = matrix.leading_dim;
-  const BlasInt unit_stride_blas = 1; 
+  const BlasInt unit_stride_blas = 1;
   const double beta = 1;
-  BLAS_SYMBOL(dgemv)(&trans, &height_blas, &width_blas, &alpha, matrix.data,
-                     &leading_dim_blas, input_vector, &unit_stride_blas,
-                     &beta, result, &unit_stride_blas);
+  BLAS_SYMBOL(dgemv)
+  (&trans, &height_blas, &width_blas, &alpha, matrix.data, &leading_dim_blas,
+   input_vector, &unit_stride_blas, &beta, result, &unit_stride_blas);
 }
 #endif
 
 template <class Field>
-void ConjugateMatrixVectorProduct(
-    const Field& alpha, const ConstBlasMatrix<Field>& matrix,
-    const Field* input_vector, Field* result) {
+void ConjugateMatrixVectorProduct(const Field& alpha,
+                                  const ConstBlasMatrix<Field>& matrix,
+                                  const Field* input_vector, Field* result) {
   const Int height = matrix.height;
   const Int width = matrix.width;
   const Int leading_dim = matrix.leading_dim;
@@ -309,24 +309,26 @@ void ConjugateMatrixVectorProduct(
 
 #ifdef CATAMARI_HAVE_BLAS
 template <>
-inline void ConjugateMatrixVectorProduct(
-    const float& alpha, const ConstBlasMatrix<float>& matrix,
-    const float* input_vector, float* result) {
+inline void ConjugateMatrixVectorProduct(const float& alpha,
+                                         const ConstBlasMatrix<float>& matrix,
+                                         const float* input_vector,
+                                         float* result) {
   MatrixVectorProduct(alpha, matrix, input_vector, result);
 }
 
 template <>
-inline void ConjugateMatrixVectorProduct(
-    const double& alpha, const ConstBlasMatrix<double>& matrix,
-    const double* input_vector, double* result) {
+inline void ConjugateMatrixVectorProduct(const double& alpha,
+                                         const ConstBlasMatrix<double>& matrix,
+                                         const double* input_vector,
+                                         double* result) {
   MatrixVectorProduct(alpha, matrix, input_vector, result);
 }
 #endif
 
 template <class Field>
-void TransposeMatrixVectorProduct(
-    const Field& alpha, const ConstBlasMatrix<Field>& matrix,
-    const Field* input_vector, Field* result) {
+void TransposeMatrixVectorProduct(const Field& alpha,
+                                  const ConstBlasMatrix<Field>& matrix,
+                                  const Field* input_vector, Field* result) {
   const Int height = matrix.height;
   const Int width = matrix.width;
   for (Int j = 0; j < width; ++j) {
@@ -338,33 +340,35 @@ void TransposeMatrixVectorProduct(
 
 #ifdef CATAMARI_HAVE_BLAS
 template <>
-inline void TransposeMatrixVectorProduct(
-    const float& alpha, const ConstBlasMatrix<float>& matrix,
-    const float* input_vector, float* result) {
+inline void TransposeMatrixVectorProduct(const float& alpha,
+                                         const ConstBlasMatrix<float>& matrix,
+                                         const float* input_vector,
+                                         float* result) {
   const char trans = 'T';
   const BlasInt height_blas = matrix.height;
   const BlasInt width_blas = matrix.width;
   const BlasInt leading_dim_blas = matrix.leading_dim;
-  const BlasInt unit_stride_blas = 1; 
+  const BlasInt unit_stride_blas = 1;
   const float beta = 1;
-  BLAS_SYMBOL(sgemv)(&trans, &height_blas, &width_blas, &alpha, matrix.data,
-                     &leading_dim_blas, input_vector, &unit_stride_blas,
-                     &beta, result, &unit_stride_blas);
+  BLAS_SYMBOL(sgemv)
+  (&trans, &height_blas, &width_blas, &alpha, matrix.data, &leading_dim_blas,
+   input_vector, &unit_stride_blas, &beta, result, &unit_stride_blas);
 }
 
 template <>
-inline void TransposeMatrixVectorProduct(
-    const double& alpha, const ConstBlasMatrix<double>& matrix,
-    const double* input_vector, double* result) {
+inline void TransposeMatrixVectorProduct(const double& alpha,
+                                         const ConstBlasMatrix<double>& matrix,
+                                         const double* input_vector,
+                                         double* result) {
   const char trans = 'T';
   const BlasInt height_blas = matrix.height;
   const BlasInt width_blas = matrix.width;
   const BlasInt leading_dim_blas = matrix.leading_dim;
-  const BlasInt unit_stride_blas = 1; 
+  const BlasInt unit_stride_blas = 1;
   const double beta = 1;
-  BLAS_SYMBOL(dgemv)(&trans, &height_blas, &width_blas, &alpha, matrix.data,
-                     &leading_dim_blas, input_vector, &unit_stride_blas,
-                     &beta, result, &unit_stride_blas);
+  BLAS_SYMBOL(dgemv)
+  (&trans, &height_blas, &width_blas, &alpha, matrix.data, &leading_dim_blas,
+   input_vector, &unit_stride_blas, &beta, result, &unit_stride_blas);
 }
 #endif
 
@@ -956,11 +960,10 @@ inline void MatrixMultiplyLowerTransposeNormal(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
-void LeftLowerTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+void LeftLowerTriangularSolves(const ConstBlasMatrix<Field>& triangular_matrix,
+                               BlasMatrix<Field>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const Int width = matrix->width;
   for (Int j = 0; j < width; ++j) {
@@ -983,7 +986,7 @@ inline void LeftLowerTriangularSolves(
     const ConstBlasMatrix<float>& triangular_matrix,
     BlasMatrix<float>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
@@ -1006,7 +1009,7 @@ inline void LeftLowerTriangularSolves(
     const ConstBlasMatrix<double>& triangular_matrix,
     BlasMatrix<double>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
@@ -1030,7 +1033,7 @@ void LeftLowerUnitTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix,
     BlasMatrix<Field>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const Int width = matrix->width;
   for (Int j = 0; j < width; ++j) {
@@ -1052,7 +1055,7 @@ inline void LeftLowerUnitTriangularSolves(
     const ConstBlasMatrix<float>& triangular_matrix,
     BlasMatrix<float>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
@@ -1075,7 +1078,7 @@ inline void LeftLowerUnitTriangularSolves(
     const ConstBlasMatrix<double>& triangular_matrix,
     BlasMatrix<double>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
@@ -1094,13 +1097,12 @@ inline void LeftLowerUnitTriangularSolves(
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
-
 template <class Field>
 void LeftLowerConjugateTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix,
     BlasMatrix<Field>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const Int width = matrix->width;
   for (Int j = 0; j < width; ++j) {
@@ -1123,7 +1125,7 @@ inline void LeftLowerConjugateTriangularSolves(
     const ConstBlasMatrix<float>& triangular_matrix,
     BlasMatrix<float>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
@@ -1146,7 +1148,7 @@ inline void LeftLowerConjugateTriangularSolves(
     const ConstBlasMatrix<double>& triangular_matrix,
     BlasMatrix<double>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
@@ -1170,7 +1172,7 @@ void LeftLowerAdjointTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix,
     BlasMatrix<Field>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const Int width = matrix->width;
   for (Int j = 0; j < width; ++j) {
@@ -1191,7 +1193,7 @@ inline void LeftLowerAdjointTriangularSolves(
     const ConstBlasMatrix<float>& triangular_matrix,
     BlasMatrix<float>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
@@ -1214,7 +1216,7 @@ inline void LeftLowerAdjointTriangularSolves(
     const ConstBlasMatrix<double>& triangular_matrix,
     BlasMatrix<double>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
@@ -1238,7 +1240,7 @@ void LeftLowerAdjointUnitTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix,
     BlasMatrix<Field>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const Int width = matrix->width;
   for (Int j = 0; j < width; ++j) {
@@ -1258,7 +1260,7 @@ inline void LeftLowerAdjointUnitTriangularSolves(
     const ConstBlasMatrix<float>& triangular_matrix,
     BlasMatrix<float>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';
@@ -1281,7 +1283,7 @@ inline void LeftLowerAdjointUnitTriangularSolves(
     const ConstBlasMatrix<double>& triangular_matrix,
     BlasMatrix<double>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
-                  triangular_matrix.height == matrix->height,
+                      triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
   const char side = 'L';
   const char uplo = 'L';

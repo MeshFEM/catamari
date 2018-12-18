@@ -15,10 +15,10 @@ namespace catamari {
 
 // vec1 := alpha matrix vec0 + beta vec1.
 template <class Field>
-void ApplySparse(
-    const Field& alpha, const CoordinateMatrix<Field>& sparse_matrix,
-    const ConstBlasMatrix<Field>& input_matrix, const Field& beta,
-    BlasMatrix<Field>* result);
+void ApplySparse(const Field& alpha,
+                 const CoordinateMatrix<Field>& sparse_matrix,
+                 const ConstBlasMatrix<Field>& input_matrix, const Field& beta,
+                 BlasMatrix<Field>* result);
 
 }  // namespace catamari
 

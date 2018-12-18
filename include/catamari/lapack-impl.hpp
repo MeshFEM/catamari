@@ -437,8 +437,8 @@ std::vector<Int> LowerFactorAndSampleDPP(
     BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
   const Int blocksize = 64;
-  return LowerBlockedFactorAndSampleDPP(
-      matrix, generator, uniform_dist, blocksize);
+  return LowerBlockedFactorAndSampleDPP(matrix, generator, uniform_dist,
+                                        blocksize);
 }
 
 }  // namespace catamari

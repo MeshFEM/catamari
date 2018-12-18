@@ -1717,8 +1717,8 @@ void LowerTriangularSolve(
       factorization.diagonal_factor;
   const bool is_cholesky = factorization.is_cholesky;
 
-  std::vector<Field> workspace(
-      factorization.largest_degree * num_rhs, Field{0});
+  std::vector<Field> workspace(factorization.largest_degree * num_rhs,
+                               Field{0});
 
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
@@ -1736,7 +1736,7 @@ void LowerTriangularSolve(
         &diagonal_factor.values[diagonal_factor.value_offsets[supernode]];
 
     BlasMatrix<Field> matrix_supernode =
-        matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs); 
+        matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
     // Solve against the diagonal block of the supernode.
     if (is_cholesky) {
@@ -1765,9 +1765,9 @@ void LowerTriangularSolve(
       work_matrix.data = workspace.data();
 
       // Store the updates in the workspace.
-      MatrixMultiplyTransposeNormal(
-          Field{-1}, subdiagonal, matrix_supernode.ToConst(), Field{0},
-          &work_matrix);
+      MatrixMultiplyTransposeNormal(Field{-1}, subdiagonal,
+                                    matrix_supernode.ToConst(), Field{0},
+                                    &work_matrix);
 
       // Accumulate the workspace into the solution matrix.
       for (Int j = 0; j < num_rhs; ++j) {
@@ -1874,9 +1874,9 @@ void LowerAdjointTriangularSolve(
         }
 
         // Perform the contiguous matrix composition update.
-        MatrixMultiplyConjugateNormal(
-            Field{-1}, subdiagonal, work_matrix.ToConst(), Field{1},
-            &matrix_supernode);
+        MatrixMultiplyConjugateNormal(Field{-1}, subdiagonal,
+                                      work_matrix.ToConst(), Field{1},
+                                      &matrix_supernode);
       } else {
         for (Int k = 0; k < supernode_size; ++k) {
           for (Int i = 0; i < degree; ++i) {
@@ -1901,8 +1901,8 @@ void LowerAdjointTriangularSolve(
     if (is_cholesky) {
       LeftLowerAdjointTriangularSolves(triangular_matrix, &matrix_supernode);
     } else {
-      LeftLowerAdjointUnitTriangularSolves(
-          triangular_matrix, &matrix_supernode);
+      LeftLowerAdjointUnitTriangularSolves(triangular_matrix,
+                                           &matrix_supernode);
     }
   }
 }

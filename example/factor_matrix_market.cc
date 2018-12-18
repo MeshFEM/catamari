@@ -162,8 +162,8 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
 }
 
 template <typename Field>
-ConstBlasMatrix<Field> GenerateRightHandSide(
-    Int num_rows, std::vector<Field>* buffer) {
+ConstBlasMatrix<Field> GenerateRightHandSide(Int num_rows,
+                                             std::vector<Field>* buffer) {
   BlasMatrix<Field> right_hand_side;
   right_hand_side.height = num_rows;
   right_hand_side.width = 1;
@@ -180,8 +180,8 @@ ConstBlasMatrix<Field> GenerateRightHandSide(
 }
 
 template <typename Field>
-BlasMatrix<Field> CopyMatrix(
-    const ConstBlasMatrix<Field>& matrix, std::vector<Field>* buffer) {
+BlasMatrix<Field> CopyMatrix(const ConstBlasMatrix<Field>& matrix,
+                             std::vector<Field>* buffer) {
   BlasMatrix<Field> matrix_copy;
   matrix_copy.height = matrix.height;
   matrix_copy.width = matrix.width;
@@ -258,8 +258,8 @@ Experiment RunMatrixMarketTest(
   // Compute the residual.
   std::vector<Field> residual_buffer;
   BlasMatrix<Field> residual = CopyMatrix(right_hand_side, &residual_buffer);
-  catamari::ApplySparse(
-      Field{-1}, *matrix, solution.ToConst(), Field{1}, &residual);
+  catamari::ApplySparse(Field{-1}, *matrix, solution.ToConst(), Field{1},
+                        &residual);
   const BaseField residual_norm = EuclideanNorm(residual.ToConst());
   std::cout << "  || B - A X ||_F / || B ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
