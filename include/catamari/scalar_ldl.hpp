@@ -10,7 +10,7 @@
 
 #include <ostream>
 
-#include "catamari/blas.hpp"
+#include "catamari/blas_matrix.hpp"
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"
 
