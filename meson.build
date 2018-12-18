@@ -118,6 +118,14 @@ dpp_matrix_market_exe = executable(
     dependencies : deps,
     cpp_args : cxx_args)
 
+# A utility for sampling a DPP from a 2D Laplacian.
+dpp_shifted_2d_negative_laplacian_exe = executable(
+    'dpp_shifted_2d_negative_laplacian',
+    ['example/dpp_shifted_2d_negative_laplacian.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps,
+    cpp_args : cxx_args)
+
 # For using catamari as a subproject.
 catamari_dep = declare_dependency(include_directories : include_dir)
 
