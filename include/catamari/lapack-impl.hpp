@@ -320,9 +320,8 @@ Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
   return LowerBlockedLDLAdjointFactorization(matrix, blocksize);
 }
 
-// TODO(Jack Poulson): Extend to a blocked implementation.
 template <class Field>
-std::vector<Int> LowerFactorAndSampleDPP(
+std::vector<Int> LowerUnblockedFactorAndSampleDPP(
     BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
   typedef ComplexBase<Field> Real;
@@ -357,6 +356,89 @@ std::vector<Int> LowerFactorAndSampleDPP(
     }
   }
   return sample;
+}
+
+template <class Field>
+std::vector<Int> LowerBlockedFactorAndSampleDPP(
+    BlasMatrix<Field>* matrix, std::mt19937* generator,
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
+    Int blocksize) {
+  const Int height = matrix->height;
+  const Int leading_dim = matrix->leading_dim;
+
+  std::vector<Int> sample;
+  sample.reserve(height);
+
+  std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  BlasMatrix<Field> factor;
+  factor.data = buffer.data();
+
+  for (Int i = 0; i < height; i += blocksize) {
+    const Int bsize = std::min(height - i, blocksize);
+
+    // Overwrite the diagonal block with its LDL' factorization.
+    BlasMatrix<Field> diagonal_block;
+    diagonal_block.height = bsize;
+    diagonal_block.width = bsize;
+    diagonal_block.leading_dim = leading_dim;
+    diagonal_block.data = matrix->Pointer(i, i);
+    std::vector<Int> block_sample = LowerUnblockedFactorAndSampleDPP(
+        &diagonal_block, generator, uniform_dist);
+    for (const Int& index : block_sample) {
+      sample.push_back(i + index);
+    }
+    if (height == i + bsize) {
+      break;
+    }
+
+    // Solve for the remainder of the block column of L.
+    BlasMatrix<Field> subdiagonal;
+    subdiagonal.height = height - (i + bsize);
+    subdiagonal.width = bsize;
+    subdiagonal.leading_dim = leading_dim;
+    subdiagonal.data = matrix->Pointer(i + bsize, i);
+    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
+    RightLowerAdjointUnitTriangularSolves(const_diagonal_block, &subdiagonal);
+
+    // Copy the conjugate of the current factor.
+    factor.height = subdiagonal.height;
+    factor.width = subdiagonal.width;
+    factor.leading_dim = subdiagonal.height;
+    for (Int j = 0; j < subdiagonal.width; ++j) {
+      for (Int k = 0; k < subdiagonal.height; ++k) {
+        factor(k, j) = Conjugate(subdiagonal(k, j));
+      }
+    }
+
+    // Solve against the diagonal.
+    for (Int j = 0; j < subdiagonal.width; ++j) {
+      const ComplexBase<Field> delta = const_diagonal_block(j, j);
+      for (Int k = 0; k < subdiagonal.height; ++k) {
+        subdiagonal(k, j) /= delta;
+      }
+    }
+
+    // Perform the Hermitian rank-bsize update.
+    const ConstBlasMatrix<Field> const_subdiagonal = subdiagonal;
+    const ConstBlasMatrix<Field> const_factor = factor;
+    BlasMatrix<Field> submatrix;
+    submatrix.height = height - (i + bsize);
+    submatrix.width = height - (i + bsize);
+    submatrix.leading_dim = leading_dim;
+    submatrix.data = matrix->Pointer(i + bsize, i + bsize);
+    MatrixMultiplyLowerNormalTranspose(Field{-1}, const_subdiagonal,
+                                       const_factor, Field{1}, &submatrix);
+  }
+  return sample;
+}
+
+template <class Field>
+std::vector<Int> LowerFactorAndSampleDPP(
+    BlasMatrix<Field>* matrix, std::mt19937* generator,
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
+  const Int blocksize = 64;
+  return LowerBlockedFactorAndSampleDPP(
+      matrix, generator, uniform_dist, blocksize);
 }
 
 }  // namespace catamari
