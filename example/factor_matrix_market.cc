@@ -47,6 +47,9 @@ void PrintExperiment(const Experiment& experiment, const std::string& label) {
   std::cout << std::endl;
 }
 
+// Returns the Frobenius norm of a real vector.
+// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
+// unstable. But it suffices for example purposes.
 template <typename Real>
 Real EuclideanNorm(const std::vector<Real>& vector) {
   Real squared_norm{0};
@@ -57,6 +60,9 @@ Real EuclideanNorm(const std::vector<Real>& vector) {
   return std::sqrt(squared_norm);
 }
 
+// Returns the Frobenius norm of a complex vector.
+// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
+// unstable. But it suffices for example purposes.
 template <typename Real>
 Real EuclideanNorm(const std::vector<catamari::Complex<Real>>& vector) {
   Real squared_norm{0};
@@ -222,14 +228,6 @@ Experiment RunMatrixMarketTest(
 // Returns a map from the identifying string of each test matrix from the
 // Amestoy/Davis/Duff Approximate Minimum Degree reordering 1996 paper meant
 // to loosely reproduce Fig. 2.
-//
-// It is worth noting that the LHR34 results from the paper appear to be
-// incorrect, as the results shown in
-//
-//   https://www.cise.ufl.edu/research/sparse/matrices/Mallya/lhr34.html
-//
-// agree with the results observed from this code's implementation.
-//
 std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, const quotient::MinimumDegreeControl& md_control,

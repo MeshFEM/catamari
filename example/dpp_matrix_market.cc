@@ -37,26 +37,9 @@ void PrintExperiment(const Experiment& experiment, const std::string& label) {
   std::cout << std::endl;
 }
 
-template <typename Real>
-Real EuclideanNorm(const std::vector<Real>& vector) {
-  Real squared_norm{0};
-  const Int num_rows = vector.size();
-  for (Int i = 0; i < num_rows; ++i) {
-    squared_norm += vector[i] * vector[i];
-  }
-  return std::sqrt(squared_norm);
-}
-
-template <typename Real>
-Real EuclideanNorm(const std::vector<catamari::Complex<Real>>& vector) {
-  Real squared_norm{0};
-  const Int num_rows = vector.size();
-  for (Int i = 0; i < num_rows; ++i) {
-    squared_norm += std::norm(vector[i]);
-  }
-  return std::sqrt(squared_norm);
-}
-
+// Returns the Frobenius norm of a real sparse matrix.
+// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
+// unstable. But it suffices for example purposes.
 template <typename Real>
 Real EuclideanNorm(const catamari::CoordinateMatrix<Real>& matrix) {
   Real squared_norm{0};
@@ -66,6 +49,9 @@ Real EuclideanNorm(const catamari::CoordinateMatrix<Real>& matrix) {
   return std::sqrt(squared_norm);
 }
 
+// Returns the Frobenius norm of a complex sparse matrix.
+// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
+// unstable. But it suffices for example purposes.
 template <typename Real>
 Real EuclideanNorm(
     const catamari::CoordinateMatrix<catamari::Complex<Real>>& matrix) {
@@ -232,14 +218,6 @@ Experiment RunMatrixMarketTest(
 // Returns a map from the identifying string of each test matrix from the
 // Amestoy/Davis/Duff Approximate Minimum Degree reordering 1996 paper meant
 // to loosely reproduce Fig. 2.
-//
-// It is worth noting that the LHR34 results from the paper appear to be
-// incorrect, as the results shown in
-//
-//   https://www.cise.ufl.edu/research/sparse/matrices/Mallya/lhr34.html
-//
-// agree with the results observed from this code's implementation.
-//
 std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, const quotient::MinimumDegreeControl& md_control,
