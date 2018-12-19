@@ -118,12 +118,13 @@ void SupernodalDPP<Field>::FormStructure() {
 }
 
 template <class Field>
-std::vector<Int> SupernodalDPP<Field>::Sample() const {
-  return LeftLookingSample();
+std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
+  return LeftLookingSample(maximum_likelihood);
 }
 
 template <class Field>
-std::vector<Int> SupernodalDPP<Field>::LeftLookingSample() const {
+std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
+    bool maximum_likelihood) const {
   const Int num_rows = supernode_starts_.back();
   const Int num_supernodes = supernode_sizes_.size();
   const bool is_cholesky = false;
@@ -260,7 +261,8 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample() const {
                .values[diagonal_factor_.value_offsets[main_supernode]];
 
       const std::vector<Int> supernode_sample =
-          LowerFactorAndSampleDPP(&diagonal_block, &generator_, &unit_uniform_);
+          LowerFactorAndSampleDPP(
+              maximum_likelihood, &diagonal_block, &generator_, &unit_uniform_);
       for (const Int& index : supernode_sample) {
         const Int orig_row = main_supernode_start + index;
         if (inverse_permutation_.empty()) {

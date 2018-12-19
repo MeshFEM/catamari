@@ -322,7 +322,7 @@ Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
 
 template <class Field>
 std::vector<Int> LowerUnblockedFactorAndSampleDPP(
-    BlasMatrix<Field>* matrix, std::mt19937* generator,
+    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
@@ -333,7 +333,8 @@ std::vector<Int> LowerUnblockedFactorAndSampleDPP(
     Real delta = RealPart(matrix->Entry(i, i));
     CATAMARI_ASSERT(delta >= Real{0} && delta <= Real{1},
                     "Diagonal value was outside of [0, 1].");
-    const bool keep_index = (*uniform_dist)(*generator) <= delta;
+    const bool keep_index = maximum_likelihood ? delta >= Real(1)/Real(2) :
+        (*uniform_dist)(*generator) <= delta;
     if (keep_index) {
       sample.push_back(i);
     } else {
@@ -360,7 +361,7 @@ std::vector<Int> LowerUnblockedFactorAndSampleDPP(
 
 template <class Field>
 std::vector<Int> LowerBlockedFactorAndSampleDPP(
-    BlasMatrix<Field>* matrix, std::mt19937* generator,
+    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     Int blocksize) {
   const Int height = matrix->height;
@@ -383,7 +384,7 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
     diagonal_block.leading_dim = leading_dim;
     diagonal_block.data = matrix->Pointer(i, i);
     std::vector<Int> block_sample = LowerUnblockedFactorAndSampleDPP(
-        &diagonal_block, generator, uniform_dist);
+        maximum_likelihood, &diagonal_block, generator, uniform_dist);
     for (const Int& index : block_sample) {
       sample.push_back(i + index);
     }
@@ -434,11 +435,11 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
 
 template <class Field>
 std::vector<Int> LowerFactorAndSampleDPP(
-    BlasMatrix<Field>* matrix, std::mt19937* generator,
+    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
   const Int blocksize = 64;
-  return LowerBlockedFactorAndSampleDPP(matrix, generator, uniform_dist,
-                                        blocksize);
+  return LowerBlockedFactorAndSampleDPP(maximum_likelihood, matrix, generator,
+                                        uniform_dist, blocksize);
 }
 
 }  // namespace catamari

@@ -20,7 +20,7 @@ Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
 
 template <class Field>
 std::vector<Int> LowerFactorAndSampleDPP(
-    BlasMatrix<Field>* matrix, std::mt19937* generator,
+    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist);
 
 }  // namespace catamari

@@ -29,8 +29,9 @@ class SupernodalDPP {
                 const std::vector<Int>& inverse_permutation,
                 const SupernodalDPPControl& control, unsigned int random_seed);
 
-  // Return a sample from the DPP.
-  std::vector<Int> Sample() const;
+  // Return a sample from the DPP. If 'maximum_likelihood' is true, then each
+  // pivot is kept based upon which choice is most likely.
+  std::vector<Int> Sample(bool maximum_likelihood) const;
 
  private:
   typedef ComplexBase<Field> Real;
@@ -89,7 +90,7 @@ class SupernodalDPP {
   void FormStructure();
 
   // Return a sample from the DPP.
-  std::vector<Int> LeftLookingSample() const;
+  std::vector<Int> LeftLookingSample(bool maximum_likelihood) const;
 };
 
 }  // namespace catamari

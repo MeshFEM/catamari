@@ -155,8 +155,8 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 Experiment RunShifted2DNegativeLaplacianTest(
     Int x_size, Int y_size, double diagonal_shift, double scale,
-    bool ascii_display, char missing_char, char sampled_char,
-    unsigned int random_seed, Int num_samples,
+    bool maximum_likelihood, bool ascii_display, char missing_char,
+    char sampled_char, unsigned int random_seed, Int num_samples,
     const catamari::SupernodalDPPControl& dpp_control, bool print_progress) {
   Experiment experiment;
 
@@ -202,7 +202,7 @@ Experiment RunShifted2DNegativeLaplacianTest(
   std::vector<Int> sample;
   for (Int run = 0; run < num_samples; ++run) {
     sample_timer.Start();
-    sample = dpp.Sample();
+    sample = dpp.Sample(maximum_likelihood);
     const double sample_seconds = sample_timer.Stop();
     std::cout << "  sample took " << sample_seconds << " seconds." << std::endl;
     quotient::PrintVector(sample, "sample", std::cout);
@@ -226,6 +226,8 @@ int main(int argc, char** argv) {
   const double scale = parser.OptionalInput<double>(
       "scale", "The two-norm, in [0, 1], of the shifted negative Laplacian.",
       1.);
+  const bool maximum_likelihood = parser.OptionalInput<bool>(
+      "maximum_likelihood", "Make the maximum-likelihood decisions?", false);
   const bool ascii_display = parser.OptionalInput<bool>(
       "ascii_display", "Display sample in ASCII?", true);
   const char missing_char = parser.OptionalInput<char>(
@@ -275,8 +277,9 @@ int main(int argc, char** argv) {
       allowable_supernode_zero_ratio;
 
   const Experiment experiment = RunShifted2DNegativeLaplacianTest(
-      x_size, y_size, diagonal_shift, scale, ascii_display, missing_char,
-      sampled_char, random_seed, num_samples, dpp_control, print_progress);
+      x_size, y_size, diagonal_shift, scale, maximum_likelihood, ascii_display,
+      missing_char, sampled_char, random_seed, num_samples, dpp_control,
+      print_progress);
   PrintExperiment(experiment);
 
   return 0;
