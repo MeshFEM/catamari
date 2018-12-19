@@ -249,7 +249,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample() const {
       }
     }
 
-    // Replace with a dense factorization/sampler.
+    // Sample and factor the diagonal block.
     {
       BlasMatrix<Field> diagonal_block;
       diagonal_block.height = main_supernode_size;

@@ -158,11 +158,10 @@ Experiment RunShifted2DNegativeLaplacianTest(
     bool ascii_display, char missing_char, char sampled_char,
     unsigned int random_seed, Int num_samples,
     const catamari::SupernodalDPPControl& dpp_control, bool print_progress) {
-  typedef double Field;
   Experiment experiment;
 
   // Read the matrix from file.
-  std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix =
+  std::unique_ptr<catamari::CoordinateMatrix<double>> matrix =
       Shifted2DNegativeLaplacian(
           x_size, y_size, diagonal_shift, scale, print_progress);
   const Int num_rows = matrix->NumRows();
