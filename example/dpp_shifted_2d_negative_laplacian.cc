@@ -110,8 +110,13 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> Shifted2DNegativeLaplacian(
   }
   matrix->FlushEntryQueues();
 
-  const Real frob_norm = EuclideanNorm(*matrix);
-  Rescale(Real{1} / frob_norm, matrix.get());
+  const Real pi = std::acos(Real{-1});
+  CATAMARI_ASSERT(diagonal_shift >= Real{0}, "Shift was assumed non-negative.");
+  const Real two_norm =
+      4 * std::pow(std::sin((pi * x_size) / (2 * x_size)), Real{2}) +
+      4 * std::pow(std::sin((pi * y_size) / (2 * y_size)), Real{2}) +
+      diagonal_shift;
+  Rescale(Real{1} / two_norm, matrix.get());
 
   if (print_progress) {
     std::cout << "Matrix had " << matrix->NumRows() << " rows and "
@@ -147,11 +152,9 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 Experiment RunShifted2DNegativeLaplacianTest(
     Int x_size, Int y_size, double diagonal_shift, bool ascii_display,
-    char missing_char, char sampled_char,
-    const quotient::MinimumDegreeControl& md_control, bool disable_reordering,
-    unsigned int random_seed, Int num_samples,
-    const catamari::SupernodalDPPControl& dpp_control, bool print_progress,
-    bool write_permuted_matrix) {
+    char missing_char, char sampled_char, unsigned int random_seed,
+    Int num_samples, const catamari::SupernodalDPPControl& dpp_control,
+    bool print_progress) {
   typedef double Field;
   Experiment experiment;
 
@@ -168,6 +171,7 @@ Experiment RunShifted2DNegativeLaplacianTest(
   quotient::Timer reordering_timer;
   reordering_timer.Start();
   std::unique_ptr<quotient::CoordinateGraph> graph = matrix->CoordinateGraph();
+  const quotient::MinimumDegreeControl md_control;
   const quotient::MinimumDegreeResult analysis =
       quotient::MinimumDegree(*graph, md_control);
   graph.reset();
@@ -226,16 +230,6 @@ int main(int argc, char** argv) {
       "missing_char", "ASCII display for missing index.", ' ');
   const char sampled_char = parser.OptionalInput<char>(
       "sampled_char", "ASCII display for sampled index.", 'x');
-  const int degree_type_int =
-      parser.OptionalInput<int>("degree_type_int",
-                                "The degree approximation type.\n"
-                                "0:exact, 1:Amestoy, 2:Ashcraft, 3:Gilbert",
-                                1);
-  const bool aggressive_absorption = parser.OptionalInput<bool>(
-      "aggressive_absorption", "Eliminate elements with aggressive absorption?",
-      true);
-  const bool disable_reordering = parser.OptionalInput<bool>(
-      "disable_reordering", "Disable the AMD reordering?", false);
   const unsigned int random_seed = parser.OptionalInput<unsigned int>(
       "random_seed", "Seed for random number generator.", 17);
   const bool relax_supernodes = parser.OptionalInput<bool>(
@@ -250,8 +244,6 @@ int main(int argc, char** argv) {
       parser.OptionalInput<Int>("num_samples", "The number of DPP samples.", 5);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
-  const bool write_permuted_matrix = parser.OptionalInput<bool>(
-      "write_permuted_matrix", "Write the permuted matrix to file?", false);
 #ifdef _OPENMP
   const int num_omp_threads = parser.OptionalInput<int>(
       "num_omp_threads",
@@ -273,10 +265,6 @@ int main(int argc, char** argv) {
   }
 #endif
 
-  quotient::MinimumDegreeControl md_control;
-  md_control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
-  md_control.aggressive_absorption = aggressive_absorption;
-
   catamari::SupernodalDPPControl dpp_control;
   dpp_control.relaxation_control.relax_supernodes = relax_supernodes;
   dpp_control.relaxation_control.allowable_supernode_zeros =
@@ -285,9 +273,8 @@ int main(int argc, char** argv) {
       allowable_supernode_zero_ratio;
 
   const Experiment experiment = RunShifted2DNegativeLaplacianTest(
-      x_size, y_size, diagonal_shift, ascii_display, missing_char,
-      sampled_char, md_control, disable_reordering, random_seed, num_samples,
-      dpp_control, print_progress, write_permuted_matrix);
+      x_size, y_size, diagonal_shift, ascii_display, missing_char, sampled_char,
+      random_seed, num_samples, dpp_control, print_progress);
   PrintExperiment(experiment);
 
   return 0;
