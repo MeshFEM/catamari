@@ -8,23 +8,19 @@
 #ifndef CATAMARI_LAPACK_H_
 #define CATAMARI_LAPACK_H_
 
-#include "catamari/integers.hpp"
+#include "catamari/blas.hpp"
 
-namespace catamari {
+#ifdef CATAMARI_HAVE_LAPACK
+extern "C" {
 
-template <class Field>
-Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix);
+#define LAPACK_SYMBOL(name) name##_
 
-template <class Field>
-Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
+void LAPACK_SYMBOL(spotrf)(const char* uplo, const BlasInt* n, float* matrix,
+                           const BlasInt* leading_dim, BlasInt* info);
 
-template <class Field>
-std::vector<Int> LowerFactorAndSampleDPP(
-    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist);
-
-}  // namespace catamari
-
-#include "catamari/lapack-impl.hpp"
+void LAPACK_SYMBOL(dpotrf)(const char* uplo, const BlasInt* n, double* matrix,
+                           const BlasInt* leading_dim, BlasInt* info);
+}
+#endif  // ifdef CATAMARI_HAVE_LAPACK
 
 #endif  // ifndef CATAMARI_LAPACK_H_

@@ -8,7 +8,7 @@
 #ifndef CATAMARI_APPLY_SPARSE_H_
 #define CATAMARI_APPLY_SPARSE_H_
 
-#include "catamari/blas.hpp"
+#include "catamari/blas_matrix.hpp"
 #include "catamari/coordinate_matrix.hpp"
 
 namespace catamari {

@@ -5,26 +5,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_LAPACK_IMPL_H_
-#define CATAMARI_LAPACK_IMPL_H_
+#ifndef CATAMARI_DENSE_FACTORIZATIONS_IMPL_H_
+#define CATAMARI_DENSE_FACTORIZATIONS_IMPL_H_
 
 #include <cmath>
 
-#include "catamari/blas.hpp"
+#include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/lapack.hpp"
 
-#ifdef CATAMARI_HAVE_LAPACK
-extern "C" {
-
-#define LAPACK_SYMBOL(name) name##_
-
-void LAPACK_SYMBOL(spotrf)(const char* uplo, const BlasInt* n, float* matrix,
-                           const BlasInt* leading_dim, BlasInt* info);
-
-void LAPACK_SYMBOL(dpotrf)(const char* uplo, const BlasInt* n, double* matrix,
-                           const BlasInt* leading_dim, BlasInt* info);
-}
-#endif  // ifdef CATAMARI_HAVE_LAPACK
+#include "catamari/dense_factorizations.hpp"
 
 namespace catamari {
 
@@ -444,4 +433,4 @@ std::vector<Int> LowerFactorAndSampleDPP(
 
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_LAPACK_IMPL_H_
+#endif  // ifndef CATAMARI_DENSE_FACTORIZATIONS_IMPL_H_

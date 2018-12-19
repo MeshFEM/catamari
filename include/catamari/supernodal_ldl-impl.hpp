@@ -8,8 +8,8 @@
 #ifndef CATAMARI_SUPERNODAL_LDL_IMPL_H_
 #define CATAMARI_SUPERNODAL_LDL_IMPL_H_
 
-#include "catamari/blas.hpp"
-#include "catamari/lapack.hpp"
+#include "catamari/dense_basic_linear_algebra.hpp"
+#include "catamari/dense_factorizations.hpp"
 #include "catamari/supernodal_ldl.hpp"
 
 namespace catamari {
