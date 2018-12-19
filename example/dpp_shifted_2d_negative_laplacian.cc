@@ -77,7 +77,8 @@ void Rescale(const catamari::ComplexBase<Field>& scale,
 
 template <typename Field>
 std::unique_ptr<catamari::CoordinateMatrix<Field>> Shifted2DNegativeLaplacian(
-    Int x_size, Int y_size, const Field& diagonal_shift, bool print_progress) {
+    Int x_size, Int y_size, const Field& diagonal_shift,
+    const catamari::ComplexBase<Field>& scale, bool print_progress) {
   typedef catamari::ComplexBase<Field> Real;
 
   std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix;
@@ -116,7 +117,7 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> Shifted2DNegativeLaplacian(
       4 * std::pow(std::sin((pi * x_size) / (2 * x_size)), Real{2}) +
       4 * std::pow(std::sin((pi * y_size) / (2 * y_size)), Real{2}) +
       diagonal_shift;
-  Rescale(Real{1} / two_norm, matrix.get());
+  Rescale(scale / two_norm, matrix.get());
 
   if (print_progress) {
     std::cout << "Matrix had " << matrix->NumRows() << " rows and "
@@ -147,21 +148,23 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
     std::cout << "\n";
   }
   std::cout << std::endl;
+  std::cout << "Sample density: " << (1. * sample.size()) / (x_size * y_size)
+            << std::endl;
 }
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 Experiment RunShifted2DNegativeLaplacianTest(
-    Int x_size, Int y_size, double diagonal_shift, bool ascii_display,
-    char missing_char, char sampled_char, unsigned int random_seed,
-    Int num_samples, const catamari::SupernodalDPPControl& dpp_control,
-    bool print_progress) {
+    Int x_size, Int y_size, double diagonal_shift, double scale,
+    bool ascii_display, char missing_char, char sampled_char,
+    unsigned int random_seed, Int num_samples,
+    const catamari::SupernodalDPPControl& dpp_control, bool print_progress) {
   typedef double Field;
   Experiment experiment;
 
   // Read the matrix from file.
   std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix =
       Shifted2DNegativeLaplacian(
-          x_size, y_size, diagonal_shift, print_progress);
+          x_size, y_size, diagonal_shift, scale, print_progress);
   const Int num_rows = matrix->NumRows();
 
   // Compute the AMD reordering.
@@ -214,16 +217,16 @@ Experiment RunShifted2DNegativeLaplacianTest(
 }
 
 int main(int argc, char** argv) {
-  typedef double Field;
-  typedef catamari::ComplexBase<Field> Real;
-
   specify::ArgumentParser parser(argc, argv);
   const Int x_size = parser.OptionalInput<Int>(
       "x_size", "The x dimension of the 2D Laplacian", 80);
   const Int y_size = parser.OptionalInput<Int>(
       "y_size", "The y dimension of the 2D Laplacian", 80);
-  const double diagonal_shift = parser.OptionalInput<Real>(
+  const double diagonal_shift = parser.OptionalInput<double>(
       "diagonal_shift", "The value to add to the diagonal.", 0.);
+  const double scale = parser.OptionalInput<double>(
+      "scale", "The two-norm, in [0, 1], of the shifted negative Laplacian.",
+      1.);
   const bool ascii_display = parser.OptionalInput<bool>(
       "ascii_display", "Display sample in ASCII?", true);
   const char missing_char = parser.OptionalInput<char>(
@@ -273,8 +276,8 @@ int main(int argc, char** argv) {
       allowable_supernode_zero_ratio;
 
   const Experiment experiment = RunShifted2DNegativeLaplacianTest(
-      x_size, y_size, diagonal_shift, ascii_display, missing_char, sampled_char,
-      random_seed, num_samples, dpp_control, print_progress);
+      x_size, y_size, diagonal_shift, scale, ascii_display, missing_char,
+      sampled_char, random_seed, num_samples, dpp_control, print_progress);
   PrintExperiment(experiment);
 
   return 0;

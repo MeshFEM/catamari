@@ -262,7 +262,12 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample() const {
       const std::vector<Int> supernode_sample =
           LowerFactorAndSampleDPP(&diagonal_block, &generator_, &unit_uniform_);
       for (const Int& index : supernode_sample) {
-        sample.push_back(main_supernode_start + index);
+        const Int orig_row = main_supernode_start + index;
+        if (inverse_permutation_.empty()) {
+          sample.push_back(orig_row);
+        } else {
+          sample.push_back(inverse_permutation_[orig_row]);
+        }
       }
     }
 
@@ -270,6 +275,8 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample() const {
                                               supernode_sizes_,
                                               diagonal_factor_, &lower_factor_);
   }
+
+  std::sort(sample.begin(), sample.end());
 
   return sample;
 }
