@@ -8,6 +8,8 @@
 #ifndef CATAMARI_BLAS_H_
 #define CATAMARI_BLAS_H_
 
+#include <complex>
+
 #ifdef CATAMARI_HAVE_MKL
 
 // TODO(Jack Poulson): Attempt to support 64-bit BLAS when Int = long long int.
@@ -33,6 +35,10 @@ typedef int BlasInt;
 #endif  // ifdef CATAMARI_HAVE_OPENBLAS
 
 #ifdef CATAMARI_HAVE_BLAS
+
+typedef std::complex<float> BlasComplexFloat;
+typedef std::complex<double> BlasComplexDouble;
+
 extern "C" {
 
 void BLAS_SYMBOL(ssyr)(const char* uplo, const BlasInt* height,
@@ -45,12 +51,15 @@ void BLAS_SYMBOL(dsyr)(const char* uplo, const BlasInt* height,
                        const BlasInt* stride, double* matrix,
                        const BlasInt* leading_dim);
 
-void BLAS_SYMBOL(dgemv)(const char* trans, const BlasInt* height,
-                        const BlasInt* width, const double* alpha,
-                        const double* matrix, const BlasInt* leading_dim,
-                        const double* input_vector, const BlasInt* input_stride,
-                        const double* beta, double* result,
-                        const BlasInt* result_stride);
+void BLAS_SYMBOL(cher)(const char* uplo, const BlasInt* height,
+                       const float* alpha, const BlasComplexFloat* vector,
+                       const BlasInt* stride, BlasComplexFloat* matrix,
+                       const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(zher)(const char* uplo, const BlasInt* height,
+                       const double* alpha, const BlasComplexDouble* vector,
+                       const BlasInt* stride, BlasComplexDouble* matrix,
+                       const BlasInt* leading_dim);
 
 void BLAS_SYMBOL(sgemv)(const char* trans, const BlasInt* height,
                         const BlasInt* width, const float* alpha,
@@ -59,15 +68,61 @@ void BLAS_SYMBOL(sgemv)(const char* trans, const BlasInt* height,
                         const float* beta, float* result,
                         const BlasInt* result_stride);
 
-void BLAS_SYMBOL(dtrsv)(const char* uplo, const char* trans, const char* diag,
-                        const BlasInt* height, const double* triangular_matrix,
-                        const BlasInt* triang_leading_dim, double* vector,
-                        const BlasInt* stride);
+void BLAS_SYMBOL(dgemv)(const char* trans, const BlasInt* height,
+                        const BlasInt* width, const double* alpha,
+                        const double* matrix, const BlasInt* leading_dim,
+                        const double* input_vector, const BlasInt* input_stride,
+                        const double* beta, double* result,
+                        const BlasInt* result_stride);
+
+void BLAS_SYMBOL(cgemv)(const char* trans, const BlasInt* height,
+                        const BlasInt* width, const BlasComplexFloat* alpha,
+                        const BlasComplexFloat* matrix,
+                        const BlasInt* leading_dim,
+                        const BlasComplexFloat* input_vector,
+                        const BlasInt* input_stride,
+                        const BlasComplexFloat* beta, BlasComplexFloat* result,
+                        const BlasInt* result_stride);
+
+void BLAS_SYMBOL(zgemv)(const char* trans, const BlasInt* height,
+                        const BlasInt* width, const BlasComplexDouble* alpha,
+                        const BlasComplexDouble* matrix,
+                        const BlasInt* leading_dim,
+                        const BlasComplexDouble* input_vector,
+                        const BlasInt* input_stride,
+                        const BlasComplexDouble* beta,
+                        BlasComplexDouble* result,
+                        const BlasInt* result_stride);
 
 void BLAS_SYMBOL(strsv)(const char* uplo, const char* trans, const char* diag,
                         const BlasInt* height, const float* triangular_matrix,
                         const BlasInt* triang_leading_dim, float* vector,
                         const BlasInt* stride);
+
+void BLAS_SYMBOL(dtrsv)(const char* uplo, const char* trans, const char* diag,
+                        const BlasInt* height, const double* triangular_matrix,
+                        const BlasInt* triang_leading_dim, double* vector,
+                        const BlasInt* stride);
+
+void BLAS_SYMBOL(ctrsv)(const char* uplo, const char* trans, const char* diag,
+                        const BlasInt* height,
+                        const BlasComplexFloat* triangular_matrix,
+                        const BlasInt* triang_leading_dim,
+                        BlasComplexFloat* vector, const BlasInt* stride);
+
+void BLAS_SYMBOL(ztrsv)(const char* uplo, const char* trans, const char* diag,
+                        const BlasInt* height,
+                        const BlasComplexDouble* triangular_matrix,
+                        const BlasInt* triang_leading_dim,
+                        BlasComplexDouble* vector, const BlasInt* stride);
+
+void BLAS_SYMBOL(sgemm)(
+    const char* trans_left, const char* trans_right,
+    const BlasInt* output_height, const BlasInt* output_width,
+    const BlasInt* contraction_size, const float* alpha,
+    const float* left_matrix, const BlasInt* left_leading_dim,
+    const float* right_matrix, const BlasInt* right_leading_dim,
+    const float* beta, float* output_matrix, const BlasInt* output_leading_dim);
 
 void BLAS_SYMBOL(dgemm)(const char* trans_left, const char* trans_right,
                         const BlasInt* output_height,
@@ -80,15 +135,34 @@ void BLAS_SYMBOL(dgemm)(const char* trans_left, const char* trans_right,
                         double* output_matrix,
                         const BlasInt* output_leading_dim);
 
-void BLAS_SYMBOL(sgemm)(
+void BLAS_SYMBOL(cgemm)(
     const char* trans_left, const char* trans_right,
     const BlasInt* output_height, const BlasInt* output_width,
-    const BlasInt* contraction_size, const float* alpha,
-    const float* left_matrix, const BlasInt* left_leading_dim,
-    const float* right_matrix, const BlasInt* right_leading_dim,
-    const float* beta, float* output_matrix, const BlasInt* output_leading_dim);
+    const BlasInt* contraction_size, const BlasComplexFloat* alpha,
+    const BlasComplexFloat* left_matrix, const BlasInt* left_leading_dim,
+    const BlasComplexFloat* right_matrix, const BlasInt* right_leading_dim,
+    const BlasComplexFloat* beta, BlasComplexFloat* output_matrix,
+    const BlasInt* output_leading_dim);
+
+void BLAS_SYMBOL(zgemm)(
+    const char* trans_left, const char* trans_right,
+    const BlasInt* output_height, const BlasInt* output_width,
+    const BlasInt* contraction_size, const BlasComplexDouble* alpha,
+    const BlasComplexDouble* left_matrix, const BlasInt* left_leading_dim,
+    const BlasComplexDouble* right_matrix, const BlasInt* right_leading_dim,
+    const BlasComplexDouble* beta, BlasComplexDouble* output_matrix,
+    const BlasInt* output_leading_dim);
 
 #ifdef CATAMARI_HAVE_MKL
+void BLAS_SYMBOL(sgemmt)(const char* uplo, const char* trans_left,
+                         const char* trans_right, const BlasInt* height,
+                         const BlasInt* rank, const float* alpha,
+                         const float* left_matrix,
+                         const BlasInt* left_leading_dim,
+                         const float* right_matrix,
+                         const BlasInt* right_leading_dim, const float* beta,
+                         float* matrix, const BlasInt* leading_dim);
+
 void BLAS_SYMBOL(dgemmt)(const char* uplo, const char* trans_left,
                          const char* trans_right, const BlasInt* height,
                          const BlasInt* rank, const double* alpha,
@@ -98,15 +172,32 @@ void BLAS_SYMBOL(dgemmt)(const char* uplo, const char* trans_left,
                          const BlasInt* right_leading_dim, const double* beta,
                          double* matrix, const BlasInt* leading_dim);
 
-void BLAS_SYMBOL(sgemmt)(const char* uplo, const char* trans_left,
+void BLAS_SYMBOL(cgemmt)(const char* uplo, const char* trans_left,
                          const char* trans_right, const BlasInt* height,
-                         const BlasInt* rank, const float* alpha,
-                         const float* left_matrix,
+                         const BlasInt* rank, const BlasComplexFloat* alpha,
+                         const BlasComplexFloat* left_matrix,
                          const BlasInt* left_leading_dim,
-                         const float* right_matrix,
-                         const BlasInt* right_leading_dim, const float* beta,
-                         float* matrix, const BlasInt* leading_dim);
+                         const BlasComplexFloat* right_matrix,
+                         const BlasInt* right_leading_dim,
+                         const BlasComplexFloat* beta,
+                         BlasComplexFloat* matrix, const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(zgemmt)(const char* uplo, const char* trans_left,
+                         const char* trans_right, const BlasInt* height,
+                         const BlasInt* rank, const BlasComplexDouble* alpha,
+                         const BlasComplexDouble* left_matrix,
+                         const BlasInt* left_leading_dim,
+                         const BlasComplexDouble* right_matrix,
+                         const BlasInt* right_leading_dim,
+                         const BlasComplexDouble* beta,
+                         BlasComplexDouble* matrix, const BlasInt* leading_dim);
 #endif  // ifdef CATAMARI_HAVE_MKL
+
+void BLAS_SYMBOL(ssyrk)(const char* uplo, const char* trans,
+                        const BlasInt* height, const BlasInt* rank,
+                        const float* alpha, const float* factor,
+                        const BlasInt* factor_leading_dim, const float* beta,
+                        float* matrix, const BlasInt* leading_dim);
 
 void BLAS_SYMBOL(dsyrk)(const char* uplo, const char* trans,
                         const BlasInt* height, const BlasInt* rank,
@@ -114,11 +205,24 @@ void BLAS_SYMBOL(dsyrk)(const char* uplo, const char* trans,
                         const BlasInt* factor_leading_dim, const double* beta,
                         double* matrix, const BlasInt* leading_dim);
 
-void BLAS_SYMBOL(ssyrk)(const char* uplo, const char* trans,
+void BLAS_SYMBOL(cherk)(const char* uplo, const char* trans,
                         const BlasInt* height, const BlasInt* rank,
-                        const float* alpha, const float* factor,
+                        const float* alpha, const BlasComplexFloat* factor,
                         const BlasInt* factor_leading_dim, const float* beta,
-                        float* matrix, const BlasInt* leading_dim);
+                        BlasComplexFloat* matrix, const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(zherk)(const char* uplo, const char* trans,
+                        const BlasInt* height, const BlasInt* rank,
+                        const double* alpha, const BlasComplexDouble* factor,
+                        const BlasInt* factor_leading_dim, const double* beta,
+                        BlasComplexDouble* matrix, const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(strsm)(const char* side, const char* uplo,
+                        const char* trans_triang, const char* diag,
+                        const BlasInt* height, const BlasInt* width,
+                        const float* alpha, const float* triang_matrix,
+                        const BlasInt* triang_leading_dim, float* matrix,
+                        const BlasInt* leading_dim);
 
 void BLAS_SYMBOL(dtrsm)(const char* side, const char* uplo,
                         const char* trans_triang, const char* diag,
@@ -127,12 +231,21 @@ void BLAS_SYMBOL(dtrsm)(const char* side, const char* uplo,
                         const BlasInt* triang_leading_dim, double* matrix,
                         const BlasInt* leading_dim);
 
-void BLAS_SYMBOL(strsm)(const char* side, const char* uplo,
+void BLAS_SYMBOL(ctrsm)(const char* side, const char* uplo,
                         const char* trans_triang, const char* diag,
                         const BlasInt* height, const BlasInt* width,
-                        const float* alpha, const float* triang_matrix,
-                        const BlasInt* triang_leading_dim, float* matrix,
-                        const BlasInt* leading_dim);
+                        const BlasComplexFloat* alpha,
+                        const BlasComplexFloat* triang_matrix,
+                        const BlasInt* triang_leading_dim,
+                        BlasComplexFloat* matrix, const BlasInt* leading_dim);
+
+void BLAS_SYMBOL(ztrsm)(const char* side, const char* uplo,
+                        const char* trans_triang, const char* diag,
+                        const BlasInt* height, const BlasInt* width,
+                        const BlasComplexDouble* alpha,
+                        const BlasComplexDouble* triang_matrix,
+                        const BlasInt* triang_leading_dim,
+                        BlasComplexDouble* matrix, const BlasInt* leading_dim);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
