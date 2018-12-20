@@ -20,6 +20,14 @@ void LAPACK_SYMBOL(spotrf)(const char* uplo, const BlasInt* n, float* matrix,
 
 void LAPACK_SYMBOL(dpotrf)(const char* uplo, const BlasInt* n, double* matrix,
                            const BlasInt* leading_dim, BlasInt* info);
+
+void LAPACK_SYMBOL(cpotrf)(const char* uplo, const BlasInt* n,
+                           BlasComplexFloat* matrix, const BlasInt* leading_dim,
+                           BlasInt* info);
+
+void LAPACK_SYMBOL(zpotrf)(const char* uplo, const BlasInt* n,
+                           BlasComplexDouble* matrix,
+                           const BlasInt* leading_dim, BlasInt* info);
 }
 #endif  // ifdef CATAMARI_HAVE_LAPACK
 
