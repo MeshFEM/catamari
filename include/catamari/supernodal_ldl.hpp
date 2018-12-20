@@ -81,6 +81,9 @@ struct SupernodalLDLFactorization {
   // The largest degree of a supernode in the factorization.
   Int largest_degree;
 
+  // The largest number of entries below the diagonal block of a supernode.
+  Int largest_subdiagonal_size;
+
   // If the following is nonempty, then, if the permutation is a matrix P, the
   // matrix P A P' has been factored. Typically, this permutation is the
   // composition of a fill-reducing ordering and a supernodal relaxation

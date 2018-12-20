@@ -15,8 +15,79 @@
 
 namespace catamari {
 
-template <typename Real>
-using Complex = std::complex<Real>;
+// An extension of std::complex beyond float and double.
+template <class Real>
+class Complex {
+ public:
+  // The real and imaginary components of the complex variable.
+  Real real, imag;
+};
+
+// A specialization of Complex to an underlying real type of 'float'.
+template <>
+class Complex<float> : public std::complex<float> {
+ public:
+  // The underlying real type of the complex class.
+  typedef float RealType;
+
+  // Imports of the std::complex operators.
+  using std::complex<RealType>::operator=;
+  using std::complex<RealType>::operator-=;
+  using std::complex<RealType>::operator+=;
+  using std::complex<RealType>::operator*=;
+  using std::complex<RealType>::operator/=;
+
+  // The default copy constructor.
+  Complex();
+
+  // A copy constructor from a std::complex variable.
+  Complex(const std::complex<RealType>& input);
+
+  // A copy constructor from a real variable.
+  template <class RealInputType>
+  Complex(const RealInputType& input);
+
+  // A copy constructor from real and imaginary parts.
+  template <class RealInputType, class ImagInputType>
+  Complex(const RealInputType& real, const ImagInputType& imag);
+
+  // A copy constructor from a Complex variable.
+  template <class RealInputType>
+  Complex(const Complex<RealInputType>& input);
+};
+
+// A specialization of Complex to an underlying real type of 'double'.
+template <>
+class Complex<double> : public std::complex<double> {
+ public:
+  // The underlying real type of the complex class.
+  typedef double RealType;
+
+  // Imports of the std::complex operators.
+  using std::complex<RealType>::operator=;
+  using std::complex<RealType>::operator-=;
+  using std::complex<RealType>::operator+=;
+  using std::complex<RealType>::operator*=;
+  using std::complex<RealType>::operator/=;
+
+  // The default copy constructor.
+  Complex();
+
+  // A copy constructor from a std::complex variable.
+  Complex(const std::complex<RealType>& input);
+
+  // A copy constructor from a real variable.
+  template <class RealInputType>
+  Complex(const RealInputType& input);
+
+  // A copy constructor from real and imaginary parts.
+  template <class RealInputType, class ImagInputType>
+  Complex(const RealInputType& real, const ImagInputType& imag);
+
+  // A copy constructor from a Complex variable.
+  template <class RealInputType>
+  Complex(const Complex<RealInputType>& input);
+};
 
 namespace complex_base {
 
@@ -35,7 +106,7 @@ struct ComplexBaseHelper<Complex<Real>> {
 // Returns the type of the base field of a real or complex scalar. For example:
 //   ComplexBase<double> == double
 //   ComplexBase<Complex<double>> == double.
-template <typename Field>
+template <class Field>
 using ComplexBase = typename complex_base::ComplexBaseHelper<Field>::type;
 
 // Encodes whether or not a given type is complex. For example,

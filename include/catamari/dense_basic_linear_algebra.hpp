@@ -14,6 +14,9 @@
 namespace catamari {
 
 template <class Field>
+void ConjugateMatrix(BlasMatrix<Field>* matrix);
+
+template <class Field>
 void MatrixVectorProduct(const Field& alpha,
                          const ConstBlasMatrix<Field>& matrix,
                          const Field* input_vector, Field* result);
@@ -45,11 +48,11 @@ void TriangularSolveLeftLowerAdjointUnit(
     const ConstBlasMatrix<Field>& triangular_matrix, Field* vector);
 
 template <class Field>
-void MatrixMultiplyConjugateNormal(const Field& alpha,
-                                   const ConstBlasMatrix<Field>& left_matrix,
-                                   const ConstBlasMatrix<Field>& right_matrix,
-                                   const Field& beta,
-                                   BlasMatrix<Field>* output_matrix);
+void MatrixMultiplyNormalNormal(const Field& alpha,
+                                const ConstBlasMatrix<Field>& left_matrix,
+                                const ConstBlasMatrix<Field>& right_matrix,
+                                const Field& beta,
+                                BlasMatrix<Field>* output_matrix);
 
 template <class Field>
 void MatrixMultiplyTransposeNormal(const Field& alpha,

@@ -444,6 +444,7 @@ void InitializeLeftLookingFactors(
   lower_factor.value_offsets.resize(num_supernodes + 1);
   diagonal_factor.value_offsets.resize(num_supernodes + 1);
   factorization->largest_degree = 0;
+  factorization->largest_subdiagonal_size = 0;
   Int degree_sum = 0;
   Int num_entries = 0;
   Int num_diagonal_entries = 0;
@@ -459,6 +460,9 @@ void InitializeLeftLookingFactors(
     num_diagonal_entries += supernode_size * supernode_size;
     factorization->largest_degree =
         std::max(factorization->largest_degree, degree);
+    factorization->largest_subdiagonal_size =
+        std::max(factorization->largest_subdiagonal_size,
+            degree * supernode_size);
   }
   lower_factor.index_offsets[num_supernodes] = degree_sum;
   lower_factor.value_offsets[num_supernodes] = num_entries;
@@ -1837,7 +1841,12 @@ void LowerAdjointTriangularSolve(
       factorization.diagonal_factor;
   const bool is_cholesky = factorization.is_cholesky;
 
-  std::vector<Field> workspace(factorization.largest_degree * num_rhs);
+  std::vector<Field> subdiagonal_conj_buf;
+  if (IsComplex<Field>::value) {
+    subdiagonal_conj_buf.resize(factorization.largest_subdiagonal_size);
+  }
+
+  std::vector<Field> packed_input_buf(factorization.largest_degree * num_rhs);
 
   for (Int supernode = num_supernodes - 1; supernode >= 0; --supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
@@ -1865,7 +1874,7 @@ void LowerAdjointTriangularSolve(
         work_matrix.height = degree;
         work_matrix.width = num_rhs;
         work_matrix.leading_dim = degree;
-        work_matrix.data = workspace.data();
+        work_matrix.data = packed_input_buf.data();
         for (Int j = 0; j < num_rhs; ++j) {
           for (Int i = 0; i < degree; ++i) {
             const Int row = lower_factor.indices[index_beg + i];
@@ -1874,9 +1883,27 @@ void LowerAdjointTriangularSolve(
         }
 
         // Perform the contiguous matrix composition update.
-        MatrixMultiplyConjugateNormal(Field{-1}, subdiagonal,
-                                      work_matrix.ToConst(), Field{1},
-                                      &matrix_supernode);
+        if (IsComplex<Field>::value) {
+          // Pack the conjugate of the subdiagonal into 'subdiagonal_conj'.
+          BlasMatrix<Field> subdiagonal_conj;
+          subdiagonal_conj.height = subdiagonal.height;
+          subdiagonal_conj.width = subdiagonal.width;
+          subdiagonal_conj.leading_dim = subdiagonal.leading_dim;
+          subdiagonal_conj.data = subdiagonal_conj_buf.data();
+          for (Int j = 0; j < subdiagonal.width; ++j) {
+            for (Int i = 0; i < subdiagonal.height; ++i) {
+              subdiagonal_conj(i, j) = Conjugate(subdiagonal(i, j));
+            }
+          }
+           
+          MatrixMultiplyNormalNormal(Field{-1}, subdiagonal_conj.ToConst(),
+                                     work_matrix.ToConst(), Field{1},
+                                     &matrix_supernode);
+        } else {
+          MatrixMultiplyNormalNormal(Field{-1}, subdiagonal,
+                                     work_matrix.ToConst(), Field{1},
+                                     &matrix_supernode);
+        }
       } else {
         for (Int k = 0; k < supernode_size; ++k) {
           for (Int i = 0; i < degree; ++i) {
