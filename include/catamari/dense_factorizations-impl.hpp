@@ -19,17 +19,18 @@ namespace catamari {
 
 template <class Field>
 Int LowerUnblockedCholeskyFactorization(BlasMatrix<Field>* matrix) {
+  typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
   for (Int i = 0; i < height; ++i) {
-    const Field delta = matrix->Entry(i, i);
+    const Real delta = RealPart(matrix->Entry(i, i));
     // TODO(Jack Poulson): Enforce 'delta' being real-valued.
-    if (delta <= Field{0}) {
+    if (delta <= Real{0}) {
       return i;
     }
 
     // TODO(Jack Poulson): Switch to a custom square-root function so that
     // more general datatypes can be supported.
-    const Field delta_sqrt = std::sqrt(delta);
+    const Real delta_sqrt = std::sqrt(delta);
     matrix->Entry(i, i) = delta_sqrt;
 
     // Solve for the remainder of the i'th column of L.
@@ -121,6 +122,7 @@ inline Int LowerUnblockedCholeskyFactorization(BlasMatrix<double>* matrix) {
 template <class Field>
 Int LowerBlockedCholeskyFactorization(BlasMatrix<Field>* matrix,
                                       Int blocksize) {
+  typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
   const Int leading_dim = matrix->leading_dim;
   for (Int i = 0; i < height; i += blocksize) {
@@ -157,7 +159,7 @@ Int LowerBlockedCholeskyFactorization(BlasMatrix<Field>* matrix,
     submatrix.leading_dim = leading_dim;
     submatrix.data = matrix->Pointer(i + bsize, i + bsize);
     const ConstBlasMatrix<Field> const_subdiagonal = subdiagonal;
-    LowerNormalHermitianOuterProduct(Field{-1}, const_subdiagonal, Field{1},
+    LowerNormalHermitianOuterProduct(Real{-1}, const_subdiagonal, Real{1},
                                      &submatrix);
   }
   return height;
@@ -283,7 +285,7 @@ Int LowerBlockedLDLAdjointFactorization(BlasMatrix<Field>* matrix,
 
     // Solve against the diagonal.
     for (Int j = 0; j < subdiagonal.width; ++j) {
-      const ComplexBase<Field> delta = const_diagonal_block(j, j);
+      const ComplexBase<Field> delta = RealPart(const_diagonal_block(j, j));
       for (Int k = 0; k < subdiagonal.height; ++k) {
         subdiagonal(k, j) /= delta;
       }
@@ -322,8 +324,9 @@ std::vector<Int> LowerUnblockedFactorAndSampleDPP(
     Real delta = RealPart(matrix->Entry(i, i));
     CATAMARI_ASSERT(delta >= Real{0} && delta <= Real{1},
                     "Diagonal value was outside of [0, 1].");
-    const bool keep_index = maximum_likelihood ? delta >= Real(1)/Real(2) :
-        (*uniform_dist)(*generator) <= delta;
+    const bool keep_index = maximum_likelihood
+                                ? delta >= Real(1) / Real(2)
+                                : (*uniform_dist)(*generator) <= delta;
     if (keep_index) {
       sample.push_back(i);
     } else {
@@ -402,7 +405,7 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
 
     // Solve against the diagonal.
     for (Int j = 0; j < subdiagonal.width; ++j) {
-      const ComplexBase<Field> delta = const_diagonal_block(j, j);
+      const ComplexBase<Field> delta = RealPart(const_diagonal_block(j, j));
       for (Int k = 0; k < subdiagonal.height; ++k) {
         subdiagonal(k, j) /= delta;
       }

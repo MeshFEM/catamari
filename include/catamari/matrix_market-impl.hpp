@@ -12,13 +12,13 @@
 
 namespace catamari {
 
-template <class Real>
+template <class Real, typename>
 bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
                                 std::ifstream& file, Real* value) {
   return quotient::ReadMatrixMarketArrayRealValue(description, file, value);
 }
 
-template <typename Real>
+template <class Real, typename>
 bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
                                 std::ifstream& file,
                                 std::complex<Real>* value) {
@@ -29,7 +29,7 @@ bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
   return status;
 }
 
-template <class Real>
+template <class Real, typename>
 bool ReadMatrixMarketCoordinateEntry(const MatrixMarketDescription& description,
                                      std::ifstream& file, Int* row, Int* column,
                                      Real* value) {
@@ -37,7 +37,7 @@ bool ReadMatrixMarketCoordinateEntry(const MatrixMarketDescription& description,
                                                        column, value);
 }
 
-template <class Real>
+template <class Real, typename>
 bool ReadMatrixMarketCoordinateEntry(const MatrixMarketDescription& description,
                                      std::ifstream& file, Int* row, Int* column,
                                      std::complex<Real>* value) {

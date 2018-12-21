@@ -16,38 +16,121 @@ Complex<float>::Complex() : std::complex<float>() {}
 
 Complex<double>::Complex() : std::complex<double>() {}
 
-Complex<float>::Complex(const std::complex<float>& input) :
-    std::complex<float>(input) {}
+Complex<float>::Complex(const std::complex<float>& input)
+    : std::complex<float>(input) {}
 
-Complex<double>::Complex(const std::complex<double>& input) :
-    std::complex<double>(input) {}
-
-template <class RealInputType>
-Complex<float>::Complex(const RealInputType& input) :
-    std::complex<float>(static_cast<float>(input)) {}
+Complex<double>::Complex(const std::complex<double>& input)
+    : std::complex<double>(input) {}
 
 template <class RealInputType>
-Complex<double>::Complex(const RealInputType& input) :
-    std::complex<double>(static_cast<double>(input)) {}
+Complex<float>::Complex(const RealInputType& input)
+    : std::complex<float>(static_cast<float>(input)) {}
 
 template <class RealInputType>
-Complex<float>::Complex(const Complex<RealInputType>& input) :
-    std::complex<float>(static_cast<float>(input.real()),
-                        static_cast<float>(input.imag())) {}
+Complex<double>::Complex(const RealInputType& input)
+    : std::complex<double>(static_cast<double>(input)) {}
 
 template <class RealInputType>
-Complex<double>::Complex(const Complex<RealInputType>& input) :
-    std::complex<double>(static_cast<double>(input.real()),
-                         static_cast<double>(input.imag())) {}
+Complex<float>::Complex(const Complex<RealInputType>& input)
+    : std::complex<float>(static_cast<float>(input.real()),
+                          static_cast<float>(input.imag())) {}
+
+template <class RealInputType>
+Complex<double>::Complex(const Complex<RealInputType>& input)
+    : std::complex<double>(static_cast<double>(input.real()),
+                           static_cast<double>(input.imag())) {}
 
 template <class RealInputType, class ImagInputType>
-Complex<float>::Complex(const RealInputType& real, const ImagInputType& imag) :
-    std::complex<float>(static_cast<float>(real), static_cast<float>(imag)) {}
+Complex<float>::Complex(const RealInputType& real, const ImagInputType& imag)
+    : std::complex<float>(static_cast<float>(real), static_cast<float>(imag)) {}
 
 template <class RealInputType, class ImagInputType>
-Complex<double>::Complex(const RealInputType& real, const ImagInputType& imag) :
-    std::complex<double>(static_cast<double>(real), static_cast<double>(imag))
-    {}
+Complex<double>::Complex(const RealInputType& real, const ImagInputType& imag)
+    : std::complex<double>(static_cast<double>(real),
+                           static_cast<double>(imag)) {}
+
+template <class Real>
+Complex<Real> operator-(const Complex<Real>& value) {
+  const std::complex<Real>& value_std =
+      static_cast<const std::complex<Real>&>(value);
+  return -value_std;
+}
+
+template <class Real>
+Complex<Real> operator+(const Complex<Real>& a, const Complex<Real>& b) {
+  const std::complex<Real>& a_std = static_cast<const std::complex<Real>&>(a);
+  const std::complex<Real>& b_std = static_cast<const std::complex<Real>&>(b);
+  return a_std + b_std;
+}
+
+template <class Real>
+Complex<Real> operator+(const Complex<Real>& a, const Real& b) {
+  const std::complex<Real>& a_std = static_cast<const std::complex<Real>&>(a);
+  return a_std + b;
+}
+
+template <class Real>
+Complex<Real> operator+(const Real& a, const Complex<Real>& b) {
+  const std::complex<Real>& b_std = static_cast<const std::complex<Real>&>(b);
+  return a + b_std;
+}
+
+template <class Real>
+Complex<Real> operator-(const Complex<Real>& a, const Complex<Real>& b) {
+  const std::complex<Real>& a_std = static_cast<const std::complex<Real>&>(a);
+  const std::complex<Real>& b_std = static_cast<const std::complex<Real>&>(b);
+  return a_std - b_std;
+}
+
+template <class Real>
+Complex<Real> operator-(const Complex<Real>& a, const Real& b) {
+  const std::complex<Real>& a_std = static_cast<const std::complex<Real>&>(a);
+  return a_std - b;
+}
+
+template <class Real>
+Complex<Real> operator-(const Real& a, const Complex<Real>& b) {
+  const std::complex<Real>& b_std = static_cast<const std::complex<Real>&>(b);
+  return a - b_std;
+}
+
+template <class Real>
+Complex<Real> operator*(const Complex<Real>& a, const Complex<Real>& b) {
+  const std::complex<Real>& a_std = static_cast<const std::complex<Real>&>(a);
+  const std::complex<Real>& b_std = static_cast<const std::complex<Real>&>(b);
+  return a_std * b_std;
+}
+
+template <class Real>
+Complex<Real> operator*(const Complex<Real>& a, const Real& b) {
+  const std::complex<Real>& a_std = static_cast<const std::complex<Real>&>(a);
+  return a_std * b;
+}
+
+template <class Real>
+Complex<Real> operator*(const Real& a, const Complex<Real>& b) {
+  const std::complex<Real>& b_std = static_cast<const std::complex<Real>&>(b);
+  return a * b_std;
+}
+
+template <class Real>
+Complex<Real> operator/(const Complex<Real>& a, const Complex<Real>& b) {
+  const std::complex<Real>& a_std = static_cast<const std::complex<Real>&>(a);
+  const std::complex<Real>& b_std = static_cast<const std::complex<Real>&>(b);
+  return a_std / b_std;
+}
+
+template <class Real>
+Complex<Real> operator/(const Complex<Real>& a, const Real& b) {
+  const std::complex<Real>& a_std = static_cast<const std::complex<Real>&>(a);
+  return a_std / b;
+}
+
+template <class Real>
+Complex<Real> operator/(const Real& a, const Complex<Real>& b) {
+  const std::complex<Real>& b_std = static_cast<const std::complex<Real>&>(b);
+  return a / b_std;
+}
 
 template <class Real>
 Real RealPart(const Real& value) CATAMARI_NOEXCEPT {

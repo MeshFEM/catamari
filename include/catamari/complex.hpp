@@ -9,6 +9,7 @@
 #define CATAMARI_COMPLEX_H_
 
 #include <complex>
+#include <type_traits>
 
 #include "catamari/enable_if.hpp"
 #include "catamari/macros.hpp"
@@ -121,6 +122,56 @@ template <class Real>
 struct IsComplex<Complex<Real>> {
   static constexpr bool value = true;
 };
+
+// Encodes whether or not a given type is real. For example,
+//   IsComplex<double>::value == true
+//   IsComplex<Complex<double>>::value == false
+template <class Field>
+struct IsReal {
+  static constexpr bool value = !IsComplex<Field>::value;
+};
+
+template <typename Condition, class T = void>
+using EnableIf = typename std::enable_if<Condition::value, T>::type;
+
+template <typename Condition, class T = void>
+using DisableIf = typename std::enable_if<!Condition::value, T>::type;
+
+// Returns the negation of a complex value.
+template <class Real>
+Complex<Real> operator-(const Complex<Real>& value);
+
+// Returns the sum of two values.
+template <class Real>
+Complex<Real> operator+(const Complex<Real>& a, const Complex<Real>& b);
+template <class Real>
+Complex<Real> operator+(const Complex<Real>& a, const Real& b);
+template <class Real>
+Complex<Real> operator+(const Real& a, const Complex<Real>& b);
+
+// Returns the difference of two values.
+template <class Real>
+Complex<Real> operator-(const Complex<Real>& a, const Complex<Real>& b);
+template <class Real>
+Complex<Real> operator-(const Complex<Real>& a, const Real& b);
+template <class Real>
+Complex<Real> operator-(const Real& a, const Complex<Real>& b);
+
+// Returns the product of two values.
+template <class Real>
+Complex<Real> operator*(const Complex<Real>& a, const Complex<Real>& b);
+template <class Real>
+Complex<Real> operator*(const Complex<Real>& a, const Real& b);
+template <class Real>
+Complex<Real> operator*(const Real& a, const Complex<Real>& b);
+
+// Returns the ratio of two values.
+template <class Real>
+Complex<Real> operator/(const Complex<Real>& a, const Complex<Real>& b);
+template <class Real>
+Complex<Real> operator/(const Complex<Real>& a, const Real& b);
+template <class Real>
+Complex<Real> operator/(const Real& a, const Complex<Real>& b);
 
 // Returns the real part of a real scalar.
 template <class Real>

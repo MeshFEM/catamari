@@ -22,7 +22,7 @@ using quotient::MatrixMarketDescription;
 // Market file.
 //
 // Returns true if successful.
-template <class Real>
+template <class Real, typename = EnableIf<IsReal<Real>>>
 bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
                                 std::ifstream& file, Real* value);
 
@@ -30,7 +30,7 @@ bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
 // Matrix Market file.
 //
 // Returns true if successful.
-template <class Real>
+template <class Real, typename = EnableIf<IsReal<Real>>>
 bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
                                 std::ifstream& file, std::complex<Real>* value);
 
@@ -38,7 +38,7 @@ bool ReadMatrixMarketArrayValue(const MatrixMarketDescription& description,
 // file.
 //
 // Returns true if successful.
-template <class Real>
+template <class Real, typename = EnableIf<IsReal<Real>>>
 bool ReadMatrixMarketCoordinateEntry(const MatrixMarketDescription& description,
                                      std::ifstream& file, Int* row, Int* column,
                                      Real* value);
@@ -47,7 +47,7 @@ bool ReadMatrixMarketCoordinateEntry(const MatrixMarketDescription& description,
 // Market file.
 //
 // Returns true if successful.
-template <class Real>
+template <class Real, typename = EnableIf<IsReal<Real>>>
 bool ReadMatrixMarketCoordinateEntry(const MatrixMarketDescription& description,
                                      std::ifstream& file, Int* row, Int* column,
                                      std::complex<Real>* value);

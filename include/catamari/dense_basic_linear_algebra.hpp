@@ -69,15 +69,10 @@ void MatrixMultiplyTransposeNormal(const Field& alpha,
                                    BlasMatrix<Field>* output_matrix);
 
 template <class Field>
-void LowerNormalHermitianOuterProduct(const Field& alpha,
+void LowerNormalHermitianOuterProduct(const ComplexBase<Field>& alpha,
                                       const ConstBlasMatrix<Field>& left_matrix,
-                                      const Field& beta,
+                                      const ComplexBase<Field>& beta,
                                       BlasMatrix<Field>* output_matrix);
-
-template <class Field>
-void LowerTransposeHermitianOuterProduct(
-    const Field& alpha, const ConstBlasMatrix<Field>& left_matrix,
-    const Field& beta, BlasMatrix<Field>* output_matrix);
 
 template <class Field>
 void MatrixMultiplyLowerNormalTranspose(
