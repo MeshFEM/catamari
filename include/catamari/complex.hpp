@@ -131,10 +131,10 @@ struct IsReal {
   static constexpr bool value = !IsComplex<Field>::value;
 };
 
-template <typename Condition, class T = void>
+template <typename Condition, class T>
 using EnableIf = typename std::enable_if<Condition::value, T>::type;
 
-template <typename Condition, class T = void>
+template <typename Condition, class T>
 using DisableIf = typename std::enable_if<!Condition::value, T>::type;
 
 // Returns the negation of a complex value.

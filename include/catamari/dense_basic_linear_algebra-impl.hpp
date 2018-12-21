@@ -32,7 +32,6 @@ void MatrixVectorProduct(const Field& alpha,
                          const Field* input_vector, Field* result) {
   const Int height = matrix.height;
   const Int width = matrix.width;
-  const Int leading_dim = matrix.leading_dim;
   for (Int j = 0; j < width; ++j) {
     for (Int i = 0; i < height; ++i) {
       result[i] += alpha * matrix(i, j) * input_vector[j];
@@ -110,7 +109,6 @@ void ConjugateMatrixVectorProduct(const Field& alpha,
                                   const Field* input_vector, Field* result) {
   const Int height = matrix.height;
   const Int width = matrix.width;
-  const Int leading_dim = matrix.leading_dim;
   for (Int j = 0; j < width; ++j) {
     for (Int i = 0; i < height; ++i) {
       result[i] += alpha * Conjugate(matrix(i, j)) * input_vector[j];
