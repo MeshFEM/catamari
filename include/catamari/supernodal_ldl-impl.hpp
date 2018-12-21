@@ -22,22 +22,22 @@ SupernodalLowerFactor<Field>::SupernodalLowerFactor(
 
   Int degree_sum = 0;
   Int num_entries = 0;
-  index_offsets.resize(num_supernodes + 1);
+  structure_index_offsets_.resize(num_supernodes + 1);
   std::vector<Int> lower_value_offsets(num_supernodes + 1);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int degree = supernode_degrees[supernode];
     const Int supernode_size = supernode_sizes[supernode];
 
-    index_offsets[supernode] = degree_sum;
+    structure_index_offsets_[supernode] = degree_sum;
     lower_value_offsets[supernode] = num_entries;
 
     degree_sum += degree;
     num_entries += degree * supernode_size;
   }
-  index_offsets[num_supernodes] = degree_sum;
+  structure_index_offsets_[num_supernodes] = degree_sum;
   lower_value_offsets[num_supernodes] = num_entries;
 
-  indices.resize(degree_sum);
+  structure_indices_.resize(degree_sum);
   values_.resize(num_entries, Field{0});
 
   blocks.resize(num_supernodes);
@@ -50,6 +50,16 @@ SupernodalLowerFactor<Field>::SupernodalLowerFactor(
     blocks[supernode].leading_dim = degree;
     blocks[supernode].data = &values_[lower_value_offsets[supernode]];
   }
+}
+
+template <class Field>
+Int* SupernodalLowerFactor<Field>::Structure(Int supernode) {
+  return &structure_indices_[structure_index_offsets_[supernode]];
+}
+
+template <class Field>
+const Int* SupernodalLowerFactor<Field>::Structure(Int supernode) const {
+  return &structure_indices_[structure_index_offsets_[supernode]];
 }
 
 template <class Field>
@@ -238,9 +248,9 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
   // A set of pointers for keeping track of where to insert supernode pattern
   // indices.
-  std::vector<Int> supernode_ptrs(num_supernodes);
+  std::vector<Int*> supernode_ptrs(num_supernodes);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    supernode_ptrs[supernode] = lower_factor->index_offsets[supernode];
+    supernode_ptrs[supernode] = lower_factor->Structure(supernode);
   }
 
   // Fill in the structure indices.
@@ -289,11 +299,12 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
               "Descendant supernode was as large as main supernode.");
           CATAMARI_ASSERT(
               supernode_ptrs[descendant_supernode] >=
-                      lower_factor->index_offsets[descendant_supernode] &&
+                      lower_factor->Structure(descendant_supernode) &&
                   supernode_ptrs[descendant_supernode] <
-                      lower_factor->index_offsets[descendant_supernode + 1],
+                      lower_factor->Structure(descendant_supernode + 1),
               "Left supernode's indices.");
-          lower_factor->indices[supernode_ptrs[descendant_supernode]++] = row;
+          *supernode_ptrs[descendant_supernode] = row;
+          ++supernode_ptrs[descendant_supernode];
         }
 
         // Move up to the parent in this subtree of the elimination forest.
@@ -306,14 +317,14 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
 #ifdef CATAMARI_DEBUG
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int index_beg = lower_factor->index_offsets[supernode];
-    const Int index_end = lower_factor->index_offsets[supernode + 1];
+    const Int* index_beg = lower_factor->Structure(supernode);
+    const Int* index_end = lower_factor->Structure(supernode + 1);
     CATAMARI_ASSERT(supernode_ptrs[supernode] == index_end,
                     "Supernode pointers did not match index offsets.");
     bool sorted = true;
     Int last_row = -1;
-    for (Int index = index_beg; index < index_end; ++index) {
-      const Int row = lower_factor->indices[index];
+    for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
+      const Int row = *row_ptr;
       if (row <= last_row) {
         sorted = false;
         break;
@@ -324,9 +335,8 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     if (!sorted) {
       std::cerr << "Supernode " << supernode << " did not have sorted indices."
                 << std::endl;
-      for (Int index = index_beg; index < index_end; ++index) {
-        const Int row = lower_factor->indices[index];
-        std::cout << row << " ";
+      for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
+        std::cout << *row_ptr << " ";
       }
       std::cout << std::endl;
     }
@@ -350,10 +360,10 @@ void FillIntersections(const std::vector<Int>& supernode_sizes,
         num_supernode_intersects;
     Int last_supernode = -1;
 
-    const Int index_beg = lower_factor->index_offsets[column_supernode];
-    const Int index_end = lower_factor->index_offsets[column_supernode + 1];
-    for (Int index = index_beg; index < index_end; ++index) {
-      const Int row = lower_factor->indices[index];
+    const Int* index_beg = lower_factor->Structure(column_supernode);
+    const Int* index_end = lower_factor->Structure(column_supernode + 1);
+    for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
+      const Int row = *row_ptr;
       const Int supernode = supernode_member_to_index[row];
       if (supernode != last_supernode) {
         last_supernode = supernode;
@@ -371,10 +381,10 @@ void FillIntersections(const std::vector<Int>& supernode_sizes,
     Int last_supernode = -1;
     Int intersect_size = 0;
 
-    const Int index_beg = lower_factor->index_offsets[supernode];
-    const Int index_end = lower_factor->index_offsets[supernode + 1];
-    for (Int index = index_beg; index < index_end; ++index) {
-      const Int row = lower_factor->indices[index];
+    const Int* index_beg = lower_factor->Structure(supernode);
+    const Int* index_end = lower_factor->Structure(supernode + 1);
+    for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
+      const Int row = *row_ptr;
       const Int row_supernode = supernode_member_to_index[row];
       if (row_supernode != last_supernode) {
         if (last_supernode != -1) {
@@ -442,11 +452,9 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
       }
 
       // Insert the value into the subdiagonal block.
-      const Int* column_index_beg =
-          &lower_factor->indices[lower_factor->index_offsets[column_supernode]];
+      const Int* column_index_beg = lower_factor->Structure(column_supernode);
       const Int* column_index_end =
-          &lower_factor
-               ->indices[lower_factor->index_offsets[column_supernode + 1]];
+          lower_factor->Structure(column_supernode + 1);
       const Int* iter =
           std::lower_bound(column_index_beg, column_index_end, row);
       CATAMARI_ASSERT(iter != column_index_end, "Exceeded column indices.");
@@ -612,11 +620,8 @@ void UpdateDiagonalBlock(bool is_cholesky,
   if (!inplace_update) {
     // Apply the out-of-place update and zero the buffer.
     const Int main_supernode_start = supernode_starts[main_supernode];
-    const Int descendant_main_index_beg =
-        lower_factor.index_offsets[descendant_supernode] +
-        descendant_main_rel_row;
     const Int* descendant_main_indices =
-        &lower_factor.indices[descendant_main_index_beg];
+        lower_factor.Structure(descendant_supernode) + descendant_main_rel_row;
 
     for (Int j = 0; j < descendant_main_intersect_size; ++j) {
       const Int column = descendant_main_indices[j];
@@ -649,9 +654,8 @@ void UpdateSubdiagonalBlock(
     SupernodalLowerFactor<Field>* lower_factor, Int* main_active_rel_row,
     Int* main_active_intersect_size_beg, BlasMatrix<Field>* update_matrix) {
   const Int main_supernode_size = lower_factor->blocks[main_supernode].width;
-  const Int main_index_offset = lower_factor->index_offsets[main_supernode];
-  const Int descendant_index_offset =
-      lower_factor->index_offsets[descendant_supernode];
+  const Int* main_indices = lower_factor->Structure(main_supernode);
+  const Int* descendant_indices = lower_factor->Structure(descendant_supernode);
 
   const Int descendant_main_intersect_size = scaled_adjoint.width;
   const Int descendant_active_intersect_size = descendant_active_matrix.height;
@@ -659,8 +663,7 @@ void UpdateSubdiagonalBlock(
   // Move the pointers for the main supernode down to the active supernode of
   // the descendant column block.
   const Int descendant_active_supernode_start =
-      lower_factor
-          ->indices[descendant_index_offset + descendant_active_rel_row];
+      descendant_indices[descendant_active_rel_row];
   const Int active_supernode =
       supernode_member_to_index[descendant_active_supernode_start];
   CATAMARI_ASSERT(active_supernode > main_supernode,
@@ -668,14 +671,12 @@ void UpdateSubdiagonalBlock(
 
   Int main_active_intersect_size =
       lower_factor->intersect_sizes[*main_active_intersect_size_beg];
-  Int main_active_first_row =
-      lower_factor->indices[main_index_offset + *main_active_rel_row];
+  Int main_active_first_row = main_indices[*main_active_rel_row];
   while (supernode_member_to_index[main_active_first_row] < active_supernode) {
     *main_active_rel_row += main_active_intersect_size;
     ++*main_active_intersect_size_beg;
 
-    main_active_first_row =
-        lower_factor->indices[main_index_offset + *main_active_rel_row];
+    main_active_first_row = main_indices[*main_active_rel_row];
     main_active_intersect_size =
         lower_factor->intersect_sizes[*main_active_intersect_size_beg];
   }
@@ -711,14 +712,11 @@ void UpdateSubdiagonalBlock(
   if (!inplace_update) {
     const Int main_supernode_start = supernode_starts[main_supernode];
 
-    const Int* main_active_indices =
-        &lower_factor->indices[main_index_offset + *main_active_rel_row];
+    const Int* main_active_indices = main_indices + *main_active_rel_row;
     const Int* descendant_main_indices =
-        &lower_factor
-             ->indices[descendant_index_offset + descendant_main_rel_row];
+        descendant_indices + descendant_main_rel_row;
     const Int* descendant_active_indices =
-        &lower_factor
-             ->indices[descendant_index_offset + descendant_active_rel_row];
+        descendant_indices + descendant_active_rel_row;
 
     Int i_rel = 0;
     for (Int i = 0; i < descendant_active_intersect_size; ++i) {
@@ -1674,13 +1672,13 @@ void LowerTriangularSolve(
       LeftLowerUnitTriangularSolves(triangular_matrix, &matrix_supernode);
     }
 
-    const Int index_beg = lower_factor.index_offsets[supernode];
     const ConstBlasMatrix<Field> subdiagonal = lower_factor.blocks[supernode];
     if (!subdiagonal.height) {
       continue;
     }
 
     // Handle the external updates for this supernode.
+    const Int* indices = lower_factor.Structure(supernode);
     if (supernode_size >=
         factorization.forward_solve_out_of_place_supernode_threshold) {
       // Perform an out-of-place GEMV.
@@ -1698,7 +1696,7 @@ void LowerTriangularSolve(
       // Accumulate the workspace into the solution matrix.
       for (Int j = 0; j < num_rhs; ++j) {
         for (Int i = 0; i < subdiagonal.height; ++i) {
-          const Int row = lower_factor.indices[index_beg + i];
+          const Int row = indices[i];
           matrix->Entry(row, j) += work_matrix(i, j);
         }
       }
@@ -1707,7 +1705,7 @@ void LowerTriangularSolve(
         for (Int k = 0; k < supernode_size; ++k) {
           const Field& eta = matrix_supernode(k, j);
           for (Int i = 0; i < subdiagonal.height; ++i) {
-            const Int row = lower_factor.indices[index_beg + i];
+            const Int row = indices[i];
             matrix->Entry(row, j) -= subdiagonal(i, k) * eta;
           }
         }
@@ -1764,7 +1762,7 @@ void LowerAdjointTriangularSolve(
   for (Int supernode = num_supernodes - 1; supernode >= 0; --supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];
     const Int supernode_start = factorization.supernode_starts[supernode];
-    const Int index_beg = lower_factor.index_offsets[supernode];
+    const Int* indices = lower_factor.Structure(supernode);
 
     BlasMatrix<Field> matrix_supernode =
         matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
@@ -1782,7 +1780,7 @@ void LowerAdjointTriangularSolve(
         work_matrix.data = packed_input_buf.data();
         for (Int j = 0; j < num_rhs; ++j) {
           for (Int i = 0; i < subdiagonal.height; ++i) {
-            const Int row = lower_factor.indices[index_beg + i];
+            const Int row = indices[i];
             work_matrix(i, j) = matrix->Entry(row, j);
           }
         }
@@ -1793,7 +1791,7 @@ void LowerAdjointTriangularSolve(
       } else {
         for (Int k = 0; k < supernode_size; ++k) {
           for (Int i = 0; i < subdiagonal.height; ++i) {
-            const Int row = lower_factor.indices[index_beg + i];
+            const Int row = indices[i];
             for (Int j = 0; j < num_rhs; ++j) {
               matrix_supernode(k, j) -=
                   Conjugate(subdiagonal(i, k)) * matrix->Entry(row, j);
@@ -1833,7 +1831,7 @@ void PrintLowerFactor(const SupernodalLDLFactorization<Field>& factorization,
   const Int num_supernodes = factorization.supernode_sizes.size();
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int supernode_start = factorization.supernode_starts[supernode];
-    const Int index_beg = lower_factor.index_offsets[supernode];
+    const Int* indices = lower_factor.Structure(supernode);
 
     const ConstBlasMatrix<Field>& diag_matrix = diag_factor.blocks[supernode];
     const ConstBlasMatrix<Field>& lower_matrix = lower_factor.blocks[supernode];
@@ -1854,7 +1852,7 @@ void PrintLowerFactor(const SupernodalLDLFactorization<Field>& factorization,
 
       // Print the portion below the diagonal block.
       for (Int i = 0; i < lower_matrix.height; ++i) {
-        const Int row = lower_factor.indices[index_beg + i];
+        const Int row = indices[i];
         print_entry(row, column, lower_matrix(i, j));
       }
     }

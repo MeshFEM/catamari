@@ -18,15 +18,6 @@ template <class Field>
 class SupernodalLowerFactor {
  public:
   // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
-  // degrees (excluding the diagonal blocks) of supernodes 0 through j - 1.
-  std::vector<Int> index_offsets;
-
-  // The concatenation of the structures of the supernodes. The structure of
-  // supernode j is stored between indices index_offsets[j] and
-  // index_offsets[j + 1].
-  std::vector<Int> indices;
-
-  // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
   // number of supernodes that supernodes 0 through j - 1 individually intersect
   // with.
   std::vector<Int> intersect_size_offsets;
@@ -42,7 +33,20 @@ class SupernodalLowerFactor {
   SupernodalLowerFactor(const std::vector<Int>& supernode_sizes,
                         const std::vector<Int>& supernode_degrees);
 
+  Int* Structure(Int supernode);
+
+  const Int* Structure(Int supernode) const;
+
  private:
+  // The concatenation of the structures of the supernodes. The structure of
+  // supernode j is stored between indices index_offsets[j] and
+  // index_offsets[j + 1].
+  std::vector<Int> structure_indices_;
+
+  // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
+  // degrees (excluding the diagonal blocks) of supernodes 0 through j - 1.
+  std::vector<Int> structure_index_offsets_;
+
   // The concatenation of the numerical values of the supernodal structures.
   // The entries of supernode j are stored between indices value_offsets[j] and
   // value_offsets[j + 1] in a column-major manner.
