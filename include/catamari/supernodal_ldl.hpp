@@ -15,7 +15,8 @@ namespace catamari {
 // The representation of the portion of the unit-lower triangular factor
 // that is below the supernodal diagonal blocks.
 template <class Field>
-struct SupernodalLowerFactor {
+class SupernodalLowerFactor {
+ public:
   // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
   // degrees (excluding the diagonal blocks) of supernodes 0 through j - 1.
   std::vector<Int> index_offsets;
@@ -35,34 +36,32 @@ struct SupernodalLowerFactor {
   // intersect_size_offsets[j] through intersect_size_offsets[j + 1].
   std::vector<Int> intersect_sizes;
 
-  // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
-  // number of nonzero entries (the degree times the supernode size) of
-  // supernodes 0 through j - 1.
-  std::vector<Int> value_offsets;
+  // Representations of the densified subdiagonal blocks of the factorization.
+  std::vector<BlasMatrix<Field>> blocks;
 
+  SupernodalLowerFactor(const std::vector<Int>& supernode_sizes,
+                        const std::vector<Int>& supernode_degrees);
+
+ private:
   // The concatenation of the numerical values of the supernodal structures.
   // The entries of supernode j are stored between indices value_offsets[j] and
   // value_offsets[j + 1] in a column-major manner.
-  std::vector<Field> values;
-
-  // Representations of the densified subdiagonal blocks of the factorization.
-  std::vector<BlasMatrix<Field>> blocks;
+  std::vector<Field> values_;
 };
 
 // Stores the (dense) diagonal blocks for the supernodes.
 template <class Field>
-struct SupernodalDiagonalFactor {
-  // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
-  // number of nonzero entries (the square of the supernode size) of supernodes
-  // 0 through j - 1.
-  std::vector<Int> value_offsets;
-
-  // The concatenation of the numerical values of the supernodal diagonal
-  // blocks (stored in a column-major manner in each block).
-  std::vector<Field> values;
-
+class SupernodalDiagonalFactor {
+ public:
   // Representations of the diagonal blocks of the factorization.
   std::vector<BlasMatrix<Field>> blocks;
+
+  SupernodalDiagonalFactor(const std::vector<Int>& supernode_sizes);
+
+ private:
+  // The concatenation of the numerical values of the supernodal diagonal
+  // blocks (stored in a column-major manner in each block).
+  std::vector<Field> values_;
 };
 
 // The user-facing data structure for storing a supernodal LDL' factorization.
@@ -97,10 +96,10 @@ struct SupernodalLDLFactorization {
   std::vector<Int> inverse_permutation;
 
   // The subdiagonal-block portion of the lower-triangular factor.
-  SupernodalLowerFactor<Field> lower_factor;
+  std::unique_ptr<SupernodalLowerFactor<Field>> lower_factor;
 
   // The block-diagonal factor.
-  SupernodalDiagonalFactor<Field> diagonal_factor;
+  std::unique_ptr<SupernodalDiagonalFactor<Field>> diagonal_factor;
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.

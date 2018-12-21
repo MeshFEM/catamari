@@ -83,57 +83,15 @@ void SupernodalDPP<Field>::FormStructure() {
   CATAMARI_ASSERT(static_cast<Int>(supernode_degrees_.size()) == num_supernodes,
                   "Invalid supernode degrees size.");
 
-  // Set up the column offsets and allocate space (initializing the values of
-  // the unit-lower and diagonal and all zeros).
-  lower_factor_.index_offsets.resize(num_supernodes + 1);
-  lower_factor_.value_offsets.resize(num_supernodes + 1);
-  diagonal_factor_.value_offsets.resize(num_supernodes + 1);
-  Int degree_sum = 0;
-  Int num_entries = 0;
-  Int num_diagonal_entries = 0;
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    lower_factor_.index_offsets[supernode] = degree_sum;
-    lower_factor_.value_offsets[supernode] = num_entries;
-    diagonal_factor_.value_offsets[supernode] = num_diagonal_entries;
-
-    const Int degree = supernode_degrees_[supernode];
-    const Int supernode_size = supernode_sizes_[supernode];
-    degree_sum += degree;
-    num_entries += degree * supernode_size;
-    num_diagonal_entries += supernode_size * supernode_size;
-  }
-  lower_factor_.index_offsets[num_supernodes] = degree_sum;
-  lower_factor_.value_offsets[num_supernodes] = num_entries;
-  diagonal_factor_.value_offsets[num_supernodes] = num_diagonal_entries;
-
-  lower_factor_.indices.resize(degree_sum);
-  lower_factor_.values.resize(num_entries);
-  diagonal_factor_.values.resize(num_diagonal_entries);
-
-  lower_factor_.blocks.resize(num_supernodes);
-  diagonal_factor_.blocks.resize(num_supernodes);
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int degree = supernode_degrees_[supernode];
-    const Int supernode_size = supernode_sizes_[supernode];
-
-    lower_factor_.blocks[supernode].height = degree;
-    lower_factor_.blocks[supernode].width = supernode_size;
-    lower_factor_.blocks[supernode].leading_dim = degree;
-    lower_factor_.blocks[supernode].data =
-        &lower_factor_.values[lower_factor_.value_offsets[supernode]];
-
-    diagonal_factor_.blocks[supernode].height = supernode_size;
-    diagonal_factor_.blocks[supernode].width = supernode_size;
-    diagonal_factor_.blocks[supernode].leading_dim = supernode_size;
-    diagonal_factor_.blocks[supernode].data =
-        &diagonal_factor_.values[diagonal_factor_.value_offsets[supernode]];
-  }
+  lower_factor_.reset(
+      new SupernodalLowerFactor<Field>(supernode_sizes_, supernode_degrees_));
+  diagonal_factor_.reset(new SupernodalDiagonalFactor<Field>(supernode_sizes_));
 
   supernodal_ldl::FillStructureIndices(
       matrix_, permutation_, inverse_permutation_, parents_, supernode_sizes_,
-      supernode_member_to_index_, &lower_factor_);
-  supernodal_ldl::FillIntersections(supernode_sizes_,
-                                    supernode_member_to_index_, &lower_factor_);
+      supernode_member_to_index_, lower_factor_.get());
+  supernodal_ldl::FillIntersections(
+      supernode_sizes_, supernode_member_to_index_, lower_factor_.get());
 }
 
 template <class Field>
@@ -148,14 +106,25 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   const Int num_supernodes = supernode_sizes_.size();
   const bool is_cholesky = false;
 
-  std::fill(lower_factor_.values.begin(), lower_factor_.values.end(), Field{0});
-  std::fill(diagonal_factor_.values.begin(), diagonal_factor_.values.end(),
-            Field{0});
+  // Reset the lower factor to all zeros.
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    BlasMatrix<Field>& matrix = lower_factor_->blocks[supernode];
+    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
+              Field{0});
+  }
 
+  // Reset the diagonal factor to all zeros.
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    BlasMatrix<Field>& matrix = diagonal_factor_->blocks[supernode];
+    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
+              Field{0});
+  }
+
+  // Initialize the factors with the input matrix.
   supernodal_ldl::FillNonzeros(matrix_, permutation_, inverse_permutation_,
                                supernode_starts_, supernode_sizes_,
-                               supernode_member_to_index_, &lower_factor_,
-                               &diagonal_factor_);
+                               supernode_member_to_index_, lower_factor_.get(),
+                               diagonal_factor_.get());
 
   std::vector<Int> sample;
   sample.reserve(num_rows);
@@ -163,8 +132,8 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   // Set up a buffer for supernodal updates.
   Int max_supernode_size = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    max_supernode_size =
-        std::max(max_supernode_size, diagonal_factor_.blocks[supernode].height);
+    max_supernode_size = std::max(max_supernode_size,
+                                  diagonal_factor_->blocks[supernode].height);
   }
   std::vector<Field> scaled_adjoint_buffer(
       max_supernode_size * max_supernode_size, Field{0});
@@ -188,14 +157,14 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   for (Int main_supernode = 0; main_supernode < num_supernodes;
        ++main_supernode) {
     BlasMatrix<Field>& main_diagonal_block =
-        diagonal_factor_.blocks[main_supernode];
-    BlasMatrix<Field>& main_lower_block = lower_factor_.blocks[main_supernode];
+        diagonal_factor_->blocks[main_supernode];
+    BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
     const Int main_supernode_start = supernode_starts_[main_supernode];
 
     pattern_flags[main_supernode] = main_supernode;
 
     intersect_ptrs[main_supernode] =
-        lower_factor_.intersect_size_offsets[main_supernode];
+        lower_factor_->intersect_size_offsets[main_supernode];
     rel_rows[main_supernode] = 0;
 
     // Compute the supernodal row pattern.
@@ -211,14 +180,14 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
       CATAMARI_ASSERT(descendant_supernode < main_supernode,
                       "Looking into upper triangle.");
       const ConstBlasMatrix<Field>& descendant_lower_block =
-          lower_factor_.blocks[descendant_supernode];
+          lower_factor_->blocks[descendant_supernode];
       const Int descendant_degree = descendant_lower_block.height;
       const Int descendant_supernode_size = descendant_lower_block.width;
 
       const Int descendant_main_intersect_size_beg =
           intersect_ptrs[descendant_supernode];
       const Int descendant_main_intersect_size =
-          lower_factor_.intersect_sizes[descendant_main_intersect_size_beg];
+          lower_factor_->intersect_sizes[descendant_main_intersect_size_beg];
 
       const Int descendant_main_rel_row = rel_rows[descendant_supernode];
       ConstBlasMatrix<Field> descendant_main_matrix =
@@ -233,7 +202,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
       scaled_adjoint.data = scaled_adjoint_buffer.data();
 
       supernodal_ldl::FormScaledAdjoint(
-          is_cholesky, diagonal_factor_.blocks[descendant_supernode].ToConst(),
+          is_cholesky, diagonal_factor_->blocks[descendant_supernode].ToConst(),
           descendant_main_matrix, &scaled_adjoint);
 
       BlasMatrix<Field> update_matrix;
@@ -243,7 +212,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
       update_matrix.data = update_buffer.data();
 
       supernodal_ldl::UpdateDiagonalBlock(
-          is_cholesky, supernode_starts_, lower_factor_, main_supernode,
+          is_cholesky, supernode_starts_, *lower_factor_, main_supernode,
           descendant_supernode, descendant_main_rel_row, descendant_main_matrix,
           scaled_adjoint.ToConst(), &main_diagonal_block, &update_matrix);
 
@@ -256,11 +225,12 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
           intersect_ptrs[descendant_supernode];
       Int descendant_active_rel_row = rel_rows[descendant_supernode];
       Int main_active_intersect_size_beg =
-          lower_factor_.intersect_size_offsets[main_supernode];
+          lower_factor_->intersect_size_offsets[main_supernode];
       Int main_active_rel_row = 0;
       while (descendant_active_rel_row != descendant_degree) {
         const Int descendant_active_intersect_size =
-            lower_factor_.intersect_sizes[descendant_active_intersect_size_beg];
+            lower_factor_
+                ->intersect_sizes[descendant_active_intersect_size_beg];
 
         ConstBlasMatrix<Field> descendant_active_matrix =
             descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
@@ -275,7 +245,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
             main_supernode, descendant_supernode, descendant_main_rel_row,
             descendant_active_rel_row, supernode_starts_,
             supernode_member_to_index_, scaled_adjoint.ToConst(),
-            descendant_active_matrix, &lower_factor_, &main_active_rel_row,
+            descendant_active_matrix, lower_factor_.get(), &main_active_rel_row,
             &main_active_intersect_size_beg, &update_matrix);
 
         ++descendant_active_intersect_size_beg;
