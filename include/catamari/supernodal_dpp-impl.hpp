@@ -79,8 +79,7 @@ void SupernodalDPP<Field>::FormSupernodes() {
 
 template <class Field>
 void SupernodalDPP<Field>::FormStructure() {
-  const Int num_supernodes = supernode_sizes_.size();
-  CATAMARI_ASSERT(static_cast<Int>(supernode_degrees_.size()) == num_supernodes,
+  CATAMARI_ASSERT(supernode_degrees_.size() == supernode_sizes_.size(),
                   "Invalid supernode degrees size.");
 
   lower_factor_.reset(

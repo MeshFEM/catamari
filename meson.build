@@ -19,24 +19,38 @@ deps = []
 cxx_args = []
 
 # Simple BLAS/LAPACK detection.
-mkl_lib = cxx.find_library('libmkl_rt', required : false)
-if mkl_lib.found()
-  message('Found MKL')
-  cxx_args += '-DCATAMARI_HAVE_MKL'
-  cxx_args += '-DCATAMARI_HAVE_LAPACK'
-  deps += mkl_lib
-else
-  openblas_lib = cxx.find_library('libopenblas', required : false)
-  if openblas_lib.found()
-    message('Found OpenBLAS')
-    cxx_args += '-DCATAMARI_HAVE_OPENBLAS'
-    deps += openblas_lib
+if not get_option('disable-blas')
+  have_blas = false
+  have_mkl = false
+  have_openblas = false
 
-    lapack_lib = cxx.find_library('liblapack', required : false)
-    if lapack_lib.found()
-      message('Found LAPACK')
+  if not get_option('disable-mkl')
+    mkl_lib = cxx.find_library('libmkl_rt', required : false)
+    if mkl_lib.found()
+      message('Found MKL')
+      have_blas = true
+      have_mkl = true
+      cxx_args += '-DCATAMARI_HAVE_MKL'
       cxx_args += '-DCATAMARI_HAVE_LAPACK'
-      deps += lapack_lib
+      deps += mkl_lib
+    endif 
+  endif
+
+  if not have_blas and not get_option('disable-openblas')
+    openblas_lib = cxx.find_library('libopenblas', required : false)
+    if openblas_lib.found()
+      message('Found OpenBLAS')
+      have_blas = true
+      have_openblas = true
+      cxx_args += '-DCATAMARI_HAVE_OPENBLAS'
+      deps += openblas_lib
+
+      lapack_lib = cxx.find_library('liblapack', required : false)
+      if lapack_lib.found()
+        message('Found LAPACK')
+        cxx_args += '-DCATAMARI_HAVE_LAPACK'
+        deps += lapack_lib
+      endif
     endif
   endif
 endif
