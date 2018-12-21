@@ -42,8 +42,11 @@ struct SupernodalLowerFactor {
 
   // The concatenation of the numerical values of the supernodal structures.
   // The entries of supernode j are stored between indices value_offsets[j] and
-  // value_offsets[j + 1].
+  // value_offsets[j + 1] in a column-major manner.
   std::vector<Field> values;
+
+  // Representations of the densified subdiagonal blocks of the factorization.
+  std::vector<BlasMatrix<Field>> blocks;
 };
 
 // Stores the (dense) diagonal blocks for the supernodes.
@@ -55,8 +58,11 @@ struct SupernodalDiagonalFactor {
   std::vector<Int> value_offsets;
 
   // The concatenation of the numerical values of the supernodal diagonal
-  // blocks.
+  // blocks (stored in a column-major manner in each block).
   std::vector<Field> values;
+
+  // Representations of the diagonal blocks of the factorization.
+  std::vector<BlasMatrix<Field>> blocks;
 };
 
 // The user-facing data structure for storing a supernodal LDL' factorization.
@@ -80,9 +86,6 @@ struct SupernodalLDLFactorization {
 
   // The largest degree of a supernode in the factorization.
   Int largest_degree;
-
-  // The largest number of entries below the diagonal block of a supernode.
-  Int largest_subdiagonal_size;
 
   // If the following is nonempty, then, if the permutation is a matrix P, the
   // matrix P A P' has been factored. Typically, this permutation is the

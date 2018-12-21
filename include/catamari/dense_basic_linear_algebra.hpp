@@ -55,11 +55,24 @@ void MatrixMultiplyNormalNormal(const Field& alpha,
                                 BlasMatrix<Field>* output_matrix);
 
 template <class Field>
+void MatrixMultiplyAdjointNormal(const Field& alpha,
+                                 const ConstBlasMatrix<Field>& left_matrix,
+                                 const ConstBlasMatrix<Field>& right_matrix,
+                                 const Field& beta,
+                                 BlasMatrix<Field>* output_matrix);
+
+template <class Field>
 void MatrixMultiplyTransposeNormal(const Field& alpha,
                                    const ConstBlasMatrix<Field>& left_matrix,
                                    const ConstBlasMatrix<Field>& right_matrix,
                                    const Field& beta,
                                    BlasMatrix<Field>* output_matrix);
+
+template <class Field>
+void LowerNormalHermitianOuterProduct(const Field& alpha,
+                                      const ConstBlasMatrix<Field>& left_matrix,
+                                      const Field& beta,
+                                      BlasMatrix<Field>* output_matrix);
 
 template <class Field>
 void LowerTransposeHermitianOuterProduct(
@@ -108,6 +121,10 @@ void RightLowerAdjointTriangularSolves(
 
 template <class Field>
 void RightLowerAdjointUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+
+template <class Field>
+void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
 }  // namespace catamari

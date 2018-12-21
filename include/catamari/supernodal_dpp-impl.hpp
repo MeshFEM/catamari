@@ -110,6 +110,25 @@ void SupernodalDPP<Field>::FormStructure() {
   lower_factor_.values.resize(num_entries);
   diagonal_factor_.values.resize(num_diagonal_entries);
 
+  lower_factor_.blocks.resize(num_supernodes);
+  diagonal_factor_.blocks.resize(num_supernodes);
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int degree = supernode_degrees_[supernode];
+    const Int supernode_size = supernode_sizes_[supernode];
+
+    lower_factor_.blocks[supernode].height = degree;
+    lower_factor_.blocks[supernode].width = supernode_size;
+    lower_factor_.blocks[supernode].leading_dim = degree;
+    lower_factor_.blocks[supernode].data =
+        &lower_factor_.values[lower_factor_.value_offsets[supernode]];
+
+    diagonal_factor_.blocks[supernode].height = supernode_size;
+    diagonal_factor_.blocks[supernode].width = supernode_size;
+    diagonal_factor_.blocks[supernode].leading_dim = supernode_size;
+    diagonal_factor_.blocks[supernode].data =
+        &diagonal_factor_.values[diagonal_factor_.value_offsets[supernode]];
+  }
+
   supernodal_ldl::FillStructureIndices(
       matrix_, permutation_, inverse_permutation_, parents_, supernode_sizes_,
       supernode_member_to_index_, &lower_factor_);
@@ -145,7 +164,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   Int max_supernode_size = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     max_supernode_size =
-        std::max(max_supernode_size, supernode_sizes_[supernode]);
+        std::max(max_supernode_size, diagonal_factor_.blocks[supernode].height);
   }
   std::vector<Field> scaled_adjoint_buffer(
       max_supernode_size * max_supernode_size, Field{0});
@@ -164,20 +183,20 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   // of  L during the updates of a supernode, we can avoid the need for binary
   // search by maintaining a separate counter for each supernode.
   std::vector<Int> intersect_ptrs(num_supernodes);
-  std::vector<Int> index_ptrs(num_supernodes);
-  std::vector<Int> value_ptrs(num_supernodes);
+  std::vector<Int> rel_rows(num_supernodes);
 
   for (Int main_supernode = 0; main_supernode < num_supernodes;
        ++main_supernode) {
-    const Int main_supernode_size = supernode_sizes_[main_supernode];
+    BlasMatrix<Field>& main_diagonal_block =
+        diagonal_factor_.blocks[main_supernode];
+    BlasMatrix<Field>& main_lower_block = lower_factor_.blocks[main_supernode];
     const Int main_supernode_start = supernode_starts_[main_supernode];
 
     pattern_flags[main_supernode] = main_supernode;
 
     intersect_ptrs[main_supernode] =
         lower_factor_.intersect_size_offsets[main_supernode];
-    index_ptrs[main_supernode] = lower_factor_.index_offsets[main_supernode];
-    value_ptrs[main_supernode] = lower_factor_.value_offsets[main_supernode];
+    rel_rows[main_supernode] = 0;
 
     // Compute the supernodal row pattern.
     const Int num_packed = supernodal_ldl::ComputeRowPattern(
@@ -191,78 +210,84 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
       const Int descendant_supernode = row_structure[index];
       CATAMARI_ASSERT(descendant_supernode < main_supernode,
                       "Looking into upper triangle.");
-      const Int descendant_supernode_size =
-          supernode_sizes_[descendant_supernode];
+      const ConstBlasMatrix<Field>& descendant_lower_block =
+          lower_factor_.blocks[descendant_supernode];
+      const Int descendant_degree = descendant_lower_block.height;
+      const Int descendant_supernode_size = descendant_lower_block.width;
 
       const Int descendant_main_intersect_size_beg =
           intersect_ptrs[descendant_supernode];
-      const Int descendant_main_index_beg = index_ptrs[descendant_supernode];
-      const Int descendant_main_value_beg = value_ptrs[descendant_supernode];
       const Int descendant_main_intersect_size =
           lower_factor_.intersect_sizes[descendant_main_intersect_size_beg];
 
+      const Int descendant_main_rel_row = rel_rows[descendant_supernode];
+      ConstBlasMatrix<Field> descendant_main_matrix =
+          descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
+                                           descendant_main_intersect_size,
+                                           descendant_supernode_size);
+
+      BlasMatrix<Field> scaled_adjoint;
+      scaled_adjoint.height = descendant_supernode_size;
+      scaled_adjoint.width = descendant_main_intersect_size;
+      scaled_adjoint.leading_dim = descendant_supernode_size;
+      scaled_adjoint.data = scaled_adjoint_buffer.data();
+
       supernodal_ldl::FormScaledAdjoint(
-          is_cholesky, supernode_sizes_, lower_factor_, diagonal_factor_,
-          descendant_supernode, descendant_main_intersect_size,
-          descendant_main_value_beg, scaled_adjoint_buffer.data());
+          is_cholesky, diagonal_factor_.blocks[descendant_supernode].ToConst(),
+          descendant_main_matrix, &scaled_adjoint);
+
+      BlasMatrix<Field> update_matrix;
+      update_matrix.height = descendant_main_intersect_size;
+      update_matrix.width = descendant_main_intersect_size;
+      update_matrix.leading_dim = descendant_main_intersect_size;
+      update_matrix.data = update_buffer.data();
 
       supernodal_ldl::UpdateDiagonalBlock(
-          is_cholesky, supernode_starts_, supernode_sizes_, lower_factor_,
-          main_supernode, descendant_supernode, descendant_main_intersect_size,
-          descendant_main_index_beg, descendant_main_value_beg,
-          scaled_adjoint_buffer.data(), &diagonal_factor_,
-          update_buffer.data());
+          is_cholesky, supernode_starts_, lower_factor_, main_supernode,
+          descendant_supernode, descendant_main_rel_row, descendant_main_matrix,
+          scaled_adjoint.ToConst(), &main_diagonal_block, &update_matrix);
 
       intersect_ptrs[descendant_supernode]++;
-      index_ptrs[descendant_supernode] += descendant_main_intersect_size;
-      value_ptrs[descendant_supernode] +=
-          descendant_main_intersect_size * descendant_supernode_size;
+      rel_rows[descendant_supernode] += descendant_main_intersect_size;
 
       // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
       //                = L(KNext:n, J) * Z(J, K).
       Int descendant_active_intersect_size_beg =
           intersect_ptrs[descendant_supernode];
-      Int descendant_active_index_beg = index_ptrs[descendant_supernode];
-      Int descendant_active_value_beg = value_ptrs[descendant_supernode];
+      Int descendant_active_rel_row = rel_rows[descendant_supernode];
       Int main_active_intersect_size_beg =
           lower_factor_.intersect_size_offsets[main_supernode];
-      Int main_active_index_beg = lower_factor_.index_offsets[main_supernode];
-      Int main_active_value_beg = lower_factor_.value_offsets[main_supernode];
-      const Int descendant_index_guard =
-          lower_factor_.index_offsets[descendant_supernode + 1];
-      while (descendant_active_index_beg != descendant_index_guard) {
+      Int main_active_rel_row = 0;
+      while (descendant_active_rel_row != descendant_degree) {
         const Int descendant_active_intersect_size =
             lower_factor_.intersect_sizes[descendant_active_intersect_size_beg];
+
+        ConstBlasMatrix<Field> descendant_active_matrix =
+            descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
+                                             descendant_active_intersect_size,
+                                             descendant_supernode_size);
+
+        // The width of the update matrix and pointer are already correct.
+        update_matrix.height = descendant_active_intersect_size;
+        update_matrix.leading_dim = descendant_active_intersect_size;
+
         supernodal_ldl::UpdateSubdiagonalBlock(
-            supernode_starts_, supernode_sizes_, supernode_member_to_index_,
-            main_supernode, descendant_supernode,
-            descendant_main_intersect_size, descendant_main_index_beg,
-            descendant_active_intersect_size, descendant_active_index_beg,
-            descendant_active_value_beg, scaled_adjoint_buffer.data(),
-            &lower_factor_, &main_active_intersect_size_beg,
-            &main_active_index_beg, &main_active_value_beg,
-            update_buffer.data());
+            main_supernode, descendant_supernode, descendant_main_rel_row,
+            descendant_active_rel_row, supernode_starts_,
+            supernode_member_to_index_, scaled_adjoint.ToConst(),
+            descendant_active_matrix, &lower_factor_, &main_active_rel_row,
+            &main_active_intersect_size_beg, &update_matrix);
 
         ++descendant_active_intersect_size_beg;
-        descendant_active_index_beg += descendant_active_intersect_size;
-        descendant_active_value_beg +=
-            descendant_active_intersect_size * descendant_supernode_size;
+        descendant_active_rel_row += descendant_active_intersect_size;
       }
     }
 
     // Sample and factor the diagonal block.
     {
-      BlasMatrix<Field> diagonal_block;
-      diagonal_block.height = main_supernode_size;
-      diagonal_block.width = main_supernode_size;
-      diagonal_block.leading_dim = main_supernode_size;
-      diagonal_block.data =
-          &diagonal_factor_
-               .values[diagonal_factor_.value_offsets[main_supernode]];
-
       const std::vector<Int> supernode_sample =
-          LowerFactorAndSampleDPP(
-              maximum_likelihood, &diagonal_block, &generator_, &unit_uniform_);
+          LowerFactorAndSampleDPP(maximum_likelihood, &main_diagonal_block,
+                                  &generator_, &unit_uniform_);
       for (const Int& index : supernode_sample) {
         const Int orig_row = main_supernode_start + index;
         if (inverse_permutation_.empty()) {
@@ -273,9 +298,8 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
       }
     }
 
-    supernodal_ldl::SolveAgainstDiagonalBlock(is_cholesky, main_supernode,
-                                              supernode_sizes_,
-                                              diagonal_factor_, &lower_factor_);
+    supernodal_ldl::SolveAgainstDiagonalBlock(
+        is_cholesky, main_diagonal_block.ToConst(), &main_lower_block);
   }
 
   std::sort(sample.begin(), sample.end());
