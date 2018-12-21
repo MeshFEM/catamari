@@ -63,6 +63,75 @@ const Int* SupernodalLowerFactor<Field>::Structure(Int supernode) const {
 }
 
 template <class Field>
+Int* SupernodalLowerFactor<Field>::IntersectionSizes(Int supernode) {
+  return &intersect_sizes_[intersect_size_offsets_[supernode]];
+}
+
+template <class Field>
+const Int* SupernodalLowerFactor<Field>::IntersectionSizes(
+    Int supernode) const {
+  return &intersect_sizes_[intersect_size_offsets_[supernode]];
+}
+
+template <class Field>
+void SupernodalLowerFactor<Field>::FillIntersectionSizes(
+    const std::vector<Int>& supernode_member_to_index) {
+  const Int num_supernodes = blocks.size();
+
+  // Compute the supernode offsets.
+  Int num_supernode_intersects = 0;
+  intersect_size_offsets_.resize(num_supernodes + 1);
+  for (Int column_supernode = 0; column_supernode < num_supernodes;
+       ++column_supernode) {
+    intersect_size_offsets_[column_supernode] = num_supernode_intersects;
+    Int last_supernode = -1;
+
+    const Int* index_beg = Structure(column_supernode);
+    const Int* index_end = Structure(column_supernode + 1);
+    for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
+      const Int row = *row_ptr;
+      const Int supernode = supernode_member_to_index[row];
+      if (supernode != last_supernode) {
+        last_supernode = supernode;
+        ++num_supernode_intersects;
+      }
+    }
+  }
+  intersect_size_offsets_[num_supernodes] = num_supernode_intersects;
+
+  // Fill the supernode intersection sizes.
+  intersect_sizes_.resize(num_supernode_intersects);
+  num_supernode_intersects = 0;
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    Int last_supernode = -1;
+    Int intersect_size = 0;
+
+    const Int* index_beg = Structure(supernode);
+    const Int* index_end = Structure(supernode + 1);
+    for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
+      const Int row = *row_ptr;
+      const Int row_supernode = supernode_member_to_index[row];
+      if (row_supernode != last_supernode) {
+        if (last_supernode != -1) {
+          // Close out the supernodal intersection.
+          intersect_sizes_[num_supernode_intersects++] = intersect_size;
+        }
+        last_supernode = row_supernode;
+        intersect_size = 0;
+      }
+      ++intersect_size;
+    }
+    if (last_supernode != -1) {
+      // Close out the last intersection count for this column supernode.
+      intersect_sizes_[num_supernode_intersects++] = intersect_size;
+    }
+  }
+  CATAMARI_ASSERT(
+      num_supernode_intersects == static_cast<Int>(intersect_sizes_.size()),
+      "Incorrect number of supernode intersections");
+}
+
+template <class Field>
 SupernodalDiagonalFactor<Field>::SupernodalDiagonalFactor(
     const std::vector<Int>& supernode_sizes) {
   const Int num_supernodes = supernode_sizes.size();
@@ -342,70 +411,8 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     }
   }
 #endif
-}
 
-// Fills in the sizes of the supernodal intersections.
-template <class Field>
-void FillIntersections(const std::vector<Int>& supernode_sizes,
-                       const std::vector<Int>& supernode_member_to_index,
-                       SupernodalLowerFactor<Field>* lower_factor) {
-  const Int num_supernodes = supernode_sizes.size();
-
-  // Compute the supernode offsets.
-  Int num_supernode_intersects = 0;
-  lower_factor->intersect_size_offsets.resize(num_supernodes + 1);
-  for (Int column_supernode = 0; column_supernode < num_supernodes;
-       ++column_supernode) {
-    lower_factor->intersect_size_offsets[column_supernode] =
-        num_supernode_intersects;
-    Int last_supernode = -1;
-
-    const Int* index_beg = lower_factor->Structure(column_supernode);
-    const Int* index_end = lower_factor->Structure(column_supernode + 1);
-    for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
-      const Int row = *row_ptr;
-      const Int supernode = supernode_member_to_index[row];
-      if (supernode != last_supernode) {
-        last_supernode = supernode;
-        ++num_supernode_intersects;
-      }
-    }
-  }
-  lower_factor->intersect_size_offsets[num_supernodes] =
-      num_supernode_intersects;
-
-  // Fill the supernode intersection sizes.
-  lower_factor->intersect_sizes.resize(num_supernode_intersects);
-  num_supernode_intersects = 0;
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    Int last_supernode = -1;
-    Int intersect_size = 0;
-
-    const Int* index_beg = lower_factor->Structure(supernode);
-    const Int* index_end = lower_factor->Structure(supernode + 1);
-    for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
-      const Int row = *row_ptr;
-      const Int row_supernode = supernode_member_to_index[row];
-      if (row_supernode != last_supernode) {
-        if (last_supernode != -1) {
-          // Close out the supernodal intersection.
-          lower_factor->intersect_sizes[num_supernode_intersects++] =
-              intersect_size;
-        }
-        last_supernode = row_supernode;
-        intersect_size = 0;
-      }
-      ++intersect_size;
-    }
-    if (last_supernode != -1) {
-      // Close out the last intersection count for this column supernode.
-      lower_factor->intersect_sizes[num_supernode_intersects++] =
-          intersect_size;
-    }
-  }
-  CATAMARI_ASSERT(num_supernode_intersects ==
-                      static_cast<Int>(lower_factor->intersect_sizes.size()),
-                  "Incorrect number of supernode intersections");
+  lower_factor->FillIntersectionSizes(supernode_member_to_index);
 }
 
 // Fill in the nonzeros from the original sparse matrix.
@@ -495,9 +502,6 @@ void InitializeLeftLookingFactors(
                        factorization->supernode_sizes,
                        factorization->supernode_member_to_index,
                        factorization->lower_factor.get());
-  FillIntersections(factorization->supernode_sizes,
-                    factorization->supernode_member_to_index,
-                    factorization->lower_factor.get());
 
   FillNonzeros(
       matrix, factorization->permutation, factorization->inverse_permutation,
@@ -652,7 +656,7 @@ void UpdateSubdiagonalBlock(
     const ConstBlasMatrix<Field>& scaled_adjoint,
     const ConstBlasMatrix<Field>& descendant_active_matrix,
     SupernodalLowerFactor<Field>* lower_factor, Int* main_active_rel_row,
-    Int* main_active_intersect_size_beg, BlasMatrix<Field>* update_matrix) {
+    const Int** main_active_intersect_sizes, BlasMatrix<Field>* update_matrix) {
   const Int main_supernode_size = lower_factor->blocks[main_supernode].width;
   const Int* main_indices = lower_factor->Structure(main_supernode);
   const Int* descendant_indices = lower_factor->Structure(descendant_supernode);
@@ -669,16 +673,14 @@ void UpdateSubdiagonalBlock(
   CATAMARI_ASSERT(active_supernode > main_supernode,
                   "Active supernode was <= the main supernode in update.");
 
-  Int main_active_intersect_size =
-      lower_factor->intersect_sizes[*main_active_intersect_size_beg];
+  Int main_active_intersect_size = **main_active_intersect_sizes;
   Int main_active_first_row = main_indices[*main_active_rel_row];
   while (supernode_member_to_index[main_active_first_row] < active_supernode) {
     *main_active_rel_row += main_active_intersect_size;
-    ++*main_active_intersect_size_beg;
+    ++*main_active_intersect_sizes;
 
     main_active_first_row = main_indices[*main_active_rel_row];
-    main_active_intersect_size =
-        lower_factor->intersect_sizes[*main_active_intersect_size_beg];
+    main_active_intersect_size = **main_active_intersect_sizes;
   }
 #ifdef CATAMARI_DEBUG
   const Int main_active_supernode =
@@ -1466,7 +1468,7 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
   // Since we will sequentially access each of the entries in each block column
   // of  L during the updates of a supernode, we can avoid the need for binary
   // search by maintaining a separate counter for each supernode.
-  std::vector<Int> intersect_ptrs(num_supernodes);
+  std::vector<const Int*> intersect_ptrs(num_supernodes);
   std::vector<Int> rel_rows(num_supernodes);
 
   LDLResult result;
@@ -1481,7 +1483,7 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
     pattern_flags[main_supernode] = main_supernode;
 
     intersect_ptrs[main_supernode] =
-        lower_factor.intersect_size_offsets[main_supernode];
+        lower_factor.IntersectionSizes(main_supernode);
     rel_rows[main_supernode] = 0;
 
     // Compute the supernodal row pattern.
@@ -1502,10 +1504,8 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
       const Int descendant_degree = descendant_lower_block.height;
       const Int descendant_supernode_size = descendant_lower_block.width;
 
-      const Int descendant_main_intersect_size_beg =
-          intersect_ptrs[descendant_supernode];
       const Int descendant_main_intersect_size =
-          lower_factor.intersect_sizes[descendant_main_intersect_size_beg];
+          *intersect_ptrs[descendant_supernode];
 
       const Int descendant_main_rel_row = rel_rows[descendant_supernode];
       ConstBlasMatrix<Field> descendant_main_matrix =
@@ -1540,15 +1540,15 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
 
       // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
       //                = L(KNext:n, J) * Z(J, K).
-      Int descendant_active_intersect_size_beg =
+      const Int* descendant_active_intersect_size_beg =
           intersect_ptrs[descendant_supernode];
       Int descendant_active_rel_row = rel_rows[descendant_supernode];
-      Int main_active_intersect_size_beg =
-          lower_factor.intersect_size_offsets[main_supernode];
+      const Int* main_active_intersect_sizes =
+          lower_factor.IntersectionSizes(main_supernode);
       Int main_active_rel_row = 0;
       while (descendant_active_rel_row != descendant_degree) {
         const Int descendant_active_intersect_size =
-            lower_factor.intersect_sizes[descendant_active_intersect_size_beg];
+            *descendant_active_intersect_size_beg;
 
         ConstBlasMatrix<Field> descendant_active_matrix =
             descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
@@ -1564,7 +1564,7 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
             descendant_active_rel_row, factorization->supernode_starts,
             factorization->supernode_member_to_index, scaled_adjoint.ToConst(),
             descendant_active_matrix, &lower_factor, &main_active_rel_row,
-            &main_active_intersect_size_beg, &update_matrix);
+            &main_active_intersect_sizes, &update_matrix);
 
         ++descendant_active_intersect_size_beg;
         descendant_active_rel_row += descendant_active_intersect_size;

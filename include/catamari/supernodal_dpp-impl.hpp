@@ -90,8 +90,6 @@ void SupernodalDPP<Field>::FormStructure() {
   supernodal_ldl::FillStructureIndices(
       matrix_, permutation_, inverse_permutation_, parents_, supernode_sizes_,
       supernode_member_to_index_, lower_factor_.get());
-  supernodal_ldl::FillIntersections(
-      supernode_sizes_, supernode_member_to_index_, lower_factor_.get());
 }
 
 template <class Field>
@@ -151,7 +149,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   // Since we will sequentially access each of the entries in each block column
   // of  L during the updates of a supernode, we can avoid the need for binary
   // search by maintaining a separate counter for each supernode.
-  std::vector<Int> intersect_ptrs(num_supernodes);
+  std::vector<const Int*> intersect_ptrs(num_supernodes);
   std::vector<Int> rel_rows(num_supernodes);
 
   for (Int main_supernode = 0; main_supernode < num_supernodes;
@@ -164,7 +162,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
     pattern_flags[main_supernode] = main_supernode;
 
     intersect_ptrs[main_supernode] =
-        lower_factor_->intersect_size_offsets[main_supernode];
+        lower_factor_->IntersectionSizes(main_supernode);
     rel_rows[main_supernode] = 0;
 
     // Compute the supernodal row pattern.
@@ -184,10 +182,8 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
       const Int descendant_degree = descendant_lower_block.height;
       const Int descendant_supernode_size = descendant_lower_block.width;
 
-      const Int descendant_main_intersect_size_beg =
-          intersect_ptrs[descendant_supernode];
       const Int descendant_main_intersect_size =
-          lower_factor_->intersect_sizes[descendant_main_intersect_size_beg];
+          *intersect_ptrs[descendant_supernode];
 
       const Int descendant_main_rel_row = rel_rows[descendant_supernode];
       ConstBlasMatrix<Field> descendant_main_matrix =
@@ -221,16 +217,15 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
 
       // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
       //                = L(KNext:n, J) * Z(J, K).
-      Int descendant_active_intersect_size_beg =
+      const Int* descendant_active_intersect_size_beg =
           intersect_ptrs[descendant_supernode];
       Int descendant_active_rel_row = rel_rows[descendant_supernode];
-      Int main_active_intersect_size_beg =
-          lower_factor_->intersect_size_offsets[main_supernode];
+      const Int* main_active_intersect_sizes =
+          lower_factor_->IntersectionSizes(main_supernode);
       Int main_active_rel_row = 0;
       while (descendant_active_rel_row != descendant_degree) {
         const Int descendant_active_intersect_size =
-            lower_factor_
-                ->intersect_sizes[descendant_active_intersect_size_beg];
+            *descendant_active_intersect_size_beg;
 
         ConstBlasMatrix<Field> descendant_active_matrix =
             descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
@@ -246,7 +241,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
             descendant_active_rel_row, supernode_starts_,
             supernode_member_to_index_, scaled_adjoint.ToConst(),
             descendant_active_matrix, lower_factor_.get(), &main_active_rel_row,
-            &main_active_intersect_size_beg, &update_matrix);
+            &main_active_intersect_sizes, &update_matrix);
 
         ++descendant_active_intersect_size_beg;
         descendant_active_rel_row += descendant_active_intersect_size;

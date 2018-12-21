@@ -17,16 +17,6 @@ namespace catamari {
 template <class Field>
 class SupernodalLowerFactor {
  public:
-  // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
-  // number of supernodes that supernodes 0 through j - 1 individually intersect
-  // with.
-  std::vector<Int> intersect_size_offsets;
-
-  // The concatenation of the number of rows in each supernodal intersection.
-  // The supernodal intersection sizes for supernode j are stored in indices
-  // intersect_size_offsets[j] through intersect_size_offsets[j + 1].
-  std::vector<Int> intersect_sizes;
-
   // Representations of the densified subdiagonal blocks of the factorization.
   std::vector<BlasMatrix<Field>> blocks;
 
@@ -37,6 +27,12 @@ class SupernodalLowerFactor {
 
   const Int* Structure(Int supernode) const;
 
+  Int* IntersectionSizes(Int supernode);
+
+  const Int* IntersectionSizes(Int supernode) const;
+
+  void FillIntersectionSizes(const std::vector<Int>& supernode_member_to_index);
+
  private:
   // The concatenation of the structures of the supernodes. The structure of
   // supernode j is stored between indices index_offsets[j] and
@@ -46,6 +42,16 @@ class SupernodalLowerFactor {
   // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
   // degrees (excluding the diagonal blocks) of supernodes 0 through j - 1.
   std::vector<Int> structure_index_offsets_;
+
+  // The concatenation of the number of rows in each supernodal intersection.
+  // The supernodal intersection sizes for supernode j are stored in indices
+  // intersect_size_offsets[j] through intersect_size_offsets[j + 1].
+  std::vector<Int> intersect_sizes_;
+
+  // An array of length 'num_supernodes + 1'; the j'th index is the sum of the
+  // number of supernodes that supernodes 0 through j - 1 individually intersect
+  // with.
+  std::vector<Int> intersect_size_offsets_;
 
   // The concatenation of the numerical values of the supernodal structures.
   // The entries of supernode j are stored between indices value_offsets[j] and
