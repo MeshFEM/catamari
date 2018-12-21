@@ -13,7 +13,7 @@
 #include <numeric>
 #include <vector>
 
-#include "catamari/supernodal_dpp.hpp"
+#include "catamari/dpp.hpp"
 #include "quotient/io_utils.hpp"
 #include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
@@ -22,9 +22,6 @@ using catamari::Int;
 
 // A list of properties to measure from DPP sampling.
 struct Experiment {
-  // The number of seconds that elapsed during the reordering.
-  double reordering_seconds = 0;
-
   // The number of seconds that elapsed during the object construction.
   double init_seconds = 0;
 
@@ -34,8 +31,6 @@ struct Experiment {
 
 // Pretty prints the Experiment structure.
 void PrintExperiment(const Experiment& experiment) {
-  std::cout << "  reordering_seconds: " << experiment.reordering_seconds
-            << "\n";
   std::cout << "  init_seconds: " << experiment.init_seconds << "\n";
   std::cout << "  sample_seconds: " << experiment.sample_seconds << "\n";
   std::cout << std::endl;
@@ -156,33 +151,14 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
 Experiment RunShifted2DNegativeLaplacianTest(
     Int x_size, Int y_size, double diagonal_shift, double scale,
     bool maximum_likelihood, bool ascii_display, char missing_char,
-    char sampled_char, unsigned int random_seed, Int num_samples,
-    const catamari::SupernodalDPPControl& dpp_control, bool print_progress) {
+    char sampled_char, Int num_samples, const catamari::DPPControl& dpp_control,
+    bool print_progress) {
   Experiment experiment;
 
   // Read the matrix from file.
   std::unique_ptr<catamari::CoordinateMatrix<double>> matrix =
-      Shifted2DNegativeLaplacian(
-          x_size, y_size, diagonal_shift, scale, print_progress);
-  const Int num_rows = matrix->NumRows();
-
-  // Compute the AMD reordering.
-  if (print_progress) {
-    std::cout << "  Reordering matrix..." << std::endl;
-  }
-  quotient::Timer reordering_timer;
-  reordering_timer.Start();
-  std::unique_ptr<quotient::CoordinateGraph> graph = matrix->CoordinateGraph();
-  const quotient::MinimumDegreeControl md_control;
-  const quotient::MinimumDegreeResult analysis =
-      quotient::MinimumDegree(*graph, md_control);
-  graph.reset();
-  const std::vector<Int> permutation = analysis.Permutation();
-  std::vector<Int> inverse_permutation(num_rows);
-  for (Int row = 0; row < num_rows; ++row) {
-    inverse_permutation[permutation[row]] = row;
-  }
-  experiment.reordering_seconds = reordering_timer.Stop();
+      Shifted2DNegativeLaplacian(x_size, y_size, diagonal_shift, scale,
+                                 print_progress);
 
   // Create the DPP object.
   if (print_progress) {
@@ -190,8 +166,7 @@ Experiment RunShifted2DNegativeLaplacianTest(
   }
   quotient::Timer init_timer;
   init_timer.Start();
-  catamari::SupernodalDPP<double> dpp(*matrix, permutation, inverse_permutation,
-                                      dpp_control, random_seed);
+  catamari::DPP<double> dpp(*matrix, dpp_control);
   experiment.init_seconds = init_timer.Stop();
 
   // Sample the matrix.
@@ -269,17 +244,18 @@ int main(int argc, char** argv) {
   }
 #endif
 
-  catamari::SupernodalDPPControl dpp_control;
-  dpp_control.relaxation_control.relax_supernodes = relax_supernodes;
-  dpp_control.relaxation_control.allowable_supernode_zeros =
+  catamari::DPPControl dpp_control;
+  dpp_control.random_seed = random_seed;
+  dpp_control.supernodal_control.relaxation_control.relax_supernodes =
+      relax_supernodes;
+  dpp_control.supernodal_control.relaxation_control.allowable_supernode_zeros =
       allowable_supernode_zeros;
-  dpp_control.relaxation_control.allowable_supernode_zero_ratio =
-      allowable_supernode_zero_ratio;
+  dpp_control.supernodal_control.relaxation_control
+      .allowable_supernode_zero_ratio = allowable_supernode_zero_ratio;
 
   const Experiment experiment = RunShifted2DNegativeLaplacianTest(
       x_size, y_size, diagonal_shift, scale, maximum_likelihood, ascii_display,
-      missing_char, sampled_char, random_seed, num_samples, dpp_control,
-      print_progress);
+      missing_char, sampled_char, num_samples, dpp_control, print_progress);
   PrintExperiment(experiment);
 
   return 0;

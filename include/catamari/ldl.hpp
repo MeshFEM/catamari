@@ -42,6 +42,8 @@ struct LDLFactorization {
 
 // Configuration options for LDL' factorization.
 struct LDLControl {
+  quotient::MinimumDegreeControl md_control;
+
   // Whether or not a supernodal factorization should be used.
   SupernodalStrategy supernodal_strategy = kAdaptiveSupernodalStrategy;
 
@@ -53,13 +55,6 @@ struct LDLControl {
 };
 
 // Performs an LDL' factorization in the minimum-degree ordering.
-template <class Field>
-LDLResult LDL(const CoordinateMatrix<Field>& matrix,
-              const quotient::MinimumDegreeControl& md_control,
-              const LDLControl& control,
-              LDLFactorization<Field>* factorization);
-
-// Performs an LDL' factorization in the natural ordering.
 template <class Field>
 LDLResult LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
               LDLFactorization<Field>* factorization);

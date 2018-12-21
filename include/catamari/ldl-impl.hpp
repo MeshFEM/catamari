@@ -15,13 +15,11 @@
 namespace catamari {
 
 template <class Field>
-LDLResult LDL(const CoordinateMatrix<Field>& matrix,
-              const quotient::MinimumDegreeControl& md_control,
-              const LDLControl& ldl_control,
+LDLResult LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
               LDLFactorization<Field>* factorization) {
   std::unique_ptr<quotient::CoordinateGraph> graph = matrix.CoordinateGraph();
   const quotient::MinimumDegreeResult analysis =
-      quotient::MinimumDegree(*graph, md_control);
+      quotient::MinimumDegree(*graph, control.md_control);
   graph.reset();
   const std::vector<Int> permutation = analysis.Permutation();
 
@@ -32,9 +30,9 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
   }
 
   bool use_supernodal;
-  if (ldl_control.supernodal_strategy == kScalarFactorization) {
+  if (control.supernodal_strategy == kScalarFactorization) {
     use_supernodal = false;
-  } else if (ldl_control.supernodal_strategy == kSupernodalFactorization) {
+  } else if (control.supernodal_strategy == kSupernodalFactorization) {
     use_supernodal = true;
   } else {
     // TODO(Jack Poulson): Use a more intelligent means of selecting based upon
@@ -47,13 +45,12 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
     factorization->supernodal_factorization.reset(
         new SupernodalLDLFactorization<Field>);
     return LDL(matrix, permutation, inverse_permutation,
-               ldl_control.supernodal_control,
+               control.supernodal_control,
                factorization->supernodal_factorization.get());
   } else {
     factorization->scalar_factorization.reset(
         new ScalarLDLFactorization<Field>);
-    return LDL(matrix, permutation, inverse_permutation,
-               ldl_control.scalar_control,
+    return LDL(matrix, permutation, inverse_permutation, control.scalar_control,
                factorization->scalar_factorization.get());
   }
 }
@@ -87,13 +84,6 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
     return LDL(matrix, permutation, inverse_permutation, control.scalar_control,
                factorization->scalar_factorization.get());
   }
-}
-
-template <class Field>
-LDLResult LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
-              LDLFactorization<Field>* factorization) {
-  std::vector<Int> permutation, inverse_permutation;
-  return LDL(matrix, permutation, inverse_permutation, control, factorization);
 }
 
 template <class Field>
