@@ -100,19 +100,11 @@ void LeftLowerUnitTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
 template <class Field>
-void LeftLowerConjugateTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
-
-template <class Field>
 void LeftLowerAdjointTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
 template <class Field>
 void LeftLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
-
-template <class Field>
-void DiagonalTimesLeftLowerConjugateTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
 template <class Field>

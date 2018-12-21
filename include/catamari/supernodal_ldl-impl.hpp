@@ -569,6 +569,7 @@ void UpdateDiagonalBlock(bool is_cholesky,
                          const ConstBlasMatrix<Field>& scaled_adjoint,
                          BlasMatrix<Field>* main_diag_block,
                          BlasMatrix<Field>* update_matrix) {
+  typedef ComplexBase<Field> Real;
   const Int main_supernode_size = main_diag_block->height;
   const Int descendant_main_intersect_size = scaled_adjoint.width;
 
@@ -578,8 +579,8 @@ void UpdateDiagonalBlock(bool is_cholesky,
       inplace_update ? main_diag_block : update_matrix;
 
   if (is_cholesky) {
-    LowerNormalHermitianOuterProduct(Field{-1}, descendant_main_matrix,
-                                     Field{1}, accumulation_block);
+    LowerNormalHermitianOuterProduct(Real{-1}, descendant_main_matrix, Real{1},
+                                     accumulation_block);
   } else {
     MatrixMultiplyLowerNormalNormal(Field{-1}, descendant_main_matrix,
                                     scaled_adjoint, Field{1},
