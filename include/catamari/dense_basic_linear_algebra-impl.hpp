@@ -2064,6 +2064,87 @@ inline void LeftLowerAdjointUnitTriangularSolves(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
+void LeftLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                      triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const Int width = matrix->width;
+  for (Int j = 0; j < width; ++j) {
+    for (Int k = triangular_matrix.height - 1; k >= 0; --k) {
+      const Field* triang_column = triangular_matrix.Pointer(0, k);
+      Field& eta = matrix->Entry(k, j);
+      for (Int i = k + 1; i < triangular_matrix.height; ++i) {
+        eta -= triang_column[i] * matrix->Entry(i, j);
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void LeftLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<float>& triangular_matrix,
+    BlasMatrix<float>* matrix) {
+  LeftLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
+}
+
+template <>
+inline void LeftLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<double>& triangular_matrix,
+    BlasMatrix<double>* matrix) {
+  LeftLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
+}
+
+template <>
+inline void LeftLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
+    BlasMatrix<Complex<float>>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                      triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'U';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const Complex<float> alpha = 1;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+
+  BLAS_SYMBOL(ctrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void LeftLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
+    BlasMatrix<Complex<double>>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                      triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+  const char side = 'L';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'U';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const Complex<double> alpha = 1;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+
+  BLAS_SYMBOL(ztrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
 void RightLowerAdjointTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix,
     BlasMatrix<Field>* matrix) {
@@ -2071,7 +2152,7 @@ void RightLowerAdjointTriangularSolves(
   const Int width = matrix->width;
   for (Int i = 0; i < height; ++i) {
     for (Int j = 0; j < width; ++j) {
-      matrix->Entry(i, j) /= RealPart(triangular_matrix(j, j));
+      matrix->Entry(i, j) /= triangular_matrix(j, j);
       const Field eta = matrix->Entry(i, j);
       for (Int k = j + 1; k < width; ++k) {
         matrix->Entry(i, k) -= eta * Conjugate(triangular_matrix(k, j));
@@ -2323,6 +2404,212 @@ inline void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
     const ConstBlasMatrix<Complex<double>>& triangular_matrix,
     BlasMatrix<Complex<double>>* matrix) {
   RightLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
+
+  // Solve against the diagonal.
+  const Int height = matrix->height;
+  const Int width = matrix->width;
+  for (BlasInt j = 0; j < width; ++j) {
+    for (BlasInt i = 0; i < height; ++i) {
+      matrix->Entry(i, j) /= triangular_matrix(j, j);
+    }
+  }
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
+void RightLowerTransposeTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* matrix) {
+  const Int height = matrix->height;
+  const Int width = matrix->width;
+  for (Int i = 0; i < height; ++i) {
+    for (Int j = 0; j < width; ++j) {
+      matrix->Entry(i, j) /= triangular_matrix(j, j);
+      const Field eta = matrix->Entry(i, j);
+      for (Int k = j + 1; k < width; ++k) {
+        matrix->Entry(i, k) -= eta * triangular_matrix(k, j);
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void RightLowerTransposeTriangularSolves(
+    const ConstBlasMatrix<float>& triangular_matrix,
+    BlasMatrix<float>* matrix) {
+  RightLowerAdjointTriangularSolves(triangular_matrix, matrix);
+}
+
+template <>
+inline void RightLowerTransposeTriangularSolves(
+    const ConstBlasMatrix<double>& triangular_matrix,
+    BlasMatrix<double>* matrix) {
+  RightLowerAdjointTriangularSolves(triangular_matrix, matrix);
+}
+
+template <>
+inline void RightLowerTransposeTriangularSolves(
+    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
+    BlasMatrix<Complex<float>>* matrix) {
+  const char side = 'R';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const Complex<float> alpha = 1;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BLAS_SYMBOL(ctrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void RightLowerTransposeTriangularSolves(
+    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
+    BlasMatrix<Complex<double>>* matrix) {
+  const char side = 'R';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const Complex<double> alpha = 1;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BLAS_SYMBOL(ztrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
+void RightLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* matrix) {
+  const Int height = matrix->height;
+  const Int width = matrix->width;
+  for (Int i = 0; i < height; ++i) {
+    for (Int j = 0; j < width; ++j) {
+      const Field eta = matrix->Entry(i, j);
+      for (Int k = j + 1; k < width; ++k) {
+        matrix->Entry(i, k) -= eta * triangular_matrix(k, j);
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void RightLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<float>& triangular_matrix,
+    BlasMatrix<float>* matrix) {
+  RightLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
+}
+
+template <>
+inline void RightLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<double>& triangular_matrix,
+    BlasMatrix<double>* matrix) {
+  RightLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
+}
+
+template <>
+inline void RightLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
+    BlasMatrix<Complex<float>>* matrix) {
+  const char side = 'R';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'U';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const Complex<float> alpha = 1;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BLAS_SYMBOL(ctrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void RightLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
+    BlasMatrix<Complex<double>>* matrix) {
+  const char side = 'R';
+  const char uplo = 'L';
+  const char trans_triang = 'T';
+  const char diag = 'U';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const Complex<double> alpha = 1;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BLAS_SYMBOL(ztrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
+void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* matrix) {
+  const Int height = matrix->height;
+  const Int width = matrix->width;
+  for (Int i = 0; i < height; ++i) {
+    for (Int j = 0; j < width; ++j) {
+      const Field eta = matrix->Entry(i, j);
+      for (Int k = j + 1; k < width; ++k) {
+        matrix->Entry(i, k) -= eta * triangular_matrix(k, j);
+      }
+      matrix->Entry(i, j) /= triangular_matrix(j, j);
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<float>& triangular_matrix,
+    BlasMatrix<float>* matrix) {
+  RightDiagonalTimesLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
+}
+
+template <>
+inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<double>& triangular_matrix,
+    BlasMatrix<double>* matrix) {
+  RightDiagonalTimesLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
+}
+
+template <>
+inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
+    BlasMatrix<Complex<float>>* matrix) {
+  RightLowerTransposeUnitTriangularSolves(triangular_matrix, matrix);
+
+  // Solve against the diagonal.
+  const Int height = matrix->height;
+  const Int width = matrix->width;
+  for (BlasInt j = 0; j < width; ++j) {
+    for (BlasInt i = 0; i < height; ++i) {
+      matrix->Entry(i, j) /= triangular_matrix(j, j);
+    }
+  }
+}
+
+template <>
+inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
+    BlasMatrix<Complex<double>>* matrix) {
+  RightLowerTransposeUnitTriangularSolves(triangular_matrix, matrix);
 
   // Solve against the diagonal.
   const Int height = matrix->height;

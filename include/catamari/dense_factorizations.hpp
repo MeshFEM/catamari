@@ -19,6 +19,9 @@ template <class Field>
 Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
 
 template <class Field>
+Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix);
+
+template <class Field>
 std::vector<Int> LowerFactorAndSampleDPP(
     bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist);

@@ -55,11 +55,22 @@ struct ScalarDiagonalFactor {
   std::vector<Field> values;
 };
 
+enum SymmetricFactorizationType {
+  // Computes lower-triangular L such that P A P' = L L'.
+  kCholeskyFactorization,
+
+  // Computes unit-lower triangular L and diagonal D such that P A P' = L D L'.
+  kLDLAdjointFactorization,
+
+  // Computes unit-lower triangular L and diagonal D such that P A P' = L D L^T.
+  kLDLTransposeFactorization,
+};
+
 // A representation of a non-supernodal LDL' factorization.
 template <class Field>
 struct ScalarLDLFactorization {
-  // Marks whether a Cholesky or traditional LDL' factorization was employed.
-  bool is_cholesky;
+  // Marks the type of factorization employed.
+  SymmetricFactorizationType factorization_type;
 
   // The unit lower-triangular factor, L.
   ScalarLowerFactor<Field> lower_factor;
@@ -78,11 +89,8 @@ struct ScalarLDLFactorization {
 
 // Configuration options for non-supernodal LDL' factorization.
 struct ScalarLDLControl {
-  // Assume that the matrix is numerically Hermitian Positive-Definite so that
-  // square-roots of the diagonal can be taken and we may choose D = I. If this
-  // option is enabled, L is lower-triangular with a positive diagonal;
-  // otherwise, L has a unit diagonal.
-  bool use_cholesky = false;
+  // The type of factorization to be performed.
+  SymmetricFactorizationType factorization_type = kLDLAdjointFactorization;
 
   // The choice of either left-looking or up-looking LDL' factorization.
   LDLAlgorithm algorithm = kUpLookingLDL;
@@ -130,25 +138,25 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
               const ScalarLDLControl& control,
               ScalarLDLFactorization<Field>* factorization);
 
-// Solve A x = b via the substitution (L D L') x = b and the sequence:
-//   x := L' \ (D \ (L \ b)).
+// Solve (P A P') (P X) = (P B) via the substitution (L D L') (P X) = (P B) or
+// (L D L^T) (P X) = (P B).
 template <class Field>
 void LDLSolve(const ScalarLDLFactorization<Field>& factorization,
               BlasMatrix<Field>* matrix);
 
-// Solves L x = b using a unit-lower triangular matrix L.
+// Solves L X = B using a unit-lower triangular matrix L.
 template <class Field>
 void LowerTriangularSolve(const ScalarLDLFactorization<Field>& factorization,
                           BlasMatrix<Field>* matrix);
 
-// Solves D x = b using a diagonal matrix D.
+// Solves D X = B using a diagonal matrix D.
 template <class Field>
 void DiagonalSolve(const ScalarLDLFactorization<Field>& factorization,
                    BlasMatrix<Field>* matrix);
 
-// Solves L' x = b using a unit-lower triangular matrix L.
+// Solves L' X = B or L^T X = B using a unit-lower triangular matrix L.
 template <class Field>
-void LowerAdjointTriangularSolve(
+void LowerTransposeTriangularSolve(
     const ScalarLDLFactorization<Field>& factorization,
     BlasMatrix<Field>* matrix);
 

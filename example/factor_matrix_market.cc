@@ -18,9 +18,9 @@
 #include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
 
-using catamari::Int;
 using catamari::BlasMatrix;
 using catamari::ConstBlasMatrix;
+using catamari::Int;
 
 // A list of properties to measure from a sparse LDL factorization / solve.
 struct Experiment {
@@ -81,13 +81,17 @@ Real EuclideanNorm(const ConstBlasMatrix<catamari::Complex<Real>>& matrix) {
   return std::sqrt(squared_norm);
 }
 
-// Overwrites a matrix A with A + A'.
+// Overwrites a matrix A with A + A' or A + A^T.
 template <typename Field>
-void MakeHermitian(catamari::CoordinateMatrix<Field>* matrix) {
+void MakeSymmetric(catamari::CoordinateMatrix<Field>* matrix, bool hermitian) {
   matrix->ReserveEntryAdditions(matrix->NumEntries());
   for (const catamari::MatrixEntry<Field>& entry : matrix->Entries()) {
-    matrix->QueueEntryAddition(entry.column, entry.row,
-                               catamari::Conjugate(entry.value));
+    if (hermitian) {
+      matrix->QueueEntryAddition(entry.column, entry.row,
+                                 catamari::Conjugate(entry.value));
+    } else {
+      matrix->QueueEntryAddition(entry.column, entry.row, entry.value);
+    }
   }
   matrix->FlushEntryQueues();
 }
@@ -125,8 +129,8 @@ std::pair<Int, Int> DensestRow(
 template <typename Field>
 std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
     const std::string& filename, bool skip_explicit_zeros,
-    quotient::EntryMask mask, bool force_symmetry, const Field& diagonal_shift,
-    bool print_progress) {
+    quotient::EntryMask mask, bool force_symmetry, bool hermitian,
+    const Field& diagonal_shift, bool print_progress) {
   if (print_progress) {
     std::cout << "Reading CoordinateGraph from " << filename << "..."
               << std::endl;
@@ -144,7 +148,7 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
     if (print_progress) {
       std::cout << "Enforcing matrix Hermiticity..." << std::endl;
     }
-    MakeHermitian(matrix.get());
+    MakeSymmetric(matrix.get(), hermitian);
   }
 
   // Adding the diagonal shift.
@@ -210,8 +214,10 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   Experiment experiment;
 
   // Read the matrix from file.
+  const bool hermitian = ldl_control.supernodal_control.factorization_type !=
+                         catamari::kLDLTransposeFactorization;
   std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix =
-      LoadMatrix(filename, skip_explicit_zeros, mask, force_symmetry,
+      LoadMatrix(filename, skip_explicit_zeros, mask, force_symmetry, hermitian,
                  diagonal_shift, print_progress);
   if (!matrix) {
     return experiment;
@@ -333,8 +339,11 @@ int main(int argc, char** argv) {
       10.f);
   const bool force_symmetry = parser.OptionalInput<bool>(
       "force_symmetry", "Use the nonzero pattern of A + A'?", true);
-  const bool use_cholesky = parser.OptionalInput<bool>(
-      "use_cholesky", "Use a Cholesky factorization?", false);
+  const int factorization_type_int =
+      parser.OptionalInput<int>("factorization_type_int",
+                                "Type of the factorization.\n"
+                                "0:Cholesky, 1:LDL', 2:LDL^T",
+                                1);
   const int supernodal_strategy_int =
       parser.OptionalInput<int>("supernodal_strategy_int",
                                 "The SupernodalStrategy int.\n"
@@ -402,10 +411,12 @@ int main(int argc, char** argv) {
   ldl_control.md_control.dense_sqrt_multiple = dense_sqrt_multiple;
   ldl_control.supernodal_strategy =
       static_cast<catamari::SupernodalStrategy>(supernodal_strategy_int);
-  ldl_control.scalar_control.use_cholesky = use_cholesky;
+  ldl_control.scalar_control.factorization_type =
+      static_cast<catamari::SymmetricFactorizationType>(factorization_type_int);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
-  ldl_control.supernodal_control.use_cholesky = use_cholesky;
+  ldl_control.supernodal_control.factorization_type =
+      static_cast<catamari::SymmetricFactorizationType>(factorization_type_int);
   ldl_control.supernodal_control.relaxation_control.relax_supernodes =
       relax_supernodes;
   ldl_control.supernodal_control.relaxation_control.allowable_supernode_zeros =

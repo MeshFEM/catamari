@@ -77,8 +77,8 @@ class SupernodalDiagonalFactor {
 // The user-facing data structure for storing a supernodal LDL' factorization.
 template <class Field>
 struct SupernodalLDLFactorization {
-  // Marks whether a Cholesky or traditional LDL' factorization was employed.
-  bool is_cholesky;
+  // Marks the type of factorization employed.
+  SymmetricFactorizationType factorization_type;
 
   // An array of length 'num_supernodes'; the i'th member is the size of the
   // i'th supernode.
@@ -141,11 +141,8 @@ struct SupernodalRelaxationControl {
 
 // Configuration options for supernodal LDL' factorization.
 struct SupernodalLDLControl {
-  // Assume that the matrix is numerically Hermitian Positive-Definite so that
-  // square-roots of the diagonal can be taken and we may choose D = I. If this
-  // option is enabled, L is lower-triangular with a positive diagonal;
-  // otherwise, L has a unit diagonal.
-  bool use_cholesky = false;
+  // Determines the style of the factorization.
+  SymmetricFactorizationType factorization_type;
 
   // Configuration for the supernodal relaxation.
   SupernodalRelaxationControl relaxation_control;
@@ -173,26 +170,26 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
               const SupernodalLDLControl& control,
               SupernodalLDLFactorization<Field>* factorization);
 
-// Solve A x = b via the substitution (L D L') x = b and the sequence:
-//   x := L' \ (D \ (L \ b)).
+// Solve (P A P') (P X) = (P B) via the substitution (L D L') (P X) = (P B) or
+// (L D L^T) (P X) = (P B).
 template <class Field>
 void LDLSolve(const SupernodalLDLFactorization<Field>& factorization,
               BlasMatrix<Field>* matrix);
 
-// Solves L x = b using a lower triangular matrix L.
+// Solves L X = B using a lower triangular matrix L.
 template <class Field>
 void LowerTriangularSolve(
     const SupernodalLDLFactorization<Field>& factorization,
     BlasMatrix<Field>* matrix);
 
-// Solves D x = b using a diagonal matrix D.
+// Solves D X = B using a diagonal matrix D.
 template <class Field>
 void DiagonalSolve(const SupernodalLDLFactorization<Field>& factorization,
                    BlasMatrix<Field>* matrix);
 
-// Solves L' x = b using a lower triangular matrix L.
+// Solves L' X = B or L^T X = B using a lower triangular matrix L.
 template <class Field>
-void LowerAdjointTriangularSolve(
+void LowerTransposeTriangularSolve(
     const SupernodalLDLFactorization<Field>& factorization,
     BlasMatrix<Field>* matrix);
 

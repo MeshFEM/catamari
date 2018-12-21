@@ -564,23 +564,31 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
   return num_packed;
 }
 
-// Store the scaled adjoint update matrix, Z(d, m) = D(d, d) L(m, d)'.
+// Store the scaled adjoint update matrix, Z(d, m) = D(d, d) L(m, d)', or
+// the scaled transpose, Z(d, m) = D(d, d) L(m, d)^T.
 template <class Field>
-void FormScaledAdjoint(bool is_cholesky,
-                       const ConstBlasMatrix<Field>& diagonal_block,
-                       const ConstBlasMatrix<Field>& matrix,
-                       BlasMatrix<Field>* scaled_adjoint) {
-  if (is_cholesky) {
+void FormScaledTranspose(SymmetricFactorizationType factorization_type,
+                         const ConstBlasMatrix<Field>& diagonal_block,
+                         const ConstBlasMatrix<Field>& matrix,
+                         BlasMatrix<Field>* scaled_transpose) {
+  if (factorization_type == kCholeskyFactorization) {
     for (Int j = 0; j < matrix.width; ++j) {
       for (Int i = 0; i < matrix.height; ++i) {
-        scaled_adjoint->Entry(j, i) = Conjugate(matrix(i, j));
+        scaled_transpose->Entry(j, i) = Conjugate(matrix(i, j));
+      }
+    }
+  } else if (factorization_type == kLDLAdjointFactorization) {
+    for (Int j = 0; j < matrix.width; ++j) {
+      const Field& delta = diagonal_block(j, j);
+      for (Int i = 0; i < matrix.height; ++i) {
+        scaled_transpose->Entry(j, i) = delta * Conjugate(matrix(i, j));
       }
     }
   } else {
     for (Int j = 0; j < matrix.width; ++j) {
       const Field& delta = diagonal_block(j, j);
       for (Int i = 0; i < matrix.height; ++i) {
-        scaled_adjoint->Entry(j, i) = delta * Conjugate(matrix(i, j));
+        scaled_transpose->Entry(j, i) = delta * matrix(i, j);
       }
     }
   }
@@ -594,30 +602,30 @@ void FormScaledAdjoint(bool is_cholesky,
 // descendant_main_intersect_size x descendant_supernode_size, and Z(:, m)
 // being descendant_supernode_size x descendant_main_intersect_size.
 template <class Field>
-void UpdateDiagonalBlock(bool is_cholesky,
+void UpdateDiagonalBlock(SymmetricFactorizationType factorization_type,
                          const std::vector<Int>& supernode_starts,
                          const SupernodalLowerFactor<Field>& lower_factor,
                          Int main_supernode, Int descendant_supernode,
                          Int descendant_main_rel_row,
                          const ConstBlasMatrix<Field>& descendant_main_matrix,
-                         const ConstBlasMatrix<Field>& scaled_adjoint,
+                         const ConstBlasMatrix<Field>& scaled_transpose,
                          BlasMatrix<Field>* main_diag_block,
                          BlasMatrix<Field>* update_matrix) {
   typedef ComplexBase<Field> Real;
   const Int main_supernode_size = main_diag_block->height;
-  const Int descendant_main_intersect_size = scaled_adjoint.width;
+  const Int descendant_main_intersect_size = scaled_transpose.width;
 
   const bool inplace_update =
       descendant_main_intersect_size == main_supernode_size;
   BlasMatrix<Field>* accumulation_block =
       inplace_update ? main_diag_block : update_matrix;
 
-  if (is_cholesky) {
+  if (factorization_type == kCholeskyFactorization) {
     LowerNormalHermitianOuterProduct(Real{-1}, descendant_main_matrix, Real{1},
                                      accumulation_block);
   } else {
     MatrixMultiplyLowerNormalNormal(Field{-1}, descendant_main_matrix,
-                                    scaled_adjoint, Field{1},
+                                    scaled_transpose, Field{1},
                                     accumulation_block);
   }
 
@@ -653,7 +661,7 @@ void UpdateSubdiagonalBlock(
     Int main_supernode, Int descendant_supernode, Int descendant_main_rel_row,
     Int descendant_active_rel_row, const std::vector<Int>& supernode_starts,
     const std::vector<Int>& supernode_member_to_index,
-    const ConstBlasMatrix<Field>& scaled_adjoint,
+    const ConstBlasMatrix<Field>& scaled_transpose,
     const ConstBlasMatrix<Field>& descendant_active_matrix,
     SupernodalLowerFactor<Field>* lower_factor, Int* main_active_rel_row,
     const Int** main_active_intersect_sizes, BlasMatrix<Field>* update_matrix) {
@@ -661,7 +669,7 @@ void UpdateSubdiagonalBlock(
   const Int* main_indices = lower_factor->Structure(main_supernode);
   const Int* descendant_indices = lower_factor->Structure(descendant_supernode);
 
-  const Int descendant_main_intersect_size = scaled_adjoint.width;
+  const Int descendant_main_intersect_size = scaled_transpose.width;
   const Int descendant_active_intersect_size = descendant_active_matrix.height;
 
   // Move the pointers for the main supernode down to the active supernode of
@@ -709,7 +717,7 @@ void UpdateSubdiagonalBlock(
       inplace_update ? &main_active_block : update_matrix;
 
   MatrixMultiplyNormalNormal(Field{-1}, descendant_active_matrix,
-                             scaled_adjoint, Field{1}, accumulation_matrix);
+                             scaled_transpose, Field{1}, accumulation_matrix);
 
   if (!inplace_update) {
     const Int main_supernode_start = supernode_starts[main_supernode];
@@ -747,31 +755,38 @@ void UpdateSubdiagonalBlock(
 
 // Perform an in-place LDL' factorization of the supernodal diagonal block.
 template <class Field>
-Int FactorDiagonalBlock(bool is_cholesky, BlasMatrix<Field>* diagonal_block) {
+Int FactorDiagonalBlock(SymmetricFactorizationType factorization_type,
+                        BlasMatrix<Field>* diagonal_block) {
   Int num_pivots;
-  if (is_cholesky) {
+  if (factorization_type == kCholeskyFactorization) {
     num_pivots = LowerCholeskyFactorization(diagonal_block);
-  } else {
+  } else if (factorization_type == kLDLAdjointFactorization) {
     num_pivots = LowerLDLAdjointFactorization(diagonal_block);
+  } else {
+    num_pivots = LowerLDLTransposeFactorization(diagonal_block);
   }
   return num_pivots;
 }
 
-// L(KNext:n, K) /= D(K, K) L(K, K)'.
+// L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
 template <class Field>
-void SolveAgainstDiagonalBlock(bool is_cholesky,
+void SolveAgainstDiagonalBlock(SymmetricFactorizationType factorization_type,
                                const ConstBlasMatrix<Field>& triangular_matrix,
                                BlasMatrix<Field>* lower_matrix) {
   if (!lower_matrix->height) {
     return;
   }
-  if (is_cholesky) {
+  if (factorization_type == kCholeskyFactorization) {
     // Solve against the lower-triangular matrix L(K, K)' from the right.
     RightLowerAdjointTriangularSolves(triangular_matrix, lower_matrix);
-  } else {
+  } else if (factorization_type == kLDLAdjointFactorization) {
     // Solve against D(K, K) L(K, K)' from the right.
     RightDiagonalTimesLowerAdjointUnitTriangularSolves(triangular_matrix,
                                                        lower_matrix);
+  } else {
+    // Solve against D(K, K) L(K, K)^T from the right.
+    RightDiagonalTimesLowerTransposeUnitTriangularSolves(triangular_matrix,
+                                                         lower_matrix);
   }
 }
 
@@ -1431,7 +1446,8 @@ template <class Field>
 LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
                       const SupernodalLDLControl& control,
                       SupernodalLDLFactorization<Field>* factorization) {
-  const bool is_cholesky = factorization->is_cholesky;
+  const SymmetricFactorizationType factorization_type =
+      factorization->factorization_type;
 
   std::vector<Int> parents;
   std::vector<Int> supernode_degrees;
@@ -1452,7 +1468,7 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
     max_supernode_size =
         std::max(max_supernode_size, diagonal_factor.blocks[supernode].height);
   }
-  std::vector<Field> scaled_adjoint_buffer(
+  std::vector<Field> scaled_transpose_buffer(
       max_supernode_size * max_supernode_size, Field{0});
   std::vector<Field> update_buffer(
       max_supernode_size * (max_supernode_size - 1), Field{0});
@@ -1513,15 +1529,16 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
                                            descendant_main_intersect_size,
                                            descendant_supernode_size);
 
-      BlasMatrix<Field> scaled_adjoint;
-      scaled_adjoint.height = descendant_supernode_size;
-      scaled_adjoint.width = descendant_main_intersect_size;
-      scaled_adjoint.leading_dim = descendant_supernode_size;
-      scaled_adjoint.data = scaled_adjoint_buffer.data();
+      BlasMatrix<Field> scaled_transpose;
+      scaled_transpose.height = descendant_supernode_size;
+      scaled_transpose.width = descendant_main_intersect_size;
+      scaled_transpose.leading_dim = descendant_supernode_size;
+      scaled_transpose.data = scaled_transpose_buffer.data();
 
-      FormScaledAdjoint(is_cholesky,
-                        diagonal_factor.blocks[descendant_supernode].ToConst(),
-                        descendant_main_matrix, &scaled_adjoint);
+      FormScaledTranspose(
+          factorization_type,
+          diagonal_factor.blocks[descendant_supernode].ToConst(),
+          descendant_main_matrix, &scaled_transpose);
 
       BlasMatrix<Field> update_matrix;
       update_matrix.height = descendant_main_intersect_size;
@@ -1529,10 +1546,10 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
       update_matrix.leading_dim = descendant_main_intersect_size;
       update_matrix.data = update_buffer.data();
 
-      UpdateDiagonalBlock(is_cholesky, factorization->supernode_starts,
+      UpdateDiagonalBlock(factorization_type, factorization->supernode_starts,
                           *factorization->lower_factor, main_supernode,
                           descendant_supernode, descendant_main_rel_row,
-                          descendant_main_matrix, scaled_adjoint.ToConst(),
+                          descendant_main_matrix, scaled_transpose.ToConst(),
                           &main_diagonal_block, &update_matrix);
 
       intersect_ptrs[descendant_supernode]++;
@@ -1562,9 +1579,9 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
         UpdateSubdiagonalBlock(
             main_supernode, descendant_supernode, descendant_main_rel_row,
             descendant_active_rel_row, factorization->supernode_starts,
-            factorization->supernode_member_to_index, scaled_adjoint.ToConst(),
-            descendant_active_matrix, &lower_factor, &main_active_rel_row,
-            &main_active_intersect_sizes, &update_matrix);
+            factorization->supernode_member_to_index,
+            scaled_transpose.ToConst(), descendant_active_matrix, &lower_factor,
+            &main_active_rel_row, &main_active_intersect_sizes, &update_matrix);
 
         ++descendant_active_intersect_size_beg;
         descendant_active_rel_row += descendant_active_intersect_size;
@@ -1572,13 +1589,13 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
     }
 
     const Int num_supernode_pivots =
-        FactorDiagonalBlock(is_cholesky, &main_diagonal_block);
+        FactorDiagonalBlock(factorization_type, &main_diagonal_block);
     result.num_successful_pivots += num_supernode_pivots;
     if (num_supernode_pivots < main_supernode_size) {
       return result;
     }
 
-    SolveAgainstDiagonalBlock(is_cholesky, main_diagonal_block.ToConst(),
+    SolveAgainstDiagonalBlock(factorization_type, main_diagonal_block.ToConst(),
                               &main_lower_block);
 
     // Finish updating the result structure.
@@ -1605,7 +1622,7 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
               SupernodalLDLFactorization<Field>* factorization) {
   factorization->permutation = permutation;
   factorization->inverse_permutation = inverse_permutation;
-  factorization->is_cholesky = control.use_cholesky;
+  factorization->factorization_type = control.factorization_type;
   factorization->forward_solve_out_of_place_supernode_threshold =
       control.forward_solve_out_of_place_supernode_threshold;
   factorization->backward_solve_out_of_place_supernode_threshold =
@@ -1633,7 +1650,7 @@ void LDLSolve(const SupernodalLDLFactorization<Field>& factorization,
 
   LowerTriangularSolve(factorization, matrix);
   DiagonalSolve(factorization, matrix);
-  LowerAdjointTriangularSolve(factorization, matrix);
+  LowerTransposeTriangularSolve(factorization, matrix);
 
   // Reverse the factorization permutation.
   if (have_permutation) {
@@ -1651,7 +1668,8 @@ void LowerTriangularSolve(
       *factorization.lower_factor;
   const SupernodalDiagonalFactor<Field>& diagonal_factor =
       *factorization.diagonal_factor;
-  const bool is_cholesky = factorization.is_cholesky;
+  const bool is_cholesky =
+      factorization.factorization_type == kCholeskyFactorization;
 
   std::vector<Field> workspace(factorization.largest_degree * num_rhs,
                                Field{0});
@@ -1721,7 +1739,8 @@ void DiagonalSolve(const SupernodalLDLFactorization<Field>& factorization,
   const Int num_supernodes = factorization.supernode_sizes.size();
   const SupernodalDiagonalFactor<Field>& diagonal_factor =
       *factorization.diagonal_factor;
-  const bool is_cholesky = factorization.is_cholesky;
+  const bool is_cholesky =
+      factorization.factorization_type == kCholeskyFactorization;
   if (is_cholesky) {
     // D is the identity.
     return;
@@ -1746,7 +1765,7 @@ void DiagonalSolve(const SupernodalLDLFactorization<Field>& factorization,
 }
 
 template <class Field>
-void LowerAdjointTriangularSolve(
+void LowerTransposeTriangularSolve(
     const SupernodalLDLFactorization<Field>& factorization,
     BlasMatrix<Field>* matrix) {
   const Int num_rhs = matrix->width;
@@ -1755,7 +1774,9 @@ void LowerAdjointTriangularSolve(
       *factorization.lower_factor;
   const SupernodalDiagonalFactor<Field>& diagonal_factor =
       *factorization.diagonal_factor;
-  const bool is_cholesky = factorization.is_cholesky;
+  const SymmetricFactorizationType factorization_type =
+      factorization.factorization_type;
+  const bool is_selfadjoint = factorization_type != kLDLTransposeFactorization;
 
   std::vector<Field> packed_input_buf(factorization.largest_degree * num_rhs);
 
@@ -1785,16 +1806,27 @@ void LowerAdjointTriangularSolve(
           }
         }
 
-        MatrixMultiplyAdjointNormal(Field{-1}, subdiagonal,
-                                    work_matrix.ToConst(), Field{1},
-                                    &matrix_supernode);
+        if (is_selfadjoint) {
+          MatrixMultiplyAdjointNormal(Field{-1}, subdiagonal,
+                                      work_matrix.ToConst(), Field{1},
+                                      &matrix_supernode);
+        } else {
+          MatrixMultiplyTransposeNormal(Field{-1}, subdiagonal,
+                                        work_matrix.ToConst(), Field{1},
+                                        &matrix_supernode);
+        }
       } else {
         for (Int k = 0; k < supernode_size; ++k) {
           for (Int i = 0; i < subdiagonal.height; ++i) {
             const Int row = indices[i];
             for (Int j = 0; j < num_rhs; ++j) {
-              matrix_supernode(k, j) -=
-                  Conjugate(subdiagonal(i, k)) * matrix->Entry(row, j);
+              if (is_selfadjoint) {
+                matrix_supernode(k, j) -=
+                    Conjugate(subdiagonal(i, k)) * matrix->Entry(row, j);
+              } else {
+                matrix_supernode(k, j) -=
+                    subdiagonal(i, k) * matrix->Entry(row, j);
+              }
             }
           }
         }
@@ -1804,11 +1836,14 @@ void LowerAdjointTriangularSolve(
     // Solve against the diagonal block of this supernode.
     const ConstBlasMatrix<Field> triangular_matrix =
         diagonal_factor.blocks[supernode];
-    if (is_cholesky) {
+    if (factorization_type == kCholeskyFactorization) {
       LeftLowerAdjointTriangularSolves(triangular_matrix, &matrix_supernode);
-    } else {
+    } else if (factorization_type == kLDLAdjointFactorization) {
       LeftLowerAdjointUnitTriangularSolves(triangular_matrix,
                                            &matrix_supernode);
+    } else {
+      LeftLowerTransposeUnitTriangularSolves(triangular_matrix,
+                                             &matrix_supernode);
     }
   }
 }
@@ -1820,7 +1855,8 @@ void PrintLowerFactor(const SupernodalLDLFactorization<Field>& factorization,
       *factorization.lower_factor;
   const SupernodalDiagonalFactor<Field>& diag_factor =
       *factorization.diagonal_factor;
-  const bool is_cholesky = factorization.is_cholesky;
+  const bool is_cholesky =
+      factorization.factorization_type == kCholeskyFactorization;
 
   auto print_entry = [&](const Int& row, const Int& column,
                          const Field& value) {
@@ -1865,7 +1901,7 @@ void PrintDiagonalFactor(const SupernodalLDLFactorization<Field>& factorization,
                          const std::string& label, std::ostream& os) {
   const SupernodalDiagonalFactor<Field>& diag_factor =
       *factorization.diagonal_factor;
-  if (factorization.is_cholesky) {
+  if (factorization.factorization_type == kCholeskyFactorization) {
     // TODO(Jack Poulson): Print the identity.
     return;
   }

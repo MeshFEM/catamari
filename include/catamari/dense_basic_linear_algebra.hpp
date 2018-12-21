@@ -110,6 +110,10 @@ void LeftLowerAdjointUnitTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
 template <class Field>
+void LeftLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+
+template <class Field>
 void RightLowerAdjointTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
@@ -119,6 +123,18 @@ void RightLowerAdjointUnitTriangularSolves(
 
 template <class Field>
 void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+
+template <class Field>
+void RightLowerTransposeTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+
+template <class Field>
+void RightLowerTransposeUnitTriangularSolves(
+    const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
+
+template <class Field>
+void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
 }  // namespace catamari

@@ -101,7 +101,8 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
     bool maximum_likelihood) const {
   const Int num_rows = supernode_starts_.back();
   const Int num_supernodes = supernode_sizes_.size();
-  const bool is_cholesky = false;
+  const SymmetricFactorizationType factorization_type =
+      kLDLAdjointFactorization;
 
   // Reset the lower factor to all zeros.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
@@ -132,7 +133,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
     max_supernode_size = std::max(max_supernode_size,
                                   diagonal_factor_->blocks[supernode].height);
   }
-  std::vector<Field> scaled_adjoint_buffer(
+  std::vector<Field> scaled_transpose_buffer(
       max_supernode_size * max_supernode_size, Field{0});
   std::vector<Field> update_buffer(
       max_supernode_size * (max_supernode_size - 1), Field{0});
@@ -190,15 +191,16 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
                                            descendant_main_intersect_size,
                                            descendant_supernode_size);
 
-      BlasMatrix<Field> scaled_adjoint;
-      scaled_adjoint.height = descendant_supernode_size;
-      scaled_adjoint.width = descendant_main_intersect_size;
-      scaled_adjoint.leading_dim = descendant_supernode_size;
-      scaled_adjoint.data = scaled_adjoint_buffer.data();
+      BlasMatrix<Field> scaled_transpose;
+      scaled_transpose.height = descendant_supernode_size;
+      scaled_transpose.width = descendant_main_intersect_size;
+      scaled_transpose.leading_dim = descendant_supernode_size;
+      scaled_transpose.data = scaled_transpose_buffer.data();
 
-      supernodal_ldl::FormScaledAdjoint(
-          is_cholesky, diagonal_factor_->blocks[descendant_supernode].ToConst(),
-          descendant_main_matrix, &scaled_adjoint);
+      supernodal_ldl::FormScaledTranspose(
+          factorization_type,
+          diagonal_factor_->blocks[descendant_supernode].ToConst(),
+          descendant_main_matrix, &scaled_transpose);
 
       BlasMatrix<Field> update_matrix;
       update_matrix.height = descendant_main_intersect_size;
@@ -207,9 +209,9 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
       update_matrix.data = update_buffer.data();
 
       supernodal_ldl::UpdateDiagonalBlock(
-          is_cholesky, supernode_starts_, *lower_factor_, main_supernode,
+          factorization_type, supernode_starts_, *lower_factor_, main_supernode,
           descendant_supernode, descendant_main_rel_row, descendant_main_matrix,
-          scaled_adjoint.ToConst(), &main_diagonal_block, &update_matrix);
+          scaled_transpose.ToConst(), &main_diagonal_block, &update_matrix);
 
       intersect_ptrs[descendant_supernode]++;
       rel_rows[descendant_supernode] += descendant_main_intersect_size;
@@ -238,7 +240,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
         supernodal_ldl::UpdateSubdiagonalBlock(
             main_supernode, descendant_supernode, descendant_main_rel_row,
             descendant_active_rel_row, supernode_starts_,
-            supernode_member_to_index_, scaled_adjoint.ToConst(),
+            supernode_member_to_index_, scaled_transpose.ToConst(),
             descendant_active_matrix, lower_factor_.get(), &main_active_rel_row,
             &main_active_intersect_sizes, &update_matrix);
 
@@ -263,7 +265,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
     }
 
     supernodal_ldl::SolveAgainstDiagonalBlock(
-        is_cholesky, main_diagonal_block.ToConst(), &main_lower_block);
+        factorization_type, main_diagonal_block.ToConst(), &main_lower_block);
   }
 
   std::sort(sample.begin(), sample.end());

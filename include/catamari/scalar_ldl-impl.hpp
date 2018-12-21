@@ -22,7 +22,8 @@ void PrintLowerFactor(const ScalarLDLFactorization<Field>& factorization,
   const ScalarLowerStructure& lower_structure = lower_factor.structure;
   const ScalarDiagonalFactor<Field>& diagonal_factor =
       factorization.diagonal_factor;
-  const bool is_cholesky = factorization.is_cholesky;
+  const SymmetricFactorizationType factorization_type =
+      factorization.factorization_type;
 
   auto print_entry = [&](const Int& row, const Int& column,
                          const Field& value) {
@@ -32,7 +33,7 @@ void PrintLowerFactor(const ScalarLDLFactorization<Field>& factorization,
   os << label << ":\n";
   const Int num_columns = lower_structure.column_offsets.size() - 1;
   for (Int column = 0; column < num_columns; ++column) {
-    if (is_cholesky) {
+    if (factorization_type == kCholeskyFactorization) {
       print_entry(column, column, diagonal_factor.values[column]);
     } else {
       print_entry(column, column, Field{1});
@@ -52,7 +53,7 @@ void PrintLowerFactor(const ScalarLDLFactorization<Field>& factorization,
 template <class Field>
 void PrintDiagonalFactor(const ScalarLDLFactorization<Field>& factorization,
                          const std::string& label, std::ostream& os) {
-  if (factorization.is_cholesky) {
+  if (factorization.factorization_type == kCholeskyFactorization) {
     // TODO(Jack Poulson): Print the identity.
     return;
   }
@@ -410,12 +411,15 @@ template <class Field>
 void UpLookingRowUpdate(Int row, Int column,
                         ScalarLDLFactorization<Field>* factorization,
                         Int* column_update_ptrs, Field* row_workspace) {
-  typedef ComplexBase<Field> Real;
   ScalarLowerFactor<Field>& lower_factor = factorization->lower_factor;
   ScalarLowerStructure& lower_structure = lower_factor.structure;
   ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
-  const bool is_cholesky = factorization->is_cholesky;
-  const Real pivot = RealPart(diagonal_factor.values[column]);
+  const bool is_cholesky =
+      factorization->factorization_type == kCholeskyFactorization;
+  const bool is_selfadjoint =
+      factorization->factorization_type != kLDLTransposeFactorization;
+  const Field pivot = is_selfadjoint ? RealPart(diagonal_factor.values[column])
+                                     : diagonal_factor.values[column];
 
   // Load eta := L(row, column) * d(column) from the workspace.
   const Field eta =
@@ -439,14 +443,22 @@ void UpLookingRowUpdate(Int row, Int column,
     // Update L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
     const Int i = lower_structure.indices[index];
     const Field& value = lower_factor.values[index];
-    row_workspace[i] -= eta * Conjugate(value);
+    if (is_selfadjoint) {
+      row_workspace[i] -= eta * Conjugate(value);
+    } else {
+      row_workspace[i] -= eta * value;
+    }
   }
 
   // Compute L(row, column) from eta = L(row, column) * d(column).
   const Field lambda = is_cholesky ? eta : eta / pivot;
 
   // Update L(row, row) -= (L(row, column) * d(column)) * conj(L(row, column)).
-  diagonal_factor.values[row] -= eta * Conjugate(lambda);
+  if (is_selfadjoint) {
+    diagonal_factor.values[row] -= eta * Conjugate(lambda);
+  } else {
+    diagonal_factor.values[row] -= eta * lambda;
+  }
 
   // Append L(row, column) into the structure of column 'column'.
   lower_structure.indices[factor_column_end] = row;
@@ -466,7 +478,8 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
                       ScalarLDLFactorization<Field>* factorization) {
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
-  const bool is_cholesky = factorization->is_cholesky;
+  const SymmetricFactorizationType factorization_type =
+      factorization->factorization_type;
 
   std::vector<Int> parents;
   ldl::LeftLookingSetup(matrix, &parents, factorization);
@@ -511,9 +524,14 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
                       "Did not find L(column, j)");
 
       const Field lambda_k_j = lower_factor.values[j_ptr];
-      const Field eta = is_cholesky
-                            ? Conjugate(lambda_k_j)
-                            : diagonal_factor.values[j] * Conjugate(lambda_k_j);
+      Field eta;
+      if (factorization_type == kCholeskyFactorization) {
+        eta = Conjugate(lambda_k_j);
+      } else if (factorization_type == kLDLAdjointFactorization) {
+        eta = diagonal_factor.values[j] * Conjugate(lambda_k_j);
+      } else {
+        eta = diagonal_factor.values[j] * lambda_k_j;
+      }
 
       // L(column, column) -= L(column, j) * eta.
       diagonal_factor.values[column] -= lambda_k_j * eta;
@@ -549,15 +567,21 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
     }
 
     // Early exit if solving would involve division by zero.
-    Real pivot = RealPart(diagonal_factor.values[column]);
-    if (is_cholesky) {
-      if (pivot <= Real{0}) {
+    Field pivot = diagonal_factor.values[column];
+    if (factorization_type == kCholeskyFactorization) {
+      if (RealPart(pivot) <= Real{0}) {
         return result;
       }
-      pivot = std::sqrt(pivot);
+      pivot = std::sqrt(RealPart(pivot));
+      diagonal_factor.values[column] = pivot;
+    } else if (factorization_type == kLDLAdjointFactorization) {
+      if (RealPart(pivot) == Real{0}) {
+        return result;
+      }
+      pivot = RealPart(pivot);
       diagonal_factor.values[column] = pivot;
     } else {
-      if (pivot == Real{0}) {
+      if (pivot == Field{0}) {
         return result;
       }
     }
@@ -590,7 +614,8 @@ LDLResult UpLooking(const CoordinateMatrix<Field>& matrix,
   typedef ComplexBase<Field> Real;
   ScalarDiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
   const Int num_rows = matrix.NumRows();
-  const bool is_cholesky = factorization->is_cholesky;
+  const SymmetricFactorizationType factorization_type =
+      factorization->factorization_type;
 
   std::vector<Int> parents;
   ldl::UpLookingSetup(matrix, &parents, factorization);
@@ -637,15 +662,19 @@ LDLResult UpLooking(const CoordinateMatrix<Field>& matrix,
     }
 
     // Early exit if solving would involve division by zero.
-    Real pivot = RealPart(diagonal_factor.values[row]);
-    if (is_cholesky) {
-      if (pivot <= Real{0}) {
+    const Field pivot = diagonal_factor.values[row];
+    if (factorization_type == kCholeskyFactorization) {
+      if (RealPart(pivot) <= Real{0}) {
         return result;
       }
-      pivot = std::sqrt(pivot);
-      diagonal_factor.values[row] = pivot;
+      diagonal_factor.values[row] = std::sqrt(RealPart(pivot));
+    } else if (factorization_type == kLDLAdjointFactorization) {
+      if (RealPart(pivot) == Real{0}) {
+        return result;
+      }
+      diagonal_factor.values[row] = RealPart(pivot);
     } else {
-      if (pivot == Real{0}) {
+      if (pivot == Field{0}) {
         return result;
       }
     }
@@ -687,7 +716,7 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
               ScalarLDLFactorization<Field>* factorization) {
   factorization->permutation = permutation;
   factorization->inverse_permutation = inverse_permutation;
-  factorization->is_cholesky = control.use_cholesky;
+  factorization->factorization_type = control.factorization_type;
 
   if (control.algorithm == kLeftLookingLDL) {
     return ldl::LeftLooking(matrix, factorization);
@@ -716,7 +745,7 @@ void LDLSolve(const ScalarLDLFactorization<Field>& factorization,
 
   LowerTriangularSolve(factorization, matrix);
   DiagonalSolve(factorization, matrix);
-  LowerAdjointTriangularSolve(factorization, matrix);
+  LowerTransposeTriangularSolve(factorization, matrix);
 
   // Reverse the factorization relxation permutation.
   if (have_permutation) {
@@ -733,7 +762,8 @@ void LowerTriangularSolve(const ScalarLDLFactorization<Field>& factorization,
   const ScalarDiagonalFactor<Field>& diagonal_factor =
       factorization.diagonal_factor;
   const Int num_rows = lower_structure.column_offsets.size() - 1;
-  const bool is_cholesky = factorization.is_cholesky;
+  const bool is_cholesky =
+      factorization.factorization_type == kCholeskyFactorization;
 
   CATAMARI_ASSERT(matrix->height == num_rows,
                   "matrix was an incorrect height.");
@@ -762,7 +792,7 @@ void LowerTriangularSolve(const ScalarLDLFactorization<Field>& factorization,
 template <class Field>
 void DiagonalSolve(const ScalarLDLFactorization<Field>& factorization,
                    BlasMatrix<Field>* matrix) {
-  if (factorization.is_cholesky) {
+  if (factorization.factorization_type == kCholeskyFactorization) {
     return;
   }
 
@@ -782,7 +812,7 @@ void DiagonalSolve(const ScalarLDLFactorization<Field>& factorization,
 }
 
 template <class Field>
-void LowerAdjointTriangularSolve(
+void LowerTransposeTriangularSolve(
     const ScalarLDLFactorization<Field>& factorization,
     BlasMatrix<Field>* matrix) {
   const Int num_rhs = matrix->width;
@@ -791,7 +821,10 @@ void LowerAdjointTriangularSolve(
   const ScalarDiagonalFactor<Field>& diagonal_factor =
       factorization.diagonal_factor;
   const Int num_rows = lower_structure.column_offsets.size() - 1;
-  const bool is_cholesky = factorization.is_cholesky;
+  const bool is_cholesky =
+      factorization.factorization_type == kCholeskyFactorization;
+  const bool is_selfadjoint =
+      factorization.factorization_type != kLDLTransposeFactorization;
 
   CATAMARI_ASSERT(matrix->height == num_rows,
                   "matrix was an incorrect height.");
@@ -804,7 +837,11 @@ void LowerAdjointTriangularSolve(
       for (Int index = factor_column_beg; index < factor_column_end; ++index) {
         const Int i = lower_structure.indices[index];
         const Field& value = lower_factor.values[index];
-        eta -= Conjugate(value) * matrix->Entry(i, j);
+        if (is_selfadjoint) {
+          eta -= Conjugate(value) * matrix->Entry(i, j);
+        } else {
+          eta -= value * matrix->Entry(i, j);
+        }
       }
     }
 
