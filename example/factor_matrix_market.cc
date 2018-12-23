@@ -15,7 +15,6 @@
 
 #include "catamari/apply_sparse.hpp"
 #include "catamari/ldl.hpp"
-#include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
 
 using catamari::BlasMatrix;
@@ -207,8 +206,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
                                quotient::EntryMask mask, bool force_symmetry,
                                double diagonal_shift,
                                const catamari::LDLControl& ldl_control,
-                               bool print_progress,
-                               bool write_permuted_matrix) {
+                               bool print_progress) {
   typedef double Field;
   typedef catamari::ComplexBase<Field> BaseField;
   Experiment experiment;
@@ -280,8 +278,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
 std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, double diagonal_shift,
-    const catamari::LDLControl& ldl_control, bool print_progress,
-    bool write_permuted_matrix) {
+    const catamari::LDLControl& ldl_control, bool print_progress) {
   const std::vector<std::string> matrix_names{
       "appu",     "bbmat",    "bcsstk30", "bcsstk31", "bcsstk32", "bcsstk33",
       "crystk02", "crystk03", "ct20stif", "ex11",     "ex19",     "ex40",
@@ -297,7 +294,7 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
                                  "/" + matrix_name + ".mtx";
     experiments[matrix_name] = RunMatrixMarketTest(
         filename, skip_explicit_zeros, mask, force_symmetry, diagonal_shift,
-        ldl_control, print_progress, write_permuted_matrix);
+        ldl_control, print_progress);
   }
 
   return experiments;
@@ -366,8 +363,6 @@ int main(int argc, char** argv) {
                                 1);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
-  const bool write_permuted_matrix = parser.OptionalInput<bool>(
-      "write_permuted_matrix", "Write the permuted matrix to file?", false);
   const std::string matrix_market_directory = parser.OptionalInput<std::string>(
       "matrix_market_directory",
       "The directory where the ADD96 matrix market .tar.gz's were unpacked",
@@ -427,15 +422,14 @@ int main(int argc, char** argv) {
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
         RunADD96Tests(matrix_market_directory, skip_explicit_zeros, mask,
-                      diagonal_shift, ldl_control, print_progress,
-                      write_permuted_matrix);
+                      diagonal_shift, ldl_control, print_progress);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
     }
   } else {
     const Experiment experiment = RunMatrixMarketTest(
         filename, skip_explicit_zeros, mask, force_symmetry, diagonal_shift,
-        ldl_control, print_progress, write_permuted_matrix);
+        ldl_control, print_progress);
     PrintExperiment(experiment, filename);
   }
 

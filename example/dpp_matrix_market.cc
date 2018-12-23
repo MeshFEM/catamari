@@ -15,7 +15,6 @@
 
 #include "catamari/dpp.hpp"
 #include "quotient/io_utils.hpp"
-#include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
 
 using catamari::Int;
@@ -163,8 +162,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
                                double diagonal_shift, bool maximum_likelihood,
                                Int num_samples,
                                const catamari::DPPControl& dpp_control,
-                               bool print_progress,
-                               bool write_permuted_matrix) {
+                               bool print_progress) {
   typedef double Field;
   Experiment experiment;
 
@@ -210,7 +208,7 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, double diagonal_shift, bool maximum_likelihood,
     Int num_samples, const catamari::DPPControl& dpp_control,
-    bool print_progress, bool write_permuted_matrix) {
+    bool print_progress) {
   const std::vector<std::string> matrix_names{
       "appu",     "bbmat",    "bcsstk30", "bcsstk31", "bcsstk32", "bcsstk33",
       "crystk02", "crystk03", "ct20stif", "ex11",     "ex19",     "ex40",
@@ -227,7 +225,7 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
     experiments[matrix_name] =
         RunMatrixMarketTest(filename, skip_explicit_zeros, mask, force_symmetry,
                             diagonal_shift, maximum_likelihood, num_samples,
-                            dpp_control, print_progress, write_permuted_matrix);
+                            dpp_control, print_progress);
   }
 
   return experiments;
@@ -287,8 +285,6 @@ int main(int argc, char** argv) {
       parser.OptionalInput<Int>("num_samples", "The number of DPP samples.", 5);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
-  const bool write_permuted_matrix = parser.OptionalInput<bool>(
-      "write_permuted_matrix", "Write the permuted matrix to file?", false);
   const std::string matrix_market_directory = parser.OptionalInput<std::string>(
       "matrix_market_directory",
       "The directory where the ADD96 matrix market .tar.gz's were unpacked",
@@ -342,7 +338,7 @@ int main(int argc, char** argv) {
     const std::unordered_map<std::string, Experiment> experiments =
         RunADD96Tests(matrix_market_directory, skip_explicit_zeros, mask,
                       diagonal_shift, maximum_likelihood, num_samples,
-                      dpp_control, print_progress, write_permuted_matrix);
+                      dpp_control, print_progress);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
     }
@@ -350,7 +346,7 @@ int main(int argc, char** argv) {
     const Experiment experiment =
         RunMatrixMarketTest(filename, skip_explicit_zeros, mask, force_symmetry,
                             diagonal_shift, maximum_likelihood, num_samples,
-                            dpp_control, print_progress, write_permuted_matrix);
+                            dpp_control, print_progress);
     PrintExperiment(experiment, filename);
   }
 

@@ -15,7 +15,6 @@
 
 #include "catamari/dpp.hpp"
 #include "quotient/io_utils.hpp"
-#include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
 
 using catamari::Int;
