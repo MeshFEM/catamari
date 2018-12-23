@@ -8,6 +8,8 @@
 #ifndef CATAMARI_DENSE_FACTORIZATIONS_H_
 #define CATAMARI_DENSE_FACTORIZATIONS_H_
 
+#include <random>
+
 #include "catamari/integers.hpp"
 
 namespace catamari {
