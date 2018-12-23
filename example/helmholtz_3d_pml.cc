@@ -608,6 +608,163 @@ ConstBlasMatrix<Complex<Real>> GenerateRightHandSide(
   return right_hand_side.ToConst();
 }
 
+struct IntegerBox {
+  Int x_beg;
+  Int x_end;
+  Int y_beg;
+  Int y_end;
+  Int z_beg;
+  Int z_end;
+};
+
+inline void AnalyticalOrderingRecursion(Int num_x_elements, Int num_y_elements,
+                                        Int num_z_elements, Int offset,
+                                        const IntegerBox& box,
+                                        std::vector<Int>* inverse_permutation) {
+  const Int y_stride = num_x_elements + 1;
+  const Int z_stride = y_stride * (num_y_elements + 1);
+  const Int min_cut_size = 5;
+
+  // Determine which dimension to cut (if any).
+  const Int x_size = box.x_end - box.x_beg;
+  const Int y_size = box.y_end - box.y_beg;
+  const Int z_size = box.z_end - box.z_beg;
+  const Int max_size = std::max(std::max(x_size, y_size), z_size);
+  CATAMARI_ASSERT(max_size > 0, "The maximum size was non-positive.");
+  if (max_size < min_cut_size) {
+    // Do not split.
+    for (Int z = box.z_beg; z < box.z_end; ++z) {
+      for (Int y = box.y_beg; y < box.y_end; ++y) {
+        for (Int x = box.x_beg; x < box.x_end; ++x) {
+          (*inverse_permutation)[offset++] = x + y * y_stride + z * z_stride;
+        }
+      }
+    }
+    return;
+  }
+
+  if (x_size == max_size) {
+    // Cut the x dimension.
+    const Int x_cut = box.x_beg + (box.x_end - box.x_beg) / 2;
+    const IntegerBox left_box{box.x_beg, x_cut,     box.y_beg,
+                              box.y_end, box.z_beg, box.z_end};
+    const IntegerBox right_box{x_cut + 1, box.x_end, box.y_beg,
+                               box.y_end, box.z_beg, box.z_end};
+    const Int left_offset = offset;
+    const Int right_offset =
+        left_offset + (left_box.x_end - left_box.x_beg) *
+                          (left_box.y_end - left_box.y_beg) *
+                          (left_box.z_end - left_box.z_beg);
+    const Int cut_offset =
+        right_offset + (right_box.x_end - right_box.x_beg) *
+                           (right_box.y_end - right_box.y_beg) *
+                           (right_box.z_end - right_box.z_beg);
+
+    // Fill the left child.
+    AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
+                                left_offset, left_box, inverse_permutation);
+
+    // Fill the right child.
+    AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
+                                right_offset, right_box, inverse_permutation);
+
+    // Fill the separator.
+    offset = cut_offset;
+    for (Int z = box.z_beg; z < box.z_end; ++z) {
+      for (Int y = box.y_beg; y < box.y_end; ++y) {
+        (*inverse_permutation)[offset++] = x_cut + y * y_stride + z * z_stride;
+      }
+    }
+  } else if (y_size == max_size) {
+    // Cut the y dimension.
+    const Int y_cut = box.y_beg + (box.y_end - box.y_beg) / 2;
+    const IntegerBox left_box{box.x_beg, box.x_end, box.y_beg,
+                              y_cut,     box.z_beg, box.z_end};
+    const IntegerBox right_box{box.x_beg, box.x_end, y_cut + 1,
+                               box.y_end, box.z_beg, box.z_end};
+    const Int left_offset = offset;
+    const Int right_offset =
+        left_offset + (left_box.x_end - left_box.x_beg) *
+                          (left_box.y_end - left_box.y_beg) *
+                          (left_box.z_end - left_box.z_beg);
+    const Int cut_offset =
+        right_offset + (right_box.x_end - right_box.x_beg) *
+                           (right_box.y_end - right_box.y_beg) *
+                           (right_box.z_end - right_box.z_beg);
+
+    // Fill the left child.
+    AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
+                                left_offset, left_box, inverse_permutation);
+
+    // Fill the right child.
+    AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
+                                right_offset, right_box, inverse_permutation);
+
+    // Fill the separator.
+    offset = cut_offset;
+    for (Int z = box.z_beg; z < box.z_end; ++z) {
+      for (Int x = box.x_beg; x < box.x_end; ++x) {
+        (*inverse_permutation)[offset++] = x + y_cut * y_stride + z * z_stride;
+      }
+    }
+  } else {
+    // Cut the z dimension.
+    const Int z_cut = box.z_beg + (box.z_end - box.z_beg) / 2;
+    const IntegerBox left_box{box.x_beg, box.x_end, box.y_beg,
+                              box.y_end, box.z_beg, z_cut};
+    const IntegerBox right_box{box.x_beg, box.x_end, box.y_beg,
+                               box.y_end, z_cut + 1, box.z_end};
+    const Int left_offset = offset;
+    const Int right_offset =
+        left_offset + (left_box.x_end - left_box.x_beg) *
+                          (left_box.y_end - left_box.y_beg) *
+                          (left_box.z_end - left_box.z_beg);
+    const Int cut_offset =
+        right_offset + (right_box.x_end - right_box.x_beg) *
+                           (right_box.y_end - right_box.y_beg) *
+                           (right_box.z_end - right_box.z_beg);
+
+    // Fill the left child.
+    AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
+                                left_offset, left_box, inverse_permutation);
+
+    // Fill the right child.
+    AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
+                                right_offset, right_box, inverse_permutation);
+
+    // Fill the separator.
+    offset = cut_offset;
+    for (Int y = box.y_beg; y < box.y_end; ++y) {
+      for (Int x = box.x_beg; x < box.x_end; ++x) {
+        (*inverse_permutation)[offset++] = x + y * y_stride + z_cut * z_stride;
+      }
+    }
+  }
+}
+
+// Because of the connectivity of the trilinear hexahedra, we can impose an
+// analytical nested-dissection ordering with a width of 1.
+inline void AnalyticalOrdering(Int num_x_elements, Int num_y_elements,
+                               Int num_z_elements,
+                               std::vector<Int>* permutation,
+                               std::vector<Int>* inverse_permutation) {
+  const Int num_rows =
+      (num_x_elements + 1) * (num_y_elements + 1) * (num_z_elements + 1);
+  permutation->resize(num_rows);
+  inverse_permutation->resize(num_rows);
+
+  Int offset = 0;
+  IntegerBox box{0, num_x_elements + 1, 0, num_y_elements + 1,
+                 0, num_z_elements + 1};
+  AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
+                              offset, box, inverse_permutation);
+
+  // Invert the inverse permutation.
+  for (Int row = 0; row < num_rows; ++row) {
+    (*permutation)[(*inverse_permutation)[row]] = row;
+  }
+}
+
 // A list of properties to measure from a sparse LDL factorization / solve.
 struct Experiment {
   // The number of seconds it took to construct the FEM matrix.
@@ -677,6 +834,7 @@ BlasMatrix<Field> CopyMatrix(const ConstBlasMatrix<Field>& matrix,
 Experiment RunTest(const double& omega, Int num_x_elements, Int num_y_elements,
                    Int num_z_elements, const double& pml_scale,
                    const double& pml_exponent, int num_pml_elements,
+                   bool analytical_ordering,
                    const catamari::LDLControl& ldl_control,
                    bool print_progress) {
   typedef Complex<double> Field;
@@ -702,8 +860,16 @@ Experiment RunTest(const double& omega, Int num_x_elements, Int num_y_elements,
   }
   timer.Start();
   catamari::LDLFactorization<Field> ldl_factorization;
-  const catamari::LDLResult result =
-      catamari::LDL(*matrix, ldl_control, &ldl_factorization);
+  catamari::LDLResult result;
+  if (analytical_ordering) {
+    std::vector<Int> permutation, inverse_permutation;
+    AnalyticalOrdering(num_x_elements, num_y_elements, num_z_elements,
+                       &permutation, &inverse_permutation);
+    result = catamari::LDL(*matrix, permutation, inverse_permutation,
+                           ldl_control, &ldl_factorization);
+  } else {
+    result = catamari::LDL(*matrix, ldl_control, &ldl_factorization);
+  }
   experiment.factorization_seconds = timer.Stop();
   if (result.num_successful_pivots < num_rows) {
     std::cout << "  Failed factorization after " << result.num_successful_pivots
@@ -771,6 +937,8 @@ int main(int argc, char** argv) {
       "pml_exponent", "The exponent of the PML profile.", 3.);
   const Int num_pml_elements = parser.OptionalInput<Int>(
       "num_pml_elements", "The number of elements the PML should span.", 10);
+  const bool analytical_ordering = parser.OptionalInput<bool>(
+      "analytical_ordering", "Use an analytical reordering?", true);
   const int degree_type_int =
       parser.OptionalInput<int>("degree_type_int",
                                 "The degree approximation type.\n"
@@ -855,7 +1023,8 @@ int main(int argc, char** argv) {
 
   const Experiment experiment =
       RunTest(omega, num_x_elements, num_y_elements, num_z_elements, pml_scale,
-              pml_exponent, num_pml_elements, ldl_control, print_progress);
+              pml_exponent, num_pml_elements, analytical_ordering, ldl_control,
+              print_progress);
   PrintExperiment(experiment);
 
   return 0;
