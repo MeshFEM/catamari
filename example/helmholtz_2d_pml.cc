@@ -45,20 +45,19 @@ namespace {
 // Fills 'points' and 'weights' with the transformed evaluation points and
 // weights for the interval [a, b].
 template <class Real>
-void ThirdOrderGaussianPointsAndWeights(
-    const Real& a, const Real& b, std::vector<Real>* points,
-    std::vector<Real>* weights) {
+void ThirdOrderGaussianPointsAndWeights(const Real& a, const Real& b,
+                                        std::vector<Real>* points,
+                                        std::vector<Real>* weights) {
   const Real scale = (b - a) / 2;
 
   // TODO(Jack Poulson): Avoid continually recreating these values by storing
   // them in a templated structure which we only construct once and pass in.
-  const std::vector<Real> orig_points{
-      -std::sqrt(Real{3}) / std::sqrt(Real{5}),
-      Real{0},
-      std::sqrt(Real{3}) / std::sqrt(Real{5})};
+  const std::vector<Real> orig_points{-std::sqrt(Real{3}) / std::sqrt(Real{5}),
+                                      Real{0},
+                                      std::sqrt(Real{3}) / std::sqrt(Real{5})};
 
-  const std::vector<Real> orig_weights{
-      Real(5) / Real(9), Real(8) / Real(9), Real(5) / Real(9)};
+  const std::vector<Real> orig_weights{Real(5) / Real(9), Real(8) / Real(9),
+                                       Real(5) / Real(9)};
 
   points->resize(3);
   weights->resize(3);
@@ -78,17 +77,17 @@ struct Rectangle {
 
 template <typename Real>
 struct RectangleQuadrature {
-  std::vector<Real> x_points; 
+  std::vector<Real> x_points;
   std::vector<Real> x_weights;
 
   std::vector<Real> y_points;
   std::vector<Real> y_weights;
 
   RectangleQuadrature(const Rectangle<Real>& extent) {
-    ThirdOrderGaussianPointsAndWeights(
-        extent.x_beg, extent.x_end, &x_points, &x_weights);
-    ThirdOrderGaussianPointsAndWeights(
-        extent.y_beg, extent.y_end, &y_points, &y_weights);
+    ThirdOrderGaussianPointsAndWeights(extent.x_beg, extent.x_end, &x_points,
+                                       &x_weights);
+    ThirdOrderGaussianPointsAndWeights(extent.y_beg, extent.y_end, &y_points,
+                                       &y_weights);
   }
 };
 
@@ -148,15 +147,13 @@ class HelmholtzWithPMLQ4Element {
   typedef std::function<Complex<Real>(const Point<Real>&)>
       DiagonalShiftFunction;
 
-  HelmholtzWithPMLQ4Element(
-      const DiagonalWeightTensor weight_tensor,
-      const DiagonalShiftFunction shift_function)
+  HelmholtzWithPMLQ4Element(const DiagonalWeightTensor weight_tensor,
+                            const DiagonalShiftFunction shift_function)
       : weight_tensor_(weight_tensor), shift_function_(shift_function) {}
 
   // Returns \psi_{i, j} evaluated at the given point.
-  Real Basis(
-      int i, int j, const Rectangle<Real>& extent,
-      const Point<Real>& point) const {
+  Real Basis(int i, int j, const Rectangle<Real>& extent,
+             const Point<Real>& point) const {
     CATAMARI_ASSERT(i == 0 || i == 1, "Invalid choice of i basis index.");
     CATAMARI_ASSERT(j == 0 || j == 1, "Invalid choice of j basis index.");
     const Real scale =
@@ -171,12 +168,11 @@ class HelmholtzWithPMLQ4Element {
       return (point.x - extent.x_beg) * (point.y - extent.y_beg) / scale;
     }
   }
-  
+
   // Returns index 'k' of the gradient of \psi_{i, j} evaluated at the given
   // point.
-  Real BasisGradient(
-      int i, int j, int k, const Rectangle<Real>& extent,
-      const Point<Real>& point) const {
+  Real BasisGradient(int i, int j, int k, const Rectangle<Real>& extent,
+                     const Point<Real>& point) const {
     CATAMARI_ASSERT(i == 0 || i == 1, "Invalid choice of i basis index.");
     CATAMARI_ASSERT(j == 0 || j == 1, "Invalid choice of j basis index.");
     CATAMARI_ASSERT(k == 0 || k == 1, "Invalid choice of gradient index.");
@@ -216,17 +212,17 @@ class HelmholtzWithPMLQ4Element {
   //
   //   a_density(u, v) = (grad v)' (A grad u) - c u conj(v).
   //
-  Complex<Real> BilinearDensity(
-      int i_test, int j_test, int i_trial, int j_trial,
-      const Rectangle<Real>& extent, const Point<Real>& point) const {
+  Complex<Real> BilinearDensity(int i_test, int j_test, int i_trial,
+                                int j_trial, const Rectangle<Real>& extent,
+                                const Point<Real>& point) const {
     Complex<Real> result = 0;
 
     // Add in the (grad v)' (A grad u) contribution. Recall that A is diagonal.
     for (int k = 0; k <= 1; ++k) {
-      const Real test_grad_entry = BasisGradient(
-          i_test, j_test, k, extent, point);
-      const Real trial_grad_entry = BasisGradient(
-          i_trial, j_trial, k, extent, point);
+      const Real test_grad_entry =
+          BasisGradient(i_test, j_test, k, extent, point);
+      const Real trial_grad_entry =
+          BasisGradient(i_trial, j_trial, k, extent, point);
       const Complex<Real> weight_entry = weight_tensor_(k, point);
       // We explicitly call 'Conjugate' even though the basis functions are
       // real.
@@ -246,10 +242,9 @@ class HelmholtzWithPMLQ4Element {
 
   // Use a tensor product of third-order Gaussian quadrature to integrate the
   // bilinear form over the quadralateral element.
-  Complex<Real> Bilinear(
-      int i_test, int j_test, int i_trial, int j_trial,
-      const Rectangle<Real>& extent,
-      const RectangleQuadrature<Real>& quadrature) const {
+  Complex<Real> Bilinear(int i_test, int j_test, int i_trial, int j_trial,
+                         const Rectangle<Real>& extent,
+                         const RectangleQuadrature<Real>& quadrature) const {
     Complex<Real> result = 0;
     for (int i = 0; i < 3; ++i) {
       const Real& x = quadrature.x_points[i];
@@ -258,13 +253,14 @@ class HelmholtzWithPMLQ4Element {
         const Real& y = quadrature.y_points[j];
         const Real& y_weight = quadrature.y_weights[j];
         const Point<Real> point{x, y};
-        result += x_weight * y_weight * BilinearDensity(
-            i_test, j_test, i_trial, j_trial, extent, point);
+        result +=
+            x_weight * y_weight *
+            BilinearDensity(i_test, j_test, i_trial, j_trial, extent, point);
       }
     }
     return result;
   }
-      
+
  private:
   const DiagonalWeightTensor weight_tensor_;
 
@@ -281,7 +277,7 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
   const Real h_y = Real{1} / num_y_elements;
 
   std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> matrix(
-    new catamari::CoordinateMatrix<Complex<Real>>);
+      new catamari::CoordinateMatrix<Complex<Real>>);
 
   const Real x_pml_width = num_pml_elements * h_x;
   const Real y_pml_width = num_pml_elements * h_y;
@@ -292,11 +288,11 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
     const Real first_pml_end = x_pml_width;
     const Real last_pml_beg = Real{1} - x_pml_width;
     if (x < first_pml_end) {
-      result = pml_scale *
-          std::pow((first_pml_end - x) / x_pml_width, pml_exponent);
+      result =
+          pml_scale * std::pow((first_pml_end - x) / x_pml_width, pml_exponent);
     } else if (x > last_pml_beg) {
-      result = pml_scale *
-          std::pow((x - last_pml_beg) / x_pml_width, pml_exponent);
+      result =
+          pml_scale * std::pow((x - last_pml_beg) / x_pml_width, pml_exponent);
     } else {
       result = 0;
     }
@@ -309,11 +305,11 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
     const Real first_pml_end = y_pml_width;
     const Real last_pml_beg = Real{1} - y_pml_width;
     if (y < first_pml_end) {
-      result = pml_scale *
-          std::pow((first_pml_end - y) / y_pml_width, pml_exponent);
+      result =
+          pml_scale * std::pow((first_pml_end - y) / y_pml_width, pml_exponent);
     } else if (y > last_pml_beg) {
-      result = pml_scale *
-          std::pow((y - last_pml_beg) / y_pml_width, pml_exponent);
+      result =
+          pml_scale * std::pow((y - last_pml_beg) / y_pml_width, pml_exponent);
     } else {
       result = 0;
     }
@@ -338,16 +334,33 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
   };
 
   // The sound speed of the material.
-  const auto speed = [](const Point<Real>& point) {
-    return Real{1};
+  // TODO(Jack Poulson): Expose a family of material profiles.
+  const bool checkerboard = false;
+  const auto speed = [&](const Point<Real>& point) {
+    if (checkerboard) {
+      // We divide [0, 1]^2 into a 10 x 10 checker-board so that tile (i, j)
+      // has the 'white' sound speed of 1 if i + j == 0 (mod 2) or 10 otherwise.
+      const Real white_speed = 1;
+      const Real black_speed = 10;
+      const Int i = std::floor(10. * point.x);
+      const Int j = std::floor(10. * point.y);
+      const bool white = ((i + j) % 2) == 0;
+      if (white) {
+        return white_speed;
+      } else {
+        return black_speed;
+      }
+    } else {
+      return Real{1};
+    }
   };
 
   // The diagonal 'A' tensor in the equation:
   //
   //    -div (A grad u) - (omega / c)^2 gamma u = f.
   //
-  std::function<Complex<Real>(int i, const Point<Real>& point)>
-      weight_tensor = [&](int i, const Point<Real>& point) {
+  std::function<Complex<Real>(int i, const Point<Real>& point)> weight_tensor =
+      [&](int i, const Point<Real>& point) {
         Complex<Real> result;
         if (i == 0) {
           const Complex<Real> gamma_k = gamma_x(point.x);
@@ -362,7 +375,7 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
   // The '(omega / c)^2 gamma' in the equation:
   //
   //    -div (A grad u) - (omega / c)^2 gamma u = f.
-  //   
+  //
   std::function<Complex<Real>(const Point<Real>& point)> diagonal_shift =
       [&](const Point<Real>& point) {
         const Real local_speed = speed(point);
@@ -393,7 +406,7 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
           for (Int i_trial = 0; i_trial <= 1; ++i_trial) {
             for (Int j_trial = 0; j_trial <= 1; ++j_trial) {
               const Int column =
-                  offset + i_trial + j_trial * (num_x_elements + 1); 
+                  offset + i_trial + j_trial * (num_x_elements + 1);
               const Complex<Real> value = element.Bilinear(
                   i_test, j_test, i_trial, j_trial, extent, quadrature);
               matrix->QueueEntryAddition(row, column, value);
@@ -425,8 +438,8 @@ ConstBlasMatrix<Complex<Real>> GenerateRightHandSide(
 
   // Generate a point source in the center of the domain.
   std::fill(buffer->begin(), buffer->end(), Complex<Real>{0});
-  const Int middle_row = (num_x_elements / 2) +
-      (num_y_elements / 2) * (num_x_elements + 1);
+  const Int middle_row =
+      (num_x_elements / 2) + (num_y_elements / 2) * (num_x_elements + 1);
   right_hand_side(middle_row, 0) = Complex<Real>{1};
 
   return right_hand_side.ToConst();
@@ -511,9 +524,8 @@ Experiment RunTest(const double& omega, Int num_x_elements, Int num_y_elements,
   // Read the matrix from file.
   timer.Start();
   std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix =
-      HelmholtzWithPML<Real>(
-          omega, num_x_elements, num_y_elements, pml_scale, pml_exponent,
-          num_pml_elements);
+      HelmholtzWithPML<Real>(omega, num_x_elements, num_y_elements, pml_scale,
+                             pml_exponent, num_pml_elements);
   experiment.construction_seconds = timer.Stop();
   if (!matrix) {
     return experiment;
@@ -540,8 +552,8 @@ Experiment RunTest(const double& omega, Int num_x_elements, Int num_y_elements,
   // Generate an arbitrary right-hand side.
   std::vector<Field> right_hand_side_buffer;
   const ConstBlasMatrix<Complex<Real>> right_hand_side =
-      GenerateRightHandSide<Real>(
-          num_x_elements, num_y_elements, &right_hand_side_buffer);
+      GenerateRightHandSide<Real>(num_x_elements, num_y_elements,
+                                  &right_hand_side_buffer);
   const Real right_hand_side_norm = EuclideanNorm(right_hand_side);
   if (print_progress) {
     std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
@@ -675,9 +687,9 @@ int main(int argc, char** argv) {
   ldl_control.supernodal_control.relaxation_control
       .allowable_supernode_zero_ratio = allowable_supernode_zero_ratio;
 
-  const Experiment experiment = RunTest(
-      omega, num_x_elements, num_y_elements, pml_scale, pml_exponent,
-      num_pml_elements, ldl_control, print_progress);
+  const Experiment experiment =
+      RunTest(omega, num_x_elements, num_y_elements, pml_scale, pml_exponent,
+              num_pml_elements, ldl_control, print_progress);
   PrintExperiment(experiment);
 
   return 0;

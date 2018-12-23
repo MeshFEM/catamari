@@ -222,10 +222,9 @@ std::unordered_map<std::string, Experiment> RunADD96Tests(
   for (const std::string& matrix_name : matrix_names) {
     const std::string filename = matrix_market_directory + "/" + matrix_name +
                                  "/" + matrix_name + ".mtx";
-    experiments[matrix_name] =
-        RunMatrixMarketTest(filename, skip_explicit_zeros, mask, force_symmetry,
-                            diagonal_shift, maximum_likelihood, num_samples,
-                            dpp_control, print_progress);
+    experiments[matrix_name] = RunMatrixMarketTest(
+        filename, skip_explicit_zeros, mask, force_symmetry, diagonal_shift,
+        maximum_likelihood, num_samples, dpp_control, print_progress);
   }
 
   return experiments;
@@ -343,10 +342,9 @@ int main(int argc, char** argv) {
       PrintExperiment(pairing.second, pairing.first);
     }
   } else {
-    const Experiment experiment =
-        RunMatrixMarketTest(filename, skip_explicit_zeros, mask, force_symmetry,
-                            diagonal_shift, maximum_likelihood, num_samples,
-                            dpp_control, print_progress);
+    const Experiment experiment = RunMatrixMarketTest(
+        filename, skip_explicit_zeros, mask, force_symmetry, diagonal_shift,
+        maximum_likelihood, num_samples, dpp_control, print_progress);
     PrintExperiment(experiment, filename);
   }
 

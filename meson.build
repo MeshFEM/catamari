@@ -124,6 +124,14 @@ factor_matrix_market_exe = executable(
     dependencies : deps,
     cpp_args : cxx_args)
 
+# An example of factoring a 2D Helmholtz discretization.
+helmholtz_2d_pml_exe = executable(
+    'helmholtz_2d_pml',
+    ['example/helmholtz_2d_pml.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps,
+    cpp_args : cxx_args)
+
 # A utility for sampling a DPP from a Matrix Market input.
 dpp_matrix_market_exe = executable(
     'dpp_matrix_market',
