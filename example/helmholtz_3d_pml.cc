@@ -5,15 +5,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-// This drive is a simple implementation of a 2D Helmholtz equation in the
-// unit box, [0, 1]^2, with Perfectly Matched Layer absorbing boundary
-// conditions on all sides. The discretization is over rectangles with bilinear,
-// Lagrangian basis functions based at the corner points (Q4 elements). The
-// bilinear form is integrated over each element using a simple tensor product
-// of three-point 1D Gaussian quadratures.
+// This drive is a simple implementation of a 3D Helmholtz equation in the
+// unit box, [0, 1]^3, with Perfectly Matched Layer absorbing boundary
+// conditions on all sides. The discretization is over boxs with trilinear,
+// Lagrangian basis functions based at the corner points. The trilinear form is
+// integrated over each element using a simple tensor product of three-point 1D
+// Gaussian quadratures.
 //
-// A good reference for the weak formulation of the 2D Helmholtz equation with
-// PML is:
+// A good reference for the weak formulation of the Helmholtz equation with PML
+// is:
 //
 //   Erkki Heikkola, Tuomo Rossi, and Jari Toivanen,
 //   "Fast solvers for the Helmholtz equation with a perfectly matched layer /
