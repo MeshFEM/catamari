@@ -275,7 +275,8 @@ class HelmholtzWithPMLTrilinearHexahedron {
     CATAMARI_ASSERT(i == 0 || i == 1, "Invalid choice of i basis index.");
     CATAMARI_ASSERT(j == 0 || j == 1, "Invalid choice of j basis index.");
     CATAMARI_ASSERT(k == 0 || k == 1, "Invalid choice of k basis index.");
-    CATAMARI_ASSERT(l == 0 || l == 1, "Invalid choice of gradient index.");
+    CATAMARI_ASSERT(l == 0 || l == 1 || l == 2,
+                    "Invalid choice of gradient index.");
     const Real volume = (extent.x_end - extent.x_beg) *
                         (extent.y_end - extent.y_beg) *
                         (extent.z_end - extent.z_beg);
@@ -338,7 +339,7 @@ class HelmholtzWithPMLTrilinearHexahedron {
     Complex<Real> result = 0;
 
     // Add in the (grad v)' (A grad u) contribution. Recall that A is diagonal.
-    for (int l = 0; l <= 1; ++l) {
+    for (int l = 0; l < 3; ++l) {
       const Real test_grad_entry =
           BasisGradient(i_test, j_test, k_test, l, extent, point);
       const Real trial_grad_entry =

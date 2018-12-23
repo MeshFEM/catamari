@@ -250,7 +250,7 @@ class HelmholtzWithPMLQ4 {
     Complex<Real> result = 0;
 
     // Add in the (grad v)' (A grad u) contribution. Recall that A is diagonal.
-    for (int k = 0; k <= 1; ++k) {
+    for (int k = 0; k < 2; ++k) {
       const Real test_grad_entry =
           BasisGradient(i_test, j_test, k, extent, point);
       const Real trial_grad_entry =
