@@ -241,7 +241,7 @@ class HelmholtzWithPMLQ4Element {
   }
 
   // Use a tensor product of third-order Gaussian quadrature to integrate the
-  // bilinear form over the quadralateral element.
+  // bilinear form over the quadrilateral element.
   Complex<Real> Bilinear(int i_test, int j_test, int i_trial, int j_trial,
                          const Rectangle<Real>& extent,
                          const RectangleQuadrature<Real>& quadrature) const {
@@ -396,7 +396,7 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
       const Rectangle<Real> extent{x_beg, x_end, y_beg, y_end};
       const RectangleQuadrature<Real> quadrature(extent);
 
-      // The index of the bottom-left entry of the quadralateral.
+      // The index of the bottom-left entry of the quadrilateral.
       const Int offset = x_element + y_element * (num_x_elements + 1);
 
       // Iterate over all of the interactions in the element.
