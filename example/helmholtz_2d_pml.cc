@@ -67,6 +67,10 @@ void ThirdOrderGaussianPointsAndWeights(const Real& a, const Real& b,
   }
 }
 
+// A representation of an arbitrary axis-aligned rectangle,
+//
+//     [x_beg, x_end] x [y_beg, y_end].
+//
 template <typename Real>
 struct Rectangle {
   Real x_beg;
@@ -75,6 +79,7 @@ struct Rectangle {
   Real y_end;
 };
 
+// A cache for the tensor-product quadrature points over an arbitrary rectangle.
 template <typename Real>
 struct RectangleQuadrature {
   std::vector<Real> x_points;
@@ -91,6 +96,7 @@ struct RectangleQuadrature {
   }
 };
 
+// A point in the 2D domain (i.e., [0, 1]^2).
 template <typename Real>
 struct Point {
   Real x;
@@ -142,11 +148,12 @@ class HelmholtzWithPMLQ4Element {
   typedef std::function<Complex<Real>(int i, const Point<Real>&)>
       DiagonalWeightTensor;
 
-  // The term -c u involves a scalar function c : Omega -> C, which we refer
+  // The term -s u involves a scalar function s : Omega -> C, which we refer
   // to as the diagonal shift function.
   typedef std::function<Complex<Real>(const Point<Real>&)>
       DiagonalShiftFunction;
 
+  // The constructor for the Q4 element.
   HelmholtzWithPMLQ4Element(const DiagonalWeightTensor weight_tensor,
                             const DiagonalShiftFunction shift_function)
       : weight_tensor_(weight_tensor), shift_function_(shift_function) {}
@@ -210,7 +217,7 @@ class HelmholtzWithPMLQ4Element {
   // v = \phi_{i_test, j_test} and trial function u = \psi_{i_trial, j_trial}.
   // That is,
   //
-  //   a_density(u, v) = (grad v)' (A grad u) - c u conj(v).
+  //   a_density(u, v) = (grad v)' (A grad u) - s u conj(v).
   //
   Complex<Real> BilinearDensity(int i_test, int j_test, int i_trial,
                                 int j_trial, const Rectangle<Real>& extent,
@@ -229,7 +236,7 @@ class HelmholtzWithPMLQ4Element {
       result += Conjugate(test_grad_entry) * (weight_entry * trial_grad_entry);
     }
 
-    // Add in the -c u conj(v) contribution.
+    // Add in the -s u conj(v) contribution.
     const Real test_entry = Basis(i_test, j_test, extent, point);
     const Real trial_entry = Basis(i_trial, j_trial, extent, point);
     const Complex<Real> diagonal_shift = shift_function_(point);
@@ -262,8 +269,17 @@ class HelmholtzWithPMLQ4Element {
   }
 
  private:
+  // The diagonal symmetric tensor field A : Omega -> C^{2 x 2} in the
+  // Helmholtz equation
+  //
+  //   -div (A grad u) - s u = f.
+  //
   const DiagonalWeightTensor weight_tensor_;
 
+  // The scalar function s : Omega -> C in
+  //
+  //   -div (A grad u) - s u = f.
+  //
   const DiagonalShiftFunction shift_function_;
 };
 
@@ -288,11 +304,11 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
     const Real first_pml_end = x_pml_width;
     const Real last_pml_beg = Real{1} - x_pml_width;
     if (x < first_pml_end) {
-      result =
-          pml_scale * std::pow((first_pml_end - x) / x_pml_width, pml_exponent);
+      const Real pml_rel_depth = (first_pml_end - x) / x_pml_width;
+      result = pml_scale * std::pow(pml_rel_depth, pml_exponent);
     } else if (x > last_pml_beg) {
-      result =
-          pml_scale * std::pow((x - last_pml_beg) / x_pml_width, pml_exponent);
+      const Real pml_rel_depth = (x - last_pml_beg) / x_pml_width;
+      result = pml_scale * std::pow(pml_rel_depth, pml_exponent);
     } else {
       result = 0;
     }
@@ -305,11 +321,11 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
     const Real first_pml_end = y_pml_width;
     const Real last_pml_beg = Real{1} - y_pml_width;
     if (y < first_pml_end) {
-      result =
-          pml_scale * std::pow((first_pml_end - y) / y_pml_width, pml_exponent);
+      const Real pml_rel_depth = (first_pml_end - y) / y_pml_width;
+      result = pml_scale * std::pow(pml_rel_depth, pml_exponent);
     } else if (y > last_pml_beg) {
-      result =
-          pml_scale * std::pow((y - last_pml_beg) / y_pml_width, pml_exponent);
+      const Real pml_rel_depth = (y - last_pml_beg) / y_pml_width;
+      result = pml_scale * std::pow(pml_rel_depth, pml_exponent);
     } else {
       result = 0;
     }
