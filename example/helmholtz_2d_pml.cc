@@ -434,7 +434,7 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
 
   const Int num_rows = (num_x_elements + 1) * (num_y_elements + 1);
   matrix->Resize(num_rows, num_rows);
-  matrix->ReserveEntryAdditions(16. * num_x_elements * num_y_elements);
+  matrix->ReserveEntryAdditions(16 * num_x_elements * num_y_elements);
   for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
     const Real x_beg = x_element * h_x;
     const Real x_end = x_beg + h_x;
