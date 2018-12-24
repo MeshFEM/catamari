@@ -76,28 +76,6 @@ struct Box {
   Real z_end;
 };
 
-// A cache for the tensor-product quadrature points over an arbitrary box.
-template <typename Real>
-struct BoxQuadrature {
-  Real x_points[3];
-  Real x_weights[3];
-
-  Real y_points[3];
-  Real y_weights[3];
-
-  Real z_points[3];
-  Real z_weights[3];
-
-  BoxQuadrature(const Box<Real>& extent) {
-    ThirdOrderGaussianPointsAndWeights(extent.x_beg, extent.x_end, x_points,
-                                       x_weights);
-    ThirdOrderGaussianPointsAndWeights(extent.y_beg, extent.y_end, y_points,
-                                       y_weights);
-    ThirdOrderGaussianPointsAndWeights(extent.z_beg, extent.z_end, z_points,
-                                       z_weights);
-  }
-};
-
 // A point in the 3D domain (i.e., [0, 1]^3).
 template <typename Real>
 struct Point {
@@ -106,127 +84,13 @@ struct Point {
   Real z;
 };
 
-// The profile of a single direction's PML as a function of a principal axis.
-// NOTE: The majority of the runtime appears to be spent in this function.
-template <typename Real>
-class PMLProfile {
- public:
-  PMLProfile(
-      const Real& pml_scale, const Real& pml_exponent, const Real& pml_width) :
-      pml_scale_(pml_scale), pml_exponent_(pml_exponent), pml_width_(pml_width)
-  {}
-
-  Real operator()(const Real& x) const {
-    Real result;
-    const Real first_pml_end = pml_width_;
-    const Real last_pml_beg = 1 - pml_width_;
-    if (x < first_pml_end) {
-      const Real pml_rel_depth = (first_pml_end - x) / pml_width_;
-      result = pml_scale_ * std::pow(pml_rel_depth, pml_exponent_);
-    } else if (x > last_pml_beg) {
-      const Real pml_rel_depth = (x - last_pml_beg) / pml_width_;
-      result = pml_scale_ * std::pow(pml_rel_depth, pml_exponent_);
-    } else {
-      result = 0;
-    }
-    return result;
-  }
-
- private:
-  const Real pml_scale_;
-  const Real pml_exponent_;
-  const Real pml_width_;
-};
-
-// The differential mapping the trivial tangent space of the real line into
-// the tangent space of the complex-stretched domain.
-template <typename Real>
-class PMLDifferential {
- public:
-  PMLDifferential(
-      const Real& omega, const PMLProfile<Real>& profile) :
-  omega_(omega), profile_(profile) {}
-
-  Complex<Real> operator()(const Real& x) const {
-    return Complex<Real>(Real{1}, profile_(x) / omega_);
-  }
-
- private:
-  const Real omega_;
-  const PMLProfile<Real> profile_;
-};
-
 // The pointwise acoustic speed.
 template <typename Real>
 class Speed {
  public:
   Speed() {}
 
-  Real operator()(const Point<Real>& point) const {
-    return Real{1};
-  }
-};
-
-// The diagonal 'A' tensor in the equation:
-//
-//    -div (A grad u) - (omega / c)^2 gamma u = f.
-//
-template <typename Real>
-class WeightTensor {
- public:
-  WeightTensor(const PMLDifferential<Real>& gamma_x,
-               const PMLDifferential<Real>& gamma_y,
-               const PMLDifferential<Real>& gamma_z) :
-      gamma_x_(gamma_x), gamma_y_(gamma_y), gamma_z_(gamma_z) {}
-
-  Complex<Real> operator()(int i, const Point<Real>& point) const {
-    const Complex<Real> gamma_x = gamma_x_(point.x);
-    const Complex<Real> gamma_y = gamma_y_(point.y);
-    const Complex<Real> gamma_z = gamma_z_(point.z);
-    Complex<Real> result = gamma_x * gamma_y * gamma_z;
-    Complex<Real> gamma_k;
-    if (i == 0) {
-      return result / (gamma_x * gamma_x);
-    } else if (i == 1) {
-      return result / (gamma_y * gamma_y);
-    } else {
-      return result / (gamma_z * gamma_z);
-    }
-  }
-
- private:
-  const PMLDifferential<Real> gamma_x_;
-  const PMLDifferential<Real> gamma_y_;
-  const PMLDifferential<Real> gamma_z_;
-};
-
-// The '(omega / c)^2 gamma' in the equation:
-//
-//    -div (A grad u) - (omega / c)^2 gamma u = f.
-//
-template <typename Real>
-class DiagonalShift {
- public:
-  DiagonalShift(const Real& omega, const Speed<Real>& speed,
-                const PMLDifferential<Real>& gamma_x,
-                const PMLDifferential<Real>& gamma_y,
-                const PMLDifferential<Real>& gamma_z) :
-      omega_(omega), speed_(speed), gamma_x_(gamma_x), gamma_y_(gamma_y),
-      gamma_z_(gamma_z) {}
-
-  Complex<Real> operator()(const Point<Real>& point) const {
-    const Real rel_omega = omega_ / speed_(point);
-    const Complex<Real> gamma =
-        gamma_x_(point.x) * gamma_y_(point.y) * gamma_z_(point.z);
-    return rel_omega * rel_omega * gamma;
-  }
-
- private:
-  const Real omega_;
-  const Speed<Real> speed_;
-  const PMLDifferential<Real> gamma_x_;
-  const PMLDifferential<Real> gamma_y_;
-  const PMLDifferential<Real> gamma_z_;
+  Real operator()(const Point<Real>& point) const { return Real{1}; }
 };
 
 // This currently uses third-order Gaussian quadrature. The basis functions
@@ -269,28 +133,104 @@ class DiagonalShift {
 //   grad_l psi_I = (prod_{alpha != l} psi_{alpha, I_alpha}) grad_l psi_alpha.
 //
 template <class Real>
-class HelmholtzWithPMLTrilinearHexahedron {
+class HelmholtzWithPMLTrilinearHexahedra {
  public:
-  // The term -div (A grad u) involves a two-tensor A : Omega -> C^{3 x 3}.
-  // The (i, j, k) index of the result is thus a function:
-  //
-  //   A_{i, j, k} : Omega -> C,  i, j, k in {0, 1}.
-  //
-  // Since our weight tensor is diagonal, only we need only provide
-  //
-  //   A_{i, i} : Omega -> C,  i in {0, 1, 2}.
-  //
-  typedef WeightTensor<Real> DiagonalWeightTensor; 
+  // The differential mapping the trivial tangent space of the real line into
+  // the tangent space of the complex-stretched domain.
+  class PMLDifferential {
+   public:
+    PMLDifferential(const Real& omega, const Real& pml_scale,
+                    const Real& pml_exponent, const Real& pml_width)
+        : omega_(omega),
+          pml_scale_(pml_scale),
+          pml_exponent_(pml_exponent),
+          pml_width_(pml_width) {}
 
-  // The term -s u involves a scalar function s : Omega -> C, which we refer
-  // to as the diagonal shift function.
-  typedef DiagonalShift<Real> DiagonalShiftFunction;
+    Complex<Real> operator()(const Real& x) const {
+      Real profile;
+      const Real first_pml_end = pml_width_;
+      const Real last_pml_beg = 1 - pml_width_;
+      if (x < first_pml_end) {
+        const Real pml_rel_depth = (first_pml_end - x) / pml_width_;
+        profile = pml_scale_ * std::pow(pml_rel_depth, pml_exponent_);
+      } else if (x > last_pml_beg) {
+        const Real pml_rel_depth = (x - last_pml_beg) / pml_width_;
+        profile = pml_scale_ * std::pow(pml_rel_depth, pml_exponent_);
+      } else {
+        profile = 0;
+      }
 
-  // The constructor for the trilinear hexahedron.
-  HelmholtzWithPMLTrilinearHexahedron(
-      const DiagonalWeightTensor weight_tensor,
-      const DiagonalShiftFunction shift_function)
-      : weight_tensor_(weight_tensor), shift_function_(shift_function) {}
+      return Complex<Real>(Real{1}, profile / omega_);
+    }
+
+   private:
+    const Real omega_;
+    const Real pml_scale_;
+    const Real pml_exponent_;
+    const Real pml_width_;
+  };
+
+  // The diagonal 'A' tensor in the equation:
+  //
+  //    -div (A grad u) - (omega / c)^2 gamma u = f.
+  //
+  class WeightTensor {
+   public:
+    WeightTensor(const PMLDifferential& gamma_x, const PMLDifferential& gamma_y,
+                 const PMLDifferential& gamma_z)
+        : gamma_x_(gamma_x), gamma_y_(gamma_y), gamma_z_(gamma_z) {}
+
+    Complex<Real> operator()(int i, const Point<Real>& point) const {
+      const Complex<Real> gamma_x = gamma_x_(point.x);
+      const Complex<Real> gamma_y = gamma_y_(point.y);
+      const Complex<Real> gamma_z = gamma_z_(point.z);
+      Complex<Real> result = gamma_x * gamma_y * gamma_z;
+      Complex<Real> gamma_k;
+      if (i == 0) {
+        return result / (gamma_x * gamma_x);
+      } else if (i == 1) {
+        return result / (gamma_y * gamma_y);
+      } else {
+        return result / (gamma_z * gamma_z);
+      }
+    }
+
+   private:
+    const PMLDifferential gamma_x_;
+    const PMLDifferential gamma_y_;
+    const PMLDifferential gamma_z_;
+  };
+
+  // The '(omega / c)^2 gamma' in the equation:
+  //
+  //    -div (A grad u) - (omega / c)^2 gamma u = f.
+  //
+  class DiagonalShift {
+   public:
+    DiagonalShift(const Real& omega, const Speed<Real>& speed,
+                  const PMLDifferential& gamma_x,
+                  const PMLDifferential& gamma_y,
+                  const PMLDifferential& gamma_z)
+        : omega_(omega),
+          speed_(speed),
+          gamma_x_(gamma_x),
+          gamma_y_(gamma_y),
+          gamma_z_(gamma_z) {}
+
+    Complex<Real> operator()(const Point<Real>& point) const {
+      const Real rel_omega = omega_ / speed_(point);
+      const Complex<Real> gamma =
+          gamma_x_(point.x) * gamma_y_(point.y) * gamma_z_(point.z);
+      return rel_omega * rel_omega * gamma;
+    }
+
+   private:
+    const Real omega_;
+    const Speed<Real> speed_;
+    const PMLDifferential gamma_x_;
+    const PMLDifferential gamma_y_;
+    const PMLDifferential gamma_z_;
+  };
 
   // Returns \psi_{i, j, k} evaluated at the given point.
   Real Basis(int i, int j, int k, const Box<Real>& extent,
@@ -382,80 +322,297 @@ class HelmholtzWithPMLTrilinearHexahedron {
     return product;
   }
 
-  // Returns the evaluation of the density of the bilinear form over an element
-  // [x_beg, x_end] x [y_beg, y_end] x [z_beg, z_end] at a point (x, y, z) with
-  // test function v = \phi_{i_test, j_test, k_test} and trial function
-  // u = \psi_{i_trial, j_trial, k_trial}. That is,
-  //
-  //   a_density(u, v) = (grad v)' (A grad u) - s u conj(v).
-  //
-  Complex<Real> BilinearFormDensity(int i_test, int j_test, int k_test,
-                                    int i_trial, int j_trial, int k_trial,
-                                    const Box<Real>& extent,
-                                    const Point<Real>& point) const {
-    Complex<Real> result = 0;
+  // The constructor for the trilinear hexahedron.
+  HelmholtzWithPMLTrilinearHexahedra(Int num_x_elements, Int num_y_elements,
+                                     Int num_z_elements, const Real& omega,
+                                     const Real& pml_scale,
+                                     const Real& pml_exponent,
+                                     Int num_pml_elements,
+                                     const Speed<Real>& speed)
+      : num_x_elements_(num_x_elements),
+        num_y_elements_(num_y_elements),
+        num_z_elements_(num_z_elements),
+        element_x_size_(Real{1} / num_x_elements),
+        element_y_size_(Real{1} / num_y_elements),
+        element_z_size_(Real{1} / num_z_elements),
+        speed_(speed) {
+    const Real x_pml_width = num_pml_elements * element_x_size_;
+    const Real y_pml_width = num_pml_elements * element_y_size_;
+    const Real z_pml_width = num_pml_elements * element_z_size_;
 
-    // Add in the (grad v)' (A grad u) contribution. Recall that A is diagonal.
-    for (int l = 0; l < 3; ++l) {
-      const Real test_grad_entry =
-          BasisGradient(i_test, j_test, k_test, l, extent, point);
-      const Real trial_grad_entry =
-          BasisGradient(i_trial, j_trial, k_trial, l, extent, point);
-      const Complex<Real> weight_entry = weight_tensor_(l, point);
-      // We explicitly call 'Conjugate' even though the basis functions are
-      // real.
-      result += Conjugate(test_grad_entry) * (weight_entry * trial_grad_entry);
-    }
+    // Exploit the fact that the elements are translations of each other to
+    // precompute the basis and gradient evaluations.
+    const Box<Real> extent{0, element_x_size_, 0, element_y_size_,
+                           0, element_z_size_};
 
-    // Add in the -s u conj(v) contribution.
-    const Real test_entry = Basis(i_test, j_test, k_test, extent, point);
-    const Real trial_entry = Basis(i_trial, j_trial, k_trial, extent, point);
-    const Complex<Real> diagonal_shift = shift_function_(point);
-    // Again, we explicitly call 'Conjugate' even though the basis functions
-    // are real.
-    result -= diagonal_shift * trial_entry * Conjugate(test_entry);
+    ThirdOrderGaussianPointsAndWeights(extent.x_beg, extent.x_end,
+                                       quadrature_x_points_,
+                                       quadrature_x_weights_);
+    ThirdOrderGaussianPointsAndWeights(extent.y_beg, extent.y_end,
+                                       quadrature_y_points_,
+                                       quadrature_y_weights_);
+    ThirdOrderGaussianPointsAndWeights(extent.z_beg, extent.z_end,
+                                       quadrature_z_points_,
+                                       quadrature_z_weights_);
 
-    return result;
-  }
+    // The differentials from the real axes to the PML Profile tangent spaces.
+    const PMLDifferential gamma_x(omega, pml_scale, pml_exponent, x_pml_width);
+    const PMLDifferential gamma_y(omega, pml_scale, pml_exponent, y_pml_width);
+    const PMLDifferential gamma_z(omega, pml_scale, pml_exponent, z_pml_width);
 
-  // Use a tensor product of third-order Gaussian quadrature to integrate the
-  // trilinear form over the hexahedral element.
-  Complex<Real> BilinearForm(int i_test, int j_test, int k_test, int i_trial,
-                             int j_trial, int k_trial, const Box<Real>& extent,
-                             const BoxQuadrature<Real>& quadrature) const {
-    Complex<Real> result = 0;
-    for (int i = 0; i < 3; ++i) {
-      const Real& x = quadrature.x_points[i];
-      const Real& x_weight = quadrature.x_weights[i];
-      for (int j = 0; j < 3; ++j) {
-        const Real& y = quadrature.y_points[j];
-        const Real& y_weight = quadrature.y_weights[j];
-        for (int k = 0; k < 3; ++k) {
-          const Real& z = quadrature.z_points[k];
-          const Real& z_weight = quadrature.z_weights[k];
-          const Point<Real> point{x, y, z};
-          result += x_weight * y_weight * z_weight *
-              BilinearFormDensity(i_test, j_test, k_test, i_trial, j_trial,
-                                  k_trial, extent, point);
+    weight_tensor_.reset(new WeightTensor(gamma_x, gamma_y, gamma_z));
+    diagonal_shift_.reset(
+        new DiagonalShift(omega, speed, gamma_x, gamma_y, gamma_z));
+
+    const Int num_dimensions = 3;
+    const Int quadrature_1d_order = 3;
+    const Int num_quadrature_points =
+        quadrature_1d_order * quadrature_1d_order * quadrature_1d_order;
+    const Int num_basis_functions = 8;
+
+    // Store the quadrature weights over the tensor product grid.
+    quadrature_weights_buffer_.resize(num_quadrature_points);
+    quadrature_weights_.height = num_quadrature_points;
+    quadrature_weights_.width = 1;
+    quadrature_weights_.leading_dim = num_quadrature_points;
+    quadrature_weights_.data = quadrature_weights_buffer_.data();
+    for (int z_quad = 0; z_quad < quadrature_1d_order; ++z_quad) {
+      const Real& z_weight = quadrature_z_weights_[z_quad];
+      for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
+        const Real& y_weight = quadrature_y_weights_[y_quad];
+        for (int x_quad = 0; x_quad < quadrature_1d_order; ++x_quad) {
+          const Real& x_weight = quadrature_x_weights_[x_quad];
+          const int row = x_quad + y_quad * quadrature_1d_order +
+                          z_quad * quadrature_1d_order * quadrature_1d_order;
+          quadrature_weights_(row, 0) = x_weight * y_weight * z_weight;
         }
       }
     }
-    return result;
+
+    // Store the evaluations of the basis functions.
+    basis_evals_buffer_.resize(num_quadrature_points * num_basis_functions);
+    basis_evals_.height = num_quadrature_points;
+    basis_evals_.width = num_basis_functions;
+    basis_evals_.leading_dim = num_quadrature_points;
+    basis_evals_.data = basis_evals_buffer_.data();
+    for (int z_quad = 0; z_quad < quadrature_1d_order; ++z_quad) {
+      const Real& z_point = quadrature_z_points_[z_quad];
+      for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
+        const Real& y_point = quadrature_y_points_[y_quad];
+        for (int x_quad = 0; x_quad < quadrature_1d_order; ++x_quad) {
+          const Real& x_point = quadrature_x_points_[x_quad];
+          const Point<Real> point{x_point, y_point, z_point};
+          const int row = x_quad + y_quad * quadrature_1d_order +
+                          z_quad * quadrature_1d_order * quadrature_1d_order;
+          for (int k = 0; k <= 1; ++k) {
+            for (int j = 0; j <= 1; ++j) {
+              for (int i = 0; i <= 1; ++i) {
+                const int column = i + j * 2 + k * 4;
+                basis_evals_(row, column) = Basis(i, j, k, extent, point);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Store the evaluations of the basis function gradients.
+    basis_grad_evals_buffer_.resize(num_quadrature_points *
+                                    num_basis_functions * num_dimensions);
+    basis_grad_evals_.height = num_quadrature_points;
+    basis_grad_evals_.width = num_basis_functions * num_dimensions;
+    basis_grad_evals_.leading_dim = num_quadrature_points;
+    basis_grad_evals_.data = basis_grad_evals_buffer_.data();
+    for (int z_quad = 0; z_quad < quadrature_1d_order; ++z_quad) {
+      const Real& z_point = quadrature_z_points_[z_quad];
+      for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
+        const Real& y_point = quadrature_y_points_[y_quad];
+        for (int x_quad = 0; x_quad < quadrature_1d_order; ++x_quad) {
+          const Real& x_point = quadrature_x_points_[x_quad];
+          const Point<Real> point{x_point, y_point, z_point};
+          const int row = x_quad + y_quad * quadrature_1d_order +
+                          z_quad * quadrature_1d_order * quadrature_1d_order;
+          for (int l = 0; l < num_dimensions; ++l) {
+            for (int k = 0; k <= 1; ++k) {
+              for (int j = 0; j <= 1; ++j) {
+                for (int i = 0; i <= 1; ++i) {
+                  const int column =
+                      i + j * 2 + k * 4 + l * num_basis_functions;
+                  basis_grad_evals_(row, column) =
+                      BasisGradient(i, j, k, l, extent, point);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Initialize the weight tensor evaluation matrix.
+    weight_tensor_evals_buffer_.resize(num_quadrature_points * num_dimensions);
+    weight_tensor_evals_.height = num_quadrature_points;
+    weight_tensor_evals_.width = num_dimensions;
+    weight_tensor_evals_.leading_dim = num_quadrature_points;
+    weight_tensor_evals_.data = weight_tensor_evals_buffer_.data();
+
+    // Initialize the diagonal shift evaluation vector.
+    diagonal_shift_evals_buffer_.resize(num_quadrature_points);
+    diagonal_shift_evals_.height = num_quadrature_points;
+    diagonal_shift_evals_.width = 1;
+    diagonal_shift_evals_.leading_dim = num_quadrature_points;
+    diagonal_shift_evals_.data = diagonal_shift_evals_buffer_.data();
+  }
+
+  // Form all of the updates for a particular element.
+  void ElementBilinearForms(Int x_element, Int y_element, Int z_element,
+                            BlasMatrix<Complex<Real>>* element_updates) const {
+    const Real x_beg = x_element * element_x_size_;
+    const Real y_beg = y_element * element_y_size_;
+    const Real z_beg = z_element * element_z_size_;
+    const int quadrature_1d_order = 3;
+    const int num_dimensions = 3;
+    const int num_basis_functions = 8;
+
+    // Evaluate the weight tensor over the element.
+    for (int l = 0; l < num_dimensions; ++l) {
+      for (int k = 0; k <= 1; ++k) {
+        const Real z = z_beg + quadrature_z_points_[k];
+        for (int j = 0; j <= 1; ++j) {
+          const Real y = y_beg + quadrature_y_points_[j];
+          for (int i = 0; i <= 1; ++i) {
+            const Real x = x_beg + quadrature_x_points_[i];
+            const Point<Real> point{x, y, z};
+            const int quadrature_index = i + j * 2 + k * 4;
+            weight_tensor_evals_(quadrature_index, l) =
+                (*weight_tensor_)(l, point);
+          }
+        }
+      }
+    }
+
+    // Evaluate the diagonal shifts over the element.
+    for (int k = 0; k <= 1; ++k) {
+      const Real z = z_beg + quadrature_z_points_[k];
+      for (int j = 0; j <= 1; ++j) {
+        const Real y = y_beg + quadrature_y_points_[j];
+        for (int i = 0; i <= 1; ++i) {
+          const Real x = x_beg + quadrature_x_points_[i];
+          const Point<Real> point{x, y, z};
+          const int quadrature_index = i + j * 2 + k * 4;
+          diagonal_shift_evals_(quadrature_index, 0) =
+              (*diagonal_shift_)(point);
+        }
+      }
+    }
+
+    // Compute the element updates.
+    for (int k_test = 0; k_test <= 1; ++k_test) {
+      for (int j_test = 0; j_test <= 1; ++j_test) {
+        for (int i_test = 0; i_test <= 1; ++i_test) {
+          const int element_row = i_test + j_test * 2 + k_test * 4;
+          for (int k_trial = 0; k_trial <= 1; ++k_trial) {
+            for (int j_trial = 0; j_trial <= 1; ++j_trial) {
+              for (int i_trial = 0; i_trial <= 1; ++i_trial) {
+                const int element_column = i_trial + j_trial * 2 + k_trial * 4;
+
+                Complex<Real> result = 0;
+
+                for (int k = 0; k < quadrature_1d_order; ++k) {
+                  for (int j = 0; j < quadrature_1d_order; ++j) {
+                    for (int i = 0; i < quadrature_1d_order; ++i) {
+                      const int quadrature_index =
+                          i + j * quadrature_1d_order +
+                          k * quadrature_1d_order * quadrature_1d_order;
+                      Complex<Real> update = 0;
+
+                      // Add in the (grad v)' (A grad u) contribution. Recall
+                      // that A is diagonal.
+                      for (int l = 0; l < num_dimensions; ++l) {
+                        const Real test_grad_entry = basis_grad_evals_(
+                            quadrature_index,
+                            element_row + num_basis_functions * l);
+                        const Real trial_grad_entry = basis_grad_evals_(
+                            quadrature_index,
+                            element_column + num_basis_functions * l);
+                        const Complex<Real> weight_entry =
+                            weight_tensor_evals_(quadrature_index, l);
+                        // We explicitly call 'Conjugate' even though the basis
+                        // functions are real.
+                        update += Conjugate(test_grad_entry) *
+                                  (weight_entry * trial_grad_entry);
+                      }
+
+                      // Add in the -s u conj(v) contribution.
+                      const Real test_entry =
+                          basis_evals_(quadrature_index, element_row);
+                      const Real trial_entry =
+                          basis_evals_(quadrature_index, element_column);
+                      const Complex<Real> diagonal_shift =
+                          diagonal_shift_evals_(quadrature_index, 0);
+                      // Again, we explicitly call 'Conjugate' even though the
+                      // basis functions are real.
+                      update -=
+                          diagonal_shift * trial_entry * Conjugate(test_entry);
+
+                      result +=
+                          quadrature_weights_(quadrature_index, 0) * update;
+                    }
+                  }
+                }
+
+                element_updates->Entry(element_row, element_column) = result;
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
  private:
+  const Int num_x_elements_;
+  const Int num_y_elements_;
+  const Int num_z_elements_;
+  const Real element_x_size_;
+  const Real element_y_size_;
+  const Real element_z_size_;
+
+  const Speed<Real> speed_;
+
+  Real quadrature_x_points_[3];
+  Real quadrature_y_points_[3];
+  Real quadrature_z_points_[3];
+  Real quadrature_x_weights_[3];
+  Real quadrature_y_weights_[3];
+  Real quadrature_z_weights_[3];
+
+  std::vector<Real> quadrature_weights_buffer_;
+  BlasMatrix<Real> quadrature_weights_;
+
+  std::vector<Real> basis_evals_buffer_;
+  BlasMatrix<Real> basis_evals_;
+
+  std::vector<Real> basis_grad_evals_buffer_;
+  BlasMatrix<Real> basis_grad_evals_;
+
+  mutable std::vector<Complex<Real>> weight_tensor_evals_buffer_;
+  mutable BlasMatrix<Complex<Real>> weight_tensor_evals_;
+
+  mutable std::vector<Complex<Real>> diagonal_shift_evals_buffer_;
+  mutable BlasMatrix<Complex<Real>> diagonal_shift_evals_;
+
   // The diagonal symmetric tensor field A : Omega -> C^{3 x 3} in the
   // Helmholtz equation
   //
   //   -div (A grad u) - s u = f.
   //
-  const DiagonalWeightTensor weight_tensor_;
+  std::unique_ptr<const WeightTensor> weight_tensor_;
 
   // The scalar function s : Omega -> C in
   //
   //   -div (A grad u) - s u = f.
   //
-  const DiagonalShiftFunction shift_function_;
+  std::unique_ptr<const DiagonalShift> diagonal_shift_;
 };
 
 // Generates a trilinear hexahedral discretization of the 2D Helmholtz equation
@@ -465,36 +622,22 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
     const Real& omega, Int num_x_elements, Int num_y_elements,
     Int num_z_elements, const Real& pml_scale, const Real& pml_exponent,
     Int num_pml_elements) {
-  const Real h_x = Real{1} / num_x_elements;
-  const Real h_y = Real{1} / num_y_elements;
-  const Real h_z = Real{1} / num_z_elements;
-
   std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> matrix(
       new catamari::CoordinateMatrix<Complex<Real>>);
 
-  const Real x_pml_width = num_pml_elements * h_x;
-  const Real y_pml_width = num_pml_elements * h_y;
-  const Real z_pml_width = num_pml_elements * h_z;
-
-  // The frequency-scaled horizontal PML profile function.
-  const PMLProfile<Real> sigma_x(pml_scale, pml_exponent, x_pml_width);
-  const PMLProfile<Real> sigma_y(pml_scale, pml_exponent, y_pml_width);
-  const PMLProfile<Real> sigma_z(pml_scale, pml_exponent, z_pml_width);
-
-  // The differentials from the real axes to the PML Profile tangent spaces.
-  const PMLDifferential<Real> gamma_x(omega, sigma_x);
-  const PMLDifferential<Real> gamma_y(omega, sigma_y);
-  const PMLDifferential<Real> gamma_z(omega, sigma_z);
-
   const Speed<Real> speed;
 
-  const WeightTensor<Real> weight_tensor(gamma_x, gamma_y, gamma_z);
+  const HelmholtzWithPMLTrilinearHexahedra<Real> discretization(
+      num_x_elements, num_y_elements, num_z_elements, omega, pml_scale,
+      pml_exponent, num_pml_elements, speed);
 
-  const DiagonalShift<Real> diagonal_shift(
-      omega, speed, gamma_x, gamma_y, gamma_z);
-
-  const HelmholtzWithPMLTrilinearHexahedron<Real> element(weight_tensor,
-                                                          diagonal_shift);
+  const Int num_element_members = 64;
+  std::vector<Complex<Real>> element_update_buffer(num_element_members);
+  BlasMatrix<Complex<Real>> element_updates;
+  element_updates.height = 8;
+  element_updates.width = 8;
+  element_updates.leading_dim = 8;
+  element_updates.data = element_update_buffer.data();
 
   const Int num_rows =
       (num_x_elements + 1) * (num_y_elements + 1) * (num_z_elements + 1);
@@ -504,38 +647,33 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
   const Int queue_upper_bound =
       64 * num_x_elements * num_y_elements * num_z_elements;
   matrix->ReserveEntryAdditions(queue_upper_bound);
-  for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
-    const Real x_beg = x_element * h_x;
-    const Real x_end = x_beg + h_x;
+  for (Int z_element = 0; z_element < num_z_elements; ++z_element) {
     for (Int y_element = 0; y_element < num_y_elements; ++y_element) {
-      const Real y_beg = y_element * h_y;
-      const Real y_end = y_beg + h_y;
-      for (Int z_element = 0; z_element < num_z_elements; ++z_element) {
-        const Real z_beg = z_element * h_z;
-        const Real z_end = z_beg + h_z;
-        const Box<Real> extent{x_beg, x_end, y_beg, y_end, z_beg, z_end};
-        const BoxQuadrature<Real> quadrature(extent);
+      for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
+        // Form the batch of updates.
+        discretization.ElementBilinearForms(x_element, y_element, z_element,
+                                            &element_updates);
 
-        // The index of the bottom-left entry of the hexahedron.
+        // Insert the updates into the matrix.
         const Int offset =
             x_element + y_element * y_stride + z_element * z_stride;
 
-        // Iterate over all of the interactions in the element.
-        for (Int i_test = 0; i_test <= 1; ++i_test) {
-          for (Int j_test = 0; j_test <= 1; ++j_test) {
-            for (Int k_test = 0; k_test <= 1; ++k_test) {
+        for (int k_test = 0; k_test <= 1; ++k_test) {
+          for (int j_test = 0; j_test <= 1; ++j_test) {
+            for (int i_test = 0; i_test <= 1; ++i_test) {
+              const int element_row = i_test + j_test * 2 + k_test * 4;
               const Int row =
                   offset + i_test + j_test * y_stride + k_test * z_stride;
-              for (Int i_trial = 0; i_trial <= 1; ++i_trial) {
-                for (Int j_trial = 0; j_trial <= 1; ++j_trial) {
-                  for (Int k_trial = 0; k_trial <= 1; ++k_trial) {
+              for (int k_trial = 0; k_trial <= 1; ++k_trial) {
+                for (int j_trial = 0; j_trial <= 1; ++j_trial) {
+                  for (int i_trial = 0; i_trial <= 1; ++i_trial) {
+                    const int element_column =
+                        i_trial + j_trial * 2 + k_trial * 4;
                     const Int column = offset + i_trial + j_trial * y_stride +
                                        k_trial * z_stride;
-                    const Complex<Real> value =
-                        element.BilinearForm(i_test, j_test, k_test, i_trial,
-                                             j_trial, k_trial, extent,
-                                             quadrature);
-                    matrix->QueueEntryAddition(row, column, value);
+                    matrix->QueueEntryAddition(
+                        row, column,
+                        element_updates(element_row, element_column));
                   }
                 }
               }
