@@ -7,8 +7,8 @@
  */
 // This drive is a simple implementation of a 3D Helmholtz equation in the
 // unit box, [0, 1]^3, with Perfectly Matched Layer absorbing boundary
-// conditions on all sides. The discretization is over boxs with trilinear,
-// Lagrangian basis functions based at the corner points. The trilinear form is
+// conditions on all sides. The discretization is over boxes with trilinear,
+// Lagrangian basis functions based at the corner points. The bilinear form is
 // integrated over each element using a simple tensor product of three-point 1D
 // Gaussian quadratures.
 //
@@ -41,40 +41,6 @@ using catamari::ConstBlasMatrix;
 using catamari::Int;
 
 namespace {
-
-// Fills 'points' and 'weights' with the transformed evaluation points and
-// weights for the interval [a, b].
-template <class Real>
-void ThirdOrderGaussianPointsAndWeights(const Real& a, const Real& b,
-                                        Real* points, Real* weights) {
-  const Real scale = (b - a) / 2;
-
-  static const Real orig_points[] = {-std::sqrt(Real{3}) / std::sqrt(Real{5}),
-                                     Real{0},
-                                     std::sqrt(Real{3}) / std::sqrt(Real{5})};
-
-  static const Real orig_weights[] = {Real(5) / Real(9), Real(8) / Real(9),
-                                      Real(5) / Real(9)};
-
-  for (int i = 0; i < 3; ++i) {
-    points[i] = a + scale * (1 + orig_points[i]);
-    weights[i] = scale * orig_weights[i];
-  }
-}
-
-// A representation of an arbitrary axis-aligned box,
-//
-//     [x_beg, x_end] x [y_beg, y_end] x [z_beg, z_end].
-//
-template <typename Real>
-struct Box {
-  Real x_beg;
-  Real x_end;
-  Real y_beg;
-  Real y_end;
-  Real z_beg;
-  Real z_end;
-};
 
 // A point in the 3D domain (i.e., [0, 1]^3).
 template <typename Real>
@@ -135,6 +101,19 @@ class Speed {
 template <class Real>
 class HelmholtzWithPMLTrilinearHexahedra {
  public:
+  // A representation of an arbitrary axis-aligned box,
+  //
+  //     [x_beg, x_end] x [y_beg, y_end] x [z_beg, z_end].
+  //
+  struct Box {
+    Real x_beg;
+    Real x_end;
+    Real y_beg;
+    Real y_end;
+    Real z_beg;
+    Real z_end;
+  };
+
   // The differential mapping the trivial tangent space of the real line into
   // the tangent space of the complex-stretched domain.
   class PMLDifferential {
@@ -233,7 +212,7 @@ class HelmholtzWithPMLTrilinearHexahedra {
   };
 
   // Returns \psi_{i, j, k} evaluated at the given point.
-  Real Basis(int i, int j, int k, const Box<Real>& extent,
+  Real Basis(int i, int j, int k, const Box& extent,
              const Point<Real>& point) const {
     CATAMARI_ASSERT(i == 0 || i == 1, "Invalid choice of i basis index.");
     CATAMARI_ASSERT(j == 0 || j == 1, "Invalid choice of j basis index.");
@@ -267,7 +246,7 @@ class HelmholtzWithPMLTrilinearHexahedra {
 
   // Returns index 'l' of the gradient of psi_{i, j, k} evaluated at the given
   // point.
-  Real BasisGradient(int i, int j, int k, int l, const Box<Real>& extent,
+  Real BasisGradient(int i, int j, int k, int l, const Box& extent,
                      const Point<Real>& point) const {
     CATAMARI_ASSERT(i == 0 || i == 1, "Invalid choice of i basis index.");
     CATAMARI_ASSERT(j == 0 || j == 1, "Invalid choice of j basis index.");
@@ -322,6 +301,25 @@ class HelmholtzWithPMLTrilinearHexahedra {
     return product;
   }
 
+  // Fills 'points' and 'weights' with the transformed evaluation points and
+  // weights for the interval [a, b].
+  static void ThirdOrderGaussianPointsAndWeights(const Real& a, const Real& b,
+                                                 Real* points, Real* weights) {
+    const Real scale = (b - a) / 2;
+
+    static const Real orig_points[] = {-std::sqrt(Real{3}) / std::sqrt(Real{5}),
+                                       Real{0},
+                                       std::sqrt(Real{3}) / std::sqrt(Real{5})};
+
+    static const Real orig_weights[] = {Real(5) / Real(9), Real(8) / Real(9),
+                                        Real(5) / Real(9)};
+
+    for (int i = 0; i < 3; ++i) {
+      points[i] = a + scale * (1 + orig_points[i]);
+      weights[i] = scale * orig_weights[i];
+    }
+  }
+
   // The constructor for the trilinear hexahedron.
   HelmholtzWithPMLTrilinearHexahedra(Int num_x_elements, Int num_y_elements,
                                      Int num_z_elements, const Real& omega,
@@ -342,8 +340,8 @@ class HelmholtzWithPMLTrilinearHexahedra {
 
     // Exploit the fact that the elements are translations of each other to
     // precompute the basis and gradient evaluations.
-    const Box<Real> extent{0, element_x_size_, 0, element_y_size_,
-                           0, element_z_size_};
+    const Box extent{0, element_x_size_, 0, element_y_size_,
+                     0, element_z_size_};
 
     ThirdOrderGaussianPointsAndWeights(extent.x_beg, extent.x_end,
                                        quadrature_x_points_,
@@ -615,7 +613,7 @@ class HelmholtzWithPMLTrilinearHexahedra {
   std::unique_ptr<const DiagonalShift> diagonal_shift_;
 };
 
-// Generates a trilinear hexahedral discretization of the 2D Helmholtz equation
+// Generates a trilinear hexahedral discretization of the 3D Helmholtz equation
 // over [0, 1]^3 with inserted PML.
 template <typename Real>
 std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
@@ -645,7 +643,7 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
   const Int z_stride = y_stride * (num_y_elements + 1);
   matrix->Resize(num_rows, num_rows);
   const Int queue_upper_bound =
-      64 * num_x_elements * num_y_elements * num_z_elements;
+      num_element_members * num_x_elements * num_y_elements * num_z_elements;
   matrix->ReserveEntryAdditions(queue_upper_bound);
   for (Int z_element = 0; z_element < num_z_elements; ++z_element) {
     for (Int y_element = 0; y_element < num_y_elements; ++y_element) {
@@ -1085,26 +1083,9 @@ int main(int argc, char** argv) {
                                 1);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
-#ifdef _OPENMP
-  const int num_omp_threads = parser.OptionalInput<int>(
-      "num_omp_threads",
-      "The desired number of OpenMP threads. Uses default if <= 0.", 1);
-#endif
   if (!parser.OK()) {
     return 0;
   }
-
-#ifdef _OPENMP
-  if (num_omp_threads > 0) {
-    const int max_omp_threads = omp_get_max_threads();
-    omp_set_num_threads(num_omp_threads);
-    std::cout << "Will use " << num_omp_threads << " of " << max_omp_threads
-              << " OpenMP threads." << std::endl;
-  } else {
-    std::cout << "Will use all " << omp_get_max_threads() << " OpenMP threads."
-              << std::endl;
-  }
-#endif
 
   catamari::LDLControl ldl_control;
   ldl_control.md_control.degree_type =
