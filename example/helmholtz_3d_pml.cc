@@ -46,24 +46,19 @@ namespace {
 // weights for the interval [a, b].
 template <class Real>
 void ThirdOrderGaussianPointsAndWeights(const Real& a, const Real& b,
-                                        std::vector<Real>* points,
-                                        std::vector<Real>* weights) {
+                                        Real* points, Real* weights) {
   const Real scale = (b - a) / 2;
 
-  // TODO(Jack Poulson): Avoid continually recreating these values by storing
-  // them in a templated structure which we only construct once and pass in.
-  const std::vector<Real> orig_points{-std::sqrt(Real{3}) / std::sqrt(Real{5}),
-                                      Real{0},
-                                      std::sqrt(Real{3}) / std::sqrt(Real{5})};
+  static const Real orig_points[] = {-std::sqrt(Real{3}) / std::sqrt(Real{5}),
+                                     Real{0},
+                                     std::sqrt(Real{3}) / std::sqrt(Real{5})};
 
-  const std::vector<Real> orig_weights{Real(5) / Real(9), Real(8) / Real(9),
-                                       Real(5) / Real(9)};
+  static const Real orig_weights[] = {Real(5) / Real(9), Real(8) / Real(9),
+                                      Real(5) / Real(9)};
 
-  points->resize(3);
-  weights->resize(3);
   for (int i = 0; i < 3; ++i) {
-    (*points)[i] = a + scale * (1 + orig_points[i]);
-    (*weights)[i] = scale * orig_weights[i];
+    points[i] = a + scale * (1 + orig_points[i]);
+    weights[i] = scale * orig_weights[i];
   }
 }
 
@@ -84,22 +79,22 @@ struct Box {
 // A cache for the tensor-product quadrature points over an arbitrary box.
 template <typename Real>
 struct BoxQuadrature {
-  std::vector<Real> x_points;
-  std::vector<Real> x_weights;
+  Real x_points[3];
+  Real x_weights[3];
 
-  std::vector<Real> y_points;
-  std::vector<Real> y_weights;
+  Real y_points[3];
+  Real y_weights[3];
 
-  std::vector<Real> z_points;
-  std::vector<Real> z_weights;
+  Real z_points[3];
+  Real z_weights[3];
 
   BoxQuadrature(const Box<Real>& extent) {
-    ThirdOrderGaussianPointsAndWeights(extent.x_beg, extent.x_end, &x_points,
-                                       &x_weights);
-    ThirdOrderGaussianPointsAndWeights(extent.y_beg, extent.y_end, &y_points,
-                                       &y_weights);
-    ThirdOrderGaussianPointsAndWeights(extent.z_beg, extent.z_end, &z_points,
-                                       &z_weights);
+    ThirdOrderGaussianPointsAndWeights(extent.x_beg, extent.x_end, x_points,
+                                       x_weights);
+    ThirdOrderGaussianPointsAndWeights(extent.y_beg, extent.y_end, y_points,
+                                       y_weights);
+    ThirdOrderGaussianPointsAndWeights(extent.z_beg, extent.z_end, z_points,
+                                       z_weights);
   }
 };
 
@@ -109,6 +104,129 @@ struct Point {
   Real x;
   Real y;
   Real z;
+};
+
+// The profile of a single direction's PML as a function of a principal axis.
+// NOTE: The majority of the runtime appears to be spent in this function.
+template <typename Real>
+class PMLProfile {
+ public:
+  PMLProfile(
+      const Real& pml_scale, const Real& pml_exponent, const Real& pml_width) :
+      pml_scale_(pml_scale), pml_exponent_(pml_exponent), pml_width_(pml_width)
+  {}
+
+  Real operator()(const Real& x) const {
+    Real result;
+    const Real first_pml_end = pml_width_;
+    const Real last_pml_beg = 1 - pml_width_;
+    if (x < first_pml_end) {
+      const Real pml_rel_depth = (first_pml_end - x) / pml_width_;
+      result = pml_scale_ * std::pow(pml_rel_depth, pml_exponent_);
+    } else if (x > last_pml_beg) {
+      const Real pml_rel_depth = (x - last_pml_beg) / pml_width_;
+      result = pml_scale_ * std::pow(pml_rel_depth, pml_exponent_);
+    } else {
+      result = 0;
+    }
+    return result;
+  }
+
+ private:
+  const Real pml_scale_;
+  const Real pml_exponent_;
+  const Real pml_width_;
+};
+
+// The differential mapping the trivial tangent space of the real line into
+// the tangent space of the complex-stretched domain.
+template <typename Real>
+class PMLDifferential {
+ public:
+  PMLDifferential(
+      const Real& omega, const PMLProfile<Real>& profile) :
+  omega_(omega), profile_(profile) {}
+
+  Complex<Real> operator()(const Real& x) const {
+    return Complex<Real>(Real{1}, profile_(x) / omega_);
+  }
+
+ private:
+  const Real omega_;
+  const PMLProfile<Real> profile_;
+};
+
+// The pointwise acoustic speed.
+template <typename Real>
+class Speed {
+ public:
+  Speed() {}
+
+  Real operator()(const Point<Real>& point) const {
+    return Real{1};
+  }
+};
+
+// The diagonal 'A' tensor in the equation:
+//
+//    -div (A grad u) - (omega / c)^2 gamma u = f.
+//
+template <typename Real>
+class WeightTensor {
+ public:
+  WeightTensor(const PMLDifferential<Real>& gamma_x,
+               const PMLDifferential<Real>& gamma_y,
+               const PMLDifferential<Real>& gamma_z) :
+      gamma_x_(gamma_x), gamma_y_(gamma_y), gamma_z_(gamma_z) {}
+
+  Complex<Real> operator()(int i, const Point<Real>& point) const {
+    const Complex<Real> gamma_x = gamma_x_(point.x);
+    const Complex<Real> gamma_y = gamma_y_(point.y);
+    const Complex<Real> gamma_z = gamma_z_(point.z);
+    Complex<Real> result = gamma_x * gamma_y * gamma_z;
+    Complex<Real> gamma_k;
+    if (i == 0) {
+      return result / (gamma_x * gamma_x);
+    } else if (i == 1) {
+      return result / (gamma_y * gamma_y);
+    } else {
+      return result / (gamma_z * gamma_z);
+    }
+  }
+
+ private:
+  const PMLDifferential<Real> gamma_x_;
+  const PMLDifferential<Real> gamma_y_;
+  const PMLDifferential<Real> gamma_z_;
+};
+
+// The '(omega / c)^2 gamma' in the equation:
+//
+//    -div (A grad u) - (omega / c)^2 gamma u = f.
+//
+template <typename Real>
+class DiagonalShift {
+ public:
+  DiagonalShift(const Real& omega, const Speed<Real>& speed,
+                const PMLDifferential<Real>& gamma_x,
+                const PMLDifferential<Real>& gamma_y,
+                const PMLDifferential<Real>& gamma_z) :
+      omega_(omega), speed_(speed), gamma_x_(gamma_x), gamma_y_(gamma_y),
+      gamma_z_(gamma_z) {}
+
+  Complex<Real> operator()(const Point<Real>& point) const {
+    const Real rel_omega = omega_ / speed_(point);
+    const Complex<Real> gamma =
+        gamma_x_(point.x) * gamma_y_(point.y) * gamma_z_(point.z);
+    return rel_omega * rel_omega * gamma;
+  }
+
+ private:
+  const Real omega_;
+  const Speed<Real> speed_;
+  const PMLDifferential<Real> gamma_x_;
+  const PMLDifferential<Real> gamma_y_;
+  const PMLDifferential<Real> gamma_z_;
 };
 
 // This currently uses third-order Gaussian quadrature. The basis functions
@@ -123,32 +241,6 @@ struct Point {
 //   psi_{1, 1, 0}(x, y, z) = (1 + x) (1 + y) (1 - z) / 2^3.
 //   psi_{1, 1, 1}(x, y, z) = (1 + x) (1 + y) (1 + z) / 2^3.
 //
-// The gradients are:
-//
-//   grad psi_{0, 0, 0}(x, y, z) =
-//     [-(1 - y) (1 - z), -(1 - x) (1 - z), -(1 - x) (1 - y)]^T / 2^3,
-//
-//   grad psi_{0, 0, 1}(x, y, z) =
-//     [-(1 - y) (1 + z), -(1 - x) (1 + z), (1 - x) (1 - y)]^T / 2^3,
-//
-//   grad psi_{0, 1, 0}(x, y, z) =
-//     [-(1 + y) (1 - z),  (1 - x) (1 - z), -(1 - x) (1 + y)]^T / 2^3,
-//
-//   grad psi_{0, 1, 1}(x, y, z) =
-//     [-(1 + y) (1 + z),  (1 - x) (1 + z), (1 - x) (1 + y)]^T / 2^3,
-//
-//   grad psi_{1, 0, 0}(x, y, z) =
-//     [ (1 - y) (1 - z), -(1 + x) (1 - z), -(1 + x) (1 - y)]^T / 2^3,
-//
-//   grad psi_{1, 0, 1}(x, y, z) =
-//     [ (1 - y) (1 + z), -(1 + x) (1 + z), (1 + x) (1 - y)]^T / 2^3,
-//
-//   grad psi_{1, 1, 0}(x, y, z) =
-//     [ (1 + y) (1 - z),  (1 + x) (1 - z), -(1 + x) (1 + y)]^T / 2^3.
-//
-//   grad psi_{1, 1, 1}(x, y, z) =
-//     [ (1 + y) (1 + z),  (1 + x) (1 + z), (1 + x) (1 + y)]^T / 2^3.
-//
 // Over an element [x_beg, x_end] x [y_beg, y_end] x [z_beg, z_end], where we
 // denote the lengths by L_x, L_y, and L_z, and their product by
 // V = L_x L_y L_z,
@@ -161,39 +253,6 @@ struct Point {
 //   psi_{1, 0, 1}(x, y, z) = (x - x_beg) (y_end - y) (z - z_beg) / V,
 //   psi_{1, 1, 0}(x, y, z) = (x - x_beg) (y - y_beg) (z_end - z) / V.
 //   psi_{1, 1, 1}(x, y, z) = (x - x_beg) (y - y_beg) (z - z_beg) / V.
-//
-// The gradients are:
-//                                 | -(y_end - y) (z_end - z) |
-//   grad psi_{0, 0, 0}(x, y, z) = | -(x_end - x) (z_end - z) | / V,
-//                                 | -(x_end - x) (y_end - y) |
-//
-//                                 | -(y_end - y) (z - z_end) |
-//   grad psi_{0, 0, 1}(x, y, z) = | -(x_end - x) (z - z_end) | / V,
-//                                 |  (x_end - x) (y_end - y) |
-//
-//                                 | -(y - y_beg) (z_end - z) |
-//   grad_psi_{0, 1, 0}(x, y, z) = |  (x_end - x) (z_end - z) | / V,
-//                                 | -(x_end - x) (y - y_beg) ||
-//
-//                                 | -(y - y_beg) (z - z_beg) |
-//   grad_psi_{0, 1, 1}(x, y, z) = |  (x_end - x) (z - z_beg) | / V,
-//                                 |  (x_end - x) (y - y_beg) |
-//
-//                                 |  (y_end - y) (z_end - z) |
-//   grad psi_{1, 0, 0}(x, y, z) = | -(x - x_beg) (z_end - z) | / V,
-//                                 | -(x - x_beg) (y_end - y) |
-//
-//                                 |  (y_end - y) (z - z_beg) |
-//   grad psi_{1, 0, 1}(x, y, z) = | -(x - x_beg) (z - z_beg) | / V,
-//                                 |  (x - x_beg) (y_end - y) |
-//
-//                                 |  (y - y_beg) (z_end - z) |
-//   grad psi_{1, 1, 0}(x, y, z) = |  (x - x_beg) (z_end - z) | / V,
-//                                 | -(x - x_beg) (y - y_beg) |
-//
-//                                 |  (y - y_beg) (z - z_beg) |
-//   grad psi_{1, 1, 1}(x, y, z) = |  (x - x_beg) (z - z_beg) | / V,
-//                                 |  (x - x_beg) (y - y_beg) |
 //
 // More compactly, if we define:
 //
@@ -221,13 +280,11 @@ class HelmholtzWithPMLTrilinearHexahedron {
   //
   //   A_{i, i} : Omega -> C,  i in {0, 1, 2}.
   //
-  typedef std::function<Complex<Real>(int i, const Point<Real>&)>
-      DiagonalWeightTensor;
+  typedef WeightTensor<Real> DiagonalWeightTensor; 
 
   // The term -s u involves a scalar function s : Omega -> C, which we refer
   // to as the diagonal shift function.
-  typedef std::function<Complex<Real>(const Point<Real>&)>
-      DiagonalShiftFunction;
+  typedef DiagonalShift<Real> DiagonalShiftFunction;
 
   // The constructor for the trilinear hexahedron.
   HelmholtzWithPMLTrilinearHexahedron(
@@ -325,17 +382,17 @@ class HelmholtzWithPMLTrilinearHexahedron {
     return product;
   }
 
-  // Returns the evaluation of the density of the trilinear form over an element
+  // Returns the evaluation of the density of the bilinear form over an element
   // [x_beg, x_end] x [y_beg, y_end] x [z_beg, z_end] at a point (x, y, z) with
   // test function v = \phi_{i_test, j_test, k_test} and trial function
   // u = \psi_{i_trial, j_trial, k_trial}. That is,
   //
   //   a_density(u, v) = (grad v)' (A grad u) - s u conj(v).
   //
-  Complex<Real> TrilinearDensity(int i_test, int j_test, int k_test,
-                                 int i_trial, int j_trial, int k_trial,
-                                 const Box<Real>& extent,
-                                 const Point<Real>& point) const {
+  Complex<Real> BilinearFormDensity(int i_test, int j_test, int k_test,
+                                    int i_trial, int j_trial, int k_trial,
+                                    const Box<Real>& extent,
+                                    const Point<Real>& point) const {
     Complex<Real> result = 0;
 
     // Add in the (grad v)' (A grad u) contribution. Recall that A is diagonal.
@@ -363,9 +420,9 @@ class HelmholtzWithPMLTrilinearHexahedron {
 
   // Use a tensor product of third-order Gaussian quadrature to integrate the
   // trilinear form over the hexahedral element.
-  Complex<Real> Trilinear(int i_test, int j_test, int k_test, int i_trial,
-                          int j_trial, int k_trial, const Box<Real>& extent,
-                          const BoxQuadrature<Real>& quadrature) const {
+  Complex<Real> BilinearForm(int i_test, int j_test, int k_test, int i_trial,
+                             int j_trial, int k_trial, const Box<Real>& extent,
+                             const BoxQuadrature<Real>& quadrature) const {
     Complex<Real> result = 0;
     for (int i = 0; i < 3; ++i) {
       const Real& x = quadrature.x_points[i];
@@ -378,8 +435,8 @@ class HelmholtzWithPMLTrilinearHexahedron {
           const Real& z_weight = quadrature.z_weights[k];
           const Point<Real> point{x, y, z};
           result += x_weight * y_weight * z_weight *
-                    TrilinearDensity(i_test, j_test, k_test, i_trial, j_trial,
-                                     k_trial, extent, point);
+              BilinearFormDensity(i_test, j_test, k_test, i_trial, j_trial,
+                                  k_trial, extent, point);
         }
       }
     }
@@ -420,112 +477,21 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
   const Real z_pml_width = num_pml_elements * h_z;
 
   // The frequency-scaled horizontal PML profile function.
-  const auto sigma_x = [&](const Real& x) {
-    Real result;
-    const Real first_pml_end = x_pml_width;
-    const Real last_pml_beg = Real{1} - x_pml_width;
-    if (x < first_pml_end) {
-      const Real pml_rel_depth = (first_pml_end - x) / x_pml_width;
-      result = pml_scale * std::pow(pml_rel_depth, pml_exponent);
-    } else if (x > last_pml_beg) {
-      const Real pml_rel_depth = (x - last_pml_beg) / x_pml_width;
-      result = pml_scale * std::pow(pml_rel_depth, pml_exponent);
-    } else {
-      result = 0;
-    }
-    return result;
-  };
+  const PMLProfile<Real> sigma_x(pml_scale, pml_exponent, x_pml_width);
+  const PMLProfile<Real> sigma_y(pml_scale, pml_exponent, y_pml_width);
+  const PMLProfile<Real> sigma_z(pml_scale, pml_exponent, z_pml_width);
 
-  // The frequency-scaled vertical PML profile function.
-  const auto sigma_y = [&](const Real& y) {
-    Real result;
-    const Real first_pml_end = y_pml_width;
-    const Real last_pml_beg = Real{1} - y_pml_width;
-    if (y < first_pml_end) {
-      const Real pml_rel_depth = (first_pml_end - y) / y_pml_width;
-      result = pml_scale * std::pow(pml_rel_depth, pml_exponent);
-    } else if (y > last_pml_beg) {
-      const Real pml_rel_depth = (y - last_pml_beg) / y_pml_width;
-      result = pml_scale * std::pow(pml_rel_depth, pml_exponent);
-    } else {
-      result = 0;
-    }
-    return result;
-  };
+  // The differentials from the real axes to the PML Profile tangent spaces.
+  const PMLDifferential<Real> gamma_x(omega, sigma_x);
+  const PMLDifferential<Real> gamma_y(omega, sigma_y);
+  const PMLDifferential<Real> gamma_z(omega, sigma_z);
 
-  // The frequency-scaled depth PML profile function.
-  const auto sigma_z = [&](const Real& z) {
-    Real result;
-    const Real first_pml_end = z_pml_width;
-    const Real last_pml_beg = Real{1} - z_pml_width;
-    if (z < first_pml_end) {
-      const Real pml_rel_depth = (first_pml_end - z) / z_pml_width;
-      result = pml_scale * std::pow(pml_rel_depth, pml_exponent);
-    } else if (z > last_pml_beg) {
-      const Real pml_rel_depth = (z - last_pml_beg) / z_pml_width;
-      result = pml_scale * std::pow(pml_rel_depth, pml_exponent);
-    } else {
-      result = 0;
-    }
-    return result;
-  };
+  const Speed<Real> speed;
 
-  // The differential from the horizontal tangent space to the horizontal PML
-  // tangent space.
-  const auto gamma_x = [&](const Real& x) {
-    return Complex<Real>{Real{1}, sigma_x(x) / omega};
-  };
+  const WeightTensor<Real> weight_tensor(gamma_x, gamma_y, gamma_z);
 
-  // The differential from the vertical tangent space to the vertical PML
-  // tangent space.
-  const auto gamma_y = [&](const Real& y) {
-    return Complex<Real>{Real{1}, sigma_y(y) / omega};
-  };
-
-  // The differential from the depth tangent space to the depth PML trangent
-  // space.
-  const auto gamma_z = [&](const Real& z) {
-    return Complex<Real>{Real{1}, sigma_z(z) / omega};
-  };
-
-  // The product of the PML differentials.
-  const auto gamma = [&](const Point<Real>& point) {
-    return gamma_x(point.x) * gamma_y(point.y) * gamma_z(point.z);
-  };
-
-  // The sound speed of the material.
-  // TODO(Jack Poulson): Expose a family of material profiles.
-  const auto speed = [&](const Point<Real>& point) { return Real{1}; };
-
-  // The diagonal 'A' tensor in the equation:
-  //
-  //    -div (A grad u) - (omega / c)^2 gamma u = f.
-  //
-  std::function<Complex<Real>(int i, const Point<Real>& point)> weight_tensor =
-      [&](int i, const Point<Real>& point) {
-        Complex<Real> result;
-        if (i == 0) {
-          const Complex<Real> gamma_k = gamma_x(point.x);
-          result = gamma(point) / (gamma_k * gamma_k);
-        } else if (i == 1) {
-          const Complex<Real> gamma_k = gamma_y(point.y);
-          result = gamma(point) / (gamma_k * gamma_k);
-        } else {
-          const Complex<Real> gamma_k = gamma_z(point.z);
-          result = gamma(point) / (gamma_k * gamma_k);
-        }
-        return result;
-      };
-
-  // The '(omega / c)^2 gamma' in the equation:
-  //
-  //    -div (A grad u) - (omega / c)^2 gamma u = f.
-  //
-  std::function<Complex<Real>(const Point<Real>& point)> diagonal_shift =
-      [&](const Point<Real>& point) {
-        const Real local_speed = speed(point);
-        return std::pow(omega / local_speed, Real{2}) * gamma(point);
-      };
+  const DiagonalShift<Real> diagonal_shift(
+      omega, speed, gamma_x, gamma_y, gamma_z);
 
   const HelmholtzWithPMLTrilinearHexahedron<Real> element(weight_tensor,
                                                           diagonal_shift);
@@ -535,8 +501,9 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
   const Int y_stride = num_x_elements + 1;
   const Int z_stride = y_stride * (num_y_elements + 1);
   matrix->Resize(num_rows, num_rows);
-  matrix->ReserveEntryAdditions(64 * num_x_elements * num_y_elements *
-                                num_z_elements);
+  const Int queue_upper_bound =
+      64 * num_x_elements * num_y_elements * num_z_elements;
+  matrix->ReserveEntryAdditions(queue_upper_bound);
   for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
     const Real x_beg = x_element * h_x;
     const Real x_end = x_beg + h_x;
@@ -565,8 +532,9 @@ std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
                     const Int column = offset + i_trial + j_trial * y_stride +
                                        k_trial * z_stride;
                     const Complex<Real> value =
-                        element.Trilinear(i_test, j_test, k_test, i_trial,
-                                          j_trial, k_trial, extent, quadrature);
+                        element.BilinearForm(i_test, j_test, k_test, i_trial,
+                                             j_trial, k_trial, extent,
+                                             quadrature);
                     matrix->QueueEntryAddition(row, column, value);
                   }
                 }

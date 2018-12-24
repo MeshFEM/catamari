@@ -38,8 +38,11 @@ class Complex<float> : public std::complex<float> {
   using std::complex<RealType>::operator*=;
   using std::complex<RealType>::operator/=;
 
-  // The default copy constructor.
+  // The default constructor.
   Complex();
+
+  // A copy constructor from a Complex<Real> variable.
+  Complex(const Complex<RealType>& input);
 
   // A copy constructor from a std::complex variable.
   Complex(const std::complex<RealType>& input);
@@ -71,8 +74,11 @@ class Complex<double> : public std::complex<double> {
   using std::complex<RealType>::operator*=;
   using std::complex<RealType>::operator/=;
 
-  // The default copy constructor.
+  // The default constructor.
   Complex();
+
+  // A copy constructor from a Complex<Real> variable.
+  Complex(const Complex<RealType>& input);
 
   // A copy constructor from a std::complex variable.
   Complex(const std::complex<RealType>& input);

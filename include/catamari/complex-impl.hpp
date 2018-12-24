@@ -16,6 +16,12 @@ Complex<float>::Complex() : std::complex<float>() {}
 
 Complex<double>::Complex() : std::complex<double>() {}
 
+Complex<float>::Complex(const Complex<float>& input)
+    : std::complex<float>(input.real(), input.imag()) {}
+
+Complex<double>::Complex(const Complex<double>& input)
+    : std::complex<double>(input.real(), input.imag()) {}
+
 Complex<float>::Complex(const std::complex<float>& input)
     : std::complex<float>(input) {}
 

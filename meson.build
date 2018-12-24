@@ -18,6 +18,13 @@ cxx = meson.get_compiler('cpp')
 deps = []
 cxx_args = []
 
+if cxx.get_id() == 'gcc'
+  message('Using gcc')
+  # Complex arithmetic is greatly accelerated by adopting the Fortran
+  # division and NaN-checking conventions.
+  cxx_args += '-fcx-fortran-rules'
+endif
+
 # Simple BLAS/LAPACK detection.
 if not get_option('disable-blas')
   have_blas = false
