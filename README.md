@@ -1,0 +1,101 @@
+**catamari** is a C++14, header-only implementation of real and complex
+supernodal sparse-direct Cholesky, LDL^T, and LDL^H factorizations. It also
+contains modifications of dense and sparse-direct LDL^H factorizations to
+support fast Determinantal Point Process sampling.
+
+### Dependencies
+The only strict dependency for manually including the headers in your project
+is:
+
+* [quotient](https://gitlab.com/hodge_star/quotient): A C++14 header-only,
+MPL-licensed, implementation of the (Approximate) Minimum Degree reordering
+method.
+
+Building the project further requires:
+
+* [specify](https://gitlab.com/hodge_star/specify): A C++14 header-only,
+
+* [Catch2](https://github.com/catchorg/Catch2): A header-only C++ unit-testing
+library.
+
+* [meson](http://mesonbuild.com): A modern build system. 
+
+Further, it is strongly recommended that one have optimized implementations of
+the Basic Linear Algebra Subprograms (BLAS) and the Linear Algebra PACKage
+(LAPACK), such as [OpenBLAS](https://openblas.net), [BLIS](https://github.com/flame/blis), or a proprietary alternative such as
+[Intel MKL](https://software.intel.com/en-us/mkl").
+
+### Example usage
+
+Usage through the `catamari::CoordinateMatrix` template class is fairly
+straight-forward:
+```c++
+#include "catamari.hpp"
+
+[...]
+
+// Build a real or complex symmetric input matrix.
+//
+// Alternatively, one could use
+// catamari::CoordinateMatrix<Field>::FromMatrixMarket to read the matrix from
+// a Matrix Market file (e.g., from the Davis sparse matrix collection). But
+// keep in mind that one often needs to enforce explicit symmetry.
+catamari::CoordinateMatrix<double> matrix;
+matrix.Resize(num_rows, num_rows);
+matrix.ReserveEntryAdditions(num_entries_upper_bound);
+for (int index = 0; index < num_entries_to_add; ++index) {
+  matrix.QueueEdgeAddition(entry.row, entry.column, entry.value);
+}
+matrix.FlushEntryQueues();
+
+// Factor the matrix.
+catamari::LDLControl ldl_control;
+catamari::LDLFactorization<double> ldl_factorization;
+const catamari::LDLResult result = catamari::LDL(
+    matrix, ldl_control, &ldl_factorization);
+
+// Solve a linear system using the factorization.
+catamari::BlasMatrix<double> right_hand_sides;
+right_hand_sides.height = num_rows;
+right_hand_sides.width = num_right_hand_sides;
+right_hand_sides.leading_dim = num_rows;
+right_hand_sides.data = /* pointer to an input buffer. */;
+// The (i, j) entry of the right-hand side can easily be read or modified, e.g.:
+//   right_hand_sides(i, j) = 1.;
+catamari::LDLSolve(ldl_factorization, &right_hand_sides);
+```
+
+### Running the unit tests
+[meson](http://mesonbuild.com) defaults to debug builds. One might start by
+building the project via:
+```
+mkdir build-debug/
+meson build-debug
+cd build-debug
+ninja
+ninja test
+```
+
+A release version can be built via:
+```
+mkdir build-release/
+meson build-release --build-type=release
+cd build-release
+ninja
+ninja test
+```
+
+### Running the example drivers
+One can factor Matrix Market examples from the Davis sparse matrix collection
+via `examples/factor_matrix_market.cc`, sample a Determinantal Point Process
+via `examples/dpp_matrix_market.cc`, or factor 2D or 3D Helmholtz Finite
+Element Method discretizations (with Perfectly Matched Layer boundary
+conditions) using `examples/helmholtz_2d_pml.cc` and
+`examples/helmholtz_3d_pml.cc`. An example plane from running the 3D Helmholtz
+solve using 120 x 120 x 120 trilinear hexahedral elements with a converging
+lens model spanning 14 wavelengths is shown below:
+![](./images/helmholtz_3d_lens_14w.png)
+
+### License
+`quotient` is distributed under the
+[Mozilla Public License, v. 2.0](https://www.mozilla.org/media/MPL/2.0/index.815ca599c9df.txt).
