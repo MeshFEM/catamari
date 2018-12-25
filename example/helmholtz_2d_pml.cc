@@ -49,13 +49,58 @@ struct Point {
   Real y;
 };
 
+enum SpeedProfile {
+  kFreeSpace,
+  kConvergingLens,
+  kWaveGuide,
+};
+
 // The pointwise acoustic speed.
 template <typename Real>
 class Speed {
  public:
-  Speed() {}
+  Speed(SpeedProfile profile) : profile_(profile) {}
 
-  Real operator()(const Point<Real>& point) const { return Real{1}; }
+  Real FreeSpace(const Point<Real>& point) const { return Real{1}; }
+
+  Real ConvergingLens(const Point<Real>& point) const {
+    const Real x_center = Real{1} / Real{2};
+    const Real y_center = Real{1} / Real{2};
+    const Real center_speed = 0.675;
+    const Real max_speed = 1.325;
+    const Real variance = 0.01;
+    const Real dist_squared = (point.x - x_center) * (point.x - x_center) +
+                              (point.y - y_center) * (point.y - y_center);
+    const Real gaussian_scale = max_speed - center_speed;
+    return max_speed -
+           gaussian_scale * std::exp(-dist_squared / (2 * variance));
+  }
+
+  Real WaveGuide(const Point<Real>& point) const {
+    const Real x_center = Real{1} / Real{2};
+    const Real center_speed = 0.675;
+    const Real max_speed = 1.325;
+    const Real variance = 0.01;
+    const Real dist_squared = (point.x - x_center) * (point.x - x_center);
+    const Real gaussian_scale = max_speed - center_speed;
+    return max_speed -
+           gaussian_scale * std::exp(-dist_squared / (2 * variance));
+  }
+
+  Real operator()(const Point<Real>& point) const {
+    if (profile_ == kFreeSpace) {
+      return FreeSpace(point);
+    } else if (profile_ == kConvergingLens) {
+      return ConvergingLens(point);
+    } else if (profile_ == kWaveGuide) {
+      return WaveGuide(point);
+    } else {
+      return 1;
+    }
+  }
+
+ private:
+  const SpeedProfile profile_;
 };
 
 // This currently uses third-order Gaussian quadrature. The basis functions
@@ -514,12 +559,13 @@ class HelmholtzWithPMLQ4 {
 // with inserted PML.
 template <typename Real>
 std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> HelmholtzWithPML(
-    const Real& omega, Int num_x_elements, Int num_y_elements,
-    const Real& pml_scale, const Real& pml_exponent, Int num_pml_elements) {
+    SpeedProfile profile, const Real& omega, Int num_x_elements,
+    Int num_y_elements, const Real& pml_scale, const Real& pml_exponent,
+    Int num_pml_elements) {
   std::unique_ptr<catamari::CoordinateMatrix<Complex<Real>>> matrix(
       new catamari::CoordinateMatrix<Complex<Real>>);
 
-  const Speed<Real> speed;
+  const Speed<Real> speed(profile);
 
   const HelmholtzWithPMLQ4<Real> discretization(num_x_elements, num_y_elements,
                                                 omega, pml_scale, pml_exponent,
@@ -584,11 +630,14 @@ ConstBlasMatrix<Complex<Real>> GenerateRightHandSide(
   buffer->resize(right_hand_side.leading_dim * right_hand_side.width);
   right_hand_side.data = buffer->data();
 
-  // Generate a point source in the center of the domain.
+  // Generate a point source roughly at (0.5, 0.125).
+  // TODO(Jack Poulson): Integrate proper integration.
   std::fill(buffer->begin(), buffer->end(), Complex<Real>{0});
-  const Int middle_row =
-      (num_x_elements / 2) + (num_y_elements / 2) * (num_x_elements + 1);
-  right_hand_side(middle_row, 0) = Complex<Real>{1};
+  const Int x_element_source = num_x_elements / 2;
+  const Int y_element_source = std::round(0.125 * num_y_elements);
+  const Int index_source =
+      x_element_source + y_element_source * (num_x_elements + 1);
+  right_hand_side(index_source, 0) = Complex<Real>{1};
 
   return right_hand_side.ToConst();
 }
@@ -762,7 +811,8 @@ BlasMatrix<Field> CopyMatrix(const ConstBlasMatrix<Field>& matrix,
 }
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
-Experiment RunTest(const double& omega, Int num_x_elements, Int num_y_elements,
+Experiment RunTest(SpeedProfile profile, const double& omega,
+                   Int num_x_elements, Int num_y_elements,
                    const double& pml_scale, const double& pml_exponent,
                    int num_pml_elements, bool analytical_ordering,
                    const catamari::LDLControl& ldl_control,
@@ -775,8 +825,8 @@ Experiment RunTest(const double& omega, Int num_x_elements, Int num_y_elements,
   // Read the matrix from file.
   timer.Start();
   std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix =
-      HelmholtzWithPML<Real>(omega, num_x_elements, num_y_elements, pml_scale,
-                             pml_exponent, num_pml_elements);
+      HelmholtzWithPML<Real>(profile, omega, num_x_elements, num_y_elements,
+                             pml_scale, pml_exponent, num_pml_elements);
   experiment.construction_seconds = timer.Stop();
   if (!matrix) {
     return experiment;
@@ -852,6 +902,11 @@ Experiment RunTest(const double& omega, Int num_x_elements, Int num_y_elements,
 
 int main(int argc, char** argv) {
   specify::ArgumentParser parser(argc, argv);
+  const int speed_profile_int =
+      parser.OptionalInput<int>("speed_profile_int",
+                                "The sound speed model to use:\n"
+                                "0:free space, 1:converging lens, 2:wave guide",
+                                1);
   const double omega = parser.OptionalInput<double>(
       "omega", "The angular frequency of the Helmholtz problem.", 502.64);
   const Int num_x_elements = parser.OptionalInput<Int>(
@@ -910,6 +965,8 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  const SpeedProfile profile = static_cast<SpeedProfile>(speed_profile_int);
+
   catamari::LDLControl ldl_control;
   ldl_control.md_control.degree_type =
       static_cast<quotient::DegreeType>(degree_type_int);
@@ -932,7 +989,7 @@ int main(int argc, char** argv) {
       .allowable_supernode_zero_ratio = allowable_supernode_zero_ratio;
 
   const Experiment experiment = RunTest(
-      omega, num_x_elements, num_y_elements, pml_scale, pml_exponent,
+      profile, omega, num_x_elements, num_y_elements, pml_scale, pml_exponent,
       num_pml_elements, analytical_ordering, ldl_control, print_progress);
   PrintExperiment(experiment);
 
