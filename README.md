@@ -14,6 +14,7 @@ method.
 Building the project further requires:
 
 * [specify](https://gitlab.com/hodge_star/specify): A C++14 header-only,
+command-line argument processor.
 
 * [Catch2](https://github.com/catchorg/Catch2): A header-only C++ unit-testing
 library.
@@ -22,7 +23,8 @@ library.
 
 Further, it is strongly recommended that one have optimized implementations of
 the Basic Linear Algebra Subprograms (BLAS) and the Linear Algebra PACKage
-(LAPACK), such as [OpenBLAS](https://openblas.net), [BLIS](https://github.com/flame/blis), or a proprietary alternative such as
+(LAPACK), such as [OpenBLAS](https://www.openblas.net),
+[BLIS](https://github.com/flame/blis), or a proprietary alternative such as
 [Intel MKL](https://software.intel.com/en-us/mkl").
 
 ### Example usage
