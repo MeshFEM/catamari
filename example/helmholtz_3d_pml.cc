@@ -751,12 +751,16 @@ ConstBlasMatrix<Complex<Real>> GenerateRightHandSide(
   buffer->resize(right_hand_side.leading_dim * right_hand_side.width);
   right_hand_side.data = buffer->data();
 
-  // Generate a point source in the center of the domain.
+  // Generate a point source roughly at (0.5, 0.5, 0.125).
+  // TODO(Jack Poulson): Integrate proper integration.
   std::fill(buffer->begin(), buffer->end(), Complex<Real>{0});
-  const Int middle_row =
-      (num_x_elements / 2) + (num_y_elements / 2) * (num_x_elements + 1) +
-      (num_z_elements / 2) * (num_x_elements + 1) * (num_y_elements + 1);
-  right_hand_side(middle_row, 0) = Complex<Real>{1};
+  const Int x_element_source = num_x_elements / 2;
+  const Int y_element_source = num_y_elements / 2;
+  const Int z_element_source = std::round(0.125 * num_z_elements);
+  const Int index_source =
+      x_element_source + y_element_source * (num_x_elements + 1) +
+      z_element_source * (num_x_elements + 1) * (num_y_elements + 1);
+  right_hand_side(index_source, 0) = Complex<Real>{1};
 
   return right_hand_side.ToConst();
 }
@@ -1090,7 +1094,7 @@ int main(int argc, char** argv) {
   const Int num_z_elements = parser.OptionalInput<Int>(
       "num_z_elements", "The number of elements in the z direction.", 40);
   const double pml_scale = parser.OptionalInput<double>(
-      "pml_scale", "The scaling factor of the PML profile.", 20.);
+      "pml_scale", "The scaling factor of the PML profile.", 100.);
   const double pml_exponent = parser.OptionalInput<double>(
       "pml_exponent", "The exponent of the PML profile.", 3.);
   const Int num_pml_elements = parser.OptionalInput<Int>(
