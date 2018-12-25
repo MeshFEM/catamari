@@ -17,6 +17,7 @@ cxx = meson.get_compiler('cpp')
 
 deps = []
 test_deps = []
+example_deps = []
 cxx_args = []
 
 if cxx.get_id() == 'gcc'
@@ -72,6 +73,14 @@ if not found_quotient
   quotient_proj = subproject('quotient')
   quotient_dep = quotient_proj.get_variable('quotient_dep')
   deps += quotient_dep
+endif
+
+# Test if specify is installed.
+found_specify = cxx.has_header('specify.hpp')
+if not found_specify
+  specify_proj = subproject('specify')
+  specify_dep = specify_proj.get_variable('specify_dep')
+  example_deps += specify_dep
 endif
 
 # For controlling whether 32-bit or 64-bit integers are used. By default,
@@ -132,7 +141,7 @@ factor_matrix_market_exe = executable(
     'factor_matrix_market',
     ['example/factor_matrix_market.cc', 'include/catamari.hpp'],
     include_directories : include_dir,
-    dependencies : deps,
+    dependencies : deps + example_deps,
     cpp_args : cxx_args)
 
 # An example of factoring a 2D Helmholtz discretization.
@@ -140,7 +149,7 @@ helmholtz_2d_pml_exe = executable(
     'helmholtz_2d_pml',
     ['example/helmholtz_2d_pml.cc', 'include/catamari.hpp'],
     include_directories : include_dir,
-    dependencies : deps,
+    dependencies : deps + example_deps,
     cpp_args : cxx_args)
 
 # An example of factoring a 3D Helmholtz discretization.
@@ -148,7 +157,7 @@ helmholtz_3d_pml_exe = executable(
     'helmholtz_3d_pml',
     ['example/helmholtz_3d_pml.cc', 'include/catamari.hpp'],
     include_directories : include_dir,
-    dependencies : deps,
+    dependencies : deps + example_deps,
     cpp_args : cxx_args)
 
 # A utility for sampling a DPP from a Matrix Market input.
@@ -156,7 +165,7 @@ dpp_matrix_market_exe = executable(
     'dpp_matrix_market',
     ['example/dpp_matrix_market.cc', 'include/catamari.hpp'],
     include_directories : include_dir,
-    dependencies : deps,
+    dependencies : deps + example_deps,
     cpp_args : cxx_args)
 
 # A utility for sampling a DPP from a 2D Laplacian.
@@ -164,7 +173,7 @@ dpp_shifted_2d_negative_laplacian_exe = executable(
     'dpp_shifted_2d_negative_laplacian',
     ['example/dpp_shifted_2d_negative_laplacian.cc', 'include/catamari.hpp'],
     include_directories : include_dir,
-    dependencies : deps,
+    dependencies : deps + example_deps,
     cpp_args : cxx_args)
 
 # For using catamari as a subproject.
