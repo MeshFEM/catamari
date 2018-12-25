@@ -45,9 +45,8 @@ straight-forward:
 catamari::CoordinateMatrix<double> matrix;
 matrix.Resize(num_rows, num_rows);
 matrix.ReserveEntryAdditions(num_entries_upper_bound);
-for (int index = 0; index < num_entries_to_add; ++index) {
-  matrix.QueueEdgeAddition(entry.row, entry.column, entry.value);
-}
+// Queue updates of entries in the sparse matrix using commands of the form:
+//   matrix.QueueEdgeAddition(row, column, value);
 matrix.FlushEntryQueues();
 
 // Factor the matrix.
