@@ -16,6 +16,7 @@ include_dir = include_directories('include')
 cxx = meson.get_compiler('cpp')
 
 deps = []
+test_deps = []
 cxx_args = []
 
 if cxx.get_id() == 'gcc'
@@ -24,6 +25,9 @@ if cxx.get_id() == 'gcc'
   # division and NaN-checking conventions.
   cxx_args += '-fcx-fortran-rules'
 endif
+
+# Add Catch
+test_deps += subproject('catch2').get_variable('catch2_dep')
 
 # Simple BLAS/LAPACK detection.
 if not get_option('disable-blas')
@@ -112,7 +116,7 @@ complex_test_exe = executable(
     'complex_test',
     ['test/complex_test.cc', 'include/catamari.hpp'],
     include_directories : include_dir,
-    dependencies : deps,
+    dependencies : deps + test_deps,
     cpp_args : cxx_args)
 
 # Tests for the CoordinateMatrix class.
@@ -120,7 +124,7 @@ coordinate_matrix_test_exe = executable(
     'coordinate_matrix_test',
     ['test/coordinate_matrix_test.cc', 'include/catamari.hpp'],
     include_directories : include_dir,
-    dependencies : deps,
+    dependencies : deps + test_deps,
     cpp_args : cxx_args)
 
 # A utility for factoring a Matrix Market input.

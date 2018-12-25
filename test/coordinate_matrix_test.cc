@@ -8,7 +8,7 @@
 #define CATCH_CONFIG_MAIN
 #include <vector>
 #include "catamari.hpp"
-#include "catch.hpp"
+#include "catch2/catch.hpp"
 
 TEST_CASE("Basic", "[Basic]") {
   catamari::CoordinateMatrix<float> matrix;
