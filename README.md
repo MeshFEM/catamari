@@ -25,7 +25,7 @@ Further, it is strongly recommended that one have optimized implementations of
 the Basic Linear Algebra Subprograms (BLAS) and the Linear Algebra PACKage
 (LAPACK), such as [OpenBLAS](https://www.openblas.net),
 [BLIS](https://github.com/flame/blis), or a proprietary alternative such as
-[Intel MKL](https://software.intel.com/en-us/mkl").
+[Intel MKL](https://software.intel.com/en-us/mkl).
 
 ### Example usage
 
