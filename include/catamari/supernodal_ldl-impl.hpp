@@ -648,6 +648,41 @@ void UpdateDiagonalBlock(SymmetricFactorizationType factorization_type,
   }
 }
 
+// Moves the pointers for the main supernode down to the active supernode of
+// the descendant column block.
+template <class Field>
+void SeekForMainActiveRelativeRow(
+    Int main_supernode, Int descendant_supernode,
+    Int descendant_active_rel_row,
+    const std::vector<Int>& supernode_member_to_index,
+    const SupernodalLowerFactor<Field>& lower_factor,
+    Int* main_active_rel_row, const Int** main_active_intersect_sizes) {
+  const Int* main_indices = lower_factor.Structure(main_supernode);
+  const Int* descendant_indices = lower_factor.Structure(descendant_supernode);
+  const Int descendant_active_supernode_start =
+      descendant_indices[descendant_active_rel_row];
+  const Int active_supernode =
+      supernode_member_to_index[descendant_active_supernode_start];
+  CATAMARI_ASSERT(active_supernode > main_supernode,
+                  "Active supernode was <= the main supernode in update.");
+
+  Int main_active_intersect_size = **main_active_intersect_sizes;
+  Int main_active_first_row = main_indices[*main_active_rel_row];
+  while (supernode_member_to_index[main_active_first_row] < active_supernode) {
+    *main_active_rel_row += main_active_intersect_size;
+    ++*main_active_intersect_sizes;
+
+    main_active_first_row = main_indices[*main_active_rel_row];
+    main_active_intersect_size = **main_active_intersect_sizes;
+  }
+#ifdef CATAMARI_DEBUG
+  const Int main_active_supernode =
+      supernode_member_to_index[main_active_first_row];
+  CATAMARI_ASSERT(main_active_supernode == active_supernode,
+                  "Did not find active supernode.");
+#endif
+}
+
 // L(a, m) -= L(a, d) * (D(d, d) * L(m, d)')
 //          = L(a, d) * Z(:, m).
 //
@@ -672,37 +707,11 @@ void UpdateSubdiagonalBlock(
   const Int descendant_main_intersect_size = scaled_transpose.width;
   const Int descendant_active_intersect_size = descendant_active_matrix.height;
 
-  // Move the pointers for the main supernode down to the active supernode of
-  // the descendant column block.
-  const Int descendant_active_supernode_start =
-      descendant_indices[descendant_active_rel_row];
-  const Int active_supernode =
-      supernode_member_to_index[descendant_active_supernode_start];
-  CATAMARI_ASSERT(active_supernode > main_supernode,
-                  "Active supernode was <= the main supernode in update.");
-
-  Int main_active_intersect_size = **main_active_intersect_sizes;
-  Int main_active_first_row = main_indices[*main_active_rel_row];
-  while (supernode_member_to_index[main_active_first_row] < active_supernode) {
-    *main_active_rel_row += main_active_intersect_size;
-    ++*main_active_intersect_sizes;
-
-    main_active_first_row = main_indices[*main_active_rel_row];
-    main_active_intersect_size = **main_active_intersect_sizes;
-  }
-#ifdef CATAMARI_DEBUG
-  const Int main_active_supernode =
-      supernode_member_to_index[main_active_first_row];
-  if (main_active_supernode != active_supernode) {
-    std::cerr << "main_supernode=" << main_supernode
-              << ", descendant_supernode=" << descendant_supernode
-              << ", active_supernode=" << active_supernode
-              << ", main_active_supernode=" << main_active_supernode
-              << std::endl;
-  }
-  CATAMARI_ASSERT(main_active_supernode == active_supernode,
-                  "Did not find active supernode.");
-#endif
+  SeekForMainActiveRelativeRow(
+      main_supernode, descendant_supernode, descendant_active_rel_row,
+      supernode_member_to_index, *lower_factor, main_active_rel_row,
+      main_active_intersect_sizes);
+  const Int main_active_intersect_size = **main_active_intersect_sizes;
 
   const bool inplace_update =
       main_active_intersect_size == descendant_active_intersect_size &&

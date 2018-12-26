@@ -1128,13 +1128,15 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   catamari::LDLSolve(ldl_factorization, &solution);
   experiment.solve_seconds = timer.Stop();
 
-  // Print the solution.
-  std::cout << "X: \n";
-  for (Int row = 0; row < num_rows; ++row) {
-    const Complex<Real> entry = solution(row, 0);
-    std::cout << entry.real() << " + " << entry.imag() << "i\n";
+  if (print_progress) {
+    // Print the solution.
+    std::cout << "X: \n";
+    for (Int row = 0; row < num_rows; ++row) {
+      const Complex<Real> entry = solution(row, 0);
+      std::cout << entry.real() << " + " << entry.imag() << "i\n";
+    }
+    std::cout << std::endl;
   }
-  std::cout << std::endl;
 
   // Compute the residual.
   std::vector<Field> residual_buffer;
