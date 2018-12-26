@@ -135,7 +135,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   }
   std::vector<Field> scaled_transpose_buffer(
       max_supernode_size * max_supernode_size, Field{0});
-  std::vector<Field> update_buffer(
+  std::vector<Field> workspace_buffer(
       max_supernode_size * (max_supernode_size - 1), Field{0});
 
   // A data structure for marking whether or not a supernode is in the pattern
@@ -203,16 +203,16 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
           diagonal_factor_->blocks[descendant_supernode].ToConst(),
           descendant_main_matrix, &scaled_transpose);
 
-      BlasMatrix<Field> update_matrix;
-      update_matrix.height = descendant_main_intersect_size;
-      update_matrix.width = descendant_main_intersect_size;
-      update_matrix.leading_dim = descendant_main_intersect_size;
-      update_matrix.data = update_buffer.data();
+      BlasMatrix<Field> workspace_matrix;
+      workspace_matrix.height = descendant_main_intersect_size;
+      workspace_matrix.width = descendant_main_intersect_size;
+      workspace_matrix.leading_dim = descendant_main_intersect_size;
+      workspace_matrix.data = workspace_buffer.data();
 
       supernodal_ldl::UpdateDiagonalBlock(
           factorization_type, supernode_starts_, *lower_factor_, main_supernode,
           descendant_supernode, descendant_main_rel_row, descendant_main_matrix,
-          scaled_transpose.ToConst(), &main_diagonal_block, &update_matrix);
+          scaled_transpose.ToConst(), &main_diagonal_block, &workspace_matrix);
 
       intersect_ptrs[descendant_supernode]++;
       rel_rows[descendant_supernode] += descendant_main_intersect_size;
@@ -234,9 +234,9 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
                                              descendant_active_intersect_size,
                                              descendant_supernode_size);
 
-        // The width of the update matrix and pointer are already correct.
-        update_matrix.height = descendant_active_intersect_size;
-        update_matrix.leading_dim = descendant_active_intersect_size;
+        // The width of the workspace matrix and pointer are already correct.
+        workspace_matrix.height = descendant_active_intersect_size;
+        workspace_matrix.leading_dim = descendant_active_intersect_size;
 
         supernodal_ldl::SeekForMainActiveRelativeRow(
             main_supernode, descendant_supernode, descendant_active_rel_row,
@@ -251,10 +251,9 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
         supernodal_ldl::UpdateSubdiagonalBlock(
             main_supernode, descendant_supernode, main_active_rel_row,
             descendant_main_rel_row, descendant_active_rel_row,
-            main_active_intersect_size, supernode_starts_,
-            supernode_member_to_index_, scaled_transpose.ToConst(),
-            descendant_active_matrix, *lower_factor_, &main_active_block,
-            &update_matrix);
+            supernode_starts_, supernode_member_to_index_,
+            scaled_transpose.ToConst(), descendant_active_matrix,
+            *lower_factor_, &main_active_block, &workspace_matrix);
 
         ++descendant_active_intersect_size_beg;
         descendant_active_rel_row += descendant_active_intersect_size;

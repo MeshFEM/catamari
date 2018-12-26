@@ -610,7 +610,7 @@ void UpdateDiagonalBlock(SymmetricFactorizationType factorization_type,
                          const ConstBlasMatrix<Field>& descendant_main_matrix,
                          const ConstBlasMatrix<Field>& scaled_transpose,
                          BlasMatrix<Field>* main_diag_block,
-                         BlasMatrix<Field>* update_matrix) {
+                         BlasMatrix<Field>* workspace_matrix) {
   typedef ComplexBase<Field> Real;
   const Int main_supernode_size = main_diag_block->height;
   const Int descendant_main_intersect_size = scaled_transpose.width;
@@ -618,7 +618,7 @@ void UpdateDiagonalBlock(SymmetricFactorizationType factorization_type,
   const bool inplace_update =
       descendant_main_intersect_size == main_supernode_size;
   BlasMatrix<Field>* accumulation_block =
-      inplace_update ? main_diag_block : update_matrix;
+      inplace_update ? main_diag_block : workspace_matrix;
 
   if (factorization_type == kCholeskyFactorization) {
     LowerNormalHermitianOuterProduct(Real{-1}, descendant_main_matrix, Real{1},
@@ -641,8 +641,8 @@ void UpdateDiagonalBlock(SymmetricFactorizationType factorization_type,
       for (Int i = j; i < descendant_main_intersect_size; ++i) {
         const Int row = descendant_main_indices[i];
         const Int i_rel = row - main_supernode_start;
-        main_diag_block->Entry(i_rel, j_rel) += update_matrix->Entry(i, j);
-        update_matrix->Entry(i, j) = 0;
+        main_diag_block->Entry(i_rel, j_rel) += workspace_matrix->Entry(i, j);
+        workspace_matrix->Entry(i, j) = 0;
       }
     }
   }
@@ -694,13 +694,14 @@ template <class Field>
 void UpdateSubdiagonalBlock(
     Int main_supernode, Int descendant_supernode, Int main_active_rel_row,
     Int descendant_main_rel_row, Int descendant_active_rel_row,
-    Int main_active_intersect_size, const std::vector<Int>& supernode_starts,
+    const std::vector<Int>& supernode_starts,
     const std::vector<Int>& supernode_member_to_index,
     const ConstBlasMatrix<Field>& scaled_transpose,
     const ConstBlasMatrix<Field>& descendant_active_matrix,
     const SupernodalLowerFactor<Field>& lower_factor,
-    BlasMatrix<Field>* main_active_block, BlasMatrix<Field>* update_matrix) {
+    BlasMatrix<Field>* main_active_block, BlasMatrix<Field>* workspace_matrix) {
   const Int main_supernode_size = lower_factor.blocks[main_supernode].width;
+  const Int main_active_intersect_size = main_active_block->height;
   const Int descendant_main_intersect_size = scaled_transpose.width;
   const Int descendant_active_intersect_size = descendant_active_matrix.height;
   const bool inplace_update =
@@ -708,7 +709,7 @@ void UpdateSubdiagonalBlock(
       main_supernode_size == descendant_main_intersect_size;
 
   BlasMatrix<Field>* accumulation_matrix =
-      inplace_update ? main_active_block : update_matrix;
+      inplace_update ? main_active_block : workspace_matrix;
   MatrixMultiplyNormalNormal(Field{-1}, descendant_active_matrix,
                              scaled_transpose, Field{1}, accumulation_matrix);
 
@@ -743,8 +744,8 @@ void UpdateSubdiagonalBlock(
         const Int column = descendant_main_indices[j];
         const Int j_rel = column - main_supernode_start;
 
-        main_active_block->Entry(i_rel, j_rel) += update_matrix->Entry(i, j);
-        update_matrix->Entry(i, j) = 0;
+        main_active_block->Entry(i_rel, j_rel) += workspace_matrix->Entry(i, j);
+        workspace_matrix->Entry(i, j) = 0;
       }
     }
   }
@@ -1467,7 +1468,7 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
   }
   std::vector<Field> scaled_transpose_buffer(
       max_supernode_size * max_supernode_size, Field{0});
-  std::vector<Field> update_buffer(
+  std::vector<Field> workspace_buffer(
       max_supernode_size * (max_supernode_size - 1), Field{0});
 
   // A data structure for marking whether or not a supernode is in the pattern
@@ -1537,17 +1538,17 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
           diagonal_factor.blocks[descendant_supernode].ToConst(),
           descendant_main_matrix, &scaled_transpose);
 
-      BlasMatrix<Field> update_matrix;
-      update_matrix.height = descendant_main_intersect_size;
-      update_matrix.width = descendant_main_intersect_size;
-      update_matrix.leading_dim = descendant_main_intersect_size;
-      update_matrix.data = update_buffer.data();
+      BlasMatrix<Field> workspace_matrix;
+      workspace_matrix.height = descendant_main_intersect_size;
+      workspace_matrix.width = descendant_main_intersect_size;
+      workspace_matrix.leading_dim = descendant_main_intersect_size;
+      workspace_matrix.data = workspace_buffer.data();
 
       UpdateDiagonalBlock(factorization_type, factorization->supernode_starts,
                           *factorization->lower_factor, main_supernode,
                           descendant_supernode, descendant_main_rel_row,
                           descendant_main_matrix, scaled_transpose.ToConst(),
-                          &main_diagonal_block, &update_matrix);
+                          &main_diagonal_block, &workspace_matrix);
 
       intersect_ptrs[descendant_supernode]++;
       rel_rows[descendant_supernode] += descendant_main_intersect_size;
@@ -1569,9 +1570,9 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
                                              descendant_active_intersect_size,
                                              descendant_supernode_size);
 
-        // The width of the update matrix and pointer are already correct.
-        update_matrix.height = descendant_active_intersect_size;
-        update_matrix.leading_dim = descendant_active_intersect_size;
+        // The width of the workspace matrix and pointer are already correct.
+        workspace_matrix.height = descendant_active_intersect_size;
+        workspace_matrix.leading_dim = descendant_active_intersect_size;
 
         SeekForMainActiveRelativeRow(
             main_supernode, descendant_supernode, descendant_active_rel_row,
@@ -1586,10 +1587,10 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
         UpdateSubdiagonalBlock(
             main_supernode, descendant_supernode, main_active_rel_row,
             descendant_main_rel_row, descendant_active_rel_row,
-            main_active_intersect_size, factorization->supernode_starts,
+            factorization->supernode_starts,
             factorization->supernode_member_to_index,
             scaled_transpose.ToConst(), descendant_active_matrix, lower_factor,
-            &main_active_block, &update_matrix);
+            &main_active_block, &workspace_matrix);
 
         ++descendant_active_intersect_size_beg;
         descendant_active_rel_row += descendant_active_intersect_size;
