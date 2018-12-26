@@ -237,12 +237,18 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
         update_matrix.height = descendant_active_intersect_size;
         update_matrix.leading_dim = descendant_active_intersect_size;
 
+        supernodal_ldl::SeekForMainActiveRelativeRow(
+            main_supernode, descendant_supernode, descendant_active_rel_row,
+            supernode_member_to_index_, *lower_factor_, &main_active_rel_row,
+            &main_active_intersect_sizes);
+        const Int main_active_intersect_size = *main_active_intersect_sizes;
+
         supernodal_ldl::UpdateSubdiagonalBlock(
-            main_supernode, descendant_supernode, descendant_main_rel_row,
-            descendant_active_rel_row, supernode_starts_,
+            main_supernode, descendant_supernode, main_active_rel_row,
+            descendant_main_rel_row, descendant_active_rel_row,
+            main_active_intersect_size, supernode_starts_,
             supernode_member_to_index_, scaled_transpose.ToConst(),
-            descendant_active_matrix, lower_factor_.get(), &main_active_rel_row,
-            &main_active_intersect_sizes, &update_matrix);
+            descendant_active_matrix, lower_factor_.get(), &update_matrix);
 
         ++descendant_active_intersect_size_beg;
         descendant_active_rel_row += descendant_active_intersect_size;

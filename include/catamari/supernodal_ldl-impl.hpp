@@ -652,11 +652,10 @@ void UpdateDiagonalBlock(SymmetricFactorizationType factorization_type,
 // the descendant column block.
 template <class Field>
 void SeekForMainActiveRelativeRow(
-    Int main_supernode, Int descendant_supernode,
-    Int descendant_active_rel_row,
+    Int main_supernode, Int descendant_supernode, Int descendant_active_rel_row,
     const std::vector<Int>& supernode_member_to_index,
-    const SupernodalLowerFactor<Field>& lower_factor,
-    Int* main_active_rel_row, const Int** main_active_intersect_sizes) {
+    const SupernodalLowerFactor<Field>& lower_factor, Int* main_active_rel_row,
+    const Int** main_active_intersect_sizes) {
   const Int* main_indices = lower_factor.Structure(main_supernode);
   const Int* descendant_indices = lower_factor.Structure(descendant_supernode);
   const Int descendant_active_supernode_start =
@@ -693,45 +692,39 @@ void SeekForMainActiveRelativeRow(
 // Z(:, m).
 template <class Field>
 void UpdateSubdiagonalBlock(
-    Int main_supernode, Int descendant_supernode, Int descendant_main_rel_row,
-    Int descendant_active_rel_row, const std::vector<Int>& supernode_starts,
+    Int main_supernode, Int descendant_supernode, Int main_active_rel_row,
+    Int descendant_main_rel_row, Int descendant_active_rel_row,
+    Int main_active_intersect_size, const std::vector<Int>& supernode_starts,
     const std::vector<Int>& supernode_member_to_index,
     const ConstBlasMatrix<Field>& scaled_transpose,
     const ConstBlasMatrix<Field>& descendant_active_matrix,
-    SupernodalLowerFactor<Field>* lower_factor, Int* main_active_rel_row,
-    const Int** main_active_intersect_sizes, BlasMatrix<Field>* update_matrix) {
+    SupernodalLowerFactor<Field>* lower_factor,
+    BlasMatrix<Field>* update_matrix) {
   const Int main_supernode_size = lower_factor->blocks[main_supernode].width;
-  const Int* main_indices = lower_factor->Structure(main_supernode);
-  const Int* descendant_indices = lower_factor->Structure(descendant_supernode);
-
   const Int descendant_main_intersect_size = scaled_transpose.width;
   const Int descendant_active_intersect_size = descendant_active_matrix.height;
-
-  SeekForMainActiveRelativeRow(
-      main_supernode, descendant_supernode, descendant_active_rel_row,
-      supernode_member_to_index, *lower_factor, main_active_rel_row,
-      main_active_intersect_sizes);
-  const Int main_active_intersect_size = **main_active_intersect_sizes;
-
   const bool inplace_update =
       main_active_intersect_size == descendant_active_intersect_size &&
       main_supernode_size == descendant_main_intersect_size;
 
   BlasMatrix<Field> main_active_block =
-      lower_factor->blocks[main_supernode].Submatrix(*main_active_rel_row, 0,
+      lower_factor->blocks[main_supernode].Submatrix(main_active_rel_row, 0,
                                                      main_active_intersect_size,
                                                      main_supernode_size);
 
   BlasMatrix<Field>* accumulation_matrix =
       inplace_update ? &main_active_block : update_matrix;
-
   MatrixMultiplyNormalNormal(Field{-1}, descendant_active_matrix,
                              scaled_transpose, Field{1}, accumulation_matrix);
 
   if (!inplace_update) {
     const Int main_supernode_start = supernode_starts[main_supernode];
 
-    const Int* main_active_indices = main_indices + *main_active_rel_row;
+    const Int* main_indices = lower_factor->Structure(main_supernode);
+    const Int* main_active_indices = main_indices + main_active_rel_row;
+
+    const Int* descendant_indices =
+        lower_factor->Structure(descendant_supernode);
     const Int* descendant_main_indices =
         descendant_indices + descendant_main_rel_row;
     const Int* descendant_active_indices =
@@ -1585,12 +1578,19 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
         update_matrix.height = descendant_active_intersect_size;
         update_matrix.leading_dim = descendant_active_intersect_size;
 
+        SeekForMainActiveRelativeRow(
+            main_supernode, descendant_supernode, descendant_active_rel_row,
+            factorization->supernode_member_to_index, lower_factor,
+            &main_active_rel_row, &main_active_intersect_sizes);
+        const Int main_active_intersect_size = *main_active_intersect_sizes;
+
         UpdateSubdiagonalBlock(
-            main_supernode, descendant_supernode, descendant_main_rel_row,
-            descendant_active_rel_row, factorization->supernode_starts,
+            main_supernode, descendant_supernode, main_active_rel_row,
+            descendant_main_rel_row, descendant_active_rel_row,
+            main_active_intersect_size, factorization->supernode_starts,
             factorization->supernode_member_to_index,
             scaled_transpose.ToConst(), descendant_active_matrix, &lower_factor,
-            &main_active_rel_row, &main_active_intersect_sizes, &update_matrix);
+            &update_matrix);
 
         ++descendant_active_intersect_size_beg;
         descendant_active_rel_row += descendant_active_intersect_size;
