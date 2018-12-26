@@ -99,5 +99,5 @@ lens model spanning 14 wavelengths is shown below:
 ![](./images/helmholtz_3d_lens_14w.png)
 
 ### License
-`quotient` is distributed under the
+`catamari` is distributed under the
 [Mozilla Public License, v. 2.0](https://www.mozilla.org/media/MPL/2.0/index.815ca599c9df.txt).
