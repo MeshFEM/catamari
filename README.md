@@ -11,9 +11,12 @@ is:
 MPL-licensed, implementation of the (Approximate) Minimum Degree reordering
 method.
 
-Building the project further requires:
+But, if you would like to make use of the project's build system, the only
+strict dependency is:
 
-* [meson](http://mesonbuild.com): A modern build system. 
+* [meson](http://mesonbuild.com): "Meson is an open source build system meant
+to be both extremely fast, and, even more importantly, as user friendly as
+possible." 
 
 Meson will automatically install [quotient](https://gitlab.com/hodge_star/quotient), [Catch2](https://github.com/catchorg/Catch2) (a header-only C++
 unit-testing library), and [specify](https://gitlab.com/hodge_star/specify)
