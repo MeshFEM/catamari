@@ -31,7 +31,9 @@ class SupernodalLowerFactor {
 
   const Int* IntersectionSizes(Int supernode) const;
 
-  void FillIntersectionSizes(const std::vector<Int>& supernode_member_to_index);
+  void FillIntersectionSizes(const std::vector<Int>& supernode_sizes,
+                             const std::vector<Int>& supernode_member_to_index,
+                             Int* max_descendant_entries);
 
  private:
   // The concatenation of the structures of the supernodes. The structure of
@@ -94,7 +96,12 @@ struct SupernodalLDLFactorization {
   std::vector<Int> supernode_member_to_index;
 
   // The largest degree of a supernode in the factorization.
-  Int largest_degree;
+  Int max_degree;
+
+  // The largest number of entries in the block row to the left of a diagonal
+  // block.
+  // NOTE: This is only needed for multithreaded factorizations.
+  Int max_descendant_entries;
 
   // If the following is nonempty, then, if the permutation is a matrix P, the
   // matrix P A P' has been factored. Typically, this permutation is the

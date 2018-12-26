@@ -75,7 +75,9 @@ const Int* SupernodalLowerFactor<Field>::IntersectionSizes(
 
 template <class Field>
 void SupernodalLowerFactor<Field>::FillIntersectionSizes(
-    const std::vector<Int>& supernode_member_to_index) {
+    const std::vector<Int>& supernode_sizes,
+    const std::vector<Int>& supernode_member_to_index,
+    Int* max_descendant_entries) {
   const Int num_supernodes = blocks.size();
 
   // Compute the supernode offsets.
@@ -99,12 +101,15 @@ void SupernodalLowerFactor<Field>::FillIntersectionSizes(
   }
   intersect_size_offsets_[num_supernodes] = num_supernode_intersects;
 
-  // Fill the supernode intersection sizes.
+  // Fill the supernode intersection sizes (and simultaneously compute the
+  // number of intersecting descendant entries for each supernode).
   intersect_sizes_.resize(num_supernode_intersects);
   num_supernode_intersects = 0;
+  std::vector<Int> num_descendant_entries(num_supernodes, 0);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     Int last_supernode = -1;
     Int intersect_size = 0;
+    const Int supernode_size = supernode_sizes[supernode];
 
     const Int* index_beg = Structure(supernode);
     const Int* index_end = Structure(supernode + 1);
@@ -115,6 +120,8 @@ void SupernodalLowerFactor<Field>::FillIntersectionSizes(
         if (last_supernode != -1) {
           // Close out the supernodal intersection.
           intersect_sizes_[num_supernode_intersects++] = intersect_size;
+          num_descendant_entries[row_supernode] +=
+              intersect_size * supernode_size;
         }
         last_supernode = row_supernode;
         intersect_size = 0;
@@ -129,6 +136,14 @@ void SupernodalLowerFactor<Field>::FillIntersectionSizes(
   CATAMARI_ASSERT(
       num_supernode_intersects == static_cast<Int>(intersect_sizes_.size()),
       "Incorrect number of supernode intersections");
+
+  // NOTE: This only needs to be computed for multithreaded factorizations,
+  // and the same applies to the num_descendant_entries array.
+  *max_descendant_entries = 0;
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    *max_descendant_entries =
+        std::max(*max_descendant_entries, num_descendant_entries[supernode]);
+  }
 }
 
 template <class Field>
@@ -302,7 +317,8 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const std::vector<Int>& parents,
                           const std::vector<Int>& supernode_sizes,
                           const std::vector<Int>& supernode_member_to_index,
-                          SupernodalLowerFactor<Field>* lower_factor) {
+                          SupernodalLowerFactor<Field>* lower_factor,
+                          Int* max_descendant_entries) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = supernode_sizes.size();
   const bool have_permutation = !permutation.empty();
@@ -412,7 +428,8 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
   }
 #endif
 
-  lower_factor->FillIntersectionSizes(supernode_member_to_index);
+  lower_factor->FillIntersectionSizes(
+      supernode_sizes, supernode_member_to_index, max_descendant_entries);
 }
 
 // Fill in the nonzeros from the original sparse matrix.
@@ -490,18 +507,18 @@ void InitializeLeftLookingFactors(
                   "Invalid supernode degrees size.");
 
   // Store the largest degree of the factorization for use in the solve phase.
-  factorization->largest_degree = 0;
+  factorization->max_degree = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int degree = supernode_degrees[supernode];
-    factorization->largest_degree =
-        std::max(factorization->largest_degree, degree);
+    factorization->max_degree = std::max(factorization->max_degree, degree);
   }
 
   FillStructureIndices(matrix, factorization->permutation,
                        factorization->inverse_permutation, parents,
                        factorization->supernode_sizes,
                        factorization->supernode_member_to_index,
-                       factorization->lower_factor.get());
+                       factorization->lower_factor.get(),
+                       &factorization->max_descendant_entries);
 
   FillNonzeros(
       matrix, factorization->permutation, factorization->inverse_permutation,
@@ -1680,8 +1697,7 @@ void LowerTriangularSolve(
   const bool is_cholesky =
       factorization.factorization_type == kCholeskyFactorization;
 
-  std::vector<Field> workspace(factorization.largest_degree * num_rhs,
-                               Field{0});
+  std::vector<Field> workspace(factorization.max_degree * num_rhs, Field{0});
 
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const ConstBlasMatrix<Field> triangular_matrix =
@@ -1787,7 +1803,7 @@ void LowerTransposeTriangularSolve(
       factorization.factorization_type;
   const bool is_selfadjoint = factorization_type != kLDLTransposeFactorization;
 
-  std::vector<Field> packed_input_buf(factorization.largest_degree * num_rhs);
+  std::vector<Field> packed_input_buf(factorization.max_degree * num_rhs);
 
   for (Int supernode = num_supernodes - 1; supernode >= 0; --supernode) {
     const Int supernode_size = factorization.supernode_sizes[supernode];

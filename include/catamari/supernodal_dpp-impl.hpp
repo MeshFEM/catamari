@@ -88,7 +88,8 @@ void SupernodalDPP<Field>::FormStructure() {
 
   supernodal_ldl::FillStructureIndices(
       matrix_, permutation_, inverse_permutation_, parents_, supernode_sizes_,
-      supernode_member_to_index_, lower_factor_.get());
+      supernode_member_to_index_, lower_factor_.get(),
+      &max_descendant_entries_);
 }
 
 template <class Field>

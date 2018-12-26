@@ -70,6 +70,11 @@ class SupernodalDPP {
   // The degrees of the supernodes.
   std::vector<Int> supernode_degrees_;
 
+  // The largest number of entries in the block row to the left of a diagonal
+  // block.
+  // NOTE: This is only needed for multithreaded sampling.
+  Int max_descendant_entries_;
+
   // The subdiagonal-block portion of the lower-triangular factor.
   mutable std::unique_ptr<SupernodalLowerFactor<Field>> lower_factor_;
 
