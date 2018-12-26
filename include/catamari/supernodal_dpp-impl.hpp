@@ -158,6 +158,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
         diagonal_factor_->blocks[main_supernode];
     BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
     const Int main_supernode_start = supernode_starts_[main_supernode];
+    const Int main_supernode_size = supernode_sizes_[main_supernode];
 
     pattern_flags[main_supernode] = main_supernode;
 
@@ -243,12 +244,17 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
             &main_active_intersect_sizes);
         const Int main_active_intersect_size = *main_active_intersect_sizes;
 
+        BlasMatrix<Field> main_active_block = main_lower_block.Submatrix(
+            main_active_rel_row, 0, main_active_intersect_size,
+            main_supernode_size);
+
         supernodal_ldl::UpdateSubdiagonalBlock(
             main_supernode, descendant_supernode, main_active_rel_row,
             descendant_main_rel_row, descendant_active_rel_row,
             main_active_intersect_size, supernode_starts_,
             supernode_member_to_index_, scaled_transpose.ToConst(),
-            descendant_active_matrix, lower_factor_.get(), &update_matrix);
+            descendant_active_matrix, *lower_factor_, &main_active_block,
+            &update_matrix);
 
         ++descendant_active_intersect_size_beg;
         descendant_active_rel_row += descendant_active_intersect_size;
