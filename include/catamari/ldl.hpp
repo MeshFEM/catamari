@@ -37,7 +37,8 @@ struct LDLFactorization {
   std::unique_ptr<ScalarLDLFactorization<Field>> scalar_factorization;
 
   // The supernodal LDL factorization data structure.
-  std::unique_ptr<SupernodalLDLFactorization<Field>> supernodal_factorization;
+  std::unique_ptr<supernodal_ldl::Factorization<Field>>
+      supernodal_factorization;
 };
 
 // Configuration options for LDL' factorization.
@@ -51,7 +52,7 @@ struct LDLControl {
   ScalarLDLControl scalar_control;
 
   // The configuration options for the supernodal LDL factorization.
-  SupernodalLDLControl supernodal_control;
+  supernodal_ldl::Control supernodal_control;
 };
 
 // Performs an LDL' factorization in the minimum-degree ordering.
@@ -85,8 +86,8 @@ void DiagonalSolve(const LDLFactorization<Field>& factorization,
 
 // Solves L' x = b using a lower triangular matrix L.
 template <class Field>
-void LowerAdjointTriangularSolve(const LDLFactorization<Field>& factorization,
-                                 BlasMatrix<Field>* matrix);
+void LowerTransposeTriangularSolve(const LDLFactorization<Field>& factorization,
+                                   BlasMatrix<Field>* matrix);
 
 // Prints the unit-diagonal lower-triangular factor of the LDL' factorization.
 template <class Field>

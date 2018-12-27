@@ -103,10 +103,11 @@ class SupernodalDPP {
   Int max_descendant_entries_;
 
   // The subdiagonal-block portion of the lower-triangular factor.
-  mutable std::unique_ptr<SupernodalLowerFactor<Field>> lower_factor_;
+  mutable std::unique_ptr<supernodal_ldl::LowerFactor<Field>> lower_factor_;
 
   // The block-diagonal factor.
-  mutable std::unique_ptr<SupernodalDiagonalFactor<Field>> diagonal_factor_;
+  mutable std::unique_ptr<supernodal_ldl::DiagonalFactor<Field>>
+      diagonal_factor_;
 
   // The controls tructure for the DPP sampler.
   const SupernodalDPPControl control_;

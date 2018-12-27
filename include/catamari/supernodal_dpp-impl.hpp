@@ -85,8 +85,10 @@ void SupernodalDPP<Field>::FormStructure() {
                   "Invalid supernode degrees size.");
 
   lower_factor_.reset(
-      new SupernodalLowerFactor<Field>(supernode_sizes_, supernode_degrees_));
-  diagonal_factor_.reset(new SupernodalDiagonalFactor<Field>(supernode_sizes_));
+      new supernodal_ldl::LowerFactor<Field>(
+          supernode_sizes_, supernode_degrees_));
+  diagonal_factor_.reset(new supernodal_ldl::DiagonalFactor<Field>(
+      supernode_sizes_));
 
   supernodal_ldl::FillStructureIndices(
       matrix_, permutation_, inverse_permutation_, parents_, supernode_sizes_,

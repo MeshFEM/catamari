@@ -43,7 +43,7 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
   factorization->is_supernodal = use_supernodal;
   if (use_supernodal) {
     factorization->supernodal_factorization.reset(
-        new SupernodalLDLFactorization<Field>);
+        new supernodal_ldl::Factorization<Field>);
     return LDL(matrix, permutation, inverse_permutation,
                control.supernodal_control,
                factorization->supernodal_factorization.get());
@@ -74,7 +74,7 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
   factorization->is_supernodal = use_supernodal;
   if (use_supernodal) {
     factorization->supernodal_factorization.reset(
-        new SupernodalLDLFactorization<Field>);
+        new supernodal_ldl::Factorization<Field>);
     return LDL(matrix, permutation, inverse_permutation,
                control.supernodal_control,
                factorization->supernodal_factorization.get());
@@ -90,7 +90,8 @@ template <class Field>
 void LDLSolve(const LDLFactorization<Field>& factorization,
               BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
-    LDLSolve(*factorization.supernodal_factorization.get(), matrix);
+    supernodal_ldl::Solve(
+        *factorization.supernodal_factorization.get(), matrix);
   } else {
     LDLSolve(*factorization.scalar_factorization.get(), matrix);
   }
@@ -100,7 +101,8 @@ template <class Field>
 void LowerTriangularSolve(const LDLFactorization<Field>& factorization,
                           BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
-    LowerTriangularSolve(*factorization.supernodal_factorization.get(), matrix);
+    supernodal_ldl::LowerTriangularSolve(
+        *factorization.supernodal_factorization.get(), matrix);
   } else {
     LowerTriangularSolve(*factorization.scalar_factorization.get(), matrix);
   }
@@ -110,21 +112,23 @@ template <class Field>
 void DiagonalSolve(const LDLFactorization<Field>& factorization,
                    BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
-    DiagonalSolve(*factorization.supernodal_factorization.get(), matrix);
+    supernodal_ldl::DiagonalSolve(
+        *factorization.supernodal_factorization.get(), matrix);
   } else {
     DiagonalSolve(*factorization.scalar_factorization.get(), matrix);
   }
 }
 
 template <class Field>
-void LowerAdjointTriangularSolve(const LDLFactorization<Field>& factorization,
-                                 BlasMatrix<Field>* matrix) {
+void LowerTransposeTriangularSolve(const LDLFactorization<Field>& factorization,
+                                   BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
-    LowerAdjointTriangularSolve(*factorization.supernodal_factorization.get(),
+    supernodal_ldl::LowerTransposeTriangularSolve(
+        *factorization.supernodal_factorization.get(),
                                 matrix);
   } else {
-    LowerAdjointTriangularSolve(*factorization.scalar_factorization.get(),
-                                matrix);
+    LowerTransposeTriangularSolve(*factorization.scalar_factorization.get(),
+                                  matrix);
   }
 }
 
@@ -132,7 +136,8 @@ template <class Field>
 void PrintLowerFactor(const LDLFactorization<Field>& factorization,
                       const std::string& label, std::ostream& os) {
   if (factorization.is_supernodal) {
-    PrintLowerFactor(*factorization.supernodal_factorization.get(), label, os);
+    supernodal_ldl::PrintLowerFactor(
+        *factorization.supernodal_factorization.get(), label, os);
   } else {
     PrintLowerFactor(*factorization.scalar_factorization.get(), label, os);
   }
@@ -142,8 +147,8 @@ template <class Field>
 void PrintDiagonalFactor(const LDLFactorization<Field>& factorization,
                          const std::string& label, std::ostream& os) {
   if (factorization.is_supernodal) {
-    PrintDiagonalFactor(*factorization.supernodal_factorization.get(), label,
-                        os);
+    supernodal_ldl::PrintDiagonalFactor(
+        *factorization.supernodal_factorization.get(), label, os);
   } else {
     PrintDiagonalFactor(*factorization.scalar_factorization.get(), label, os);
   }
