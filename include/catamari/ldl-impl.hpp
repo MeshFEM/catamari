@@ -90,8 +90,8 @@ template <class Field>
 void LDLSolve(const LDLFactorization<Field>& factorization,
               BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
-    supernodal_ldl::Solve(
-        *factorization.supernodal_factorization.get(), matrix);
+    supernodal_ldl::Solve(*factorization.supernodal_factorization.get(),
+                          matrix);
   } else {
     LDLSolve(*factorization.scalar_factorization.get(), matrix);
   }
@@ -112,8 +112,8 @@ template <class Field>
 void DiagonalSolve(const LDLFactorization<Field>& factorization,
                    BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
-    supernodal_ldl::DiagonalSolve(
-        *factorization.supernodal_factorization.get(), matrix);
+    supernodal_ldl::DiagonalSolve(*factorization.supernodal_factorization.get(),
+                                  matrix);
   } else {
     DiagonalSolve(*factorization.scalar_factorization.get(), matrix);
   }
@@ -124,8 +124,7 @@ void LowerTransposeTriangularSolve(const LDLFactorization<Field>& factorization,
                                    BlasMatrix<Field>* matrix) {
   if (factorization.is_supernodal) {
     supernodal_ldl::LowerTransposeTriangularSolve(
-        *factorization.supernodal_factorization.get(),
-                                matrix);
+        *factorization.supernodal_factorization.get(), matrix);
   } else {
     LowerTransposeTriangularSolve(*factorization.scalar_factorization.get(),
                                   matrix);

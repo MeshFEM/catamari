@@ -5,10 +5,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_LDL_LOWER_FACTOR_IMPL_H_
-#define CATAMARI_SUPERNODAL_LDL_LOWER_FACTOR_IMPL_H_
+#ifndef CATAMARI_LDL_SUPERNODAL_LDL_LOWER_FACTOR_IMPL_H_
+#define CATAMARI_LDL_SUPERNODAL_LDL_LOWER_FACTOR_IMPL_H_
 
-#include "catamari/supernodal_ldl/lower_factor.hpp"
+#include "catamari/ldl/supernodal_ldl/lower_factor.hpp"
 
 namespace catamari {
 namespace supernodal_ldl {
@@ -146,4 +146,4 @@ void LowerFactor<Field>::FillIntersectionSizes(
 }  // namespace supernodal_ldl
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_SUPERNODAL_LDL_LOWER_FACTOR_IMPL_H_
+#endif  // ifndef CATAMARI_LDL_SUPERNODAL_LDL_LOWER_FACTOR_IMPL_H_

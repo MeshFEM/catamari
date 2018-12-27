@@ -10,7 +10,7 @@
 
 #include <memory>
 
-#include "catamari/supernodal_ldl.hpp"
+#include "catamari/ldl/supernodal_ldl.hpp"
 #include "quotient/minimum_degree.hpp"
 
 namespace catamari {

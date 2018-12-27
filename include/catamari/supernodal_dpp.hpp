@@ -10,8 +10,7 @@
 
 #include <random>
 
-#include "catamari/scalar_ldl.hpp"
-#include "catamari/supernodal_ldl.hpp"
+#include "catamari/ldl.hpp"
 
 namespace catamari {
 

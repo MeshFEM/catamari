@@ -5,8 +5,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_LDL_IO_H_
-#define CATAMARI_SUPERNODAL_LDL_IO_H_
+#ifndef CATAMARI_LDL_SUPERNODAL_LDL_IO_H_
+#define CATAMARI_LDL_SUPERNODAL_LDL_IO_H_
 
 #include <ostream>
 
@@ -26,6 +26,6 @@ void PrintLowerFactor(const Factorization<Field>& factorization,
 }  // namespace supernodal_ldl
 }  // namespace catamari
 
-#include "catamari/supernodal_ldl/io-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/io-impl.hpp"
 
-#endif  // ifndef CATAMARI_SUPERNODAL_LDL_IO_H_
+#endif  // ifndef CATAMARI_LDL_SUPERNODAL_LDL_IO_H_

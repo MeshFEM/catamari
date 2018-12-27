@@ -5,8 +5,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_LDL_DIAGONAL_FACTOR_H_
-#define CATAMARI_SUPERNODAL_LDL_DIAGONAL_FACTOR_H_
+#ifndef CATAMARI_LDL_SUPERNODAL_LDL_DIAGONAL_FACTOR_H_
+#define CATAMARI_LDL_SUPERNODAL_LDL_DIAGONAL_FACTOR_H_
 
 #include <vector>
 
@@ -33,6 +33,6 @@ class DiagonalFactor {
 }  // namespace supernodal_ldl
 }  // namespace catamari
 
-#include "catamari/supernodal_ldl/diagonal_factor-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/diagonal_factor-impl.hpp"
 
-#endif  // ifndef CATAMARI_SUPERNODAL_LDL_DIAGONAL_FACTOR_H_
+#endif  // ifndef CATAMARI_LDL_SUPERNODAL_LDL_DIAGONAL_FACTOR_H_

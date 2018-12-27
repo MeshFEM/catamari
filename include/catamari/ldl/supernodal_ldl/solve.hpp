@@ -5,10 +5,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_LDL_SOLVE_H_
-#define CATAMARI_SUPERNODAL_LDL_SOLVE_H_
+#ifndef CATAMARI_LDL_SUPERNODAL_LDL_SOLVE_H_
+#define CATAMARI_LDL_SUPERNODAL_LDL_SOLVE_H_
 
-#include "catamari/supernodal_ldl/factorization.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization.hpp"
 
 namespace catamari {
 namespace supernodal_ldl {
@@ -37,6 +37,6 @@ void LowerTransposeTriangularSolve(const Factorization<Field>& factorization,
 }  // namespace supernodal_ldl
 }  // namespace catamari
 
-#include "catamari/supernodal_ldl/solve-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/solve-impl.hpp"
 
-#endif  // ifndef CATAMARI_SUPERNODAL_LDL_SOLVE_H_
+#endif  // ifndef CATAMARI_LDL_SUPERNODAL_LDL_SOLVE_H_

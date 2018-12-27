@@ -5,12 +5,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_LDL_FORM_SUPERNODES_H_
-#define CATAMARI_SUPERNODAL_LDL_FORM_SUPERNODES_H_
+#ifndef CATAMARI_LDL_SUPERNODAL_LDL_FORM_SUPERNODES_H_
+#define CATAMARI_LDL_SUPERNODAL_LDL_FORM_SUPERNODES_H_
 
-#include "catamari/scalar_ldl.hpp"
-
-#include "catamari/supernodal_ldl/factorization.hpp"
+#include "catamari/ldl/scalar_ldl.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization.hpp"
 
 namespace catamari {
 
@@ -178,6 +177,6 @@ void FormSupernodes(const CoordinateMatrix<Field>& matrix,
 }  // namespace supernodal_ldl
 }  // namespace catamari
 
-#include "catamari/supernodal_ldl/form_supernodes-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/form_supernodes-impl.hpp"
 
-#endif  // ifndef CATAMARI_SUPERNODAL_LDL_FORM_SUPERNODES_H_
+#endif  // ifndef CATAMARI_LDL_SUPERNODAL_LDL_FORM_SUPERNODES_H_

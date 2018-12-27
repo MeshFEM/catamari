@@ -5,8 +5,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SCALAR_LDL_H_
-#define CATAMARI_SCALAR_LDL_H_
+#ifndef CATAMARI_LDL_SCALAR_LDL_H_
+#define CATAMARI_LDL_SCALAR_LDL_H_
 
 #include <ostream>
 
@@ -162,6 +162,6 @@ void LowerTransposeTriangularSolve(
 
 }  // namespace catamari
 
-#include "catamari/scalar_ldl-impl.hpp"
+#include "catamari/ldl/scalar_ldl-impl.hpp"
 
-#endif  // ifndef CATAMARI_SCALAR_LDL_H_
+#endif  // ifndef CATAMARI_LDL_SCALAR_LDL_H_
