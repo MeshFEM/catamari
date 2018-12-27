@@ -5,10 +5,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_LDL_SUPERNODAL_LDL_FORM_SUPERNODES_IMPL_H_
-#define CATAMARI_LDL_SUPERNODAL_LDL_FORM_SUPERNODES_IMPL_H_
+#ifndef CATAMARI_LDL_SUPERNODAL_LDL_SUPERNODE_UTILS_IMPL_H_
+#define CATAMARI_LDL_SUPERNODAL_LDL_SUPERNODE_UTILS_IMPL_H_
 
-#include "catamari/ldl/supernodal_ldl/form_supernodes.hpp"
+#include "catamari/ldl/supernodal_ldl/supernode_utils.hpp"
 
 namespace catamari {
 namespace supernodal_ldl {
@@ -660,75 +660,7 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
   }
 }
 
-template <class Field>
-void FormSupernodes(const CoordinateMatrix<Field>& matrix,
-                    const SupernodalRelaxationControl& control,
-                    std::vector<Int>* parents,
-                    std::vector<Int>* supernode_degrees,
-                    std::vector<Int>* supernode_parents,
-                    Factorization<Field>* factorization) {
-  // Compute the non-supernodal elimination tree using the original ordering.
-  std::vector<Int> orig_parents, orig_degrees;
-  scalar_ldl::EliminationForestAndDegrees(matrix, factorization->permutation,
-                                          factorization->inverse_permutation,
-                                          &orig_parents, &orig_degrees);
-
-  // Greedily compute a supernodal partition using the original ordering.
-  std::vector<Int> orig_supernode_sizes;
-  scalar_ldl::LowerStructure scalar_structure;
-  FormFundamentalSupernodes(
-      matrix, factorization->permutation, factorization->inverse_permutation,
-      orig_parents, orig_degrees, &orig_supernode_sizes, &scalar_structure);
-
-#ifdef CATAMARI_DEBUG
-  {
-    Int supernode_size_sum = 0;
-    for (const Int& supernode_size : orig_supernode_sizes) {
-      supernode_size_sum += supernode_size;
-    }
-    CATAMARI_ASSERT(supernode_size_sum == matrix.NumRows(),
-                    "Supernodes did not sum to the matrix size.");
-  }
-#endif
-
-  std::vector<Int> orig_supernode_starts;
-  OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
-
-  std::vector<Int> orig_member_to_index;
-  MemberToIndex(matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
-
-  std::vector<Int> orig_supernode_degrees;
-  SupernodalDegrees(matrix, factorization->permutation,
-                    factorization->inverse_permutation, orig_supernode_sizes,
-                    orig_supernode_starts, orig_member_to_index, orig_parents,
-                    &orig_supernode_degrees);
-
-  const Int num_orig_supernodes = orig_supernode_sizes.size();
-  std::vector<Int> orig_supernode_parents;
-  ConvertFromScalarToSupernodalEliminationForest(
-      num_orig_supernodes, orig_parents, orig_member_to_index,
-      &orig_supernode_parents);
-
-  if (control.relax_supernodes) {
-    RelaxSupernodes(
-        orig_parents, orig_supernode_sizes, orig_supernode_starts,
-        orig_supernode_parents, orig_supernode_degrees, orig_member_to_index,
-        scalar_structure, control, &factorization->permutation,
-        &factorization->inverse_permutation, parents, supernode_parents,
-        supernode_degrees, &factorization->supernode_sizes,
-        &factorization->supernode_starts,
-        &factorization->supernode_member_to_index);
-  } else {
-    *parents = orig_parents;
-    *supernode_degrees = orig_supernode_degrees;
-    *supernode_parents = orig_supernode_parents;
-    factorization->supernode_sizes = orig_supernode_sizes;
-    factorization->supernode_starts = orig_supernode_starts;
-    factorization->supernode_member_to_index = orig_member_to_index;
-  }
-}
-
 }  // namespace supernodal_ldl
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_LDL_SUPERNODAL_LDL_FORM_SUPERNODES_IMPL_H_
+#endif  // ifndef CATAMARI_LDL_SUPERNODAL_LDL_SUPERNODE_UTILS_IMPL_H_

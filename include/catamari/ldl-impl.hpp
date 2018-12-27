@@ -15,8 +15,8 @@
 namespace catamari {
 
 template <class Field>
-LDLResult LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
-              LDLFactorization<Field>* factorization) {
+LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
+                                          const LDLControl& control) {
   std::unique_ptr<quotient::CoordinateGraph> graph = matrix.CoordinateGraph();
   const quotient::MinimumDegreeResult analysis =
       quotient::MinimumDegree(*graph, control.md_control);
@@ -40,27 +40,22 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
     use_supernodal = true;
   }
 
-  factorization->is_supernodal = use_supernodal;
+  is_supernodal = use_supernodal;
   if (use_supernodal) {
-    factorization->supernodal_factorization.reset(
-        new supernodal_ldl::Factorization<Field>);
-    return LDL(matrix, permutation, inverse_permutation,
-               control.supernodal_control,
-               factorization->supernodal_factorization.get());
+    supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
+    return supernodal_factorization->Factor(
+        matrix, permutation, inverse_permutation, control.supernodal_control);
   } else {
-    factorization->scalar_factorization.reset(
-        new scalar_ldl::Factorization<Field>);
-    return factorization->scalar_factorization->Factor(
+    scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
+    return scalar_factorization->Factor(
         matrix, permutation, inverse_permutation, control.scalar_control);
   }
 }
 
 template <class Field>
-LDLResult LDL(const CoordinateMatrix<Field>& matrix,
-              const std::vector<Int>& permutation,
-              const std::vector<Int>& inverse_permutation,
-              const LDLControl& control,
-              LDLFactorization<Field>* factorization) {
+LDLResult LDLFactorization<Field>::Factor(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation, const LDLControl& control) {
   bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {
     use_supernodal = false;
@@ -71,84 +66,73 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
     use_supernodal = true;
   }
 
-  factorization->is_supernodal = use_supernodal;
+  is_supernodal = use_supernodal;
   if (use_supernodal) {
-    factorization->supernodal_factorization.reset(
-        new supernodal_ldl::Factorization<Field>);
-    return LDL(matrix, permutation, inverse_permutation,
-               control.supernodal_control,
-               factorization->supernodal_factorization.get());
+    supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
+    return supernodal_factorization->Factor(
+        matrix, permutation, inverse_permutation, control.supernodal_control);
   } else {
-    factorization->scalar_factorization.reset(
-        new scalar_ldl::Factorization<Field>);
-    factorization->scalar_factorization->Factor(
+    scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
+    return scalar_factorization->Factor(
         matrix, permutation, inverse_permutation, control.scalar_control);
   }
 }
 
 template <class Field>
-void LDLSolve(const LDLFactorization<Field>& factorization,
-              BlasMatrix<Field>* matrix) {
-  if (factorization.is_supernodal) {
-    supernodal_ldl::Solve(*factorization.supernodal_factorization.get(),
-                          matrix);
+void LDLFactorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
+  if (is_supernodal) {
+    supernodal_factorization->Solve(matrix);
   } else {
-    factorization.scalar_factorization->Solve(matrix);
+    scalar_factorization->Solve(matrix);
   }
 }
 
 template <class Field>
-void LowerTriangularSolve(const LDLFactorization<Field>& factorization,
-                          BlasMatrix<Field>* matrix) {
-  if (factorization.is_supernodal) {
-    supernodal_ldl::LowerTriangularSolve(
-        *factorization.supernodal_factorization.get(), matrix);
+void LDLFactorization<Field>::LowerTriangularSolve(
+    BlasMatrix<Field>* matrix) const {
+  if (is_supernodal) {
+    supernodal_factorization->LowerTriangularSolve(matrix);
   } else {
-    factorization.scalar_factorization->LowerTriangularSolve(matrix);
+    scalar_factorization->LowerTriangularSolve(matrix);
   }
 }
 
 template <class Field>
-void DiagonalSolve(const LDLFactorization<Field>& factorization,
-                   BlasMatrix<Field>* matrix) {
-  if (factorization.is_supernodal) {
-    supernodal_ldl::DiagonalSolve(*factorization.supernodal_factorization.get(),
-                                  matrix);
+void LDLFactorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
+  if (is_supernodal) {
+    supernodal_factorization->DiagonalSolve(matrix);
   } else {
-    factorization.scalar_factorization->DiagonalSolve(matrix);
+    scalar_factorization->DiagonalSolve(matrix);
   }
 }
 
 template <class Field>
-void LowerTransposeTriangularSolve(const LDLFactorization<Field>& factorization,
-                                   BlasMatrix<Field>* matrix) {
-  if (factorization.is_supernodal) {
-    supernodal_ldl::LowerTransposeTriangularSolve(
-        *factorization.supernodal_factorization.get(), matrix);
+void LDLFactorization<Field>::LowerTransposeTriangularSolve(
+    BlasMatrix<Field>* matrix) const {
+  if (is_supernodal) {
+    supernodal_factorization->LowerTransposeTriangularSolve(matrix);
   } else {
-    factorization.scalar_factorization->LowerTransposeTriangularSolve(matrix);
+    scalar_factorization->LowerTransposeTriangularSolve(matrix);
   }
 }
 
 template <class Field>
-void PrintLowerFactor(const LDLFactorization<Field>& factorization,
-                      const std::string& label, std::ostream& os) {
-  if (factorization.is_supernodal) {
-    supernodal_ldl::PrintLowerFactor(
-        *factorization.supernodal_factorization.get(), label, os);
+void LDLFactorization<Field>::PrintLowerFactor(const std::string& label,
+                                               std::ostream& os) const {
+  if (is_supernodal) {
+    supernodal_factorization->PrintLowerFactor(label, os);
   } else {
-    factorization.scalar_factorization->PrintLowerFactor(label, os);
+    scalar_factorization->PrintLowerFactor(label, os);
   }
 }
 
 template <class Field>
-void PrintDiagonalFactor(const LDLFactorization<Field>& factorization,
-                         const std::string& label, std::ostream& os) {
-  if (factorization.is_supernodal) {
-    supernodal_ldl::PrintDiagonalFactor(
-        *factorization.supernodal_factorization.get(), label, os);
+void LDLFactorization<Field>::PrintDiagonalFactor(const std::string& label,
+                                                  std::ostream& os) const {
+  if (is_supernodal) {
+    supernodal_factorization->PrintDiagonalFactor(label, os);
   } else {
-    factorization.scalar_factorization->PrintDiagonalFactor(label, os);
+    scalar_factorization->PrintDiagonalFactor(label, os);
   }
 }
 

@@ -5,11 +5,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_LDL_SUPERNODAL_LDL_FORM_SUPERNODES_H_
-#define CATAMARI_LDL_SUPERNODAL_LDL_FORM_SUPERNODES_H_
+#ifndef CATAMARI_LDL_SUPERNODAL_LDL_SUPERNODE_UTILS_H_
+#define CATAMARI_LDL_SUPERNODAL_LDL_SUPERNODE_UTILS_H_
 
 #include "catamari/ldl/scalar_ldl.hpp"
-#include "catamari/ldl/supernodal_ldl/factorization.hpp"
 
 namespace catamari {
 
@@ -164,18 +163,9 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
                        const std::vector<Int>& parents,
                        std::vector<Int>* supernode_degrees);
 
-// Form the (possibly relaxed) supernodes for the factorization.
-template <class Field>
-void FormSupernodes(const CoordinateMatrix<Field>& matrix,
-                    const SupernodalRelaxationControl& control,
-                    std::vector<Int>* parents,
-                    std::vector<Int>* supernode_degrees,
-                    std::vector<Int>* supernode_parents,
-                    Factorization<Field>* factorization);
-
 }  // namespace supernodal_ldl
 }  // namespace catamari
 
-#include "catamari/ldl/supernodal_ldl/form_supernodes-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/supernode_utils-impl.hpp"
 
-#endif  // ifndef CATAMARI_LDL_SUPERNODAL_LDL_FORM_SUPERNODES_H_
+#endif  // ifndef CATAMARI_LDL_SUPERNODAL_LDL_SUPERNODE_UTILS_H_

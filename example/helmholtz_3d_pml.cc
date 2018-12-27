@@ -1103,10 +1103,10 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     std::vector<Int> permutation, inverse_permutation;
     AnalyticalOrdering(num_x_elements, num_y_elements, num_z_elements,
                        &permutation, &inverse_permutation);
-    result = catamari::LDL(matrix, permutation, inverse_permutation,
-                           ldl_control, &ldl_factorization);
+    result = ldl_factorization.Factor(
+        matrix, permutation, inverse_permutation, ldl_control);
   } else {
-    result = catamari::LDL(matrix, ldl_control, &ldl_factorization);
+    result = ldl_factorization.Factor(matrix, ldl_control);
   }
   experiment.factorization_seconds = timer.Stop();
   if (result.num_successful_pivots < num_rows) {
@@ -1125,7 +1125,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   BlasMatrix<Field> solution =
       CopyMatrix(right_hand_sides.ToConst(), &solution_buffer);
   timer.Start();
-  catamari::LDLSolve(ldl_factorization, &solution);
+  ldl_factorization.Solve(&solution);
   experiment.solve_seconds = timer.Stop();
 
   if (print_progress) {

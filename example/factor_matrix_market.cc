@@ -230,7 +230,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   factorization_timer.Start();
   catamari::LDLFactorization<Field> ldl_factorization;
   const catamari::LDLResult result =
-      catamari::LDL(*matrix, ldl_control, &ldl_factorization);
+      ldl_factorization.Factor(*matrix, ldl_control);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (result.num_successful_pivots < num_rows) {
     std::cout << "  Failed factorization after " << result.num_successful_pivots
@@ -257,7 +257,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   BlasMatrix<Field> solution = CopyMatrix(right_hand_side, &solution_buffer);
   quotient::Timer solve_timer;
   solve_timer.Start();
-  catamari::LDLSolve(ldl_factorization, &solution);
+  ldl_factorization.Solve(&solution);
   experiment.solve_seconds = solve_timer.Stop();
 
   // Compute the residual.

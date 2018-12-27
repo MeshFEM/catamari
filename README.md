@@ -53,8 +53,8 @@ matrix.FlushEntryQueues();
 // Factor the matrix.
 catamari::LDLControl ldl_control;
 catamari::LDLFactorization<double> ldl_factorization;
-const catamari::LDLResult result = catamari::LDL(
-    matrix, ldl_control, &ldl_factorization);
+const catamari::LDLResult result =
+    ldl_factorization.Factor(matrix, ldl_control);
 
 // Solve a linear system using the factorization.
 catamari::BlasMatrix<double> right_hand_sides;
@@ -64,7 +64,7 @@ right_hand_sides.leading_dim = num_rows;
 right_hand_sides.data = /* pointer to an input buffer. */;
 // The (i, j) entry of the right-hand side can easily be read or modified, e.g.:
 //   right_hand_sides(i, j) = 1.;
-catamari::LDLSolve(ldl_factorization, &right_hand_sides);
+ldl_factorization.Solve(&right_hand_sides);
 ```
 
 ### Running the unit tests
