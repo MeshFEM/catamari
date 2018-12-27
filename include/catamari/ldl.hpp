@@ -34,7 +34,7 @@ struct LDLFactorization {
   bool is_supernodal;
 
   // The scalar LDL factorization data structure.
-  std::unique_ptr<ScalarLDLFactorization<Field>> scalar_factorization;
+  std::unique_ptr<scalar_ldl::Factorization<Field>> scalar_factorization;
 
   // The supernodal LDL factorization data structure.
   std::unique_ptr<supernodal_ldl::Factorization<Field>>
@@ -49,7 +49,7 @@ struct LDLControl {
   SupernodalStrategy supernodal_strategy = kAdaptiveSupernodalStrategy;
 
   // The configuration options for the scalar LDL factorization.
-  ScalarLDLControl scalar_control;
+  scalar_ldl::Control scalar_control;
 
   // The configuration options for the supernodal LDL factorization.
   supernodal_ldl::Control supernodal_control;

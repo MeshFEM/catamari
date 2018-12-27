@@ -33,17 +33,18 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void SupernodalDPP<Field>::FormSupernodes() {
   std::vector<Int> orig_parents, orig_degrees;
-  ldl::EliminationForestAndDegrees(matrix_, permutation_, inverse_permutation_,
-                                   &orig_parents, &orig_degrees);
+  scalar_ldl::EliminationForestAndDegrees(matrix_, permutation_,
+                                          inverse_permutation_, &orig_parents,
+                                          &orig_degrees);
 
   std::vector<Int> orig_supernode_sizes;
-  ScalarLowerStructure scalar_structure;
+  scalar_ldl::LowerStructure scalar_structure;
   supernodal_ldl::FormFundamentalSupernodes(
       matrix_, permutation_, inverse_permutation_, orig_parents, orig_degrees,
       &orig_supernode_sizes, &scalar_structure);
 
   std::vector<Int> orig_supernode_starts;
-  ldl::OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
+  scalar_ldl::OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
 
   std::vector<Int> orig_member_to_index;
   supernodal_ldl::MemberToIndex(matrix_.NumRows(), orig_supernode_starts,
@@ -84,11 +85,10 @@ void SupernodalDPP<Field>::FormStructure() {
   CATAMARI_ASSERT(supernode_degrees_.size() == supernode_sizes_.size(),
                   "Invalid supernode degrees size.");
 
-  lower_factor_.reset(
-      new supernodal_ldl::LowerFactor<Field>(
-          supernode_sizes_, supernode_degrees_));
-  diagonal_factor_.reset(new supernodal_ldl::DiagonalFactor<Field>(
-      supernode_sizes_));
+  lower_factor_.reset(new supernodal_ldl::LowerFactor<Field>(
+      supernode_sizes_, supernode_degrees_));
+  diagonal_factor_.reset(
+      new supernodal_ldl::DiagonalFactor<Field>(supernode_sizes_));
 
   supernodal_ldl::FillStructureIndices(
       matrix_, permutation_, inverse_permutation_, parents_, supernode_sizes_,

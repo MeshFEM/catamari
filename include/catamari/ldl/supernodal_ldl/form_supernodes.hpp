@@ -82,7 +82,7 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                const std::vector<Int>& parents,
                                const std::vector<Int>& degrees,
                                std::vector<Int>* supernode_sizes,
-                               ScalarLowerStructure* scalar_structure);
+                               scalar_ldl::LowerStructure* scalar_structure);
 
 // Returns whether or not the child supernode can be merged into its parent by
 // counting the number of explicit zeros that would be introduced by the
@@ -114,20 +114,19 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 // same as the reason explicit zeros are not introduced into L21; supernode
 // 1 is the parent of supernode 0.
 //
-MergableStatus MergableSupernode(Int child_tail, Int parent_tail,
-                                 Int child_size, Int parent_size,
-                                 Int num_child_explicit_zeros,
-                                 Int num_parent_explicit_zeros,
-                                 const std::vector<Int>& orig_member_to_index,
-                                 const ScalarLowerStructure& scalar_structure,
-                                 const SupernodalRelaxationControl& control);
+MergableStatus MergableSupernode(
+    Int child_tail, Int parent_tail, Int child_size, Int parent_size,
+    Int num_child_explicit_zeros, Int num_parent_explicit_zeros,
+    const std::vector<Int>& orig_member_to_index,
+    const scalar_ldl::LowerStructure& scalar_structure,
+    const SupernodalRelaxationControl& control);
 
 void MergeChildren(Int parent, const std::vector<Int>& orig_supernode_starts,
                    const std::vector<Int>& orig_supernode_sizes,
                    const std::vector<Int>& orig_member_to_index,
                    const std::vector<Int>& children,
                    const std::vector<Int>& child_offsets,
-                   const ScalarLowerStructure& scalar_structure,
+                   const scalar_ldl::LowerStructure& scalar_structure,
                    const SupernodalRelaxationControl& control,
                    std::vector<Int>* supernode_sizes,
                    std::vector<Int>* num_explicit_zeros,
@@ -143,7 +142,7 @@ void RelaxSupernodes(const std::vector<Int>& orig_parents,
                      const std::vector<Int>& orig_supernode_parents,
                      const std::vector<Int>& orig_supernode_degrees,
                      const std::vector<Int>& orig_member_to_index,
-                     const ScalarLowerStructure& scalar_structure,
+                     const scalar_ldl::LowerStructure& scalar_structure,
                      const SupernodalRelaxationControl& control,
                      std::vector<Int>* relaxed_permutation,
                      std::vector<Int>* relaxed_inverse_permutation,

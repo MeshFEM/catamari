@@ -49,7 +49,7 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix, const LDLControl& control,
                factorization->supernodal_factorization.get());
   } else {
     factorization->scalar_factorization.reset(
-        new ScalarLDLFactorization<Field>);
+        new scalar_ldl::Factorization<Field>);
     return LDL(matrix, permutation, inverse_permutation, control.scalar_control,
                factorization->scalar_factorization.get());
   }
@@ -80,7 +80,7 @@ LDLResult LDL(const CoordinateMatrix<Field>& matrix,
                factorization->supernodal_factorization.get());
   } else {
     factorization->scalar_factorization.reset(
-        new ScalarLDLFactorization<Field>);
+        new scalar_ldl::Factorization<Field>);
     return LDL(matrix, permutation, inverse_permutation, control.scalar_control,
                factorization->scalar_factorization.get());
   }
@@ -93,7 +93,7 @@ void LDLSolve(const LDLFactorization<Field>& factorization,
     supernodal_ldl::Solve(*factorization.supernodal_factorization.get(),
                           matrix);
   } else {
-    LDLSolve(*factorization.scalar_factorization.get(), matrix);
+    scalar_ldl::Solve(*factorization.scalar_factorization.get(), matrix);
   }
 }
 
@@ -104,7 +104,8 @@ void LowerTriangularSolve(const LDLFactorization<Field>& factorization,
     supernodal_ldl::LowerTriangularSolve(
         *factorization.supernodal_factorization.get(), matrix);
   } else {
-    LowerTriangularSolve(*factorization.scalar_factorization.get(), matrix);
+    scalar_ldl::LowerTriangularSolve(*factorization.scalar_factorization.get(),
+                                     matrix);
   }
 }
 
@@ -115,7 +116,8 @@ void DiagonalSolve(const LDLFactorization<Field>& factorization,
     supernodal_ldl::DiagonalSolve(*factorization.supernodal_factorization.get(),
                                   matrix);
   } else {
-    DiagonalSolve(*factorization.scalar_factorization.get(), matrix);
+    scalar_ldl::DiagonalSolve(*factorization.scalar_factorization.get(),
+                              matrix);
   }
 }
 
@@ -126,8 +128,8 @@ void LowerTransposeTriangularSolve(const LDLFactorization<Field>& factorization,
     supernodal_ldl::LowerTransposeTriangularSolve(
         *factorization.supernodal_factorization.get(), matrix);
   } else {
-    LowerTransposeTriangularSolve(*factorization.scalar_factorization.get(),
-                                  matrix);
+    scalar_ldl::LowerTransposeTriangularSolve(
+        *factorization.scalar_factorization.get(), matrix);
   }
 }
 
@@ -138,7 +140,8 @@ void PrintLowerFactor(const LDLFactorization<Field>& factorization,
     supernodal_ldl::PrintLowerFactor(
         *factorization.supernodal_factorization.get(), label, os);
   } else {
-    PrintLowerFactor(*factorization.scalar_factorization.get(), label, os);
+    scalar_ldl::PrintLowerFactor(*factorization.scalar_factorization.get(),
+                                 label, os);
   }
 }
 
@@ -149,7 +152,8 @@ void PrintDiagonalFactor(const LDLFactorization<Field>& factorization,
     supernodal_ldl::PrintDiagonalFactor(
         *factorization.supernodal_factorization.get(), label, os);
   } else {
-    PrintDiagonalFactor(*factorization.scalar_factorization.get(), label, os);
+    scalar_ldl::PrintDiagonalFactor(*factorization.scalar_factorization.get(),
+                                    label, os);
   }
 }
 
