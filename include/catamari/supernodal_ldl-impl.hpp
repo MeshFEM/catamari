@@ -1487,12 +1487,11 @@ struct LeftLookingState {
 };
 
 template <class Field>
-bool LeftLookingSupernodeElimination(
+void LeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
     const std::vector<Int>& supernode_parents,
-    const SupernodalLDLControl& control,
     SupernodalLDLFactorization<Field>* factorization,
-    LeftLookingState<Field>* state, LDLResult* result) {
+    LeftLookingState<Field>* state) {
   SupernodalLowerFactor<Field>& lower_factor = *factorization->lower_factor;
   SupernodalDiagonalFactor<Field>& diagonal_factor =
       *factorization->diagonal_factor;
@@ -1502,7 +1501,6 @@ bool LeftLookingSupernodeElimination(
   BlasMatrix<Field>& main_diagonal_block =
       diagonal_factor.blocks[main_supernode];
   BlasMatrix<Field>& main_lower_block = lower_factor.blocks[main_supernode];
-  const Int main_degree = main_lower_block.height;
   const Int main_supernode_size = main_lower_block.width;
 
   state->pattern_flags[main_supernode] = main_supernode;
@@ -1606,6 +1604,23 @@ bool LeftLookingSupernodeElimination(
       descendant_active_rel_row += descendant_active_intersect_size;
     }
   }
+}
+
+template <class Field>
+bool LeftLookingSupernodeFinalize(
+    Int main_supernode, SupernodalLDLFactorization<Field>* factorization,
+    LDLResult* result) {
+  SupernodalLowerFactor<Field>& lower_factor = *factorization->lower_factor;
+  SupernodalDiagonalFactor<Field>& diagonal_factor =
+      *factorization->diagonal_factor;
+  const SymmetricFactorizationType factorization_type =
+      factorization->factorization_type;
+
+  BlasMatrix<Field>& main_diagonal_block =
+      diagonal_factor.blocks[main_supernode];
+  BlasMatrix<Field>& main_lower_block = lower_factor.blocks[main_supernode];
+  const Int main_degree = main_lower_block.height;
+  const Int main_supernode_size = main_lower_block.width;
 
   const Int num_supernode_pivots =
       FactorDiagonalBlock(factorization_type, &main_diagonal_block);
@@ -1668,9 +1683,10 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
 
   // Note that any postordering of the supernodal elimination forest suffices.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const bool succeeded = LeftLookingSupernodeElimination(
-        supernode, matrix, supernode_parents, control, factorization, &state,
-        &result);
+    LeftLookingSupernodeUpdate(supernode, matrix, supernode_parents,
+                               factorization, &state);
+    const bool succeeded =
+        LeftLookingSupernodeFinalize(supernode, factorization, &result);
     if (!succeeded) {
       return result;
     }

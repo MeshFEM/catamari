@@ -103,16 +103,14 @@ std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
 }
 
 template <class Field>
-void SupernodalDPP<Field>::LeftLookingSupernodeSample(
-    Int main_supernode, bool maximum_likelihood, LeftLookingSampleState* state,
-    std::vector<Int>* sample) const {
+void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
+    Int main_supernode, LeftLookingSampleState* state) const {
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
 
   BlasMatrix<Field>& main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
   BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
-  const Int main_supernode_start = supernode_starts_[main_supernode];
   const Int main_supernode_size = supernode_sizes_[main_supernode];
 
   state->pattern_flags[main_supernode] = main_supernode;
@@ -214,18 +212,29 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
       descendant_active_rel_row += descendant_active_intersect_size;
     }
   }
+}
+
+template <class Field>
+void SupernodalDPP<Field>::LeftLookingSupernodeSample(
+    Int main_supernode, bool maximum_likelihood,
+    std::vector<Int>* sample) const {
+  const SymmetricFactorizationType factorization_type =
+      kLDLAdjointFactorization;
+
+  BlasMatrix<Field>& main_diagonal_block =
+      diagonal_factor_->blocks[main_supernode];
+  BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
 
   // Sample and factor the diagonal block.
-  {
-    const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
-        maximum_likelihood, &main_diagonal_block, &generator_, &unit_uniform_);
-    for (const Int& index : supernode_sample) {
-      const Int orig_row = main_supernode_start + index;
-      if (inverse_permutation_.empty()) {
-        sample->push_back(orig_row);
-      } else {
-        sample->push_back(inverse_permutation_[orig_row]);
-      }
+  const Int main_supernode_start = supernode_starts_[main_supernode];
+  const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
+      maximum_likelihood, &main_diagonal_block, &generator_, &unit_uniform_);
+  for (const Int& index : supernode_sample) {
+    const Int orig_row = main_supernode_start + index;
+    if (inverse_permutation_.empty()) {
+      sample->push_back(orig_row);
+    } else {
+      sample->push_back(inverse_permutation_[orig_row]);
     }
   }
 
@@ -274,7 +283,8 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
 
   // Note that any postordering of the supernodal elimination forest suffices.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    LeftLookingSupernodeSample(supernode, maximum_likelihood, &state, &sample);
+    LeftLookingSupernodeUpdate(supernode, &state);
+    LeftLookingSupernodeSample(supernode, maximum_likelihood, &sample);
   }
 
   std::sort(sample.begin(), sample.end());

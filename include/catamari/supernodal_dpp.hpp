@@ -124,9 +124,12 @@ class SupernodalDPP {
   // Return a sample from the DPP.
   std::vector<Int> LeftLookingSample(bool maximum_likelihood) const;
 
+  // Updates a supernode using its descendants.
+  void LeftLookingSupernodeUpdate(Int main_supernode,
+                                  LeftLookingSampleState* state) const;
+
   // Appends a supernode's contribution to the current sample.
   void LeftLookingSupernodeSample(Int main_supernode, bool maximum_likelihood,
-                                  LeftLookingSampleState* state,
                                   std::vector<Int>* sample) const;
 };
 
