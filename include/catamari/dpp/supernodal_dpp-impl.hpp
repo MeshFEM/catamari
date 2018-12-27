@@ -44,7 +44,7 @@ void SupernodalDPP<Field>::FormSupernodes() {
       &orig_supernode_sizes, &scalar_structure);
 
   std::vector<Int> orig_supernode_starts;
-  scalar_ldl::OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
+  OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
 
   std::vector<Int> orig_member_to_index;
   supernodal_ldl::MemberToIndex(matrix_.NumRows(), orig_supernode_starts,

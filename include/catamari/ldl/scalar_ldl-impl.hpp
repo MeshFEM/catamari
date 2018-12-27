@@ -15,6 +15,21 @@
 
 namespace catamari {
 
+// Fills 'offsets' with a length 'num_indices + 1' array whose i'th index is
+// the sum of the sizes whose indices are less than i.
+inline void OffsetScan(const std::vector<Int>& sizes,
+                       std::vector<Int>* offsets) {
+  const Int num_indices = sizes.size();
+  offsets->resize(num_indices + 1);
+
+  Int offset = 0;
+  for (Int index = 0; index < num_indices; ++index) {
+    (*offsets)[index] = offset;
+    offset += sizes[index];
+  }
+  (*offsets)[num_indices] = offset;
+}
+
 template <class Field>
 void Permute(const std::vector<Int>& permutation, BlasMatrix<Field>* matrix) {
   for (Int j = 0; j < matrix->width; ++j) {
@@ -33,69 +48,6 @@ void Permute(const std::vector<Int>& permutation, BlasMatrix<Field>* matrix) {
 
 namespace scalar_ldl {
 
-template <class Field>
-void PrintLowerFactor(const Factorization<Field>& factorization,
-                      const std::string& label, std::ostream& os) {
-  const LowerFactor<Field>& lower_factor = factorization.lower_factor;
-  const LowerStructure& lower_structure = lower_factor.structure;
-  const DiagonalFactor<Field>& diagonal_factor = factorization.diagonal_factor;
-  const SymmetricFactorizationType factorization_type =
-      factorization.factorization_type;
-
-  auto print_entry = [&](const Int& row, const Int& column,
-                         const Field& value) {
-    os << row << " " << column << " " << value << "\n";
-  };
-
-  os << label << ":\n";
-  const Int num_columns = lower_structure.column_offsets.size() - 1;
-  for (Int column = 0; column < num_columns; ++column) {
-    if (factorization_type == kCholeskyFactorization) {
-      print_entry(column, column, diagonal_factor.values[column]);
-    } else {
-      print_entry(column, column, Field{1});
-    }
-
-    const Int column_beg = lower_structure.column_offsets[column];
-    const Int column_end = lower_structure.column_offsets[column + 1];
-    for (Int index = column_beg; index < column_end; ++index) {
-      const Int row = lower_structure.indices[index];
-      const Field& value = lower_factor.values[index];
-      print_entry(row, column, value);
-    }
-  }
-  os << std::endl;
-}
-
-template <class Field>
-void PrintDiagonalFactor(const Factorization<Field>& factorization,
-                         const std::string& label, std::ostream& os) {
-  if (factorization.factorization_type == kCholeskyFactorization) {
-    // TODO(Jack Poulson): Print the identity.
-    return;
-  }
-  quotient::PrintVector(factorization.diagonal_factor.values, label, os);
-}
-
-// Fills 'offsets' with a length 'num_indices + 1' array whose i'th index is
-// the sum of the sizes whose indices are less than i.
-inline void OffsetScan(const std::vector<Int>& sizes,
-                       std::vector<Int>* offsets) {
-  const Int num_indices = sizes.size();
-  offsets->resize(num_indices + 1);
-
-  Int offset = 0;
-  for (Int index = 0; index < num_indices; ++index) {
-    (*offsets)[index] = offset;
-    offset += sizes[index];
-  }
-  (*offsets)[num_indices] = offset;
-}
-
-// Computes the elimination forest (via the 'parents' array) and sizes of the
-// structures of a scalar (simplicial) LDL' factorization.
-//
-// Cf. Tim Davis's "LDL"'s symbolic factorization.
 template <class Field>
 void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
                                  const std::vector<Int>& permutation,
@@ -161,7 +113,95 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
   }
 }
 
-// Fills in the structure indices for the lower factor.
+template <class Field>
+Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
+                      const std::vector<Int>& permutation,
+                      const std::vector<Int>& inverse_permutation,
+                      const std::vector<Int>& parents, Int row,
+                      Int* pattern_flags, Int* row_structure) {
+  const bool have_permutation = !permutation.empty();
+
+  const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+  const Int row_beg = matrix.RowEntryOffset(orig_row);
+  const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  Int num_packed = 0;
+  for (Int index = row_beg; index < row_end; ++index) {
+    const MatrixEntry<Field>& entry = entries[index];
+    Int column = have_permutation ? permutation[entry.column] : entry.column;
+
+    if (column >= row) {
+      if (have_permutation) {
+        continue;
+      } else {
+        break;
+      }
+    }
+
+    // Walk up to the root of the current subtree of the elimination
+    // forest, stopping if we encounter a member already marked as in the
+    // row pattern.
+    while (pattern_flags[column] != row) {
+      // Place 'column' into the pattern of row 'row'.
+      row_structure[num_packed++] = column;
+      pattern_flags[column] = row;
+
+      // Move up to the parent in this subtree of the elimination forest.
+      column = parents[column];
+    }
+  }
+  return num_packed;
+}
+
+template <class Field>
+Int ComputeTopologicalRowPatternAndScatterNonzeros(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation,
+    const std::vector<Int>& parents, Int row, Int* pattern_flags,
+    Int* row_structure, Field* row_workspace) {
+  const bool have_permutation = !permutation.empty();
+  Int start = matrix.NumRows();
+
+  const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+  const Int row_beg = matrix.RowEntryOffset(orig_row);
+  const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int index = row_beg; index < row_end; ++index) {
+    const MatrixEntry<Field>& entry = entries[index];
+    Int column = have_permutation ? permutation[entry.column] : entry.column;
+
+    if (column > row) {
+      if (have_permutation) {
+        continue;
+      } else {
+        break;
+      }
+    }
+
+    // Scatter matrix(row, column) into row_workspace.
+    row_workspace[column] = entry.value;
+
+    // Walk up to the root of the current subtree of the elimination
+    // forest, stopping if we encounter a member already marked as in the
+    // row pattern.
+    Int num_packed = 0;
+    while (pattern_flags[column] != row) {
+      // Place 'column' into the pattern of row 'row'.
+      row_structure[num_packed++] = column;
+      pattern_flags[column] = row;
+
+      // Move up to the parent in this subtree of the elimination forest.
+      column = parents[column];
+    }
+
+    // Pack this ancestral sequence into the back of the pattern.
+    while (num_packed > 0) {
+      row_structure[--start] = row_structure[--num_packed];
+    }
+  }
+  return start;
+}
+
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const std::vector<Int>& permutation,
@@ -223,16 +263,49 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
   }
 }
 
-// Fill the factorization with the nonzeros from the input matrix.
 template <class Field>
-void FillNonzeros(const CoordinateMatrix<Field>& matrix,
-                  Factorization<Field>* factorization) {
-  LowerFactor<Field>& lower_factor = factorization->lower_factor;
+void Factorization<Field>::PrintLowerFactor(const std::string& label,
+                                            std::ostream& os) const {
+  const LowerStructure& lower_structure = lower_factor.structure;
+
+  auto print_entry = [&](const Int& row, const Int& column,
+                         const Field& value) {
+    os << row << " " << column << " " << value << "\n";
+  };
+
+  os << label << ":\n";
+  const Int num_columns = lower_structure.column_offsets.size() - 1;
+  for (Int column = 0; column < num_columns; ++column) {
+    if (factorization_type == kCholeskyFactorization) {
+      print_entry(column, column, diagonal_factor.values[column]);
+    } else {
+      print_entry(column, column, Field{1});
+    }
+
+    const Int column_beg = lower_structure.column_offsets[column];
+    const Int column_end = lower_structure.column_offsets[column + 1];
+    for (Int index = column_beg; index < column_end; ++index) {
+      const Int row = lower_structure.indices[index];
+      const Field& value = lower_factor.values[index];
+      print_entry(row, column, value);
+    }
+  }
+  os << std::endl;
+}
+
+template <class Field>
+void Factorization<Field>::PrintDiagonalFactor(const std::string& label,
+                                               std::ostream& os) const {
+  if (factorization_type == kCholeskyFactorization) {
+    // TODO(Jack Poulson): Print the identity.
+    return;
+  }
+  quotient::PrintVector(diagonal_factor.values, label, os);
+}
+
+template <class Field>
+void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
   LowerStructure& lower_structure = lower_factor.structure;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
-  const std::vector<Int>& permutation = factorization->permutation;
-  const std::vector<Int>& inverse_permutation =
-      factorization->inverse_permutation;
   const Int num_rows = matrix.NumRows();
   const Int num_entries = lower_structure.indices.size();
   const bool have_permutation = !permutation.empty();
@@ -275,33 +348,25 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
   }
 }
 
-// Fills in the structures of each column of the lower-triangular Cholesky
-// factor.
 template <class Field>
-void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
-                                  const std::vector<Int>& parents,
-                                  const std::vector<Int>& degrees,
-                                  Factorization<Field>* factorization) {
-  FillStructureIndices(matrix, factorization->permutation,
-                       factorization->inverse_permutation, parents, degrees,
-                       &factorization->lower_factor.structure);
-  FillNonzeros(matrix, factorization);
+void Factorization<Field>::LeftLookingSetup(
+    const CoordinateMatrix<Field>& matrix, std::vector<Int>* parents) {
+  std::vector<Int> degrees;
+  EliminationForestAndDegrees(matrix, permutation, inverse_permutation, parents,
+                              &degrees);
+
+  FillStructureIndices(matrix, permutation, inverse_permutation, *parents,
+                       degrees, &lower_factor.structure);
+  FillNonzeros(matrix);
 }
 
-// Sets up the data structures needed for a scalar up-looking LDL'
-// factorization: the elimination forest and structure sizes are computed,
-// and the memory for the factors is allocated.
 template <class Field>
-void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
-                    std::vector<Int>* parents,
-                    Factorization<Field>* factorization) {
-  LowerFactor<Field>& lower_factor = factorization->lower_factor;
+void Factorization<Field>::UpLookingSetup(const CoordinateMatrix<Field>& matrix,
+                                          std::vector<Int>* parents) {
   LowerStructure& lower_structure = lower_factor.structure;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
 
   std::vector<Int> degrees;
-  EliminationForestAndDegrees(matrix, factorization->permutation,
-                              factorization->inverse_permutation, parents,
+  EliminationForestAndDegrees(matrix, permutation, inverse_permutation, parents,
                               &degrees);
 
   const Int num_rows = matrix.NumRows();
@@ -315,124 +380,12 @@ void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
-                      std::vector<Int>* parents,
-                      Factorization<Field>* factorization) {
-  std::vector<Int> degrees;
-  EliminationForestAndDegrees(matrix, factorization->permutation,
-                              factorization->inverse_permutation, parents,
-                              &degrees);
-  InitializeLeftLookingFactors(matrix, *parents, degrees, factorization);
-}
-
-// Computes the nonzero pattern of L(row, :) in
-// row_structure[0 : num_packed - 1].
-template <class Field>
-Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
-                      const std::vector<Int>& permutation,
-                      const std::vector<Int>& inverse_permutation,
-                      const std::vector<Int>& parents, Int row,
-                      Int* pattern_flags, Int* row_structure) {
-  const bool have_permutation = !permutation.empty();
-
-  const Int orig_row = have_permutation ? inverse_permutation[row] : row;
-  const Int row_beg = matrix.RowEntryOffset(orig_row);
-  const Int row_end = matrix.RowEntryOffset(orig_row + 1);
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
-  Int num_packed = 0;
-  for (Int index = row_beg; index < row_end; ++index) {
-    const MatrixEntry<Field>& entry = entries[index];
-    Int column = have_permutation ? permutation[entry.column] : entry.column;
-
-    if (column >= row) {
-      if (have_permutation) {
-        continue;
-      } else {
-        break;
-      }
-    }
-
-    // Walk up to the root of the current subtree of the elimination
-    // forest, stopping if we encounter a member already marked as in the
-    // row pattern.
-    while (pattern_flags[column] != row) {
-      // Place 'column' into the pattern of row 'row'.
-      row_structure[num_packed++] = column;
-      pattern_flags[column] = row;
-
-      // Move up to the parent in this subtree of the elimination forest.
-      column = parents[column];
-    }
-  }
-  return num_packed;
-}
-
-// Computes the nonzero pattern of L(row, :) in a topological ordering in
-// row_structure[start : num_rows - 1] and spread A(row, 0 : row - 1) into
-// row_workspace.
-template <class Field>
-Int ComputeTopologicalRowPatternAndScatterNonzeros(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation,
-    const std::vector<Int>& parents, Int row, Int* pattern_flags,
-    Int* row_structure, Field* row_workspace) {
-  const bool have_permutation = !permutation.empty();
-  Int start = matrix.NumRows();
-
-  const Int orig_row = have_permutation ? inverse_permutation[row] : row;
-  const Int row_beg = matrix.RowEntryOffset(orig_row);
-  const Int row_end = matrix.RowEntryOffset(orig_row + 1);
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
-  for (Int index = row_beg; index < row_end; ++index) {
-    const MatrixEntry<Field>& entry = entries[index];
-    Int column = have_permutation ? permutation[entry.column] : entry.column;
-
-    if (column > row) {
-      if (have_permutation) {
-        continue;
-      } else {
-        break;
-      }
-    }
-
-    // Scatter matrix(row, column) into row_workspace.
-    row_workspace[column] = entry.value;
-
-    // Walk up to the root of the current subtree of the elimination
-    // forest, stopping if we encounter a member already marked as in the
-    // row pattern.
-    Int num_packed = 0;
-    while (pattern_flags[column] != row) {
-      // Place 'column' into the pattern of row 'row'.
-      row_structure[num_packed++] = column;
-      pattern_flags[column] = row;
-
-      // Move up to the parent in this subtree of the elimination forest.
-      column = parents[column];
-    }
-
-    // Pack this ancestral sequence into the back of the pattern.
-    while (num_packed > 0) {
-      row_structure[--start] = row_structure[--num_packed];
-    }
-  }
-  return start;
-}
-
-// For each index 'i' in the structure of column 'column' of L formed so far:
-//   L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
-// L(row, row) is similarly updated, within d, then L(row, column) is finalized.
-template <class Field>
-void UpLookingRowUpdate(Int row, Int column,
-                        Factorization<Field>* factorization,
-                        Int* column_update_ptrs, Field* row_workspace) {
-  LowerFactor<Field>& lower_factor = factorization->lower_factor;
+void Factorization<Field>::UpLookingRowUpdate(Int row, Int column,
+                                              Int* column_update_ptrs,
+                                              Field* row_workspace) {
   LowerStructure& lower_structure = lower_factor.structure;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
-  const bool is_cholesky =
-      factorization->factorization_type == kCholeskyFactorization;
-  const bool is_selfadjoint =
-      factorization->factorization_type != kLDLTransposeFactorization;
+  const bool is_cholesky = factorization_type == kCholeskyFactorization;
+  const bool is_selfadjoint = factorization_type != kLDLTransposeFactorization;
   const Field pivot = is_selfadjoint ? RealPart(diagonal_factor.values[column])
                                      : diagonal_factor.values[column];
 
@@ -480,27 +433,15 @@ void UpLookingRowUpdate(Int row, Int column,
   lower_factor.values[factor_column_end] = lambda;
 }
 
-// Performs a non-supernodal left-looking LDL' factorization.
-// Cf. Section 4.8 of Tim Davis, "Direct Methods for Sparse Linear Systems".
-//
-// The basic high-level algorithm is of the form:
-//   for k = 1:n
-//     L(k, k) = sqrt(A(k, k) - L(k, 1:k-1) * L(k, 1:k-1)');
-//     L(k+1:n, k) = (A(k+1:n, k) - L(k+1:n, 1:k-1) * L(k, 1:k-1)') / L(k, k);
-//   end
+// TODO(Jack Poulson): Factor out the LeftLookingState.
 template <class Field>
-LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
-                      Factorization<Field>* factorization) {
+LDLResult Factorization<Field>::LeftLooking(
+    const CoordinateMatrix<Field>& matrix) {
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
-  const SymmetricFactorizationType factorization_type =
-      factorization->factorization_type;
 
   std::vector<Int> parents;
-  LeftLookingSetup(matrix, &parents, factorization);
-
-  LowerFactor<Field>& lower_factor = factorization->lower_factor;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
+  LeftLookingSetup(matrix, &parents);
   const LowerStructure& lower_structure = lower_factor.structure;
 
   // A data structure for marking whether or not an index is in the pattern
@@ -521,9 +462,9 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
     column_update_ptrs[column] = lower_structure.column_offsets[column];
 
     // Compute the row pattern.
-    const Int num_packed = ComputeRowPattern(
-        matrix, factorization->permutation, factorization->inverse_permutation,
-        parents, column, pattern_flags.data(), row_structure.data());
+    const Int num_packed =
+        ComputeRowPattern(matrix, permutation, inverse_permutation, parents,
+                          column, pattern_flags.data(), row_structure.data());
 
     // for j = find(L(column, :))
     //   L(column:n, column) -= L(column:n, j) * (d(j) * conj(L(column, j)))
@@ -621,20 +562,16 @@ LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
   return result;
 }
 
-// Performs a non-supernodal up-looking LDL' factorization.
-// Cf. Section 4.7 of Tim Davis, "Direct Methods for Sparse Linear Systems".
+// TODO(Jack Poulson): Factor out the UpLookingState.
 template <class Field>
-LDLResult UpLooking(const CoordinateMatrix<Field>& matrix,
-                    Factorization<Field>* factorization) {
+LDLResult Factorization<Field>::UpLooking(
+    const CoordinateMatrix<Field>& matrix) {
   typedef ComplexBase<Field> Real;
-  DiagonalFactor<Field>& diagonal_factor = factorization->diagonal_factor;
   const Int num_rows = matrix.NumRows();
-  const SymmetricFactorizationType factorization_type =
-      factorization->factorization_type;
 
   std::vector<Int> parents;
-  UpLookingSetup(matrix, &parents, factorization);
-  const LowerStructure& lower_structure = factorization->lower_factor.structure;
+  UpLookingSetup(matrix, &parents);
+  const LowerStructure& lower_structure = lower_factor.structure;
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -659,9 +596,8 @@ LDLResult UpLooking(const CoordinateMatrix<Field>& matrix,
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
     const Int start = ComputeTopologicalRowPatternAndScatterNonzeros(
-        matrix, factorization->permutation, factorization->inverse_permutation,
-        parents, row, pattern_flags.data(), row_structure.data(),
-        row_workspace.data());
+        matrix, permutation, inverse_permutation, parents, row,
+        pattern_flags.data(), row_structure.data(), row_workspace.data());
 
     // Pull the diagonal entry out of the workspace.
     diagonal_factor.values[row] = row_workspace[row];
@@ -671,7 +607,7 @@ LDLResult UpLooking(const CoordinateMatrix<Field>& matrix,
     //   L(row, :) := matrix(row, :) / L(0 : row - 1, 0 : row - 1)'.
     for (Int index = start; index < num_rows; ++index) {
       const Int column = row_structure[index];
-      UpLookingRowUpdate(row, column, factorization, column_update_ptrs.data(),
+      UpLookingRowUpdate(row, column, column_update_ptrs.data(),
                          row_workspace.data());
     }
 
@@ -705,35 +641,31 @@ LDLResult UpLooking(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-void Solve(const Factorization<Field>& factorization,
-           BlasMatrix<Field>* matrix) {
-  const bool have_permutation = !factorization.permutation.empty();
+void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
+  const bool have_permutation = !permutation.empty();
 
   // Reorder the input into the relaxation permutation of the factorization.
   if (have_permutation) {
-    Permute(factorization.permutation, matrix);
+    Permute(permutation, matrix);
   }
 
-  LowerTriangularSolve(factorization, matrix);
-  DiagonalSolve(factorization, matrix);
-  LowerTransposeTriangularSolve(factorization, matrix);
+  LowerTriangularSolve(matrix);
+  DiagonalSolve(matrix);
+  LowerTransposeTriangularSolve(matrix);
 
   // Reverse the factorization relxation permutation.
   if (have_permutation) {
-    Permute(factorization.inverse_permutation, matrix);
+    Permute(inverse_permutation, matrix);
   }
 }
 
 template <class Field>
-void LowerTriangularSolve(const Factorization<Field>& factorization,
-                          BlasMatrix<Field>* matrix) {
+void Factorization<Field>::LowerTriangularSolve(
+    BlasMatrix<Field>* matrix) const {
   const Int num_rhs = matrix->width;
-  const LowerFactor<Field>& lower_factor = factorization.lower_factor;
   const LowerStructure& lower_structure = lower_factor.structure;
-  const DiagonalFactor<Field>& diagonal_factor = factorization.diagonal_factor;
   const Int num_rows = lower_structure.column_offsets.size() - 1;
-  const bool is_cholesky =
-      factorization.factorization_type == kCholeskyFactorization;
+  const bool is_cholesky = factorization_type == kCholeskyFactorization;
 
   CATAMARI_ASSERT(matrix->height == num_rows,
                   "matrix was an incorrect height.");
@@ -760,14 +692,12 @@ void LowerTriangularSolve(const Factorization<Field>& factorization,
 }
 
 template <class Field>
-void DiagonalSolve(const Factorization<Field>& factorization,
-                   BlasMatrix<Field>* matrix) {
-  if (factorization.factorization_type == kCholeskyFactorization) {
+void Factorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
+  if (factorization_type == kCholeskyFactorization) {
     return;
   }
 
   const Int num_rhs = matrix->width;
-  const DiagonalFactor<Field>& diagonal_factor = factorization.diagonal_factor;
   const Int num_rows = diagonal_factor.values.size();
 
   CATAMARI_ASSERT(matrix->height == num_rows,
@@ -781,17 +711,13 @@ void DiagonalSolve(const Factorization<Field>& factorization,
 }
 
 template <class Field>
-void LowerTransposeTriangularSolve(const Factorization<Field>& factorization,
-                                   BlasMatrix<Field>* matrix) {
+void Factorization<Field>::LowerTransposeTriangularSolve(
+    BlasMatrix<Field>* matrix) const {
   const Int num_rhs = matrix->width;
-  const LowerFactor<Field>& lower_factor = factorization.lower_factor;
   const LowerStructure& lower_structure = lower_factor.structure;
-  const DiagonalFactor<Field>& diagonal_factor = factorization.diagonal_factor;
   const Int num_rows = lower_structure.column_offsets.size() - 1;
-  const bool is_cholesky =
-      factorization.factorization_type == kCholeskyFactorization;
-  const bool is_selfadjoint =
-      factorization.factorization_type != kLDLTransposeFactorization;
+  const bool is_cholesky = factorization_type == kCholeskyFactorization;
+  const bool is_selfadjoint = factorization_type != kLDLTransposeFactorization;
 
   CATAMARI_ASSERT(matrix->height == num_rows,
                   "matrix was an incorrect height.");
@@ -821,33 +747,31 @@ void LowerTransposeTriangularSolve(const Factorization<Field>& factorization,
   }
 }
 
-}  // namespace scalar_ldl
-
 template <class Field>
-LDLResult LDL(const CoordinateMatrix<Field>& matrix,
-              const std::vector<Int>& permutation,
-              const std::vector<Int>& inverse_permutation,
-              const scalar_ldl::Control& control,
-              scalar_ldl::Factorization<Field>* factorization) {
-  factorization->permutation = permutation;
-  factorization->inverse_permutation = inverse_permutation;
-  factorization->factorization_type = control.factorization_type;
-
+LDLResult Factorization<Field>::Factor(
+    const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& manual_permutation,
+    const std::vector<Int>& inverse_manual_permutation,
+    const Control& control) {
+  permutation = manual_permutation;
+  inverse_permutation = inverse_manual_permutation;
+  factorization_type = control.factorization_type;
   if (control.algorithm == kLeftLookingLDL) {
-    return scalar_ldl::LeftLooking(matrix, factorization);
+    return LeftLooking(matrix);
   } else {
-    return scalar_ldl::UpLooking(matrix, factorization);
+    return UpLooking(matrix);
   }
 }
 
 template <class Field>
-LDLResult LDL(const CoordinateMatrix<Field>& matrix,
-              const scalar_ldl::Control& control,
-              scalar_ldl::Factorization<Field>* factorization) {
-  std::vector<Int> permutation, inverse_permutation;
-  return LDL(matrix, permutation, inverse_permutation, control, factorization);
+LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
+                                       const Control& control) {
+  std::vector<Int> manual_permutation, inverse_manual_permutation;
+  return Factor(matrix, manual_permutation, inverse_manual_permutation,
+                control);
 }
 
+}  // namespace scalar_ldl
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_LDL_SCALAR_LDL_IMPL_H_

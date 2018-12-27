@@ -45,7 +45,7 @@ inline void EliminationForestFromParents(const std::vector<Int>& parents,
     }
   }
 
-  scalar_ldl::OffsetScan(num_children, child_offsets);
+  OffsetScan(num_children, child_offsets);
 
   children->resize(num_indices);
   auto offsets_copy = *child_offsets;
@@ -89,7 +89,7 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
       matrix, permutation, inverse_permutation, &parents, &degrees);
 
   std::vector<Int> supernode_starts, member_to_index;
-  scalar_ldl::OffsetScan(supernode_sizes, &supernode_starts);
+  OffsetScan(supernode_sizes, &supernode_starts);
   MemberToIndex(num_rows, supernode_starts, &member_to_index);
 
   std::vector<Int> row_structure(num_rows);
@@ -692,7 +692,7 @@ void FormSupernodes(const CoordinateMatrix<Field>& matrix,
 #endif
 
   std::vector<Int> orig_supernode_starts;
-  scalar_ldl::OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
+  OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
 
   std::vector<Int> orig_member_to_index;
   MemberToIndex(matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
