@@ -135,6 +135,6 @@ class SupernodalDPP {
 
 }  // namespace catamari
 
-#include "catamari/supernodal_dpp-impl.hpp"
+#include "catamari/dpp/supernodal_dpp-impl.hpp"
 
 #endif  // ifndef CATAMARI_SUPERNODAL_DPP_H_

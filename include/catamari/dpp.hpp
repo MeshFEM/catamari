@@ -10,7 +10,7 @@
 
 #include <random>
 
-#include "catamari/supernodal_dpp.hpp"
+#include "catamari/dpp/supernodal_dpp.hpp"
 #include "quotient/minimum_degree.hpp"
 
 namespace catamari {

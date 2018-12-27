@@ -10,7 +10,7 @@
 
 #include <algorithm>
 
-#include "catamari/supernodal_dpp.hpp"
+#include "catamari/dpp/supernodal_dpp.hpp"
 
 namespace catamari {
 
