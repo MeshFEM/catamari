@@ -95,6 +95,9 @@ struct SupernodalLDLFactorization {
   // supernode containing column 'i'.
   std::vector<Int> supernode_member_to_index;
 
+  // The largest supernode size in the factorization.
+  Int max_supernode_size;
+
   // The largest degree of a supernode in the factorization.
   Int max_degree;
 

@@ -36,6 +36,30 @@ class SupernodalDPP {
  private:
   typedef ComplexBase<Field> Real;
 
+  struct LeftLookingSampleState {
+    // An integer workspace for storing the supernodes in the current row
+    // pattern.
+    std::vector<Int> row_structure;
+
+    // A data structure for marking whether or not a supernode is in the pattern
+    // of the active row of the lower-triangular factor.
+    std::vector<Int> pattern_flags;
+
+    // The relative index of the active supernode within each supernode's
+    // structure.
+    std::vector<Int> rel_rows;
+
+    // Pointers to the active supernode intersection size within each
+    // supernode's structure.
+    std::vector<const Int*> intersect_ptrs;
+
+    // A buffer for storing (scaled) transposed descendant blocks.
+    std::vector<Field> scaled_transpose_buffer;
+
+    // A buffer for storing updates to the current supernode column.
+    std::vector<Field> workspace_buffer;
+  };
+
   // A copy of the input matrix.
   CoordinateMatrix<Field> matrix_;
 
@@ -70,6 +94,9 @@ class SupernodalDPP {
   // The degrees of the supernodes.
   std::vector<Int> supernode_degrees_;
 
+  // The size of the largest supernode of the factorization.
+  Int max_supernode_size_;
+
   // The largest number of entries in the block row to the left of a diagonal
   // block.
   // NOTE: This is only needed for multithreaded sampling.
@@ -96,6 +123,11 @@ class SupernodalDPP {
 
   // Return a sample from the DPP.
   std::vector<Int> LeftLookingSample(bool maximum_likelihood) const;
+
+  // Appends a supernode's contribution to the current sample.
+  void LeftLookingSupernodeSample(Int main_supernode, bool maximum_likelihood,
+                                  LeftLookingSampleState* state,
+                                  std::vector<Int>* sample) const;
 };
 
 }  // namespace catamari

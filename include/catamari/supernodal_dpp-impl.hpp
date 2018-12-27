@@ -8,6 +8,8 @@
 #ifndef CATAMARI_SUPERNODAL_DPP_IMPL_H_
 #define CATAMARI_SUPERNODAL_DPP_IMPL_H_
 
+#include <algorithm>
+
 #include "catamari/supernodal_dpp.hpp"
 
 namespace catamari {
@@ -90,6 +92,9 @@ void SupernodalDPP<Field>::FormStructure() {
       matrix_, permutation_, inverse_permutation_, parents_, supernode_sizes_,
       supernode_member_to_index_, lower_factor_.get(),
       &max_descendant_entries_);
+
+  max_supernode_size_ =
+      *std::max_element(supernode_sizes_.begin(), supernode_sizes_.end());
 }
 
 template <class Field>
@@ -98,12 +103,141 @@ std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
 }
 
 template <class Field>
+void SupernodalDPP<Field>::LeftLookingSupernodeSample(
+    Int main_supernode, bool maximum_likelihood, LeftLookingSampleState* state,
+    std::vector<Int>* sample) const {
+  const SymmetricFactorizationType factorization_type =
+      kLDLAdjointFactorization;
+
+  BlasMatrix<Field>& main_diagonal_block =
+      diagonal_factor_->blocks[main_supernode];
+  BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
+  const Int main_supernode_start = supernode_starts_[main_supernode];
+  const Int main_supernode_size = supernode_sizes_[main_supernode];
+
+  state->pattern_flags[main_supernode] = main_supernode;
+
+  state->rel_rows[main_supernode] = 0;
+  state->intersect_ptrs[main_supernode] =
+      lower_factor_->IntersectionSizes(main_supernode);
+
+  // Compute the supernodal row pattern.
+  const Int num_packed = supernodal_ldl::ComputeRowPattern(
+      matrix_, permutation_, inverse_permutation_, supernode_sizes_,
+      supernode_starts_, supernode_member_to_index_, supernode_parents_,
+      main_supernode, state->pattern_flags.data(), state->row_structure.data());
+
+  // for J = find(L(K, :))
+  //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
+  for (Int index = 0; index < num_packed; ++index) {
+    const Int descendant_supernode = state->row_structure[index];
+    CATAMARI_ASSERT(descendant_supernode < main_supernode,
+                    "Looking into upper triangle.");
+    const ConstBlasMatrix<Field>& descendant_lower_block =
+        lower_factor_->blocks[descendant_supernode];
+    const Int descendant_degree = descendant_lower_block.height;
+    const Int descendant_supernode_size = descendant_lower_block.width;
+
+    const Int descendant_main_intersect_size =
+        *state->intersect_ptrs[descendant_supernode];
+
+    const Int descendant_main_rel_row = state->rel_rows[descendant_supernode];
+    ConstBlasMatrix<Field> descendant_main_matrix =
+        descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
+                                         descendant_main_intersect_size,
+                                         descendant_supernode_size);
+
+    BlasMatrix<Field> scaled_transpose;
+    scaled_transpose.height = descendant_supernode_size;
+    scaled_transpose.width = descendant_main_intersect_size;
+    scaled_transpose.leading_dim = descendant_supernode_size;
+    scaled_transpose.data = state->scaled_transpose_buffer.data();
+
+    supernodal_ldl::FormScaledTranspose(
+        factorization_type,
+        diagonal_factor_->blocks[descendant_supernode].ToConst(),
+        descendant_main_matrix, &scaled_transpose);
+
+    BlasMatrix<Field> workspace_matrix;
+    workspace_matrix.height = descendant_main_intersect_size;
+    workspace_matrix.width = descendant_main_intersect_size;
+    workspace_matrix.leading_dim = descendant_main_intersect_size;
+    workspace_matrix.data = state->workspace_buffer.data();
+
+    supernodal_ldl::UpdateDiagonalBlock(
+        factorization_type, supernode_starts_, *lower_factor_, main_supernode,
+        descendant_supernode, descendant_main_rel_row, descendant_main_matrix,
+        scaled_transpose.ToConst(), &main_diagonal_block, &workspace_matrix);
+
+    state->intersect_ptrs[descendant_supernode]++;
+    state->rel_rows[descendant_supernode] += descendant_main_intersect_size;
+
+    // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
+    //                = L(KNext:n, J) * Z(J, K).
+    const Int* descendant_active_intersect_size_beg =
+        state->intersect_ptrs[descendant_supernode];
+    Int descendant_active_rel_row = state->rel_rows[descendant_supernode];
+    const Int* main_active_intersect_sizes =
+        lower_factor_->IntersectionSizes(main_supernode);
+    Int main_active_rel_row = 0;
+    while (descendant_active_rel_row != descendant_degree) {
+      const Int descendant_active_intersect_size =
+          *descendant_active_intersect_size_beg;
+
+      ConstBlasMatrix<Field> descendant_active_matrix =
+          descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
+                                           descendant_active_intersect_size,
+                                           descendant_supernode_size);
+
+      // The width of the workspace matrix and pointer are already correct.
+      workspace_matrix.height = descendant_active_intersect_size;
+      workspace_matrix.leading_dim = descendant_active_intersect_size;
+
+      supernodal_ldl::SeekForMainActiveRelativeRow(
+          main_supernode, descendant_supernode, descendant_active_rel_row,
+          supernode_member_to_index_, *lower_factor_, &main_active_rel_row,
+          &main_active_intersect_sizes);
+      const Int main_active_intersect_size = *main_active_intersect_sizes;
+
+      BlasMatrix<Field> main_active_block = main_lower_block.Submatrix(
+          main_active_rel_row, 0, main_active_intersect_size,
+          main_supernode_size);
+
+      supernodal_ldl::UpdateSubdiagonalBlock(
+          main_supernode, descendant_supernode, main_active_rel_row,
+          descendant_main_rel_row, descendant_active_rel_row, supernode_starts_,
+          supernode_member_to_index_, scaled_transpose.ToConst(),
+          descendant_active_matrix, *lower_factor_, &main_active_block,
+          &workspace_matrix);
+
+      ++descendant_active_intersect_size_beg;
+      descendant_active_rel_row += descendant_active_intersect_size;
+    }
+  }
+
+  // Sample and factor the diagonal block.
+  {
+    const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
+        maximum_likelihood, &main_diagonal_block, &generator_, &unit_uniform_);
+    for (const Int& index : supernode_sample) {
+      const Int orig_row = main_supernode_start + index;
+      if (inverse_permutation_.empty()) {
+        sample->push_back(orig_row);
+      } else {
+        sample->push_back(inverse_permutation_[orig_row]);
+      }
+    }
+  }
+
+  supernodal_ldl::SolveAgainstDiagonalBlock(
+      factorization_type, main_diagonal_block.ToConst(), &main_lower_block);
+}
+
+template <class Field>
 std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
     bool maximum_likelihood) const {
   const Int num_rows = supernode_starts_.back();
   const Int num_supernodes = supernode_sizes_.size();
-  const SymmetricFactorizationType factorization_type =
-      kLDLAdjointFactorization;
 
   // Reset the lower factor to all zeros.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
@@ -128,156 +262,19 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   std::vector<Int> sample;
   sample.reserve(num_rows);
 
-  // Set up a buffer for supernodal updates.
-  Int max_supernode_size = 0;
+  LeftLookingSampleState state;
+  state.row_structure.resize(num_supernodes);
+  state.pattern_flags.resize(num_supernodes);
+  state.rel_rows.resize(num_supernodes);
+  state.intersect_ptrs.resize(num_supernodes);
+  state.scaled_transpose_buffer.resize(
+      max_supernode_size_ * max_supernode_size_, Field{0});
+  state.workspace_buffer.resize(max_supernode_size_ * (max_supernode_size_ - 1),
+                                Field{0});
+
+  // Note that any postordering of the supernodal elimination forest suffices.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    max_supernode_size = std::max(max_supernode_size,
-                                  diagonal_factor_->blocks[supernode].height);
-  }
-  std::vector<Field> scaled_transpose_buffer(
-      max_supernode_size * max_supernode_size, Field{0});
-  std::vector<Field> workspace_buffer(
-      max_supernode_size * (max_supernode_size - 1), Field{0});
-
-  // A data structure for marking whether or not a supernode is in the pattern
-  // of the active row of the lower-triangular factor.
-  std::vector<Int> pattern_flags(num_supernodes);
-
-  // An integer workspace for storing the supernodes in the current row
-  // pattern.
-  std::vector<Int> row_structure(num_supernodes);
-
-  // Since we will sequentially access each of the entries in each block column
-  // of  L during the updates of a supernode, we can avoid the need for binary
-  // search by maintaining a separate counter for each supernode.
-  std::vector<const Int*> intersect_ptrs(num_supernodes);
-  std::vector<Int> rel_rows(num_supernodes);
-
-  for (Int main_supernode = 0; main_supernode < num_supernodes;
-       ++main_supernode) {
-    BlasMatrix<Field>& main_diagonal_block =
-        diagonal_factor_->blocks[main_supernode];
-    BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
-    const Int main_supernode_start = supernode_starts_[main_supernode];
-    const Int main_supernode_size = supernode_sizes_[main_supernode];
-
-    pattern_flags[main_supernode] = main_supernode;
-
-    intersect_ptrs[main_supernode] =
-        lower_factor_->IntersectionSizes(main_supernode);
-    rel_rows[main_supernode] = 0;
-
-    // Compute the supernodal row pattern.
-    const Int num_packed = supernodal_ldl::ComputeRowPattern(
-        matrix_, permutation_, inverse_permutation_, supernode_sizes_,
-        supernode_starts_, supernode_member_to_index_, supernode_parents_,
-        main_supernode, pattern_flags.data(), row_structure.data());
-
-    // for J = find(L(K, :))
-    //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
-    for (Int index = 0; index < num_packed; ++index) {
-      const Int descendant_supernode = row_structure[index];
-      CATAMARI_ASSERT(descendant_supernode < main_supernode,
-                      "Looking into upper triangle.");
-      const ConstBlasMatrix<Field>& descendant_lower_block =
-          lower_factor_->blocks[descendant_supernode];
-      const Int descendant_degree = descendant_lower_block.height;
-      const Int descendant_supernode_size = descendant_lower_block.width;
-
-      const Int descendant_main_intersect_size =
-          *intersect_ptrs[descendant_supernode];
-
-      const Int descendant_main_rel_row = rel_rows[descendant_supernode];
-      ConstBlasMatrix<Field> descendant_main_matrix =
-          descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
-                                           descendant_main_intersect_size,
-                                           descendant_supernode_size);
-
-      BlasMatrix<Field> scaled_transpose;
-      scaled_transpose.height = descendant_supernode_size;
-      scaled_transpose.width = descendant_main_intersect_size;
-      scaled_transpose.leading_dim = descendant_supernode_size;
-      scaled_transpose.data = scaled_transpose_buffer.data();
-
-      supernodal_ldl::FormScaledTranspose(
-          factorization_type,
-          diagonal_factor_->blocks[descendant_supernode].ToConst(),
-          descendant_main_matrix, &scaled_transpose);
-
-      BlasMatrix<Field> workspace_matrix;
-      workspace_matrix.height = descendant_main_intersect_size;
-      workspace_matrix.width = descendant_main_intersect_size;
-      workspace_matrix.leading_dim = descendant_main_intersect_size;
-      workspace_matrix.data = workspace_buffer.data();
-
-      supernodal_ldl::UpdateDiagonalBlock(
-          factorization_type, supernode_starts_, *lower_factor_, main_supernode,
-          descendant_supernode, descendant_main_rel_row, descendant_main_matrix,
-          scaled_transpose.ToConst(), &main_diagonal_block, &workspace_matrix);
-
-      intersect_ptrs[descendant_supernode]++;
-      rel_rows[descendant_supernode] += descendant_main_intersect_size;
-
-      // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
-      //                = L(KNext:n, J) * Z(J, K).
-      const Int* descendant_active_intersect_size_beg =
-          intersect_ptrs[descendant_supernode];
-      Int descendant_active_rel_row = rel_rows[descendant_supernode];
-      const Int* main_active_intersect_sizes =
-          lower_factor_->IntersectionSizes(main_supernode);
-      Int main_active_rel_row = 0;
-      while (descendant_active_rel_row != descendant_degree) {
-        const Int descendant_active_intersect_size =
-            *descendant_active_intersect_size_beg;
-
-        ConstBlasMatrix<Field> descendant_active_matrix =
-            descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
-                                             descendant_active_intersect_size,
-                                             descendant_supernode_size);
-
-        // The width of the workspace matrix and pointer are already correct.
-        workspace_matrix.height = descendant_active_intersect_size;
-        workspace_matrix.leading_dim = descendant_active_intersect_size;
-
-        supernodal_ldl::SeekForMainActiveRelativeRow(
-            main_supernode, descendant_supernode, descendant_active_rel_row,
-            supernode_member_to_index_, *lower_factor_, &main_active_rel_row,
-            &main_active_intersect_sizes);
-        const Int main_active_intersect_size = *main_active_intersect_sizes;
-
-        BlasMatrix<Field> main_active_block = main_lower_block.Submatrix(
-            main_active_rel_row, 0, main_active_intersect_size,
-            main_supernode_size);
-
-        supernodal_ldl::UpdateSubdiagonalBlock(
-            main_supernode, descendant_supernode, main_active_rel_row,
-            descendant_main_rel_row, descendant_active_rel_row,
-            supernode_starts_, supernode_member_to_index_,
-            scaled_transpose.ToConst(), descendant_active_matrix,
-            *lower_factor_, &main_active_block, &workspace_matrix);
-
-        ++descendant_active_intersect_size_beg;
-        descendant_active_rel_row += descendant_active_intersect_size;
-      }
-    }
-
-    // Sample and factor the diagonal block.
-    {
-      const std::vector<Int> supernode_sample =
-          LowerFactorAndSampleDPP(maximum_likelihood, &main_diagonal_block,
-                                  &generator_, &unit_uniform_);
-      for (const Int& index : supernode_sample) {
-        const Int orig_row = main_supernode_start + index;
-        if (inverse_permutation_.empty()) {
-          sample.push_back(orig_row);
-        } else {
-          sample.push_back(inverse_permutation_[orig_row]);
-        }
-      }
-    }
-
-    supernodal_ldl::SolveAgainstDiagonalBlock(
-        factorization_type, main_diagonal_block.ToConst(), &main_lower_block);
+    LeftLookingSupernodeSample(supernode, maximum_likelihood, &state, &sample);
   }
 
   std::sort(sample.begin(), sample.end());
