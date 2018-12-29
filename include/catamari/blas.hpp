@@ -12,32 +12,35 @@
 
 #ifdef CATAMARI_HAVE_MKL
 
-// TODO(Jack Poulson): Attempt to support 64-bit BLAS when Int = long long int.
-typedef int BlasInt;
-
 #define CATAMARI_HAVE_BLAS
 
-#define BLAS_SYMBOL(name) name##_
+// TODO(Jack Poulson): Attempt to support 64-bit BLAS when Int = long long int.
+typedef int BlasInt;
+typedef std::complex<float> BlasComplexFloat;
+typedef std::complex<double> BlasComplexDouble;
+
+#define BLAS_SYMBOL(name) name
 
 // TODO(Jack Poulson): Decide when to avoid enabling this function. It seems to
 // be slightly slower than doing twice as much work by running Gemm then
 // setting the strictly upper triangle of the result to zero.
 #define CATAMARI_USE_GEMMT
 
+#define MKL_INT BlasInt
+#define MKL_Complex8 BlasComplexFloat
+#define MKL_Complex16 BlasComplexDouble
+#include "mkl.h"
+
 #elif defined(CATAMARI_HAVE_OPENBLAS)
+
+#define CATAMARI_HAVE_BLAS
 
 // TODO(Jack Poulson): Attempt to support 64-bit BLAS when Int = long long int.
 typedef int BlasInt;
-
-#define CATAMARI_HAVE_BLAS
-#define BLAS_SYMBOL(name) name##_
-
-#endif  // ifdef CATAMARI_HAVE_OPENBLAS
-
-#ifdef CATAMARI_HAVE_BLAS
-
 typedef std::complex<float> BlasComplexFloat;
-typedef std::complex<double> BlasComplexDouble;
+typedef std::complex<float> BlasComplexDouble;
+
+#define BLAS_SYMBOL(name) name##_
 
 extern "C" {
 
@@ -84,15 +87,12 @@ void BLAS_SYMBOL(cgemv)(const char* trans, const BlasInt* height,
                         const BlasComplexFloat* beta, BlasComplexFloat* result,
                         const BlasInt* result_stride);
 
-void BLAS_SYMBOL(zgemv)(const char* trans, const BlasInt* height,
-                        const BlasInt* width, const BlasComplexDouble* alpha,
-                        const BlasComplexDouble* matrix,
-                        const BlasInt* leading_dim,
-                        const BlasComplexDouble* input_vector,
-                        const BlasInt* input_stride,
-                        const BlasComplexDouble* beta,
-                        BlasComplexDouble* result,
-                        const BlasInt* result_stride);
+void BLAS_SYMBOL(zgemv)(
+    const char* trans, const BlasInt* height, const BlasInt* width,
+    const BlasComplexDouble* alpha, const BlasComplexDouble* matrix,
+    const BlasInt* leading_dim, const BlasComplexDouble* input_vector,
+    const BlasInt* input_stride, const BlasComplexDouble* beta,
+    BlasComplexDouble* result, const BlasInt* result_stride);
 
 void BLAS_SYMBOL(strsv)(const char* uplo, const char* trans, const char* diag,
                         const BlasInt* height, const float* triangular_matrix,
@@ -179,8 +179,8 @@ void BLAS_SYMBOL(cgemmt)(const char* uplo, const char* trans_left,
                          const BlasInt* left_leading_dim,
                          const BlasComplexFloat* right_matrix,
                          const BlasInt* right_leading_dim,
-                         const BlasComplexFloat* beta,
-                         BlasComplexFloat* matrix, const BlasInt* leading_dim);
+                         const BlasComplexFloat* beta, BlasComplexFloat* matrix,
+                         const BlasInt* leading_dim);
 
 void BLAS_SYMBOL(zgemmt)(const char* uplo, const char* trans_left,
                          const char* trans_right, const BlasInt* height,
@@ -247,6 +247,6 @@ void BLAS_SYMBOL(ztrsm)(const char* side, const char* uplo,
                         const BlasInt* triang_leading_dim,
                         BlasComplexDouble* matrix, const BlasInt* leading_dim);
 }
-#endif  // ifdef CATAMARI_HAVE_BLAS
+#endif  // elif CATAMARI_HAVE_OPENBLAS
 
 #endif  // ifndef CATAMARI_BLAS_H_
