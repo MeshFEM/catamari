@@ -14,7 +14,9 @@
 
 #define LAPACK_SYMBOL(name) name##_
 
-#ifndef CATAMARI_HAVE_MKL
+#ifndef CATAMARI_HAVE_LAPACK_PROTOS
+#define CATAMARI_HAVE_LAPACK_PROTOS
+
 extern "C" {
 
 void LAPACK_SYMBOL(spotrf)(const char* uplo, const BlasInt* n, float* matrix,
@@ -31,7 +33,7 @@ void LAPACK_SYMBOL(zpotrf)(const char* uplo, const BlasInt* n,
                            BlasComplexDouble* matrix,
                            const BlasInt* leading_dim, BlasInt* info);
 }
-#endif  // ifdef CATAMARI_HAVE_MKL
+#endif  // ifndef CATAMARI_HAVE_LAPACK_PROTOS
 #endif  // ifdef CATAMARI_HAVE_LAPACK
 
 #endif  // ifndef CATAMARI_LAPACK_H_

@@ -12,12 +12,18 @@
 
 #ifdef CATAMARI_HAVE_MKL
 
-#define CATAMARI_HAVE_BLAS
-
 // TODO(Jack Poulson): Attempt to support 64-bit BLAS when Int = long long int.
 typedef int BlasInt;
 typedef std::complex<float> BlasComplexFloat;
 typedef std::complex<double> BlasComplexDouble;
+
+#define MKL_INT BlasInt
+#define MKL_Complex8 BlasComplexFloat
+#define MKL_Complex16 BlasComplexDouble
+#include "mkl.h"
+
+#define CATAMARI_HAVE_BLAS_PROTOS
+#define CATAMARI_HAVE_LAPACK_PROTOS
 
 #define BLAS_SYMBOL(name) name
 
@@ -26,21 +32,29 @@ typedef std::complex<double> BlasComplexDouble;
 // setting the strictly upper triangle of the result to zero.
 #define CATAMARI_USE_GEMMT
 
-#define MKL_INT BlasInt
-#define MKL_Complex8 BlasComplexFloat
-#define MKL_Complex16 BlasComplexDouble
-#include "mkl.h"
-
 #elif defined(CATAMARI_HAVE_OPENBLAS)
-
-#define CATAMARI_HAVE_BLAS
 
 // TODO(Jack Poulson): Attempt to support 64-bit BLAS when Int = long long int.
 typedef int BlasInt;
 typedef std::complex<float> BlasComplexFloat;
 typedef std::complex<float> BlasComplexDouble;
 
+extern "C" {
+
+// Sets the maximum number of OpenBLAS threads.
+void openblas_set_num_threads(int num_threads);
+
+// Gets the current maximum number of OpenBLAS threads.
+int openblas_get_num_threads();
+
+}  // extern "C"
+
 #define BLAS_SYMBOL(name) name##_
+
+#endif  // ifdef CATAMARI_HAVE_MKL
+
+#if defined(CATAMARI_HAVE_BLAS) && !defined(CATAMARI_HAVE_BLAS_PROTOS)
+#define CATAMARI_HAVE_BLAS_PROTOS
 
 extern "C" {
 
@@ -153,46 +167,6 @@ void BLAS_SYMBOL(zgemm)(
     const BlasComplexDouble* beta, BlasComplexDouble* output_matrix,
     const BlasInt* output_leading_dim);
 
-#ifdef CATAMARI_HAVE_MKL
-void BLAS_SYMBOL(sgemmt)(const char* uplo, const char* trans_left,
-                         const char* trans_right, const BlasInt* height,
-                         const BlasInt* rank, const float* alpha,
-                         const float* left_matrix,
-                         const BlasInt* left_leading_dim,
-                         const float* right_matrix,
-                         const BlasInt* right_leading_dim, const float* beta,
-                         float* matrix, const BlasInt* leading_dim);
-
-void BLAS_SYMBOL(dgemmt)(const char* uplo, const char* trans_left,
-                         const char* trans_right, const BlasInt* height,
-                         const BlasInt* rank, const double* alpha,
-                         const double* left_matrix,
-                         const BlasInt* left_leading_dim,
-                         const double* right_matrix,
-                         const BlasInt* right_leading_dim, const double* beta,
-                         double* matrix, const BlasInt* leading_dim);
-
-void BLAS_SYMBOL(cgemmt)(const char* uplo, const char* trans_left,
-                         const char* trans_right, const BlasInt* height,
-                         const BlasInt* rank, const BlasComplexFloat* alpha,
-                         const BlasComplexFloat* left_matrix,
-                         const BlasInt* left_leading_dim,
-                         const BlasComplexFloat* right_matrix,
-                         const BlasInt* right_leading_dim,
-                         const BlasComplexFloat* beta, BlasComplexFloat* matrix,
-                         const BlasInt* leading_dim);
-
-void BLAS_SYMBOL(zgemmt)(const char* uplo, const char* trans_left,
-                         const char* trans_right, const BlasInt* height,
-                         const BlasInt* rank, const BlasComplexDouble* alpha,
-                         const BlasComplexDouble* left_matrix,
-                         const BlasInt* left_leading_dim,
-                         const BlasComplexDouble* right_matrix,
-                         const BlasInt* right_leading_dim,
-                         const BlasComplexDouble* beta,
-                         BlasComplexDouble* matrix, const BlasInt* leading_dim);
-#endif  // ifdef CATAMARI_HAVE_MKL
-
 void BLAS_SYMBOL(ssyrk)(const char* uplo, const char* trans,
                         const BlasInt* height, const BlasInt* rank,
                         const float* alpha, const float* factor,
@@ -247,6 +221,24 @@ void BLAS_SYMBOL(ztrsm)(const char* side, const char* uplo,
                         const BlasInt* triang_leading_dim,
                         BlasComplexDouble* matrix, const BlasInt* leading_dim);
 }
-#endif  // elif CATAMARI_HAVE_OPENBLAS
+#endif  // if defined(CATAMARI_HAVE_BLAS) && !defined(CATAMARI_HAVE_BLAS_PROTOS)
+
+namespace catamari {
+
+inline int CapNumLocalBlasThreads(int num_threads) {
+#ifdef CATAMARI_HAVE_MKL
+  return mkl_set_num_threads_local(num_threads);
+#elif defined(CATAMARI_HAVE_OPENBLAS)
+  // OpenBLAS does not support any equivalent of mkl_set_num_threads_local, so
+  // the best-practice is to disable threading in such cases.
+  const int old_num_threads = openblas_get_num_threads();
+  openblas_set_num_threads(num_threads);
+  return old_num_threads;
+#else
+  return 1;
+#endif  // ifdef CATAMARI_HAVE_MKL
+}
+
+}  // namespace catamari
 
 #endif  // ifndef CATAMARI_BLAS_H_

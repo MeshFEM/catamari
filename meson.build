@@ -78,6 +78,7 @@ if not get_option('disable-blas')
         message('Found MKL')
         have_blas = true
         cxx_args += '-DCATAMARI_HAVE_MKL'
+        cxx_args += '-DCATAMARI_HAVE_BLAS'
         cxx_args += '-DCATAMARI_HAVE_LAPACK'
       endif
     endif
@@ -90,6 +91,7 @@ if not get_option('disable-blas')
       have_blas = true
       have_openblas = true
       cxx_args += '-DCATAMARI_HAVE_OPENBLAS'
+      cxx_args += '-DCATAMARI_HAVE_BLAS'
       deps += openblas_lib
 
       lapack_lib = cxx.find_library('liblapack', required : false)
