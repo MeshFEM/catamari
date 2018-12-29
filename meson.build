@@ -30,6 +30,24 @@ endif
 # Add Catch
 test_deps += subproject('catch2').get_variable('catch2_dep')
 
+# For controlling whether OpenMP support is enabled.
+if get_option('enable-openmp')
+  openmp_dep = dependency('openmp', version : '>=4.0')
+  have_openmp = true
+  deps += openmp_dep
+elif get_option('disable-openmp')
+  openmp_dep = false
+  have_openmp = false
+else
+  openmp_dep = dependency('openmp', version : '>=4.0', required : false)
+  if openmp_dep.found()
+    have_openmp = true
+  else
+    have_openmp = false
+  endif
+  deps += openmp_dep
+endif
+
 # Simple BLAS/LAPACK detection.
 if not get_option('disable-blas')
   have_blas = false
@@ -39,13 +57,30 @@ if not get_option('disable-blas')
   if not get_option('disable-mkl')
     mkl_lib = cxx.find_library('libmkl_rt', required : false)
     if mkl_lib.found()
-      message('Found MKL')
-      have_blas = true
-      have_mkl = true
-      cxx_args += '-DCATAMARI_HAVE_MKL'
-      cxx_args += '-DCATAMARI_HAVE_LAPACK'
-      deps += mkl_lib
-    endif 
+      if have_openmp
+        mkl_intel_thread_lib = cxx.find_library('libmkl_intel_thread', \
+            required : false)
+        iomp5_lib = cxx.find_library('iomp5', required : false)
+        if mkl_intel_thread_lib.found() and iomp5_lib.found()
+          have_mkl = true
+          deps += mkl_lib
+          deps += mkl_intel_thread_lib
+          deps += iomp5_lib
+        else
+          message('Found libmkl_rt but not mkl_intel_thread and iomp5')
+          have_mkl = false
+        endif
+      else
+        have_mkl = true
+        deps += mkl_lib
+      endif
+      if have_mkl
+        message('Found MKL')
+        have_blas = true
+        cxx_args += '-DCATAMARI_HAVE_MKL'
+        cxx_args += '-DCATAMARI_HAVE_LAPACK'
+      endif
+    endif
   endif
 
   if not have_blas and not get_option('disable-openblas')
@@ -107,17 +142,6 @@ endif
 if get_option('enable-debug')
   cxx_args += '-DQUOTIENT_DEBUG'
   cxx_args += '-DCATAMARI_DEBUG'
-endif
-
-# For controlling whether (still not implemented) OpenMP support is enabled.
-if get_option('enable-openmp')
-  openmp_dep = dependency('openmp', version : '>=3.0')
-  deps += openmp_dep
-elif get_option('disable-openmp')
-  openmp_dep = false
-else
-  openmp_dep = dependency('openmp', version : '>=3.0', required : false)
-  deps += openmp_dep
 endif
 
 # Tests for the Complex class.
