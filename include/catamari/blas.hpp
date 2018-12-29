@@ -225,14 +225,25 @@ void BLAS_SYMBOL(ztrsm)(const char* side, const char* uplo,
 
 namespace catamari {
 
-inline int CapNumLocalBlasThreads(int num_threads) {
+// When possible, sets the global number of threads to be used by BLAS.
+inline void SetNumBlasThreads(int num_threads) {
+#ifdef CATAMARI_HAVE_MKL
+  mkl_set_num_threads(num_threads);
+#elif defined(CATAMARI_HAVE_OPENBLAS)
+  openblas_set_num_threads(num_threads);
+#endif  // ifdef CATAMARI_HAVE_MKL
+}
+
+// When possible, sets the thread-local number of threads to be used by BLAS.
+//
+// OpenBLAS does not support any equivalent of mkl_set_num_threads_local, so
+// the best-practice is to instead disable threading in such cases.
+inline int SetNumLocalBlasThreads(int num_threads) {
 #ifdef CATAMARI_HAVE_MKL
   return mkl_set_num_threads_local(num_threads);
 #elif defined(CATAMARI_HAVE_OPENBLAS)
-  // OpenBLAS does not support any equivalent of mkl_set_num_threads_local, so
-  // the best-practice is to disable threading in such cases.
   const int old_num_threads = openblas_get_num_threads();
-  openblas_set_num_threads(num_threads);
+  openblas_set_num_threads(1);
   return old_num_threads;
 #else
   return 1;
