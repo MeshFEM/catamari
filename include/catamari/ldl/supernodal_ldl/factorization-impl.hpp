@@ -189,12 +189,12 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     const Int descendant_degree = descendant_lower_block.height;
     const Int descendant_supernode_size = descendant_lower_block.width;
 
+    const Int descendant_main_rel_row =
+        shared_state->rel_rows[descendant_supernode];
     const Int descendant_main_intersect_size =
         *shared_state->intersect_ptrs[descendant_supernode];
 
-    const Int descendant_main_rel_row =
-        shared_state->rel_rows[descendant_supernode];
-    ConstBlasMatrix<Field> descendant_main_matrix =
+    const ConstBlasMatrix<Field> descendant_main_matrix =
         descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
                                          descendant_main_intersect_size,
                                          descendant_supernode_size);
@@ -237,7 +237,13 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
       const Int descendant_active_intersect_size =
           *descendant_active_intersect_size_beg;
 
-      ConstBlasMatrix<Field> descendant_active_matrix =
+      SeekForMainActiveRelativeRow(
+          main_supernode, descendant_supernode, descendant_active_rel_row,
+          supernode_member_to_index, *lower_factor, &main_active_rel_row,
+          &main_active_intersect_sizes);
+      const Int main_active_intersect_size = *main_active_intersect_sizes;
+
+      const ConstBlasMatrix<Field> descendant_active_matrix =
           descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
                                            descendant_active_intersect_size,
                                            descendant_supernode_size);
@@ -246,11 +252,6 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
       workspace_matrix.height = descendant_active_intersect_size;
       workspace_matrix.leading_dim = descendant_active_intersect_size;
 
-      SeekForMainActiveRelativeRow(
-          main_supernode, descendant_supernode, descendant_active_rel_row,
-          supernode_member_to_index, *lower_factor, &main_active_rel_row,
-          &main_active_intersect_sizes);
-      const Int main_active_intersect_size = *main_active_intersect_sizes;
 
       BlasMatrix<Field> main_active_block = main_lower_block.Submatrix(
           main_active_rel_row, 0, main_active_intersect_size,
@@ -359,6 +360,7 @@ Int MultithreadedFactorDiagonalBlock(
     BlasMatrix<Field>* diagonal_block) {
   Int num_pivots;
 
+  // TODO(Jack Poulson): Decide if this parallel construct is of use.
 #pragma omp parallel num_threads(num_threads)
   {
     const int old_num_threads = SetNumLocalBlasThreads(num_threads);
@@ -618,6 +620,7 @@ bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
     return false;
   }
 
+  // TODO(Jack Poulson): Decide if this parallel construct is of use.
 #pragma omp parallel num_threads(num_threads)
   {
     const int old_num_threads = SetNumLocalBlasThreads(num_threads);
@@ -849,16 +852,13 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = roots[root_index];
 
-#pragma omp parallel num_threads(1)
-      {
-        const int old_num_threads = SetNumLocalBlasThreads(1);
-        LDLResult& result_contribution = result_contributions[root_index];
-        successes[root_index] = LeftLookingSubtree(
-            root, matrix, supernode_parents, supernode_children,
-            supernode_child_offsets, &shared_state, &private_state,
-            &result_contribution);
-        SetNumLocalBlasThreads(old_num_threads);
-      }
+      const int old_num_threads = SetNumLocalBlasThreads(1);
+      LDLResult& result_contribution = result_contributions[root_index];
+      successes[root_index] = LeftLookingSubtree(
+          root, matrix, supernode_parents, supernode_children,
+          supernode_child_offsets, &shared_state, &private_state,
+          &result_contribution);
+      SetNumLocalBlasThreads(old_num_threads);
     }
   } else {
     std::vector<Int> num_threads_per_tree(num_roots);
