@@ -18,6 +18,51 @@
 namespace catamari {
 namespace supernodal_ldl {
 
+// Create the packed downlinks from the uplinks of an elimination forest.
+inline void EliminationChildrenFromParents(
+    const std::vector<Int>& supernode_parents,
+    std::vector<Int>* supernode_children,
+    std::vector<Int>* supernode_child_offsets, std::vector<Int>* roots) {
+  const Int num_supernodes = supernode_parents.size();
+
+  // Compute the number of children (initially stored in
+  // 'supernode_child_offsets') of each supernode. Along the way, count the
+  // number of trees in the forest.
+  Int num_roots = 0;
+  supernode_child_offsets->clear();
+  supernode_child_offsets->resize(num_supernodes + 1, 0);
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int parent = supernode_parents[supernode];
+    if (parent >= 0) {
+      ++(*supernode_child_offsets)[parent];
+    } else {
+      ++num_roots;
+    }
+  }
+
+  // Compute the child offsets using an in-place scan.
+  Int num_total_children = 0;
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int num_children = (*supernode_child_offsets)[supernode];
+    (*supernode_child_offsets)[supernode] = num_total_children;
+    num_total_children += num_children;
+  }
+  (*supernode_child_offsets)[num_supernodes] = num_total_children;
+
+  // Pack the children into the 'supernode_children' buffer.
+  supernode_children->resize(num_total_children);
+  roots->reserve(num_roots);
+  std::vector<Int> offsets_copy = *supernode_child_offsets;
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int parent = supernode_parents[supernode];
+    if (parent >= 0) {
+      (*supernode_children)[offsets_copy[parent]++] = supernode;
+    } else {
+      roots->push_back(supernode);
+    }
+  }
+}
+
 template <class Field>
 void Factorization<Field>::FormSupernodes(
     const CoordinateMatrix<Field>& matrix,
@@ -112,28 +157,31 @@ void Factorization<Field>::InitializeLeftLookingFactors(
 template <class Field>
 void Factorization<Field>::LeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& supernode_parents, LeftLookingState* state) {
+    const std::vector<Int>& supernode_parents,
+    LeftLookingSharedState* shared_state,
+    LeftLookingPrivateState* private_state) {
   BlasMatrix<Field>& main_diagonal_block =
       diagonal_factor->blocks[main_supernode];
   BlasMatrix<Field>& main_lower_block = lower_factor->blocks[main_supernode];
   const Int main_supernode_size = main_lower_block.width;
 
-  state->pattern_flags[main_supernode] = main_supernode;
+  private_state->pattern_flags[main_supernode] = main_supernode;
 
-  state->rel_rows[main_supernode] = 0;
-  state->intersect_ptrs[main_supernode] =
+  shared_state->rel_rows[main_supernode] = 0;
+  shared_state->intersect_ptrs[main_supernode] =
       lower_factor->IntersectionSizes(main_supernode);
 
   // Compute the supernodal row pattern.
   const Int num_packed = ComputeRowPattern(
       matrix, permutation, inverse_permutation, supernode_sizes,
       supernode_starts, supernode_member_to_index, supernode_parents,
-      main_supernode, state->pattern_flags.data(), state->row_structure.data());
+      main_supernode, private_state->pattern_flags.data(),
+      private_state->row_structure.data());
 
   // for J = find(L(K, :))
   //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
   for (Int index = 0; index < num_packed; ++index) {
-    const Int descendant_supernode = state->row_structure[index];
+    const Int descendant_supernode = private_state->row_structure[index];
     CATAMARI_ASSERT(descendant_supernode < main_supernode,
                     "Looking into upper triangle.");
     const ConstBlasMatrix<Field>& descendant_lower_block =
@@ -142,9 +190,10 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     const Int descendant_supernode_size = descendant_lower_block.width;
 
     const Int descendant_main_intersect_size =
-        *state->intersect_ptrs[descendant_supernode];
+        *shared_state->intersect_ptrs[descendant_supernode];
 
-    const Int descendant_main_rel_row = state->rel_rows[descendant_supernode];
+    const Int descendant_main_rel_row =
+        shared_state->rel_rows[descendant_supernode];
     ConstBlasMatrix<Field> descendant_main_matrix =
         descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
                                          descendant_main_intersect_size,
@@ -154,7 +203,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     scaled_transpose.height = descendant_supernode_size;
     scaled_transpose.width = descendant_main_intersect_size;
     scaled_transpose.leading_dim = descendant_supernode_size;
-    scaled_transpose.data = state->scaled_transpose_buffer.data();
+    scaled_transpose.data = private_state->scaled_transpose_buffer.data();
 
     FormScaledTranspose(factorization_type,
                         diagonal_factor->blocks[descendant_supernode].ToConst(),
@@ -164,21 +213,23 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     workspace_matrix.height = descendant_main_intersect_size;
     workspace_matrix.width = descendant_main_intersect_size;
     workspace_matrix.leading_dim = descendant_main_intersect_size;
-    workspace_matrix.data = state->workspace_buffer.data();
+    workspace_matrix.data = private_state->workspace_buffer.data();
 
     UpdateDiagonalBlock(
         factorization_type, supernode_starts, *lower_factor, main_supernode,
         descendant_supernode, descendant_main_rel_row, descendant_main_matrix,
         scaled_transpose.ToConst(), &main_diagonal_block, &workspace_matrix);
 
-    state->intersect_ptrs[descendant_supernode]++;
-    state->rel_rows[descendant_supernode] += descendant_main_intersect_size;
+    shared_state->intersect_ptrs[descendant_supernode]++;
+    shared_state->rel_rows[descendant_supernode] +=
+        descendant_main_intersect_size;
 
     // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
     //                = L(KNext:n, J) * Z(J, K).
     const Int* descendant_active_intersect_size_beg =
-        state->intersect_ptrs[descendant_supernode];
-    Int descendant_active_rel_row = state->rel_rows[descendant_supernode];
+        shared_state->intersect_ptrs[descendant_supernode];
+    Int descendant_active_rel_row =
+        shared_state->rel_rows[descendant_supernode];
     const Int* main_active_intersect_sizes =
         lower_factor->IntersectionSizes(main_supernode);
     Int main_active_rel_row = 0;
@@ -260,6 +311,10 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(Int main_supernode,
 template <class Field>
 LDLResult Factorization<Field>::LeftLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
+#ifdef _OPENMP
+  return MultithreadedLeftLooking(matrix, control);
+#endif
+
   std::vector<Int> supernode_parents;
   {
     std::vector<Int> parents;
@@ -270,21 +325,24 @@ LDLResult Factorization<Field>::LeftLooking(
   }
   const Int num_supernodes = supernode_sizes.size();
 
-  LeftLookingState state;
-  state.row_structure.resize(num_supernodes);
-  state.pattern_flags.resize(num_supernodes);
-  state.rel_rows.resize(num_supernodes);
-  state.intersect_ptrs.resize(num_supernodes);
-  state.scaled_transpose_buffer.resize(max_supernode_size * max_supernode_size,
-                                       Field{0});
-  state.workspace_buffer.resize(max_supernode_size * (max_supernode_size - 1),
-                                Field{0});
+  LeftLookingSharedState shared_state;
+  shared_state.rel_rows.resize(num_supernodes);
+  shared_state.intersect_ptrs.resize(num_supernodes);
+
+  LeftLookingPrivateState private_state;
+  private_state.row_structure.resize(num_supernodes);
+  private_state.pattern_flags.resize(num_supernodes);
+  private_state.scaled_transpose_buffer.resize(
+      max_supernode_size * max_supernode_size, Field{0});
+  private_state.workspace_buffer.resize(
+      max_supernode_size * (max_supernode_size - 1), Field{0});
 
   LDLResult result;
 
   // Note that any postordering of the supernodal elimination forest suffices.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    LeftLookingSupernodeUpdate(supernode, matrix, supernode_parents, &state);
+    LeftLookingSupernodeUpdate(supernode, matrix, supernode_parents,
+                               &shared_state, &private_state);
     const bool succeeded = LeftLookingSupernodeFinalize(supernode, &result);
     if (!succeeded) {
       return result;
@@ -293,6 +351,561 @@ LDLResult Factorization<Field>::LeftLooking(
 
   return result;
 }
+
+#ifdef _OPENMP
+template <class Field>
+Int MultithreadedFactorDiagonalBlock(
+    Int num_threads, SymmetricFactorizationType factorization_type,
+    BlasMatrix<Field>* diagonal_block) {
+  Int num_pivots;
+
+#pragma omp parallel num_threads(num_threads)
+  {
+    const int old_num_threads = SetNumLocalBlasThreads(num_threads);
+#pragma omp single
+    {
+      if (factorization_type == kCholeskyFactorization) {
+        num_pivots = LowerCholeskyFactorization(diagonal_block);
+      } else if (factorization_type == kLDLAdjointFactorization) {
+        num_pivots = LowerLDLAdjointFactorization(diagonal_block);
+      } else {
+        num_pivots = LowerLDLTransposeFactorization(diagonal_block);
+      }
+    }  // #pragma omp sequential
+    SetNumLocalBlasThreads(old_num_threads);
+  }  // #pragma omp parallel
+
+  return num_pivots;
+}
+
+template <class Field>
+void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
+    Int num_threads, Int main_supernode, const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& supernode_parents,
+    LeftLookingSharedState* shared_state,
+    LeftLookingPrivateState* private_state) {
+  BlasMatrix<Field>& main_diagonal_block =
+      diagonal_factor->blocks[main_supernode];
+  BlasMatrix<Field>& main_lower_block = lower_factor->blocks[main_supernode];
+  const Int main_supernode_size = main_lower_block.width;
+  LeftLookingSharedState& shared_state_ref = *shared_state;
+
+  private_state->pattern_flags[main_supernode] = main_supernode;
+
+  shared_state_ref.rel_rows[main_supernode] = 0;
+  shared_state_ref.intersect_ptrs[main_supernode] =
+      lower_factor->IntersectionSizes(main_supernode);
+
+  // Compute the supernodal row pattern.
+  const Int num_packed = ComputeRowPattern(
+      matrix, permutation, inverse_permutation, supernode_sizes,
+      supernode_starts, supernode_member_to_index, supernode_parents,
+      main_supernode, private_state->pattern_flags.data(),
+      private_state->row_structure.data());
+
+  const Int max_supernode_size_ref = max_supernode_size;
+  const SymmetricFactorizationType& factorization_type_ref = factorization_type;
+  const std::vector<Int>& supernode_starts_ref = supernode_starts;
+  const std::vector<Int>& supernode_member_to_index_ref =
+      supernode_member_to_index;
+
+  const std::vector<Int>& row_structure = private_state->row_structure;
+
+  LowerFactor<Field>* const lower_factor_ptr = lower_factor.get();
+  Field* const main_diagonal_block_data CATAMARI_UNUSED =
+      main_diagonal_block.data;
+  Field* const main_lower_block_data = main_lower_block.data;
+
+#pragma omp parallel num_threads(num_threads) default(none)             \
+    shared(factorization_type_ref, main_supernode, main_diagonal_block, \
+           shared_state_ref, row_structure, supernode_starts_ref,       \
+           supernode_member_to_index_ref, main_lower_block)
+  {
+    const int old_num_threads = SetNumLocalBlasThreads(1);
+#pragma omp single
+    {
+      // TODO(Jack Poulson): Find a tighter upper bound.
+      std::vector<Field> workspace_buffer(
+          max_supernode_size_ref * max_supernode_size_ref, Field{0});
+
+      // Store the scaled transposes.
+      Int scaled_transposes_buffer_size = 0;
+      for (Int index = 0; index < num_packed; ++index) {
+        const Int descendant_supernode = row_structure[index];
+        const ConstBlasMatrix<Field>& descendant_lower_block =
+            lower_factor_ptr->blocks[descendant_supernode];
+        const Int descendant_supernode_size = descendant_lower_block.width;
+        const Int descendant_main_intersect_size =
+            *shared_state_ref.intersect_ptrs[descendant_supernode];
+
+        scaled_transposes_buffer_size +=
+            descendant_supernode_size * descendant_main_intersect_size;
+      }
+      std::vector<Field> scaled_transposes_buffer(
+          scaled_transposes_buffer_size);
+      std::vector<BlasMatrix<Field>> scaled_transposes(num_packed);
+      BlasMatrix<Field>* const scaled_transposes_data =
+          scaled_transposes.data();
+      {
+        Int offset = 0;
+        for (Int index = 0; index < num_packed; ++index) {
+          const Int descendant_supernode = row_structure[index];
+          const ConstBlasMatrix<Field>& descendant_lower_block =
+              lower_factor_ptr->blocks[descendant_supernode];
+          const Int descendant_supernode_size = descendant_lower_block.width;
+          const Int descendant_main_rel_row =
+              shared_state_ref.rel_rows[descendant_supernode];
+          const Int descendant_main_intersect_size =
+              *shared_state_ref.intersect_ptrs[descendant_supernode];
+
+          const ConstBlasMatrix<Field> descendant_diag_block =
+              diagonal_factor->blocks[descendant_supernode].ToConst();
+
+          const ConstBlasMatrix<Field> descendant_main_matrix =
+              descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
+                                               descendant_main_intersect_size,
+                                               descendant_supernode_size);
+
+          scaled_transposes[index].height = descendant_supernode_size;
+          scaled_transposes[index].width = descendant_main_intersect_size;
+          scaled_transposes[index].leading_dim = descendant_supernode_size;
+          scaled_transposes[index].data = &scaled_transposes_buffer[offset];
+
+#pragma omp task depend(out                                            \
+                        : scaled_transposes_data[index]) default(none) \
+    firstprivate(index, descendant_diag_block, descendant_main_matrix) \
+        shared(factorization_type_ref, scaled_transposes)
+          FormScaledTranspose(factorization_type_ref, descendant_diag_block,
+                              descendant_main_matrix,
+                              &scaled_transposes[index]);
+
+          offset += descendant_supernode_size * descendant_main_intersect_size;
+        }
+      }
+
+      // for J = find(L(K, :))
+      //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
+      for (Int index = 0; index < num_packed; ++index) {
+        const Int descendant_supernode = row_structure[index];
+        CATAMARI_ASSERT(descendant_supernode < main_supernode,
+                        "Looking into upper triangle.");
+        const ConstBlasMatrix<Field> descendant_lower_block =
+            lower_factor_ptr->blocks[descendant_supernode];
+        const Int descendant_degree = descendant_lower_block.height;
+        const Int descendant_supernode_size = descendant_lower_block.width;
+
+        const Int descendant_main_rel_row =
+            shared_state_ref.rel_rows[descendant_supernode];
+        const Int descendant_main_intersect_size =
+            *shared_state_ref.intersect_ptrs[descendant_supernode];
+
+#pragma omp task depend(in                                                    \
+                        : scaled_transposes_data[index])                      \
+    depend(out                                                                \
+           : main_diagonal_block_data) default(none)                          \
+        firstprivate(index, descendant_supernode, descendant_main_rel_row,    \
+                     descendant_main_intersect_size, workspace_buffer,        \
+                     descendant_lower_block)                                  \
+            shared(factorization_type_ref, main_supernode, scaled_transposes, \
+                   main_diagonal_block, supernode_starts_ref)
+        {
+          const ConstBlasMatrix<Field> scaled_transpose =
+              scaled_transposes[index].ToConst();
+
+          const ConstBlasMatrix<Field> descendant_main_matrix =
+              descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
+                                               descendant_main_intersect_size,
+                                               descendant_supernode_size);
+
+          BlasMatrix<Field> workspace_matrix;
+          workspace_matrix.height = descendant_main_intersect_size;
+          workspace_matrix.width = descendant_main_intersect_size;
+          workspace_matrix.leading_dim = descendant_main_intersect_size;
+          workspace_matrix.data = workspace_buffer.data();
+
+          UpdateDiagonalBlock(factorization_type_ref, supernode_starts_ref,
+                              *lower_factor_ptr, main_supernode,
+                              descendant_supernode, descendant_main_rel_row,
+                              descendant_main_matrix, scaled_transpose,
+                              &main_diagonal_block, &workspace_matrix);
+        }
+
+        shared_state_ref.intersect_ptrs[descendant_supernode]++;
+        shared_state_ref.rel_rows[descendant_supernode] +=
+            descendant_main_intersect_size;
+
+        // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
+        //                = L(KNext:n, J) * Z(J, K).
+        const Int* descendant_active_intersect_size_beg =
+            shared_state_ref.intersect_ptrs[descendant_supernode];
+        Int descendant_active_rel_row =
+            shared_state_ref.rel_rows[descendant_supernode];
+        const Int* main_active_intersect_sizes =
+            lower_factor_ptr->IntersectionSizes(main_supernode);
+        Int main_active_rel_row = 0;
+        while (descendant_active_rel_row != descendant_degree) {
+          const Int descendant_active_intersect_size =
+              *descendant_active_intersect_size_beg;
+
+          SeekForMainActiveRelativeRow(
+              main_supernode, descendant_supernode, descendant_active_rel_row,
+              supernode_member_to_index_ref, *lower_factor_ptr,
+              &main_active_rel_row, &main_active_intersect_sizes);
+          const Int main_active_intersect_size = *main_active_intersect_sizes;
+
+#pragma omp task depend(in                                                   \
+                        : scaled_transposes_data[index])                     \
+    depend(out                                                               \
+           : main_lower_block_data[main_active_rel_row]) default(none)       \
+        firstprivate(index, descendant_supernode, descendant_active_rel_row, \
+                     descendant_main_rel_row, main_active_rel_row,           \
+                     descendant_active_intersect_size,                       \
+                     descendant_main_intersect_size,                         \
+                     main_active_intersect_size, descendant_supernode_size,  \
+                     workspace_buffer, descendant_lower_block)               \
+            shared(main_supernode, scaled_transposes, main_lower_block,      \
+                   supernode_starts_ref, supernode_member_to_index_ref)
+          {
+            const ConstBlasMatrix<Field> scaled_transpose =
+                scaled_transposes[index].ToConst();
+
+            const ConstBlasMatrix<Field> descendant_active_matrix =
+                descendant_lower_block.Submatrix(
+                    descendant_active_rel_row, 0,
+                    descendant_active_intersect_size,
+                    descendant_supernode_size);
+
+            BlasMatrix<Field> main_active_block = main_lower_block.Submatrix(
+                main_active_rel_row, 0, main_active_intersect_size,
+                main_supernode_size);
+
+            BlasMatrix<Field> workspace_matrix;
+            workspace_matrix.height = descendant_active_intersect_size;
+            workspace_matrix.width = descendant_main_intersect_size;
+            workspace_matrix.leading_dim = descendant_active_intersect_size;
+            workspace_matrix.data = workspace_buffer.data();
+
+            UpdateSubdiagonalBlock(
+                main_supernode, descendant_supernode, main_active_rel_row,
+                descendant_main_rel_row, descendant_active_rel_row,
+                supernode_starts_ref, supernode_member_to_index_ref,
+                scaled_transpose, descendant_active_matrix, *lower_factor_ptr,
+                &main_active_block, &workspace_matrix);
+          }
+
+          ++descendant_active_intersect_size_beg;
+          descendant_active_rel_row += descendant_active_intersect_size;
+        }
+      }
+    }  // pragma omp sequential
+    SetNumLocalBlasThreads(old_num_threads);
+  }  // pragma omp parallel
+}
+
+template <class Field>
+bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
+    Int num_threads, Int main_supernode, LDLResult* result) {
+  BlasMatrix<Field>& main_diagonal_block =
+      diagonal_factor->blocks[main_supernode];
+  BlasMatrix<Field>& main_lower_block = lower_factor->blocks[main_supernode];
+  const Int main_degree = main_lower_block.height;
+  const Int main_supernode_size = main_lower_block.width;
+
+  const Int num_supernode_pivots = MultithreadedFactorDiagonalBlock(
+      num_threads, factorization_type, &main_diagonal_block);
+  result->num_successful_pivots += num_supernode_pivots;
+  if (num_supernode_pivots < main_supernode_size) {
+    return false;
+  }
+
+#pragma omp parallel num_threads(num_threads)
+  {
+    const int old_num_threads = SetNumLocalBlasThreads(num_threads);
+#pragma omp single
+    {
+      SolveAgainstDiagonalBlock(
+          factorization_type, main_diagonal_block.ToConst(), &main_lower_block);
+    }
+    SetNumLocalBlasThreads(old_num_threads);
+  }
+
+  // Finish updating the result structure.
+  result->largest_supernode =
+      std::max(result->largest_supernode, main_supernode_size);
+  result->num_factorization_entries +=
+      (main_supernode_size * (main_supernode_size + 1)) / 2 +
+      main_supernode_size * main_degree;
+
+  // Add the approximate number of flops for the diagonal block factorization.
+  result->num_factorization_flops +=
+      std::pow(1. * main_supernode_size, 3.) / 3. +
+      std::pow(1. * main_supernode_size, 2.) / 2.;
+
+  // Add the approximate number of flops for the triangular solves of the
+  // diagonal block against its structure.
+  result->num_factorization_flops +=
+      std::pow(1. * main_degree, 2.) * main_supernode_size;
+
+  return true;
+}
+
+template <class Field>
+bool Factorization<Field>::LeftLookingSubtree(
+    Int supernode, const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& supernode_parents,
+    const std::vector<Int>& supernode_children,
+    const std::vector<Int>& supernode_child_offsets,
+    LeftLookingSharedState* shared_state,
+    LeftLookingPrivateState* private_state, LDLResult* result) {
+  const Int child_beg = supernode_child_offsets[supernode];
+  const Int child_end = supernode_child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+
+  std::vector<int> successes(num_children);
+  std::vector<LDLResult> result_contributions(num_children);
+
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child = supernode_children[child_beg + child_index];
+    CATAMARI_ASSERT(supernode_parents[child] == supernode,
+                    "Incorrect child index");
+    LDLResult& result_contribution = result_contributions[child_index];
+    successes[child_index] =
+        LeftLookingSubtree(child, matrix, supernode_parents, supernode_children,
+                           supernode_child_offsets, shared_state, private_state,
+                           &result_contribution);
+  }
+
+  bool succeeded = true;
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    if (!successes[child_index]) {
+      succeeded = false;
+      break;
+    }
+    const LDLResult& contribution = result_contributions[child_index];
+
+    // TODO(Jack Poulson): Switch to calling a reduction routine.
+    result->num_successful_pivots += contribution.num_successful_pivots;
+    result->largest_supernode =
+        std::max(result->largest_supernode, contribution.largest_supernode);
+    result->num_factorization_entries += contribution.num_factorization_entries;
+    result->num_factorization_flops += contribution.num_factorization_flops;
+  }
+
+  if (succeeded) {
+    LeftLookingSupernodeUpdate(supernode, matrix, supernode_parents,
+                               shared_state, private_state);
+    succeeded = LeftLookingSupernodeFinalize(supernode, result);
+  }
+
+  return succeeded;
+}
+
+template <class Field>
+bool Factorization<Field>::MultithreadedLeftLookingSubtree(
+    Int num_threads, Int supernode, const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& supernode_parents,
+    const std::vector<Int>& supernode_children,
+    const std::vector<Int>& supernode_child_offsets,
+    LeftLookingSharedState* shared_state,
+    LeftLookingPrivateState* private_state, LDLResult* result) {
+  const Int child_beg = supernode_child_offsets[supernode];
+  const Int child_end = supernode_child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+
+  std::vector<int> successes(num_children);
+  std::vector<LDLResult> result_contributions(num_children);
+
+  // TODO(Jack Poulson): Avoid all of the unnecessary workspace buffer copies.
+  LeftLookingPrivateState private_state_copy = *private_state;
+
+  if (num_threads < num_children) {
+#pragma omp parallel for num_threads(num_threads) default(none)          \
+    firstprivate(private_state_copy)                                     \
+        shared(successes, matrix, supernode_parents, supernode_children, \
+               supernode_child_offsets, result_contributions, shared_state)
+    for (Int child_index = 0; child_index < num_children; ++child_index) {
+      const Int child = supernode_children[child_beg + child_index];
+      CATAMARI_ASSERT(supernode_parents[child] == supernode,
+                      "Incorrect child index");
+
+      const int old_num_threads = SetNumLocalBlasThreads(1);
+      LDLResult& result_contribution = result_contributions[child_index];
+      successes[child_index] = LeftLookingSubtree(
+          child, matrix, supernode_parents, supernode_children,
+          supernode_child_offsets, shared_state, &private_state_copy,
+          &result_contribution);
+      SetNumLocalBlasThreads(old_num_threads);
+    }
+  } else {
+    // TODO(Jack Poulson): Come up with a more intelligent subtree mapping.
+    std::vector<Int> num_threads_per_tree(num_children);
+    const Int num_threads_base = num_threads / num_children;
+    for (Int j = 0; j < num_children; ++j) {
+      if (j < num_children - 1) {
+        num_threads_per_tree[j] = num_threads_base;
+      } else {
+        num_threads_per_tree[j] =
+            num_threads - (num_children - 1) * num_threads_base;
+      }
+    }
+
+#pragma omp parallel for num_threads(num_children) default(none)            \
+    firstprivate(private_state_copy)                                        \
+        shared(successes, matrix, supernode_parents, supernode_children,    \
+               supernode_child_offsets, result_contributions, shared_state, \
+               num_threads_per_tree)
+    for (Int child_index = 0; child_index < num_children; ++child_index) {
+      const Int child = supernode_children[child_beg + child_index];
+      CATAMARI_ASSERT(supernode_parents[child] == supernode,
+                      "Incorrect child index");
+
+      const int num_threads_child = num_threads_per_tree[omp_get_thread_num()];
+      LDLResult& result_contribution = result_contributions[child_index];
+      successes[child_index] = MultithreadedLeftLookingSubtree(
+          num_threads_child, child, matrix, supernode_parents,
+          supernode_children, supernode_child_offsets, shared_state,
+          &private_state_copy, &result_contribution);
+    }
+  }
+
+  bool succeeded = true;
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    if (!successes[child_index]) {
+      succeeded = false;
+      break;
+    }
+    const LDLResult& contribution = result_contributions[child_index];
+
+    // TODO(Jack Poulson): Switch to calling a reduction routine.
+    result->num_successful_pivots += contribution.num_successful_pivots;
+    result->largest_supernode =
+        std::max(result->largest_supernode, contribution.largest_supernode);
+    result->num_factorization_entries += contribution.num_factorization_entries;
+    result->num_factorization_flops += contribution.num_factorization_flops;
+  }
+
+  if (succeeded) {
+    // Handle the current supernode's elimination.
+    MultithreadedLeftLookingSupernodeUpdate(num_threads, supernode, matrix,
+                                            supernode_parents, shared_state,
+                                            private_state);
+    succeeded = MultithreadedLeftLookingSupernodeFinalize(num_threads,
+                                                          supernode, result);
+  }
+
+  return succeeded;
+}
+
+template <class Field>
+LDLResult Factorization<Field>::MultithreadedLeftLooking(
+    const CoordinateMatrix<Field>& matrix, const Control& control) {
+  std::vector<Int> supernode_parents;
+  {
+    std::vector<Int> parents;
+    std::vector<Int> supernode_degrees;
+    FormSupernodes(matrix, control.relaxation_control, &parents,
+                   &supernode_degrees, &supernode_parents);
+    InitializeLeftLookingFactors(matrix, parents, supernode_degrees);
+  }
+  const Int num_supernodes = supernode_sizes.size();
+
+  LeftLookingSharedState shared_state;
+  shared_state.rel_rows.resize(num_supernodes);
+  shared_state.intersect_ptrs.resize(num_supernodes);
+
+  LeftLookingPrivateState private_state;
+  private_state.pattern_flags.resize(num_supernodes, -1);
+  private_state.row_structure.resize(num_supernodes);
+  private_state.scaled_transpose_buffer.resize(
+      max_supernode_size * max_supernode_size, Field{0});
+  private_state.workspace_buffer.resize(
+      max_supernode_size * (max_supernode_size - 1), Field{0});
+
+  // Form the downlinks for the supernodal elimination tree.
+  std::vector<Int> supernode_children;
+  std::vector<Int> supernode_child_offsets;
+  std::vector<Int> roots;
+  EliminationChildrenFromParents(supernode_parents, &supernode_children,
+                                 &supernode_child_offsets, &roots);
+  const Int num_roots = roots.size();
+
+  omp_set_nested(1);
+  omp_set_dynamic(0);
+
+  LDLResult result;
+
+  std::vector<int> successes(num_roots);
+  std::vector<LDLResult> result_contributions(num_roots);
+
+  // Decide how many of the current processes to split amongst each of the
+  // children.
+  // TODO(Jack Poulson): Come up with a more intelligent assignment mechanism.
+  const Int max_threads = omp_get_max_threads();
+  if (max_threads < num_roots) {
+#pragma omp parallel for num_threads(max_threads) default(none)          \
+    firstprivate(private_state) shared(                                  \
+        roots, successes, matrix, supernode_parents, supernode_children, \
+        supernode_child_offsets, result_contributions, shared_state)
+    for (Int root_index = 0; root_index < num_roots; ++root_index) {
+      const Int root = roots[root_index];
+
+#pragma omp parallel num_threads(1)
+      {
+        const int old_num_threads = SetNumLocalBlasThreads(1);
+        LDLResult& result_contribution = result_contributions[root_index];
+        successes[root_index] = LeftLookingSubtree(
+            root, matrix, supernode_parents, supernode_children,
+            supernode_child_offsets, &shared_state, &private_state,
+            &result_contribution);
+        SetNumLocalBlasThreads(old_num_threads);
+      }
+    }
+  } else {
+    std::vector<Int> num_threads_per_tree(num_roots);
+    const Int num_threads_base = max_threads / num_roots;
+    for (Int j = 0; j < num_roots; ++j) {
+      if (j < num_roots - 1) {
+        num_threads_per_tree[j] = num_threads_base;
+      } else {
+        num_threads_per_tree[j] =
+            max_threads - (num_roots - 1) * num_threads_base;
+      }
+    }
+
+#pragma omp parallel for num_threads(num_roots) default(none) \
+    firstprivate(private_state)                               \
+        shared(roots, successes, matrix, supernode_parents,   \
+               supernode_children, supernode_child_offsets,   \
+               result_contributions, shared_state, num_threads_per_tree)
+    for (Int root_index = 0; root_index < num_roots; ++root_index) {
+      const Int root = roots[root_index];
+      const int num_threads_child = num_threads_per_tree[omp_get_thread_num()];
+      LDLResult& result_contribution = result_contributions[root_index];
+      successes[root_index] = MultithreadedLeftLookingSubtree(
+          num_threads_child, root, matrix, supernode_parents,
+          supernode_children, supernode_child_offsets, &shared_state,
+          &private_state, &result_contribution);
+    }
+  }
+
+  for (Int index = 0; index < num_roots; ++index) {
+    if (!successes[index]) {
+      break;
+    }
+
+    const LDLResult& contribution = result_contributions[index];
+
+    // TODO(Jack Poulson): Switch to calling a reduction routine.
+    result.num_successful_pivots += contribution.num_successful_pivots;
+    result.largest_supernode =
+        std::max(result.largest_supernode, contribution.largest_supernode);
+    result.num_factorization_entries += contribution.num_factorization_entries;
+    result.num_factorization_flops += contribution.num_factorization_flops;
+  }
+
+  return result;
+}
+#endif  // ifdef _OPENMP
 
 template <class Field>
 LDLResult Factorization<Field>::Factor(
@@ -370,7 +983,7 @@ void Factorization<Field>::LowerTriangularSolve(
     // Handle the external updates for this supernode.
     const Int* indices = lower_factor->Structure(supernode);
     if (supernode_size >= forward_solve_out_of_place_supernode_threshold) {
-      // Perform an out-of-place GEMV.
+      // Perform an out-of-place GEMM.
       BlasMatrix<Field> work_matrix;
       work_matrix.height = subdiagonal.height;
       work_matrix.width = num_rhs;

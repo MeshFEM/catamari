@@ -14,4 +14,12 @@
 
 #define CATAMARI_NOEXCEPT QUOTIENT_NOEXCEPT
 
+#ifdef __GNUG__
+#define CATAMARI_UNUSED __attribute__((unused))
+#elif defined(__clang__)
+#define CATAMARI_UNUSED __attribute__((unused))
+#else
+#define CATAMARI_UNUSED
+#endif  // ifdef __GNUG__
+
 #endif  // ifndef CATAMARI_MACROS_H_

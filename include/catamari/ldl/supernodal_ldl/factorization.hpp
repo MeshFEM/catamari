@@ -116,7 +116,17 @@ class Factorization {
   void PrintLowerFactor(const std::string& label, std::ostream& os) const;
 
  private:
-  struct LeftLookingState {
+  struct LeftLookingSharedState {
+    // The relative index of the active supernode within each supernode's
+    // structure.
+    std::vector<Int> rel_rows;
+
+    // Pointers to the active supernode intersection size within each
+    // supernode's structure.
+    std::vector<const Int*> intersect_ptrs;
+  };
+
+  struct LeftLookingPrivateState {
     // An integer workspace for storing the supernodes in the current row
     // pattern.
     std::vector<Int> row_structure;
@@ -125,20 +135,19 @@ class Factorization {
     // of the active row of the lower-triangular factor.
     std::vector<Int> pattern_flags;
 
-    // The relative index of the active supernode within each supernode's
-    // structure.
-    std::vector<Int> rel_rows;
-
-    // Pointers to the active supernode intersection size within each
-    // supernode's structure.
-    std::vector<const Int*> intersect_ptrs;
-
     // A buffer for storing (scaled) transposed descendant blocks.
     std::vector<Field> scaled_transpose_buffer;
 
     // A buffer for storing updates to the current supernode column.
     std::vector<Field> workspace_buffer;
   };
+
+  // Form the (possibly relaxed) supernodes for the factorization.
+  void FormSupernodes(const CoordinateMatrix<Field>& matrix,
+                      const SupernodalRelaxationControl& control,
+                      std::vector<Int>* parents,
+                      std::vector<Int>* supernode_degrees,
+                      std::vector<Int>* supernode_parents);
 
   LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
                         const Control& control);
@@ -150,16 +159,42 @@ class Factorization {
   void LeftLookingSupernodeUpdate(Int main_supernode,
                                   const CoordinateMatrix<Field>& matrix,
                                   const std::vector<Int>& supernode_parents,
-                                  LeftLookingState* state);
+                                  LeftLookingSharedState* shared_state,
+                                  LeftLookingPrivateState* private_state);
 
   bool LeftLookingSupernodeFinalize(Int main_supernode, LDLResult* result);
 
-  // Form the (possibly relaxed) supernodes for the factorization.
-  void FormSupernodes(const CoordinateMatrix<Field>& matrix,
-                      const SupernodalRelaxationControl& control,
-                      std::vector<Int>* parents,
-                      std::vector<Int>* supernode_degrees,
-                      std::vector<Int>* supernode_parents);
+#ifdef _OPENMP
+  void MultithreadedLeftLookingSupernodeUpdate(
+      Int num_threads, Int main_supernode,
+      const CoordinateMatrix<Field>& matrix,
+      const std::vector<Int>& supernode_parents,
+      LeftLookingSharedState* shared_state,
+      LeftLookingPrivateState* private_state);
+
+  bool MultithreadedLeftLookingSupernodeFinalize(Int num_threads,
+                                                 Int main_supernode,
+                                                 LDLResult* result);
+
+  bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
+                          const std::vector<Int>& supernode_parents,
+                          const std::vector<Int>& supernode_children,
+                          const std::vector<Int>& supernode_child_offsets,
+                          LeftLookingSharedState* shared_state,
+                          LeftLookingPrivateState* private_state,
+                          LDLResult* result);
+
+  bool MultithreadedLeftLookingSubtree(
+      Int num_threads, Int supernode, const CoordinateMatrix<Field>& matrix,
+      const std::vector<Int>& supernode_parents,
+      const std::vector<Int>& supernode_children,
+      const std::vector<Int>& supernode_child_offsets,
+      LeftLookingSharedState* shared_state,
+      LeftLookingPrivateState* private_state, LDLResult* result);
+
+  LDLResult MultithreadedLeftLooking(const CoordinateMatrix<Field>& matrix,
+                                     const Control& control);
+#endif  // ifdef _OPENMP
 };
 
 // Fills in the structure indices for the lower factor.
@@ -255,6 +290,14 @@ void UpdateSubdiagonalBlock(
 template <class Field>
 Int FactorDiagonalBlock(SymmetricFactorizationType factorization_type,
                         BlasMatrix<Field>* diagonal_block);
+
+#ifdef _OPENMP
+// Perform an in-place LDL' factorization of the supernodal diagonal block.
+template <class Field>
+Int MultithreadedFactorDiagonalBlock(
+    Int num_threads, SymmetricFactorizationType factorization_type,
+    BlasMatrix<Field>* diagonal_block);
+#endif
 
 // L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
 template <class Field>
