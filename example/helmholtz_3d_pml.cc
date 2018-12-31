@@ -1103,8 +1103,8 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     std::vector<Int> permutation, inverse_permutation;
     AnalyticalOrdering(num_x_elements, num_y_elements, num_z_elements,
                        &permutation, &inverse_permutation);
-    result = ldl_factorization.Factor(
-        matrix, permutation, inverse_permutation, ldl_control);
+    result = ldl_factorization.Factor(matrix, permutation, inverse_permutation,
+                                      ldl_control);
   } else {
     result = ldl_factorization.Factor(matrix, ldl_control);
   }

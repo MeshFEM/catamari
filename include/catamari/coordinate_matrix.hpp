@@ -14,8 +14,8 @@
 
 namespace catamari {
 
-using quotient::GraphEdge;
 using quotient::EntryMask;
+using quotient::GraphEdge;
 using quotient::SwapClearVector;
 
 // A tuple of the row, column, and value of a nonzero in a sparse matrix.

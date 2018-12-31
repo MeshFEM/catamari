@@ -166,11 +166,11 @@ class Factorization {
 
 #ifdef _OPENMP
   void MultithreadedLeftLookingSupernodeUpdate(
-      Int num_threads, Int main_supernode,
+      Int thread_offset, Int num_threads, Int main_supernode,
       const CoordinateMatrix<Field>& matrix,
       const std::vector<Int>& supernode_parents,
       LeftLookingSharedState* shared_state,
-      LeftLookingPrivateState* private_state);
+      std::vector<LeftLookingPrivateState>* private_states);
 
   bool MultithreadedLeftLookingSupernodeFinalize(Int num_threads,
                                                  Int main_supernode,
@@ -185,12 +185,13 @@ class Factorization {
                           LDLResult* result);
 
   bool MultithreadedLeftLookingSubtree(
-      Int num_threads, Int supernode, const CoordinateMatrix<Field>& matrix,
+      Int thread_offset, Int num_threads, Int supernode,
+      const CoordinateMatrix<Field>& matrix,
       const std::vector<Int>& supernode_parents,
       const std::vector<Int>& supernode_children,
       const std::vector<Int>& supernode_child_offsets,
       LeftLookingSharedState* shared_state,
-      LeftLookingPrivateState* private_state, LDLResult* result);
+      std::vector<LeftLookingPrivateState>* private_states, LDLResult* result);
 
   LDLResult MultithreadedLeftLooking(const CoordinateMatrix<Field>& matrix,
                                      const Control& control);

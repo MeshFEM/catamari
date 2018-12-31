@@ -128,6 +128,7 @@ void LowerFactor<Field>::FillIntersectionSizes(
     if (last_supernode != -1) {
       // Close out the last intersection count for this column supernode.
       intersect_sizes_[num_supernode_intersects++] = intersect_size;
+      num_descendant_entries[last_supernode] += intersect_size * supernode_size;
     }
   }
   CATAMARI_ASSERT(
@@ -136,11 +137,8 @@ void LowerFactor<Field>::FillIntersectionSizes(
 
   // NOTE: This only needs to be computed for multithreaded factorizations,
   // and the same applies to the num_descendant_entries array.
-  *max_descendant_entries = 0;
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    *max_descendant_entries =
-        std::max(*max_descendant_entries, num_descendant_entries[supernode]);
-  }
+  *max_descendant_entries = *std::max_element(num_descendant_entries.begin(),
+                                              num_descendant_entries.end());
 }
 
 }  // namespace supernodal_ldl
