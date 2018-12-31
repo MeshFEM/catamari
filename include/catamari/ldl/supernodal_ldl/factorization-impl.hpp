@@ -407,23 +407,20 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
       supernode_starts, supernode_member_to_index, supernode_parents,
       main_supernode, main_pattern_flags.data(), main_row_structure.data());
 
+  // Pack the scaled transposes.
+  std::vector<BlasMatrix<Field>> scaled_transposes(num_packed);
+  std::vector<Field>& scaled_transpose_buffer =
+      main_private_state.scaled_transpose_buffer;
+
+  // OpenMP pragmas cannot operate on object members or function results.
   const SymmetricFactorizationType factorization_type_copy = factorization_type;
   const std::vector<Int>& supernode_starts_ref = supernode_starts;
   const std::vector<Int>& supernode_member_to_index_ref =
       supernode_member_to_index;
-
   LowerFactor<Field>* const lower_factor_ptr = lower_factor.get();
   Field* const main_diagonal_block_data CATAMARI_UNUSED =
       main_diagonal_block.data;
   Field* const main_lower_block_data = main_lower_block.data;
-
-  // Pack the scaled transposes.
-  std::vector<BlasMatrix<Field>> scaled_transposes(num_packed);
-  std::vector<Field>& scaled_transpose_buffer =
-      (*private_states)[thread_offset].scaled_transpose_buffer;
-
-  // OpenMP array index dependencies cannot operate directly on an
-  // std::vector, so we extract the underlying array.
   BlasMatrix<Field>* scaled_transposes_data = scaled_transposes.data();
 
   #pragma omp parallel num_threads(num_threads) default(none)                \
@@ -856,7 +853,8 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
   // children.
   // TODO(Jack Poulson): Come up with a more intelligent assignment mechanism.
   if (max_threads == 1 || max_threads < num_roots) {
-    #pragma omp parallel for num_threads(max_threads) default(none)            \
+    #pragma omp parallel for num_threads(max_threads) schedule(dynamic)        \
+	default(none)                                                          \
         shared(roots, successes, matrix, supernode_parents,                    \
             supernode_children, supernode_child_offsets, result_contributions, \
             shared_state, private_states)
