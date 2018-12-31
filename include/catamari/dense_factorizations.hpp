@@ -14,15 +14,37 @@
 
 namespace catamari {
 
+// Attempts to overwrite the lower triangle of an (implicitly) Hermitian
+// Positive-Definite matrix with its lower-triangular Cholesky factor. The
+// return value is the number of successful pivots; the factorization was
+// successful if and only if the return value is the height of the input
+// matrix.
 template <class Field>
 Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix);
 
+// Attempts to overwrite the lower triangle of an (implicitly) Hermitian
+// matrix with its L D L^H factorization, where L is lower-triangular with
+// unit diagonal and D is diagonal (D is stored in place of the implicit
+// unit diagonal). The return value is the number of successful pivots; the
+// factorization was successful if and only if the return value is the height
+// of the input matrix.
 template <class Field>
 Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
 
+// Attempts to overwrite the lower triangle of an (implicitly) symmetric
+// matrix with its L D L^T factorization, where L is lower-triangular with
+// unit diagonal and D is diagonal (D is stored in place of the implicit
+// unit diagonal). The return value is the number of successful pivots; the
+// factorization was successful if and only if the return value is the height
+// of the input matrix.
 template <class Field>
 Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix);
 
+// Returns a sample from the Determinantal Point Process implied by the
+// marginal kernel matrix (i.e., a Hermitian matrix with all eigenvalues
+// contained in [0, 1]). The input matrix is overwritten with the associated
+// L D L^H factorization of the modified kernel (each diagonal pivot with a
+// failed coin-flip is decremented by one).
 template <class Field>
 std::vector<Int> LowerFactorAndSampleDPP(
     bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
