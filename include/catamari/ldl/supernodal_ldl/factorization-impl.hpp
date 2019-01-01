@@ -691,12 +691,19 @@ bool Factorization<Field>::LeftLookingSubtree(
 
 template <class Field>
 bool Factorization<Field>::MultithreadedLeftLookingSubtree(
-    Int supernode, const CoordinateMatrix<Field>& matrix,
+    Int level, Int max_parallel_levels, Int supernode,
+    const CoordinateMatrix<Field>& matrix,
     const std::vector<Int>& supernode_parents,
     const std::vector<Int>& supernode_children,
     const std::vector<Int>& supernode_child_offsets,
     LeftLookingSharedState* shared_state,
     std::vector<LeftLookingPrivateState>* private_states, LDLResult* result) {
+  if (level >= max_parallel_levels) {
+    return LeftLookingSubtree(supernode, matrix, supernode_parents,
+                              supernode_children, supernode_child_offsets,
+                              shared_state, &(*private_states)[0], result);
+  }
+
   const Int child_beg = supernode_child_offsets[supernode];
   const Int child_end = supernode_child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
@@ -712,7 +719,7 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
         firstprivate(child_index)                                        \
         shared(successes, matrix, supernode_parents, supernode_children, \
             supernode_child_offsets, result_contributions, shared_state, \
-            private_states)
+            private_states, level, max_parallel_levels)
     {
       const Int child = supernode_children[child_beg + child_index];
       CATAMARI_ASSERT(supernode_parents[child] == supernode,
@@ -720,9 +727,9 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
 
       LDLResult& result_contribution = result_contributions[child_index];
       successes[child_index] = MultithreadedLeftLookingSubtree(
-          child, matrix, supernode_parents, supernode_children,
-          supernode_child_offsets, shared_state, private_states,
-          &result_contribution);
+          level + 1, max_parallel_levels, child, matrix, supernode_parents,
+          supernode_children, supernode_child_offsets, shared_state,
+          private_states, &result_contribution);
     }
   }
 
@@ -802,23 +809,45 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
   std::vector<int> successes(num_roots);
   std::vector<LDLResult> result_contributions(num_roots);
 
-  // As of Jan. 1, 2019, OpenMP 4.5 is still not pervasive, and so we avoid
-  // dependence on the more natural approach of a 'taskloop'.
-  #pragma omp taskgroup
-  for (Int root_index = 0; root_index < num_roots; ++root_index) {
-    #pragma omp task default(none)                                             \
-        firstprivate(root_index)                                               \
-        shared(roots, successes, matrix, supernode_parents,                    \
-            supernode_children, supernode_child_offsets, result_contributions, \
-            shared_state, private_states)
-    {
+  // TODO(Jack Poulson): Make this value configurable, perhaps with a default
+  // value that signals that an intelligent preset should be used (e.g.,
+  // log2(max_threads).
+  const Int max_parallel_levels = 3;
+
+  const Int level = 0;
+  if (max_parallel_levels == 0) {
+    for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = roots[root_index];
       LDLResult& result_contribution = result_contributions[root_index];
-      successes[root_index] = MultithreadedLeftLookingSubtree(
+      successes[root_index] = LeftLookingSubtree(
           root, matrix, supernode_parents, supernode_children,
-          supernode_child_offsets, &shared_state, &private_states,
+          supernode_child_offsets, &shared_state, &private_states[0],
           &result_contribution);
     }
+  } else {
+    const int old_max_threads = GetMaxBlasThreads();
+    SetNumBlasThreads(1);
+
+    // As of Jan. 1, 2019, OpenMP 4.5 is still not pervasive, and so we avoid
+    // dependence on the more natural approach of a 'taskloop'.
+    #pragma omp taskgroup
+    for (Int root_index = 0; root_index < num_roots; ++root_index) {
+      #pragma omp task default(none)                          \
+          firstprivate(root_index)                            \
+          shared(roots, successes, matrix, supernode_parents, \
+              supernode_children, supernode_child_offsets,    \
+              result_contributions, shared_state, private_states)
+      {
+        const Int root = roots[root_index];
+        LDLResult& result_contribution = result_contributions[root_index];
+        successes[root_index] = MultithreadedLeftLookingSubtree(
+            max_parallel_levels, level + 1, root, matrix, supernode_parents,
+            supernode_children, supernode_child_offsets, &shared_state,
+            &private_states, &result_contribution);
+      }
+    }
+
+    SetNumBlasThreads(old_max_threads);
   }
 
   for (Int index = 0; index < num_roots; ++index) {

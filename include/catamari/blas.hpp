@@ -225,6 +225,17 @@ void BLAS_SYMBOL(ztrsm)(const char* side, const char* uplo,
 
 namespace catamari {
 
+// Returns the maximum number of BLAS threads.
+inline int GetMaxBlasThreads() {
+#ifdef CATAMARI_HAVE_MKL
+  return mkl_get_max_threads();
+#elif defined(CATAMARI_HAVE_OPENBLAS)
+  return openblas_get_max_threads();
+#else
+  return 1;
+#endif  // ifdef CATAMARI_HAVE_MKL
+}
+
 // When possible, sets the global number of threads to be used by BLAS.
 inline void SetNumBlasThreads(int num_threads) {
 #ifdef CATAMARI_HAVE_MKL

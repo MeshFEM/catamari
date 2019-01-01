@@ -183,7 +183,8 @@ class Factorization {
                           LDLResult* result);
 
   bool MultithreadedLeftLookingSubtree(
-      Int supernode, const CoordinateMatrix<Field>& matrix,
+      Int level, Int max_parallel_levels, Int supernode,
+      const CoordinateMatrix<Field>& matrix,
       const std::vector<Int>& supernode_parents,
       const std::vector<Int>& supernode_children,
       const std::vector<Int>& supernode_child_offsets,
