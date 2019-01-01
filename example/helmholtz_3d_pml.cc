@@ -522,14 +522,15 @@ class HelmholtzWithPMLTrilinearHexahedra {
 
     // Evaluate the weight tensor over the element.
     for (int l = 0; l < num_dimensions; ++l) {
-      for (int k = 0; k <= 1; ++k) {
+      for (int k = 0; k < quadrature_1d_order; ++k) {
         const Real z = z_beg + quadrature_z_points_[k];
-        for (int j = 0; j <= 1; ++j) {
+        for (int j = 0; j < quadrature_1d_order; ++j) {
           const Real y = y_beg + quadrature_y_points_[j];
-          for (int i = 0; i <= 1; ++i) {
+          for (int i = 0; i < quadrature_1d_order; ++i) {
             const Real x = x_beg + quadrature_x_points_[i];
             const Point<Real> point{x, y, z};
-            const int quadrature_index = i + j * 2 + k * 4;
+            const int quadrature_index = i + j * quadrature_1d_order +
+	        k * quadrature_1d_order * quadrature_1d_order;
             gradient_evals_(quadrature_index, l) = (*weight_tensor_)(l, point);
           }
         }
@@ -537,14 +538,15 @@ class HelmholtzWithPMLTrilinearHexahedra {
     }
 
     // Evaluate the diagonal shifts over the element.
-    for (int k = 0; k <= 1; ++k) {
+    for (int k = 0; k < quadrature_1d_order; ++k) {
       const Real z = z_beg + quadrature_z_points_[k];
-      for (int j = 0; j <= 1; ++j) {
+      for (int j = 0; j < quadrature_1d_order; ++j) {
         const Real y = y_beg + quadrature_y_points_[j];
-        for (int i = 0; i <= 1; ++i) {
+        for (int i = 0; i < quadrature_1d_order; ++i) {
           const Real x = x_beg + quadrature_x_points_[i];
           const Point<Real> point{x, y, z};
-          const int quadrature_index = i + j * 2 + k * 4;
+          const int quadrature_index = i + j * quadrature_1d_order +
+              k * quadrature_1d_order;
           scalar_evals_(quadrature_index, 0) = (*diagonal_shift_)(point);
         }
       }
@@ -625,14 +627,15 @@ class HelmholtzWithPMLTrilinearHexahedra {
     const int num_basis_functions = 8;
 
     // Evaluate the right-hand side over the element.
-    for (int k = 0; k <= 1; ++k) {
+    for (int k = 0; k < quadrature_1d_order; ++k) {
       const Real z = z_beg + quadrature_z_points_[k];
-      for (int j = 0; j <= 1; ++j) {
+      for (int j = 0; j < quadrature_1d_order; ++j) {
         const Real y = y_beg + quadrature_y_points_[j];
-        for (int i = 0; i <= 1; ++i) {
+        for (int i = 0; i < quadrature_1d_order; ++i) {
           const Real x = x_beg + quadrature_x_points_[i];
           const Point<Real> point{x, y, z};
-          const int quadrature_index = i + j * 2 + k * 4;
+          const int quadrature_index = i + j * quadrature_1d_order +
+              k * quadrature_1d_order * quadrature_1d_order;
           scalar_evals_(quadrature_index, 0) = rhs_function(point);
         }
       }

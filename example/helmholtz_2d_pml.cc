@@ -437,24 +437,24 @@ class HelmholtzWithPMLQ4 {
 
     // Evaluate the weight tensor over the element.
     for (int l = 0; l < num_dimensions; ++l) {
-      for (int j = 0; j <= 1; ++j) {
+      for (int j = 0; j < quadrature_1d_order; ++j) {
         const Real y = y_beg + quadrature_y_points_[j];
-        for (int i = 0; i <= 1; ++i) {
+        for (int i = 0; i < quadrature_1d_order; ++i) {
           const Real x = x_beg + quadrature_x_points_[i];
           const Point<Real> point{x, y};
-          const int quadrature_index = i + j * 2;
+          const int quadrature_index = i + j * quadrature_1d_order;
           gradient_evals_(quadrature_index, l) = (*weight_tensor_)(l, point);
         }
       }
     }
 
     // Evaluate the diagonal shifts over the element.
-    for (int j = 0; j <= 1; ++j) {
+    for (int j = 0; j < quadrature_1d_order; ++j) {
       const Real y = y_beg + quadrature_y_points_[j];
-      for (int i = 0; i <= 1; ++i) {
+      for (int i = 0; i < quadrature_1d_order; ++i) {
         const Real x = x_beg + quadrature_x_points_[i];
         const Point<Real> point{x, y};
-        const int quadrature_index = i + j * 2;
+        const int quadrature_index = i + j * quadrature_1d_order;
         scalar_evals_(quadrature_index, 0) = (*diagonal_shift_)(point);
       }
     }
@@ -521,12 +521,12 @@ class HelmholtzWithPMLQ4 {
     const int num_basis_functions = 4;
 
     // Evaluate the right-hand side over the element.
-    for (int j = 0; j <= 1; ++j) {
+    for (int j = 0; j < quadrature_1d_order; ++j) {
       const Real y = y_beg + quadrature_y_points_[j];
-      for (int i = 0; i <= 1; ++i) {
+      for (int i = 0; i < quadrature_1d_order; ++i) {
         const Real x = x_beg + quadrature_x_points_[i];
         const Point<Real> point{x, y};
-        const int quadrature_index = i + j * 2;
+        const int quadrature_index = i + j * quadrature_1d_order;
         scalar_evals_(quadrature_index, 0) = rhs_function(point);
       }
     }
