@@ -124,16 +124,11 @@ Int LowerBlockedCholeskyFactorization(BlasMatrix<Field>* matrix,
                                       Int blocksize) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
-  const Int leading_dim = matrix->leading_dim;
   for (Int i = 0; i < height; i += blocksize) {
     const Int bsize = std::min(height - i, blocksize);
 
     // Overwrite the diagonal block with its Cholesky factor.
-    BlasMatrix<Field> diagonal_block;
-    diagonal_block.height = bsize;
-    diagonal_block.width = bsize;
-    diagonal_block.leading_dim = leading_dim;
-    diagonal_block.data = matrix->Pointer(i, i);
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
     const Int num_diag_pivots =
         LowerUnblockedCholeskyFactorization(&diagonal_block);
     if (num_diag_pivots < bsize) {
@@ -144,22 +139,14 @@ Int LowerBlockedCholeskyFactorization(BlasMatrix<Field>* matrix,
     }
 
     // Solve for the remainder of the block column of L.
-    BlasMatrix<Field> subdiagonal;
-    subdiagonal.height = height - (i + bsize);
-    subdiagonal.width = bsize;
-    subdiagonal.leading_dim = leading_dim;
-    subdiagonal.data = matrix->Pointer(i + bsize, i);
-    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
-    RightLowerAdjointTriangularSolves(const_diagonal_block, &subdiagonal);
+    BlasMatrix<Field> subdiagonal =
+        matrix->Submatrix(i + bsize, i, height - (i + bsize), bsize);
+    RightLowerAdjointTriangularSolves(diagonal_block.ToConst(), &subdiagonal);
 
     // Perform the Hermitian rank-bsize update.
-    BlasMatrix<Field> submatrix;
-    submatrix.height = height - (i + bsize);
-    submatrix.width = height - (i + bsize);
-    submatrix.leading_dim = leading_dim;
-    submatrix.data = matrix->Pointer(i + bsize, i + bsize);
-    const ConstBlasMatrix<Field> const_subdiagonal = subdiagonal;
-    LowerNormalHermitianOuterProduct(Real{-1}, const_subdiagonal, Real{1},
+    BlasMatrix<Field> submatrix = matrix->Submatrix(
+        i + bsize, i + bsize, height - (i + bsize), height - (i + bsize));
+    LowerNormalHermitianOuterProduct(Real{-1}, subdiagonal.ToConst(), Real{1},
                                      &submatrix);
   }
   return height;
@@ -167,6 +154,7 @@ Int LowerBlockedCholeskyFactorization(BlasMatrix<Field>* matrix,
 
 template <class Field>
 Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix) {
+  // TODO(Jack Poulson): Expose this as a parameter.
   const Int blocksize = 64;
   return LowerBlockedCholeskyFactorization(matrix, blocksize);
 }
@@ -210,6 +198,96 @@ inline Int LowerCholeskyFactorization(BlasMatrix<double>* matrix) {
 #endif  // ifdef CATAMARI_HAVE_LAPACK
 
 template <class Field>
+Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix) {
+  typedef ComplexBase<Field> Real;
+
+  // TODO(Jack Poulson): Expose this as a parameter.
+  const Int blocksize = 128;
+
+  const Int height = matrix->height;
+
+  // For use in tracking dependencies.
+  Field* const matrix_data CATAMARI_UNUSED = matrix->data;
+  const Int leading_dim CATAMARI_UNUSED = matrix->leading_dim;
+
+  Int num_pivots = 0;
+  for (Int i = 0; i < height; i += blocksize) {
+    const Int bsize = std::min(height - i, blocksize);
+
+    // Overwrite the diagonal block with its Cholesky factor.
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
+    bool failed_pivot = false;
+    #pragma omp taskgroup
+    #pragma omp task default(none)                                    \
+        firstprivate(diagonal_block) shared(num_pivots, failed_pivot) \
+        depend(in: matrix_data[i + i * leading_dim])
+    {
+      const Int num_diag_pivots = LowerCholeskyFactorization(&diagonal_block);
+      num_pivots += num_diag_pivots;
+      if (num_diag_pivots < diagonal_block.height) {
+        failed_pivot = true;
+      }
+    }
+    if (failed_pivot || height == i + bsize) {
+      break;
+    }
+    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
+
+    // Solve for the remainder of the block column of L.
+    for (Int i_sub = i + bsize; i_sub < height; i_sub += blocksize) {
+      #pragma omp task default(none)                           \
+          firstprivate(i, i_sub, matrix, const_diagonal_block) \
+          depend(inout: matrix_data[i_sub + i * leading_dim])
+      {
+        const Int bsize_solve = std::min(height - i_sub, bsize);
+        BlasMatrix<Field> subdiagonal_block =
+            matrix->Submatrix(i_sub, i, bsize_solve, bsize);
+        RightLowerAdjointTriangularSolves(const_diagonal_block,
+                                          &subdiagonal_block);
+      }
+    }
+
+    // Perform the Hermitian rank-bsize update.
+    for (Int j_sub = i + bsize; j_sub < height; j_sub += blocksize) {
+      #pragma omp task default(none)                       \
+          firstprivate(i, j_sub, matrix)                   \
+          depend(in: matrix_data[j_sub + i * leading_dim]) \
+          depend(inout: matrix_data[j_sub + j_sub * leading_dim])
+      {
+        const Int column_bsize = std::min(height - j_sub, bsize);
+        const ConstBlasMatrix<Field> column_block =
+            matrix->Submatrix(j_sub, i, column_bsize, bsize).ToConst();
+        BlasMatrix<Field> update_block =
+            matrix->Submatrix(j_sub, j_sub, column_bsize, column_bsize);
+        LowerNormalHermitianOuterProduct(Real{-1}, column_block, Real{1},
+                                         &update_block);
+      }
+
+      for (Int i_sub = j_sub + bsize; i_sub < height; i_sub += blocksize) {
+        #pragma omp task default(none)                     \
+          firstprivate(i, i_sub, j_sub, matrix)            \
+          depend(in: matrix_data[i_sub + i * leading_dim], \
+              matrix_data[j_sub + i * leading_dim])        \
+          depend(inout: matrix_data[i_sub + j_sub * leading_dim])
+        {
+          const Int row_bsize = std::min(height - i_sub, bsize);
+          const Int column_bsize = std::min(height - j_sub, bsize);
+          const ConstBlasMatrix<Field> row_block =
+              matrix->Submatrix(i_sub, i, row_bsize, bsize).ToConst();
+          const ConstBlasMatrix<Field> column_block =
+              matrix->Submatrix(j_sub, i, column_bsize, bsize).ToConst();
+          BlasMatrix<Field> update_block =
+              matrix->Submatrix(i_sub, j_sub, row_bsize, column_bsize);
+          MatrixMultiplyNormalAdjoint(Field{-1}, row_block, column_block,
+                                      Field{1}, &update_block);
+        }
+      }
+    }
+  }
+  return num_pivots;
+}
+
+template <class Field>
 Int LowerUnblockedLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
   const Int height = matrix->height;
   for (Int i = 0; i < height; ++i) {
@@ -240,7 +318,6 @@ template <class Field>
 Int LowerBlockedLDLAdjointFactorization(BlasMatrix<Field>* matrix,
                                         Int blocksize) {
   const Int height = matrix->height;
-  const Int leading_dim = matrix->leading_dim;
 
   std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
   BlasMatrix<Field> factor;
@@ -250,11 +327,7 @@ Int LowerBlockedLDLAdjointFactorization(BlasMatrix<Field>* matrix,
     const Int bsize = std::min(height - i, blocksize);
 
     // Overwrite the diagonal block with its LDL' factorization.
-    BlasMatrix<Field> diagonal_block;
-    diagonal_block.height = bsize;
-    diagonal_block.width = bsize;
-    diagonal_block.leading_dim = leading_dim;
-    diagonal_block.data = matrix->Pointer(i, i);
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
     const Int num_diag_pivots =
         LowerUnblockedLDLAdjointFactorization(&diagonal_block);
     if (num_diag_pivots < bsize) {
@@ -265,13 +338,10 @@ Int LowerBlockedLDLAdjointFactorization(BlasMatrix<Field>* matrix,
     }
 
     // Solve for the remainder of the block column of L.
-    BlasMatrix<Field> subdiagonal;
-    subdiagonal.height = height - (i + bsize);
-    subdiagonal.width = bsize;
-    subdiagonal.leading_dim = leading_dim;
-    subdiagonal.data = matrix->Pointer(i + bsize, i);
-    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
-    RightLowerAdjointUnitTriangularSolves(const_diagonal_block, &subdiagonal);
+    BlasMatrix<Field> subdiagonal =
+        matrix->Submatrix(i + bsize, i, height - (i + bsize), bsize);
+    RightLowerAdjointUnitTriangularSolves(diagonal_block.ToConst(),
+                                          &subdiagonal);
 
     // Copy the conjugate of the current factor.
     factor.height = subdiagonal.height;
@@ -285,30 +355,136 @@ Int LowerBlockedLDLAdjointFactorization(BlasMatrix<Field>* matrix,
 
     // Solve against the diagonal.
     for (Int j = 0; j < subdiagonal.width; ++j) {
-      const ComplexBase<Field> delta = RealPart(const_diagonal_block(j, j));
+      const ComplexBase<Field> delta = RealPart(diagonal_block(j, j));
       for (Int k = 0; k < subdiagonal.height; ++k) {
         subdiagonal(k, j) /= delta;
       }
     }
 
     // Perform the Hermitian rank-bsize update.
-    const ConstBlasMatrix<Field> const_subdiagonal = subdiagonal;
-    const ConstBlasMatrix<Field> const_factor = factor;
-    BlasMatrix<Field> submatrix;
-    submatrix.height = height - (i + bsize);
-    submatrix.width = height - (i + bsize);
-    submatrix.leading_dim = leading_dim;
-    submatrix.data = matrix->Pointer(i + bsize, i + bsize);
-    MatrixMultiplyLowerNormalTranspose(Field{-1}, const_subdiagonal,
-                                       const_factor, Field{1}, &submatrix);
+    BlasMatrix<Field> submatrix = matrix->Submatrix(
+        i + bsize, i + bsize, height - (i + bsize), height - (i + bsize));
+    MatrixMultiplyLowerNormalTranspose(Field{-1}, subdiagonal.ToConst(),
+                                       factor.ToConst(), Field{1}, &submatrix);
   }
   return height;
 }
 
 template <class Field>
 Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
+  // TODO(Jack Poulson): Expose this as a parameter.
   const Int blocksize = 64;
   return LowerBlockedLDLAdjointFactorization(matrix, blocksize);
+}
+
+template <class Field>
+Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
+  const Int height = matrix->height;
+
+  // TODO(Jack Poulson): Expose this as a parameter.
+  const Int blocksize = 128;
+
+  std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  BlasMatrix<Field> factor;
+  factor.data = buffer.data();
+
+  // For use in tracking dependencies.
+  const Int leading_dim CATAMARI_UNUSED = matrix->leading_dim;
+  Field* const matrix_data CATAMARI_UNUSED = matrix->data;
+
+  Int num_pivots = 0;
+  for (Int i = 0; i < height; i += blocksize) {
+    const Int bsize = std::min(height - i, blocksize);
+
+    // Overwrite the diagonal block with its LDL' factorization.
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
+    bool failed_pivot = false;
+    #pragma omp taskgroup
+    #pragma omp task default(none) \
+        firstprivate(diagonal_block) shared(num_pivots, failed_pivot) \
+        depend(in: matrix_data[i + i * leading_dim])
+    {
+      const Int num_diag_pivots = LowerLDLAdjointFactorization(&diagonal_block);
+      num_pivots += num_diag_pivots;
+      if (num_diag_pivots < diagonal_block.height) {
+        failed_pivot = true;
+      }
+    }
+    if (failed_pivot || height == i + bsize) {
+      break;
+    }
+    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
+
+    // Solve for the remainder of the block column of L and then simultaneously
+    // copy its conjugate into 'factor' and the solve against the diagonal.
+    factor.height = height - (i + bsize);
+    factor.width = bsize;
+    factor.leading_dim = factor.height;
+    for (Int i_sub = i + bsize; i_sub < height; i_sub += blocksize) {
+      #pragma omp task default(none)                                   \
+          firstprivate(i, i_sub, matrix, const_diagonal_block, factor) \
+          depend(inout: matrix_data[i_sub + i * leading_dim])
+      {
+        // Solve agains the unit lower-triangle of the diagonal block.
+        const Int bsize_solve = std::min(height - i_sub, bsize);
+        BlasMatrix<Field> subdiagonal_block =
+            matrix->Submatrix(i_sub, i, bsize_solve, bsize);
+        RightLowerAdjointUnitTriangularSolves(const_diagonal_block,
+                                              &subdiagonal_block);
+
+        // Copy the conjugate into 'factor' and solve against the diagonal.
+        BlasMatrix<Field> factor_block =
+            factor.Submatrix(i_sub - (i + bsize), 0, bsize_solve, bsize);
+        for (Int j = 0; j < subdiagonal_block.width; ++j) {
+          const ComplexBase<Field> delta = RealPart(const_diagonal_block(j, j));
+          for (Int k = 0; k < subdiagonal_block.height; ++k) {
+            factor_block(k, j) = Conjugate(subdiagonal_block(k, j));
+            subdiagonal_block(k, j) /= delta;
+          }
+        }
+      }
+    }
+
+    // Perform the Hermitian rank-bsize update.
+    for (Int j_sub = i + bsize; j_sub < height; j_sub += blocksize) {
+      #pragma omp task default(none)                       \
+          firstprivate(i, j_sub, matrix, factor)           \
+          depend(in: matrix_data[j_sub + i * leading_dim]) \
+          depend(inout: matrix_data[j_sub + j_sub * leading_dim])
+      {
+        const Int column_bsize = std::min(height - j_sub, bsize);
+        const ConstBlasMatrix<Field> row_block =
+            matrix->Submatrix(j_sub, i, column_bsize, bsize).ToConst();
+        const ConstBlasMatrix<Field> column_block =
+            factor.Submatrix(j_sub - (i + bsize), 0, column_bsize, bsize);
+        BlasMatrix<Field> update_block =
+            matrix->Submatrix(j_sub, j_sub, column_bsize, column_bsize);
+        MatrixMultiplyLowerNormalTranspose(Field{-1}, row_block, column_block,
+                                           Field{1}, &update_block);
+      }
+
+      for (Int i_sub = j_sub + bsize; i_sub < height; i_sub += blocksize) {
+        #pragma omp task default(none)                     \
+          firstprivate(i, i_sub, j_sub, matrix, factor)    \
+          depend(in: matrix_data[i_sub + i * leading_dim], \
+              matrix_data[j_sub + i * leading_dim])        \
+          depend(inout: matrix_data[i_sub + j_sub * leading_dim])
+        {
+          const Int row_bsize = std::min(height - i_sub, bsize);
+          const Int column_bsize = std::min(height - j_sub, bsize);
+          const ConstBlasMatrix<Field> row_block =
+              matrix->Submatrix(i_sub, i, row_bsize, bsize).ToConst();
+          const ConstBlasMatrix<Field> column_block =
+              factor.Submatrix(j_sub - (i + bsize), 0, column_bsize, bsize);
+          BlasMatrix<Field> update_block =
+              matrix->Submatrix(i_sub, j_sub, row_bsize, column_bsize);
+          MatrixMultiplyNormalTranspose(Field{-1}, row_block, column_block,
+                                        Field{1}, &update_block);
+        }
+      }
+    }
+  }
+  return num_pivots;
 }
 
 template <class Field>
@@ -342,7 +518,6 @@ template <class Field>
 Int LowerBlockedLDLTransposeFactorization(BlasMatrix<Field>* matrix,
                                           Int blocksize) {
   const Int height = matrix->height;
-  const Int leading_dim = matrix->leading_dim;
 
   std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
   BlasMatrix<Field> factor;
@@ -352,11 +527,7 @@ Int LowerBlockedLDLTransposeFactorization(BlasMatrix<Field>* matrix,
     const Int bsize = std::min(height - i, blocksize);
 
     // Overwrite the diagonal block with its LDL' factorization.
-    BlasMatrix<Field> diagonal_block;
-    diagonal_block.height = bsize;
-    diagonal_block.width = bsize;
-    diagonal_block.leading_dim = leading_dim;
-    diagonal_block.data = matrix->Pointer(i, i);
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
     const Int num_diag_pivots =
         LowerUnblockedLDLTransposeFactorization(&diagonal_block);
     if (num_diag_pivots < bsize) {
@@ -367,13 +538,10 @@ Int LowerBlockedLDLTransposeFactorization(BlasMatrix<Field>* matrix,
     }
 
     // Solve for the remainder of the block column of L.
-    BlasMatrix<Field> subdiagonal;
-    subdiagonal.height = height - (i + bsize);
-    subdiagonal.width = bsize;
-    subdiagonal.leading_dim = leading_dim;
-    subdiagonal.data = matrix->Pointer(i + bsize, i);
-    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
-    RightLowerTransposeUnitTriangularSolves(const_diagonal_block, &subdiagonal);
+    BlasMatrix<Field> subdiagonal =
+        matrix->Submatrix(i + bsize, i, height - (i + bsize), bsize);
+    RightLowerTransposeUnitTriangularSolves(diagonal_block.ToConst(),
+                                            &subdiagonal);
 
     // Copy the current factor.
     factor.height = subdiagonal.height;
@@ -387,30 +555,137 @@ Int LowerBlockedLDLTransposeFactorization(BlasMatrix<Field>* matrix,
 
     // Solve against the diagonal.
     for (Int j = 0; j < subdiagonal.width; ++j) {
-      const Field delta = const_diagonal_block(j, j);
+      const Field delta = diagonal_block(j, j);
       for (Int k = 0; k < subdiagonal.height; ++k) {
         subdiagonal(k, j) /= delta;
       }
     }
 
     // Perform the symmetric rank-bsize update.
-    const ConstBlasMatrix<Field> const_subdiagonal = subdiagonal;
-    const ConstBlasMatrix<Field> const_factor = factor;
-    BlasMatrix<Field> submatrix;
-    submatrix.height = height - (i + bsize);
-    submatrix.width = height - (i + bsize);
-    submatrix.leading_dim = leading_dim;
-    submatrix.data = matrix->Pointer(i + bsize, i + bsize);
-    MatrixMultiplyLowerNormalTranspose(Field{-1}, const_subdiagonal,
-                                       const_factor, Field{1}, &submatrix);
+    BlasMatrix<Field> submatrix = matrix->Submatrix(
+        i + bsize, i + bsize, height - (i + bsize), height - (i + bsize));
+    MatrixMultiplyLowerNormalTranspose(Field{-1}, subdiagonal.ToConst(),
+                                       factor.ToConst(), Field{1}, &submatrix);
   }
   return height;
 }
 
 template <class Field>
 Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix) {
+  // TODO(Jack Poulson): Expose this as a parameter.
   const Int blocksize = 64;
   return LowerBlockedLDLTransposeFactorization(matrix, blocksize);
+}
+
+template <class Field>
+Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix) {
+  const Int height = matrix->height;
+
+  // TODO(Jack Poulson): Expose this as a parameter.
+  const Int blocksize = 128;
+
+  std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  BlasMatrix<Field> factor;
+  factor.data = buffer.data();
+
+  // For use in tracking dependencies.
+  const Int leading_dim CATAMARI_UNUSED = matrix->leading_dim;
+  Field* const matrix_data CATAMARI_UNUSED = matrix->data;
+
+  Int num_pivots = 0;
+  for (Int i = 0; i < height; i += blocksize) {
+    const Int bsize = std::min(height - i, blocksize);
+
+    // Overwrite the diagonal block with its LDL^T factorization.
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
+    bool failed_pivot = false;
+    #pragma omp taskgroup
+    #pragma omp task default(none) \
+        firstprivate(diagonal_block) shared(num_pivots, failed_pivot) \
+        depend(in: matrix_data[i + i * leading_dim])
+    {
+      const Int num_diag_pivots =
+          LowerLDLTransposeFactorization(&diagonal_block);
+      num_pivots += num_diag_pivots;
+      if (num_diag_pivots < diagonal_block.height) {
+        failed_pivot = true;
+      }
+    }
+    if (failed_pivot || height == i + bsize) {
+      break;
+    }
+    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
+
+    // Solve for the remainder of the block column of L and then simultaneously
+    // copy its conjugate into 'factor' and the solve against the diagonal.
+    factor.height = height - (i + bsize);
+    factor.width = bsize;
+    factor.leading_dim = factor.height;
+    for (Int i_sub = i + bsize; i_sub < height; i_sub += blocksize) {
+      #pragma omp task default(none)                                   \
+          firstprivate(i, i_sub, matrix, factor, const_diagonal_block) \
+          depend(inout: matrix_data[i_sub + i * leading_dim])
+      {
+        // Solve agains the unit lower-triangle of the diagonal block.
+        const Int bsize_solve = std::min(height - i_sub, bsize);
+        BlasMatrix<Field> subdiagonal_block =
+            matrix->Submatrix(i_sub, i, bsize_solve, bsize);
+        RightLowerTransposeUnitTriangularSolves(const_diagonal_block,
+                                                &subdiagonal_block);
+
+        // Copy into 'factor' and solve against the diagonal.
+        BlasMatrix<Field> factor_block =
+            factor.Submatrix(i_sub - (i + bsize), 0, bsize_solve, bsize);
+        for (Int j = 0; j < subdiagonal_block.width; ++j) {
+          const Field delta = const_diagonal_block(j, j);
+          for (Int k = 0; k < subdiagonal_block.height; ++k) {
+            factor_block(k, j) = subdiagonal_block(k, j);
+            subdiagonal_block(k, j) /= delta;
+          }
+        }
+      }
+    }
+
+    // Perform the Hermitian rank-bsize update.
+    for (Int j_sub = i + bsize; j_sub < height; j_sub += blocksize) {
+      #pragma omp task default(none)                       \
+          firstprivate(i, j_sub, matrix, factor)           \
+          depend(in: matrix_data[j_sub + i * leading_dim]) \
+          depend(inout: matrix_data[j_sub + j_sub * leading_dim])
+      {
+        const Int column_bsize = std::min(height - j_sub, bsize);
+        const ConstBlasMatrix<Field> row_block =
+            matrix->Submatrix(j_sub, i, column_bsize, bsize).ToConst();
+        const ConstBlasMatrix<Field> column_block =
+            factor.Submatrix(j_sub - (i + bsize), 0, column_bsize, bsize);
+        BlasMatrix<Field> update_block =
+            matrix->Submatrix(j_sub, j_sub, column_bsize, column_bsize);
+        MatrixMultiplyLowerNormalTranspose(Field{-1}, row_block, column_block,
+                                           Field{1}, &update_block);
+      }
+
+      for (Int i_sub = j_sub + bsize; i_sub < height; i_sub += blocksize) {
+        #pragma omp task default(none)                     \
+          firstprivate(i, i_sub, j_sub, matrix, factor)    \
+          depend(in: matrix_data[i_sub + i * leading_dim], \
+              matrix_data[j_sub + i * leading_dim])        \
+          depend(inout: matrix_data[i_sub + j_sub * leading_dim])
+        {
+          const Int row_bsize = std::min(height - i_sub, bsize);
+          const Int column_bsize = std::min(height - j_sub, bsize);
+          const ConstBlasMatrix<Field> row_block =
+              matrix->Submatrix(i_sub, i, row_bsize, bsize).ToConst();
+          const ConstBlasMatrix<Field> column_block =
+              factor.Submatrix(j_sub - (i + bsize), 0, column_bsize, bsize);
+          BlasMatrix<Field> update_block =
+              matrix->Submatrix(i_sub, j_sub, row_bsize, column_bsize);
+          MatrixMultiplyNormalTranspose(Field{-1}, row_block, column_block,
+                                        Field{1}, &update_block);
+        }
+      }
+    }
+  }
+  return num_pivots;
 }
 
 template <class Field>
@@ -459,7 +734,6 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     Int blocksize) {
   const Int height = matrix->height;
-  const Int leading_dim = matrix->leading_dim;
 
   std::vector<Int> sample;
   sample.reserve(height);
@@ -472,11 +746,7 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
     const Int bsize = std::min(height - i, blocksize);
 
     // Overwrite the diagonal block with its LDL' factorization.
-    BlasMatrix<Field> diagonal_block;
-    diagonal_block.height = bsize;
-    diagonal_block.width = bsize;
-    diagonal_block.leading_dim = leading_dim;
-    diagonal_block.data = matrix->Pointer(i, i);
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
     std::vector<Int> block_sample = LowerUnblockedFactorAndSampleDPP(
         maximum_likelihood, &diagonal_block, generator, uniform_dist);
     for (const Int& index : block_sample) {
@@ -487,13 +757,10 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
     }
 
     // Solve for the remainder of the block column of L.
-    BlasMatrix<Field> subdiagonal;
-    subdiagonal.height = height - (i + bsize);
-    subdiagonal.width = bsize;
-    subdiagonal.leading_dim = leading_dim;
-    subdiagonal.data = matrix->Pointer(i + bsize, i);
-    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
-    RightLowerAdjointUnitTriangularSolves(const_diagonal_block, &subdiagonal);
+    BlasMatrix<Field> subdiagonal =
+        matrix->Submatrix(i + bsize, i, height - (i + bsize), bsize);
+    RightLowerAdjointUnitTriangularSolves(diagonal_block.ToConst(),
+                                          &subdiagonal);
 
     // Copy the conjugate of the current factor.
     factor.height = subdiagonal.height;
@@ -507,22 +774,17 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
 
     // Solve against the diagonal.
     for (Int j = 0; j < subdiagonal.width; ++j) {
-      const ComplexBase<Field> delta = RealPart(const_diagonal_block(j, j));
+      const ComplexBase<Field> delta = RealPart(diagonal_block(j, j));
       for (Int k = 0; k < subdiagonal.height; ++k) {
         subdiagonal(k, j) /= delta;
       }
     }
 
     // Perform the Hermitian rank-bsize update.
-    const ConstBlasMatrix<Field> const_subdiagonal = subdiagonal;
-    const ConstBlasMatrix<Field> const_factor = factor;
-    BlasMatrix<Field> submatrix;
-    submatrix.height = height - (i + bsize);
-    submatrix.width = height - (i + bsize);
-    submatrix.leading_dim = leading_dim;
-    submatrix.data = matrix->Pointer(i + bsize, i + bsize);
-    MatrixMultiplyLowerNormalTranspose(Field{-1}, const_subdiagonal,
-                                       const_factor, Field{1}, &submatrix);
+    BlasMatrix<Field> submatrix = matrix->Submatrix(
+        i + bsize, i + bsize, height - (i + bsize), height - (i + bsize));
+    MatrixMultiplyLowerNormalTranspose(Field{-1}, subdiagonal.ToConst(),
+                                       factor.ToConst(), Field{1}, &submatrix);
   }
   return sample;
 }
@@ -531,9 +793,126 @@ template <class Field>
 std::vector<Int> LowerFactorAndSampleDPP(
     bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
+  // TODO(Jack Poulson): Expose this as a parameter.
   const Int blocksize = 64;
   return LowerBlockedFactorAndSampleDPP(maximum_likelihood, matrix, generator,
                                         uniform_dist, blocksize);
+}
+
+template <class Field>
+std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
+    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
+  const Int height = matrix->height;
+
+  // TODO(Jack Poulson): Expose this as a parameter.
+  const Int blocksize = 128;
+
+  std::vector<Int> sample;
+  sample.reserve(height);
+
+  std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  BlasMatrix<Field> factor;
+  factor.data = buffer.data();
+
+  // For use in tracking dependencies.
+  const Int leading_dim CATAMARI_UNUSED = matrix->leading_dim;
+  Field* const matrix_data CATAMARI_UNUSED = matrix->data;
+
+  std::vector<Int> block_sample;
+  for (Int i = 0; i < height; i += blocksize) {
+    const Int bsize = std::min(height - i, blocksize);
+
+    // Overwrite the diagonal block with its LDL' factorization.
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
+    #pragma omp taskgroup
+    #pragma omp task default(none)                                  \
+        firstprivate(i, diagonal_block)                             \
+        shared(sample, block_sample, maximum_likelihood, generator, \
+            uniform_dist)                                           \
+        depend(in: matrix_data[i + i * leading_dim])
+    {
+      block_sample = LowerUnblockedFactorAndSampleDPP(
+          maximum_likelihood, &diagonal_block, generator, uniform_dist);
+      for (const Int& index : block_sample) {
+        sample.push_back(i + index);
+      }
+    }
+    if (height == i + bsize) {
+      break;
+    }
+    const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
+
+    // Solve for the remainder of the block column of L and then simultaneously
+    // copy its conjugate into 'factor' and the solve against the diagonal.
+    factor.height = height - (i + bsize);
+    factor.width = bsize;
+    factor.leading_dim = factor.height;
+    for (Int i_sub = i + bsize; i_sub < height; i_sub += blocksize) {
+      #pragma omp task default(none)                                   \
+          firstprivate(i, i_sub, matrix, const_diagonal_block, factor) \
+          depend(inout: matrix_data[i_sub + i * leading_dim])
+      {
+        // Solve agains the unit lower-triangle of the diagonal block.
+        const Int bsize_solve = std::min(height - i_sub, bsize);
+        BlasMatrix<Field> subdiagonal_block =
+            matrix->Submatrix(i_sub, i, bsize_solve, bsize);
+        RightLowerAdjointUnitTriangularSolves(const_diagonal_block,
+                                              &subdiagonal_block);
+
+        // Copy the conjugate into 'factor' and solve against the diagonal.
+        BlasMatrix<Field> factor_block =
+            factor.Submatrix(i_sub - (i + bsize), 0, bsize_solve, bsize);
+        for (Int j = 0; j < subdiagonal_block.width; ++j) {
+          const ComplexBase<Field> delta = RealPart(const_diagonal_block(j, j));
+          for (Int k = 0; k < subdiagonal_block.height; ++k) {
+            factor_block(k, j) = Conjugate(subdiagonal_block(k, j));
+            subdiagonal_block(k, j) /= delta;
+          }
+        }
+      }
+    }
+
+    // Perform the Hermitian rank-bsize update.
+    for (Int j_sub = i + bsize; j_sub < height; j_sub += blocksize) {
+      #pragma omp task default(none)                       \
+          firstprivate(i, j_sub, matrix)                   \
+          depend(in: matrix_data[j_sub + i * leading_dim]) \
+          depend(inout: matrix_data[j_sub + j_sub * leading_dim])
+      {
+        const Int column_bsize = std::min(height - j_sub, bsize);
+        const ConstBlasMatrix<Field> row_block =
+            matrix->Submatrix(j_sub, i, column_bsize, bsize).ToConst();
+        const ConstBlasMatrix<Field> column_block =
+            factor.Submatrix(j_sub - (i + bsize), 0, column_bsize, bsize);
+        BlasMatrix<Field> update_block =
+            matrix->Submatrix(j_sub, j_sub, column_bsize, column_bsize);
+        MatrixMultiplyLowerNormalTranspose(Field{-1}, row_block, column_block,
+                                           Field{1}, &update_block);
+      }
+
+      for (Int i_sub = j_sub + bsize; i_sub < height; i_sub += blocksize) {
+        #pragma omp task default(none)                     \
+          firstprivate(i, i_sub, j_sub, matrix, factor)    \
+          depend(in: matrix_data[i_sub + i * leading_dim], \
+              matrix_data[j_sub + i * leading_dim])        \
+          depend(inout: matrix_data[i_sub + j_sub * leading_dim])
+        {
+          const Int row_bsize = std::min(height - i_sub, bsize);
+          const Int column_bsize = std::min(height - j_sub, bsize);
+          const ConstBlasMatrix<Field> row_block =
+              matrix->Submatrix(i_sub, i, row_bsize, bsize).ToConst();
+          const ConstBlasMatrix<Field> column_block =
+              factor.Submatrix(j_sub - (i + bsize), 0, column_bsize, bsize);
+          BlasMatrix<Field> update_block =
+              matrix->Submatrix(i_sub, j_sub, row_bsize, column_bsize);
+          MatrixMultiplyNormalTranspose(Field{-1}, row_block, column_block,
+                                        Field{1}, &update_block);
+        }
+      }
+    }
+  }
+  return sample;
 }
 
 }  // namespace catamari

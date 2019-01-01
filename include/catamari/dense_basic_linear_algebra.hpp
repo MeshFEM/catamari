@@ -88,6 +88,17 @@ void MatrixMultiplyNormalTranspose(const Field& alpha,
 
 // Updates
 //
+//   output_matrix := alpha left_matrix right_matrix^H + beta output_matrix
+//
+template <class Field>
+void MatrixMultiplyNormalAdjoint(const Field& alpha,
+                                 const ConstBlasMatrix<Field>& left_matrix,
+                                 const ConstBlasMatrix<Field>& right_matrix,
+                                 const Field& beta,
+                                 BlasMatrix<Field>* output_matrix);
+
+// Updates
+//
 //   output_matrix := alpha left_matrix^H right_matrix + beta output_matrix
 //
 template <class Field>

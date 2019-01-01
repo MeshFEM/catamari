@@ -22,6 +22,9 @@ namespace catamari {
 template <class Field>
 Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix);
 
+template <class Field>
+Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix);
+
 // Attempts to overwrite the lower triangle of an (implicitly) Hermitian
 // matrix with its L D L^H factorization, where L is lower-triangular with
 // unit diagonal and D is diagonal (D is stored in place of the implicit
@@ -31,6 +34,9 @@ Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix);
 template <class Field>
 Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
 
+template <class Field>
+Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
+
 // Attempts to overwrite the lower triangle of an (implicitly) symmetric
 // matrix with its L D L^T factorization, where L is lower-triangular with
 // unit diagonal and D is diagonal (D is stored in place of the implicit
@@ -39,6 +45,9 @@ Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
 // of the input matrix.
 template <class Field>
 Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix);
+
+template <class Field>
+Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix);
 
 // Returns a sample from the Determinantal Point Process implied by the
 // marginal kernel matrix (i.e., a Hermitian matrix with all eigenvalues

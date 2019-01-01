@@ -822,6 +822,107 @@ inline void MatrixMultiplyNormalTranspose(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
+void MatrixMultiplyNormalAdjoint(const Field& alpha,
+                                 const ConstBlasMatrix<Field>& left_matrix,
+                                 const ConstBlasMatrix<Field>& right_matrix,
+                                 const Field& beta,
+                                 BlasMatrix<Field>* output_matrix) {
+  CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
+                  "Output height was incompatible");
+  CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
+                  "Output width was incompatible");
+  CATAMARI_ASSERT(left_matrix.width == right_matrix.width,
+                  "Contraction dimensions were incompatible.");
+  const Int output_height = output_matrix->height;
+  const Int output_width = output_matrix->width;
+  const Int contraction_size = left_matrix.width;
+  for (Int j = 0; j < output_width; ++j) {
+    for (Int i = 0; i < output_height; ++i) {
+      Field& output_entry = output_matrix->Entry(i, j);
+      output_entry *= beta;
+      for (Int k = 0; k < contraction_size; ++k) {
+        output_entry +=
+            alpha * left_matrix(i, k) * Conjugate(right_matrix(j, k));
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void MatrixMultiplyNormalAdjoint(
+    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
+    const ConstBlasMatrix<float>& right_matrix, const float& beta,
+    BlasMatrix<float>* output_matrix) {
+  MatrixMultiplyNormalTranspose(alpha, left_matrix, right_matrix, beta,
+                                output_matrix);
+}
+
+template <>
+inline void MatrixMultiplyNormalAdjoint(
+    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
+    const ConstBlasMatrix<double>& right_matrix, const double& beta,
+    BlasMatrix<double>* output_matrix) {
+  MatrixMultiplyNormalTranspose(alpha, left_matrix, right_matrix, beta,
+                                output_matrix);
+}
+
+template <>
+inline void MatrixMultiplyNormalAdjoint(
+    const Complex<float>& alpha,
+    const ConstBlasMatrix<Complex<float>>& left_matrix,
+    const ConstBlasMatrix<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+  CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
+                  "Output height was incompatible");
+  CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
+                  "Output width was incompatible");
+  CATAMARI_ASSERT(left_matrix.width == right_matrix.width,
+                  "Contraction dimensions were incompatible.");
+  const char trans_left = 'N';
+  const char trans_right = 'C';
+  const BlasInt output_height_blas = output_matrix->height;
+  const BlasInt output_width_blas = output_matrix->width;
+  const BlasInt contraction_size_blas = left_matrix.width;
+  const BlasInt left_leading_dim_blas = left_matrix.leading_dim;
+  const BlasInt right_leading_dim_blas = right_matrix.leading_dim;
+  const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
+  BLAS_SYMBOL(cgemm)
+  (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
+   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
+   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &output_leading_dim_blas);
+}
+
+template <>
+inline void MatrixMultiplyNormalAdjoint(
+    const Complex<double>& alpha,
+    const ConstBlasMatrix<Complex<double>>& left_matrix,
+    const ConstBlasMatrix<Complex<double>>& right_matrix,
+    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+  CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
+                  "Output height was incompatible");
+  CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
+                  "Output width was incompatible");
+  CATAMARI_ASSERT(left_matrix.width == right_matrix.width,
+                  "Contraction dimensions were incompatible.");
+  const char trans_left = 'N';
+  const char trans_right = 'C';
+  const BlasInt output_height_blas = output_matrix->height;
+  const BlasInt output_width_blas = output_matrix->width;
+  const BlasInt contraction_size_blas = left_matrix.width;
+  const BlasInt left_leading_dim_blas = left_matrix.leading_dim;
+  const BlasInt right_leading_dim_blas = right_matrix.leading_dim;
+  const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
+  BLAS_SYMBOL(zgemm)
+  (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
+   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
+   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &output_leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
 void MatrixMultiplyTransposeNormal(const Field& alpha,
                                    const ConstBlasMatrix<Field>& left_matrix,
                                    const ConstBlasMatrix<Field>& right_matrix,
