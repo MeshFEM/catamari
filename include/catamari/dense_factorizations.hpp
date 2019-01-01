@@ -20,10 +20,11 @@ namespace catamari {
 // successful if and only if the return value is the height of the input
 // matrix.
 template <class Field>
-Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix);
+Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix, Int blocksize = 64);
 
 template <class Field>
-Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix);
+Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix,
+                                            Int blocksize = 128);
 
 // Attempts to overwrite the lower triangle of an (implicitly) Hermitian
 // matrix with its L D L^H factorization, where L is lower-triangular with
@@ -32,10 +33,11 @@ Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix);
 // factorization was successful if and only if the return value is the height
 // of the input matrix.
 template <class Field>
-Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
+Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix, Int blocksize = 64);
 
 template <class Field>
-Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
+Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix,
+                                              Int blocksize = 128);
 
 // Attempts to overwrite the lower triangle of an (implicitly) symmetric
 // matrix with its L D L^T factorization, where L is lower-triangular with
@@ -44,10 +46,12 @@ Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix);
 // factorization was successful if and only if the return value is the height
 // of the input matrix.
 template <class Field>
-Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix);
+Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
+                                   Int blocksize = 64);
 
 template <class Field>
-Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix);
+Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
+                                                Int blocksize = 128);
 
 // Returns a sample from the Determinantal Point Process implied by the
 // marginal kernel matrix (i.e., a Hermitian matrix with all eigenvalues
@@ -57,7 +61,14 @@ Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix);
 template <class Field>
 std::vector<Int> LowerFactorAndSampleDPP(
     bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist);
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
+    Int blocksize = 64);
+
+template <class Field>
+std::vector<Int> MultithreadedLowerFactorAndSampleDPP(
+    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
+    Int blocksize = 128);
 
 }  // namespace catamari
 

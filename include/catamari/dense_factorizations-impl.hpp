@@ -153,15 +153,14 @@ Int LowerBlockedCholeskyFactorization(BlasMatrix<Field>* matrix,
 }
 
 template <class Field>
-Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix) {
-  // TODO(Jack Poulson): Expose this as a parameter.
-  const Int blocksize = 64;
+Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix, Int blocksize) {
   return LowerBlockedCholeskyFactorization(matrix, blocksize);
 }
 
 #ifdef CATAMARI_HAVE_LAPACK
 template <>
-inline Int LowerCholeskyFactorization(BlasMatrix<float>* matrix) {
+inline Int LowerCholeskyFactorization(BlasMatrix<float>* matrix,
+                                      Int blocksize) {
   const char uplo = 'L';
   const BlasInt height_blas = matrix->height;
   const BlasInt leading_dim_blas = matrix->leading_dim;
@@ -179,7 +178,8 @@ inline Int LowerCholeskyFactorization(BlasMatrix<float>* matrix) {
 }
 
 template <>
-inline Int LowerCholeskyFactorization(BlasMatrix<double>* matrix) {
+inline Int LowerCholeskyFactorization(BlasMatrix<double>* matrix,
+                                      Int blocksize) {
   const char uplo = 'L';
   const BlasInt height_blas = matrix->height;
   const BlasInt leading_dim_blas = matrix->leading_dim;
@@ -195,15 +195,50 @@ inline Int LowerCholeskyFactorization(BlasMatrix<double>* matrix) {
     return info;
   }
 }
+
+template <>
+inline Int LowerCholeskyFactorization(BlasMatrix<Complex<float>>* matrix,
+                                      Int blocksize) {
+  const char uplo = 'L';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BlasInt info;
+  LAPACK_SYMBOL(cpotrf)
+  (&uplo, &height_blas, matrix->data, &leading_dim_blas, &info);
+  if (info < 0) {
+    std::cerr << "Argument " << -info << " had an illegal value." << std::endl;
+    return 0;
+  } else if (info == 0) {
+    return matrix->height;
+  } else {
+    return info;
+  }
+}
+
+template <>
+inline Int LowerCholeskyFactorization(BlasMatrix<Complex<double>>* matrix,
+                                      Int blocksize) {
+  const char uplo = 'L';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BlasInt info;
+  LAPACK_SYMBOL(zpotrf)
+  (&uplo, &height_blas, matrix->data, &leading_dim_blas, &info);
+  if (info < 0) {
+    std::cerr << "Argument " << -info << " had an illegal value." << std::endl;
+    return 0;
+  } else if (info == 0) {
+    return matrix->height;
+  } else {
+    return info;
+  }
+}
 #endif  // ifdef CATAMARI_HAVE_LAPACK
 
 template <class Field>
-Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix) {
+Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix,
+                                            Int blocksize) {
   typedef ComplexBase<Field> Real;
-
-  // TODO(Jack Poulson): Expose this as a parameter.
-  const Int blocksize = 128;
-
   const Int height = matrix->height;
 
   // For use in tracking dependencies.
@@ -371,18 +406,14 @@ Int LowerBlockedLDLAdjointFactorization(BlasMatrix<Field>* matrix,
 }
 
 template <class Field>
-Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
-  // TODO(Jack Poulson): Expose this as a parameter.
-  const Int blocksize = 64;
+Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix, Int blocksize) {
   return LowerBlockedLDLAdjointFactorization(matrix, blocksize);
 }
 
 template <class Field>
-Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
+Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix,
+                                              Int blocksize) {
   const Int height = matrix->height;
-
-  // TODO(Jack Poulson): Expose this as a parameter.
-  const Int blocksize = 128;
 
   std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
   BlasMatrix<Field> factor;
@@ -571,18 +602,14 @@ Int LowerBlockedLDLTransposeFactorization(BlasMatrix<Field>* matrix,
 }
 
 template <class Field>
-Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix) {
-  // TODO(Jack Poulson): Expose this as a parameter.
-  const Int blocksize = 64;
+Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix, Int blocksize) {
   return LowerBlockedLDLTransposeFactorization(matrix, blocksize);
 }
 
 template <class Field>
-Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix) {
+Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
+                                                Int blocksize) {
   const Int height = matrix->height;
-
-  // TODO(Jack Poulson): Expose this as a parameter.
-  const Int blocksize = 128;
 
   std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
   BlasMatrix<Field> factor;
@@ -792,9 +819,8 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
 template <class Field>
 std::vector<Int> LowerFactorAndSampleDPP(
     bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
-  // TODO(Jack Poulson): Expose this as a parameter.
-  const Int blocksize = 64;
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
+    Int blocksize) {
   return LowerBlockedFactorAndSampleDPP(maximum_likelihood, matrix, generator,
                                         uniform_dist, blocksize);
 }
@@ -802,11 +828,9 @@ std::vector<Int> LowerFactorAndSampleDPP(
 template <class Field>
 std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
     bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
+    Int blocksize) {
   const Int height = matrix->height;
-
-  // TODO(Jack Poulson): Expose this as a parameter.
-  const Int blocksize = 128;
 
   std::vector<Int> sample;
   sample.reserve(height);
