@@ -181,56 +181,6 @@ class HelmholtzWithPMLQ4 {
     const Real pml_width_;
   };
 
-  // The diagonal 'A' tensor in the equation:
-  //
-  //    -div (A grad u) - (omega / c)^2 gamma u = f.
-  //
-  class WeightTensor {
-   public:
-    WeightTensor(const PMLDifferential& gamma_x, const PMLDifferential& gamma_y)
-        : gamma_x_(gamma_x), gamma_y_(gamma_y) {}
-
-    Complex<Real> operator()(int i, const Point<Real>& point) const {
-      const Complex<Real> gamma_x = gamma_x_(point.x);
-      const Complex<Real> gamma_y = gamma_y_(point.y);
-      Complex<Real> result = gamma_x * gamma_y;
-      Complex<Real> gamma_k;
-      if (i == 0) {
-        return result / (gamma_x * gamma_x);
-      } else {
-        return result / (gamma_y * gamma_y);
-      }
-    }
-
-   private:
-    const PMLDifferential gamma_x_;
-    const PMLDifferential gamma_y_;
-  };
-
-  // The '(omega / c)^2 gamma' in the equation:
-  //
-  //    -div (A grad u) - (omega / c)^2 gamma u = f.
-  //
-  class DiagonalShift {
-   public:
-    DiagonalShift(const Real& omega, const Speed<Real>& speed,
-                  const PMLDifferential& gamma_x,
-                  const PMLDifferential& gamma_y)
-        : omega_(omega), speed_(speed), gamma_x_(gamma_x), gamma_y_(gamma_y) {}
-
-    Complex<Real> operator()(const Point<Real>& point) const {
-      const Real rel_omega = omega_ / speed_(point);
-      const Complex<Real> gamma = gamma_x_(point.x) * gamma_y_(point.y);
-      return rel_omega * rel_omega * gamma;
-    }
-
-   private:
-    const Real omega_;
-    const Speed<Real> speed_;
-    const PMLDifferential gamma_x_;
-    const PMLDifferential gamma_y_;
-  };
-
   // Returns \psi_{i, j} evaluated at the given point.
   Real Basis(int i, int j, const Box& extent, const Point<Real>& point) const {
     CATAMARI_ASSERT(i == 0 || i == 1, "Invalid choice of i basis index.");
@@ -323,7 +273,12 @@ class HelmholtzWithPMLQ4 {
         num_y_elements_(num_y_elements),
         element_x_size_(Real{1} / num_x_elements),
         element_y_size_(Real{1} / num_y_elements),
+        omega_(omega),
         speed_(speed) {
+    const Int num_dimensions = 2;
+    const Int quadrature_1d_order = 3;
+    const Int num_quadrature_points = quadrature_1d_order * quadrature_1d_order;
+    const Int num_basis_functions = 4;
     const Real x_pml_width = num_pml_elements * element_x_size_;
     const Real y_pml_width = num_pml_elements * element_y_size_;
 
@@ -342,13 +297,25 @@ class HelmholtzWithPMLQ4 {
     const PMLDifferential gamma_x(omega, pml_scale, pml_exponent, x_pml_width);
     const PMLDifferential gamma_y(omega, pml_scale, pml_exponent, y_pml_width);
 
-    weight_tensor_.reset(new WeightTensor(gamma_x, gamma_y));
-    diagonal_shift_.reset(new DiagonalShift(omega, speed, gamma_x, gamma_y));
+    pml_x_points_.resize(num_x_elements * quadrature_1d_order);
+    for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
+      const Int x_offset = x_element * quadrature_1d_order;
+      const Real x_beg = x_element * element_x_size_;
+      for (Int i = 0; i < quadrature_1d_order; ++i) {
+        const Real& x_point = quadrature_x_points_[i];
+        pml_x_points_[x_offset + i] = gamma_x(x_beg + x_point);
+      }
+    }
 
-    const Int num_dimensions = 2;
-    const Int quadrature_1d_order = 3;
-    const Int num_quadrature_points = quadrature_1d_order * quadrature_1d_order;
-    const Int num_basis_functions = 4;
+    pml_y_points_.resize(num_y_elements * quadrature_1d_order);
+    for (Int y_element = 0; y_element < num_y_elements; ++y_element) {
+      const Int y_offset = y_element * quadrature_1d_order;
+      const Real y_beg = y_element * element_y_size_;
+      for (Int i = 0; i < quadrature_1d_order; ++i) {
+        const Real& y_point = quadrature_y_points_[i];
+        pml_y_points_[y_offset + i] = gamma_y(y_beg + y_point);
+      }
+    }
 
     // Store the quadrature weights over the tensor product grid.
     quadrature_weights_buffer_.resize(num_quadrature_points);
@@ -429,21 +396,30 @@ class HelmholtzWithPMLQ4 {
   // Form all of the matrix updates for a particular element.
   void ElementBilinearForms(Int x_element, Int y_element,
                             BlasMatrix<Complex<Real>>* element_updates) const {
-    const Real x_beg = x_element * element_x_size_;
-    const Real y_beg = y_element * element_y_size_;
     const int quadrature_1d_order = 3;
     const int num_dimensions = 2;
     const int num_basis_functions = 4;
+    const Int x_offset = x_element * quadrature_1d_order;
+    const Int y_offset = y_element * quadrature_1d_order;
+    const Real x_beg = x_element * element_x_size_;
+    const Real y_beg = y_element * element_y_size_;
 
     // Evaluate the weight tensor over the element.
     for (int l = 0; l < num_dimensions; ++l) {
       for (int j = 0; j < quadrature_1d_order; ++j) {
-        const Real y = y_beg + quadrature_y_points_[j];
+        const Complex<Real>& gamma_y = pml_y_points_[y_offset + j];
         for (int i = 0; i < quadrature_1d_order; ++i) {
-          const Real x = x_beg + quadrature_x_points_[i];
-          const Point<Real> point{x, y};
+          const Complex<Real>& gamma_x = pml_x_points_[x_offset + i];
           const int quadrature_index = i + j * quadrature_1d_order;
-          gradient_evals_(quadrature_index, l) = (*weight_tensor_)(l, point);
+
+          const Complex<Real> gamma_product = gamma_x * gamma_y;
+          if (l == 0) {
+            gradient_evals_(quadrature_index, l) =
+                gamma_product / (gamma_x * gamma_x);
+          } else if (l == 1) {
+            gradient_evals_(quadrature_index, l) =
+                gamma_product / (gamma_y * gamma_y);
+          }
         }
       }
     }
@@ -451,11 +427,18 @@ class HelmholtzWithPMLQ4 {
     // Evaluate the diagonal shifts over the element.
     for (int j = 0; j < quadrature_1d_order; ++j) {
       const Real y = y_beg + quadrature_y_points_[j];
+      const Complex<Real>& gamma_y = pml_y_points_[y_offset + j];
       for (int i = 0; i < quadrature_1d_order; ++i) {
         const Real x = x_beg + quadrature_x_points_[i];
+        const Complex<Real>& gamma_x = pml_x_points_[x_offset + i];
+
         const Point<Real> point{x, y};
+        const Complex<Real> gamma_product = gamma_x * gamma_y;
         const int quadrature_index = i + j * quadrature_1d_order;
-        scalar_evals_(quadrature_index, 0) = (*diagonal_shift_)(point);
+
+        const Real rel_omega = omega_ / speed_(point);
+        scalar_evals_(quadrature_index, 0) =
+            rel_omega * rel_omega * gamma_product;
       }
     }
 
@@ -557,15 +540,35 @@ class HelmholtzWithPMLQ4 {
   }
 
  private:
+  // The number of elements in the x direction.
   const Int num_x_elements_;
+
+  // The number of elements in the y direction.
   const Int num_y_elements_;
+
+  // The x-length of each rectangular element.
   const Real element_x_size_;
+
+  // The y-length of each rectangular element.
   const Real element_y_size_;
 
+  // The angular frequency of the harmonic forcing function.
+  const Real omega_;
+
+  // The sound speed over the domain.
   const Speed<Real> speed_;
+
+  // Evaluations of the PML profile over the quadrature points in the x
+  // direction.
+  std::vector<Complex<Real>> pml_x_points_;
+
+  // Evaluations of the PML profile over the quadrature points in the y
+  // direction.
+  std::vector<Complex<Real>> pml_y_points_;
 
   Real quadrature_x_points_[3];
   Real quadrature_y_points_[3];
+
   Real quadrature_x_weights_[3];
   Real quadrature_y_weights_[3];
 
@@ -583,19 +586,6 @@ class HelmholtzWithPMLQ4 {
 
   mutable std::vector<Complex<Real>> scalar_evals_buffer_;
   mutable BlasMatrix<Complex<Real>> scalar_evals_;
-
-  // The diagonal symmetric tensor field A : Omega -> C^{2 x 2} in the
-  // Helmholtz equation
-  //
-  //   -div (A grad u) - s u = f.
-  //
-  std::unique_ptr<const WeightTensor> weight_tensor_;
-
-  // The scalar function s : Omega -> C in
-  //
-  //   -div (A grad u) - s u = f.
-  //
-  std::unique_ptr<const DiagonalShift> diagonal_shift_;
 };
 
 // Generates a Q4 discretization of the 2D Helmholtz equation over [0, 1]^2
