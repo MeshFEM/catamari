@@ -667,8 +667,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     #pragma omp taskgroup
     for (Int j = 0; j < degree; j += tile_size) {
       #pragma omp task default(none) \
-          firstprivate(j, degree, supernode_size, tile_size, lower_block, \
-              schur_complement)
+          firstprivate(j) shared(schur_complement, lower_block)
       {
         const Int tsize = std::min(degree - j, tile_size);
         const ConstBlasMatrix<Field> column_block =
@@ -681,8 +680,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
 
       for (Int i = j + tile_size; i < degree; i += tile_size) {
         #pragma omp task default(none) \
-          firstprivate(i, j, degree, supernode_size, tile_size, lower_block, \
-              schur_complement)
+            firstprivate(i, j) shared(schur_complement, lower_block)
         {
           const Int row_tsize = std::min(degree - i, tile_size);
           const Int column_tsize = std::min(degree - j, tile_size);
@@ -713,8 +711,8 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     #pragma omp taskgroup
     for (Int j = 0; j < degree; j += tile_size) {
       #pragma omp task default(none) \
-          firstprivate(j, degree, supernode_size, tile_size, lower_block, \
-              scaled_transpose, schur_complement)
+          firstprivate(j) \
+          shared(schur_complement, lower_block, scaled_transpose)
       {
         const Int tsize = std::min(degree - j, tile_size);
         const ConstBlasMatrix<Field> row_block =
@@ -729,8 +727,8 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
 
       for (Int i = j + tile_size; i < degree; i += tile_size) {
         #pragma omp task default(none) \
-          firstprivate(i, j, degree, supernode_size, tile_size, lower_block, \
-              scaled_transpose, schur_complement)
+            firstprivate(i, j) \
+            shared(schur_complement, lower_block, scaled_transpose)
         {
           const Int row_tsize = std::min(degree - i, tile_size);
           const Int column_tsize = std::min(degree - j, tile_size);
