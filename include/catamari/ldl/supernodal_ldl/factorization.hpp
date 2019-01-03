@@ -338,7 +338,7 @@ Int FactorDiagonalBlock(SymmetricFactorizationType factorization_type,
 template <class Field>
 Int MultithreadedFactorDiagonalBlock(
     Int tile_size, SymmetricFactorizationType factorization_type,
-    BlasMatrix<Field>* diagonal_block);
+    BlasMatrix<Field>* diagonal_block, std::vector<Field>* buffer);
 #endif  // ifdef _OPENMP
 
 // L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
