@@ -295,15 +295,24 @@ Int FactorDiagonalBlock(SymmetricFactorizationType factorization_type,
 // Perform an in-place LDL' factorization of the supernodal diagonal block.
 template <class Field>
 Int MultithreadedFactorDiagonalBlock(
-    Int num_threads, SymmetricFactorizationType factorization_type,
+    Int tile_size, SymmetricFactorizationType factorization_type,
     BlasMatrix<Field>* diagonal_block);
-#endif
+#endif  // ifdef _OPENMP
 
 // L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
 template <class Field>
 void SolveAgainstDiagonalBlock(SymmetricFactorizationType factorization_type,
                                const ConstBlasMatrix<Field>& triangular_matrix,
                                BlasMatrix<Field>* lower_matrix);
+
+#ifdef _OPENMP
+// L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
+template <class Field>
+void MultithreadedSolveAgainstDiagonalBlock(
+    Int tile_size, SymmetricFactorizationType factorization_type,
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* lower_matrix);
+#endif  // ifdef _OPENMP
 
 }  // namespace supernodal_ldl
 }  // namespace catamari

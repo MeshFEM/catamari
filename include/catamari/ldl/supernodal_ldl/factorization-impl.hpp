@@ -12,6 +12,7 @@
 
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/dense_factorizations.hpp"
+#include "quotient/timer.hpp"
 
 #include "catamari/ldl/supernodal_ldl.hpp"
 
@@ -384,17 +385,18 @@ LDLResult Factorization<Field>::LeftLooking(
 #ifdef _OPENMP
 template <class Field>
 Int MultithreadedFactorDiagonalBlock(
-    SymmetricFactorizationType factorization_type,
+    Int tile_size, SymmetricFactorizationType factorization_type,
     BlasMatrix<Field>* diagonal_block, std::vector<Field>* buffer) {
   Int num_pivots;
   if (factorization_type == kCholeskyFactorization) {
-    num_pivots = MultithreadedLowerCholeskyFactorization(diagonal_block);
+    num_pivots =
+        MultithreadedLowerCholeskyFactorization(tile_size, diagonal_block);
   } else if (factorization_type == kLDLAdjointFactorization) {
-    num_pivots =
-        MultithreadedLowerLDLAdjointFactorization(diagonal_block, buffer);
+    num_pivots = MultithreadedLowerLDLAdjointFactorization(
+        tile_size, diagonal_block, buffer);
   } else {
-    num_pivots =
-        MultithreadedLowerLDLTransposeFactorization(diagonal_block, buffer);
+    num_pivots = MultithreadedLowerLDLTransposeFactorization(
+        tile_size, diagonal_block, buffer);
   }
   return num_pivots;
 }
@@ -582,6 +584,9 @@ bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
   const Int main_degree = main_lower_block.height;
   const Int main_supernode_size = main_lower_block.width;
 
+  // TODO(Jack Poulson): Make this configurable.
+  const Int tile_size = 128;
+
   Int num_supernode_pivots;
   #pragma omp taskgroup
   {
@@ -589,15 +594,17 @@ bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
     std::vector<Field>* buffer =
         &(*private_states)[thread].scaled_transpose_buffer;
     num_supernode_pivots = MultithreadedFactorDiagonalBlock(
-        factorization_type, &main_diagonal_block, buffer);
+        tile_size, factorization_type, &main_diagonal_block, buffer);
     result->num_successful_pivots += num_supernode_pivots;
   }
   if (num_supernode_pivots < main_supernode_size) {
     return false;
   }
 
-  SolveAgainstDiagonalBlock(factorization_type, main_diagonal_block.ToConst(),
-                            &main_lower_block);
+  #pragma omp taskgroup
+  MultithreadedSolveAgainstDiagonalBlock(tile_size, factorization_type,
+                                         main_diagonal_block.ToConst(),
+                                         &main_lower_block);
 
   // Finish updating the result structure.
   result->largest_supernode =
@@ -697,19 +704,21 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
   // As of Jan. 1, 2019, OpenMP 4.5 is still not pervasive, and so we avoid
   // dependence on the more natural approach of a 'taskloop'.
   #pragma omp taskgroup
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    #pragma omp task default(none)                                       \
+  {
+    for (Int child_index = 0; child_index < num_children; ++child_index) {
+      #pragma omp task default(none)                                       \
         firstprivate(level, max_parallel_levels, supernode, child_index, \
             shared_state, private_states) \
         shared(successes, matrix, supernode_parents, supernode_children, \
             supernode_child_offsets, result_contributions)
-    {
-      const Int child = supernode_children[child_beg + child_index];
-      LDLResult& result_contribution = result_contributions[child_index];
-      successes[child_index] = MultithreadedLeftLookingSubtree(
-          level + 1, max_parallel_levels, child, matrix, supernode_parents,
-          supernode_children, supernode_child_offsets, shared_state,
-          private_states, &result_contribution);
+      {
+        const Int child = supernode_children[child_beg + child_index];
+        LDLResult& result_contribution = result_contributions[child_index];
+        successes[child_index] = MultithreadedLeftLookingSubtree(
+            level + 1, max_parallel_levels, child, matrix, supernode_parents,
+            supernode_children, supernode_child_offsets, shared_state,
+            private_states, &result_contribution);
+      }
     }
   }
 
@@ -732,9 +741,14 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
   if (succeeded) {
     // Handle the current supernode's elimination.
     #pragma omp taskgroup
+    #pragma omp task default(none) firstprivate(supernode) \
+        shared(matrix, supernode_parents, shared_state, private_states)
     MultithreadedLeftLookingSupernodeUpdate(
         supernode, matrix, supernode_parents, shared_state, private_states);
 
+    #pragma omp taskgroup
+    #pragma omp task default(none) firstprivate(supernode) \
+        shared(private_states, result, succeeded)
     succeeded = MultithreadedLeftLookingSupernodeFinalize(
         supernode, private_states, result);
   }
@@ -1578,6 +1592,59 @@ void SolveAgainstDiagonalBlock(SymmetricFactorizationType factorization_type,
                                                          lower_matrix);
   }
 }
+
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedSolveAgainstDiagonalBlock(
+    Int tile_size, SymmetricFactorizationType factorization_type,
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* lower_matrix) {
+  if (!lower_matrix->height) {
+    return;
+  }
+
+  const Int height = lower_matrix->height;
+  const Int width = lower_matrix->width;
+  if (factorization_type == kCholeskyFactorization) {
+    // Solve against the lower-triangular matrix L(K, K)' from the right.
+    for (Int i = 0; i < height; i += tile_size) {
+      #pragma omp task default(none) firstprivate(i, tile_size) \
+          shared(triangular_matrix, lower_matrix)
+      {
+        const Int tsize = std::min(height - i, tile_size);
+        BlasMatrix<Field> lower_block =
+            lower_matrix->Submatrix(i, 0, tsize, width);
+        RightLowerAdjointTriangularSolves(triangular_matrix, &lower_block);
+      }
+    }
+  } else if (factorization_type == kLDLAdjointFactorization) {
+    // Solve against D(K, K) L(K, K)' from the right.
+    for (Int i = 0; i < height; i += tile_size) {
+      #pragma omp task default(none) firstprivate(i, tile_size) \
+          shared(triangular_matrix, lower_matrix)
+      {
+        const Int tsize = std::min(height - i, tile_size);
+        BlasMatrix<Field> lower_block =
+            lower_matrix->Submatrix(i, 0, tsize, width);
+        RightLowerAdjointUnitTriangularSolves(triangular_matrix, &lower_block);
+      }
+    }
+  } else {
+    // Solve against D(K, K) L(K, K)^T from the right.
+    for (Int i = 0; i < height; i += tile_size) {
+      #pragma omp task default(none) firstprivate(i, tile_size) \
+          shared(triangular_matrix, lower_matrix)
+      {
+        const Int tsize = std::min(height - i, tile_size);
+        BlasMatrix<Field> lower_block =
+            lower_matrix->Submatrix(i, 0, tsize, width);
+        RightDiagonalTimesLowerTransposeUnitTriangularSolves(triangular_matrix,
+                                                             &lower_block);
+      }
+    }
+  }
+}
+#endif  // ifdef _OPENMP
 
 }  // namespace supernodal_ldl
 }  // namespace catamari

@@ -235,9 +235,10 @@ inline Int LowerCholeskyFactorization(BlasMatrix<Complex<double>>* matrix,
 }
 #endif  // ifdef CATAMARI_HAVE_LAPACK
 
+#ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix,
-                                            Int blocksize) {
+Int MultithreadedLowerCholeskyFactorization(Int tile_size,
+                                            BlasMatrix<Field>* matrix) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
 
@@ -246,11 +247,11 @@ Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix,
   const Int leading_dim CATAMARI_UNUSED = matrix->leading_dim;
 
   Int num_pivots = 0;
-  for (Int i = 0; i < height; i += blocksize) {
-    const Int bsize = std::min(height - i, blocksize);
+  for (Int i = 0; i < height; i += tile_size) {
+    const Int tsize = std::min(height - i, tile_size);
 
     // Overwrite the diagonal block with its Cholesky factor.
-    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, tsize, tsize);
     bool failed_pivot = false;
     #pragma omp taskgroup
     #pragma omp task default(none)                                    \
@@ -263,56 +264,56 @@ Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix,
         failed_pivot = true;
       }
     }
-    if (failed_pivot || height == i + bsize) {
+    if (failed_pivot || height == i + tsize) {
       break;
     }
     const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
 
     // Solve for the remainder of the block column of L.
-    for (Int i_sub = i + bsize; i_sub < height; i_sub += blocksize) {
+    for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
       #pragma omp task default(none)                                  \
-          firstprivate(i, i_sub, matrix, const_diagonal_block, bsize) \
+          firstprivate(i, i_sub, matrix, const_diagonal_block, tsize) \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
-        const Int bsize_solve = std::min(height - i_sub, bsize);
+        const Int tsize_solve = std::min(height - i_sub, tsize);
         BlasMatrix<Field> subdiagonal_block =
-            matrix->Submatrix(i_sub, i, bsize_solve, bsize);
+            matrix->Submatrix(i_sub, i, tsize_solve, tsize);
         RightLowerAdjointTriangularSolves(const_diagonal_block,
                                           &subdiagonal_block);
       }
     }
 
     // Perform the Hermitian rank-bsize update.
-    for (Int j_sub = i + bsize; j_sub < height; j_sub += blocksize) {
+    for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
       #pragma omp task default(none)                       \
-          firstprivate(i, j_sub, matrix, bsize)            \
+          firstprivate(i, j_sub, matrix, tsize)            \
           depend(in: matrix_data[j_sub + i * leading_dim]) \
           depend(inout: matrix_data[j_sub + j_sub * leading_dim])
       {
-        const Int column_bsize = std::min(height - j_sub, bsize);
+        const Int column_tsize = std::min(height - j_sub, tsize);
         const ConstBlasMatrix<Field> column_block =
-            matrix->Submatrix(j_sub, i, column_bsize, bsize).ToConst();
+            matrix->Submatrix(j_sub, i, column_tsize, tsize).ToConst();
         BlasMatrix<Field> update_block =
-            matrix->Submatrix(j_sub, j_sub, column_bsize, column_bsize);
+            matrix->Submatrix(j_sub, j_sub, column_tsize, column_tsize);
         LowerNormalHermitianOuterProduct(Real{-1}, column_block, Real{1},
                                          &update_block);
       }
 
-      for (Int i_sub = j_sub + bsize; i_sub < height; i_sub += blocksize) {
+      for (Int i_sub = j_sub + tsize; i_sub < height; i_sub += tile_size) {
         #pragma omp task default(none)                     \
-          firstprivate(i, i_sub, j_sub, matrix, bsize)     \
+          firstprivate(i, i_sub, j_sub, matrix, tsize)     \
           depend(in: matrix_data[i_sub + i * leading_dim], \
               matrix_data[j_sub + i * leading_dim])        \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
         {
-          const Int row_bsize = std::min(height - i_sub, bsize);
-          const Int column_bsize = std::min(height - j_sub, bsize);
+          const Int row_tsize = std::min(height - i_sub, tsize);
+          const Int column_tsize = std::min(height - j_sub, tsize);
           const ConstBlasMatrix<Field> row_block =
-              matrix->Submatrix(i_sub, i, row_bsize, bsize).ToConst();
+              matrix->Submatrix(i_sub, i, row_tsize, tsize).ToConst();
           const ConstBlasMatrix<Field> column_block =
-              matrix->Submatrix(j_sub, i, column_bsize, bsize).ToConst();
+              matrix->Submatrix(j_sub, i, column_tsize, tsize).ToConst();
           BlasMatrix<Field> update_block =
-              matrix->Submatrix(i_sub, j_sub, row_bsize, column_bsize);
+              matrix->Submatrix(i_sub, j_sub, row_tsize, column_tsize);
           MatrixMultiplyNormalAdjoint(Field{-1}, row_block, column_block,
                                       Field{1}, &update_block);
         }
@@ -321,6 +322,7 @@ Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix,
   }
   return num_pivots;
 }
+#endif  // ifdef _OPENMP
 
 template <class Field>
 Int LowerUnblockedLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
@@ -411,10 +413,11 @@ Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix, Int blocksize) {
   return LowerBlockedLDLAdjointFactorization(matrix, blocksize);
 }
 
+#ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix,
-                                              std::vector<Field>* buffer,
-                                              Int blocksize) {
+Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
+                                              BlasMatrix<Field>* matrix,
+                                              std::vector<Field>* buffer) {
   const Int height = matrix->height;
 
   CATAMARI_ASSERT(
@@ -432,11 +435,11 @@ Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix,
   Field* const matrix_data CATAMARI_UNUSED = matrix->data;
 
   Int num_pivots = 0;
-  for (Int i = 0; i < height; i += blocksize) {
-    const Int bsize = std::min(height - i, blocksize);
+  for (Int i = 0; i < height; i += tile_size) {
+    const Int tsize = std::min(height - i, tile_size);
 
     // Overwrite the diagonal block with its LDL' factorization.
-    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, tsize, tsize);
     bool failed_pivot = false;
     #pragma omp taskgroup
     #pragma omp task default(none) \
@@ -449,29 +452,29 @@ Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix,
         failed_pivot = true;
       }
     }
-    if (failed_pivot || height == i + bsize) {
+    if (failed_pivot || height == i + tsize) {
       break;
     }
     const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
 
     // Solve for the remainder of the block column of L and then simultaneously
     // copy its conjugate into 'factor' and the solve against the diagonal.
-    for (Int i_sub = i + bsize; i_sub < height; i_sub += blocksize) {
+    for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
       #pragma omp task default(none)                          \
-          firstprivate(i, i_sub, const_diagonal_block, bsize) \
+          firstprivate(i, i_sub, const_diagonal_block, tsize) \
 	  shared(matrix, factor)                              \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
         // Solve agains the unit lower-triangle of the diagonal block.
-        const Int bsize_solve = std::min(height - i_sub, bsize);
+        const Int tsize_solve = std::min(height - i_sub, tsize);
         BlasMatrix<Field> subdiagonal_block =
-            matrix->Submatrix(i_sub, i, bsize_solve, bsize);
+            matrix->Submatrix(i_sub, i, tsize_solve, tsize);
         RightLowerAdjointUnitTriangularSolves(const_diagonal_block,
                                               &subdiagonal_block);
 
         // Copy the conjugate into 'factor' and solve against the diagonal.
         BlasMatrix<Field> factor_block =
-            factor.Submatrix(i_sub, i, bsize_solve, bsize);
+            factor.Submatrix(i_sub, i, tsize_solve, tsize);
         for (Int j = 0; j < subdiagonal_block.width; ++j) {
           const ComplexBase<Field> delta = RealPart(const_diagonal_block(j, j));
           for (Int k = 0; k < subdiagonal_block.height; ++k) {
@@ -483,40 +486,40 @@ Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix,
     }
 
     // Perform the Hermitian rank-bsize update.
-    for (Int j_sub = i + bsize; j_sub < height; j_sub += blocksize) {
+    for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
       #pragma omp task default(none)                       \
-          firstprivate(i, j_sub, bsize)                    \
+          firstprivate(i, j_sub, tsize)                    \
 	  shared(matrix, factor)                           \
           depend(in: matrix_data[j_sub + i * leading_dim]) \
           depend(inout: matrix_data[j_sub + j_sub * leading_dim])
       {
-        const Int column_bsize = std::min(height - j_sub, bsize);
+        const Int column_tsize = std::min(height - j_sub, tsize);
         const ConstBlasMatrix<Field> row_block =
-            matrix->Submatrix(j_sub, i, column_bsize, bsize).ToConst();
+            matrix->Submatrix(j_sub, i, column_tsize, tsize).ToConst();
         const ConstBlasMatrix<Field> column_block =
-            factor.Submatrix(j_sub, i, column_bsize, bsize);
+            factor.Submatrix(j_sub, i, column_tsize, tsize);
         BlasMatrix<Field> update_block =
-            matrix->Submatrix(j_sub, j_sub, column_bsize, column_bsize);
+            matrix->Submatrix(j_sub, j_sub, column_tsize, column_tsize);
         MatrixMultiplyLowerNormalTranspose(Field{-1}, row_block, column_block,
                                            Field{1}, &update_block);
       }
 
-      for (Int i_sub = j_sub + bsize; i_sub < height; i_sub += blocksize) {
+      for (Int i_sub = j_sub + tsize; i_sub < height; i_sub += tile_size) {
         #pragma omp task default(none)                     \
-          firstprivate(i, i_sub, j_sub, bsize)             \
+          firstprivate(i, i_sub, j_sub, tsize)             \
 	  shared(matrix, factor)                           \
           depend(in: matrix_data[i_sub + i * leading_dim], \
               matrix_data[j_sub + i * leading_dim])        \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
         {
-          const Int row_bsize = std::min(height - i_sub, bsize);
-          const Int column_bsize = std::min(height - j_sub, bsize);
+          const Int row_tsize = std::min(height - i_sub, tsize);
+          const Int column_tsize = std::min(height - j_sub, tsize);
           const ConstBlasMatrix<Field> row_block =
-              matrix->Submatrix(i_sub, i, row_bsize, bsize).ToConst();
+              matrix->Submatrix(i_sub, i, row_tsize, tsize).ToConst();
           const ConstBlasMatrix<Field> column_block =
-              factor.Submatrix(j_sub, i, column_bsize, bsize);
+              factor.Submatrix(j_sub, i, column_tsize, tsize);
           BlasMatrix<Field> update_block =
-              matrix->Submatrix(i_sub, j_sub, row_bsize, column_bsize);
+              matrix->Submatrix(i_sub, j_sub, row_tsize, column_tsize);
           MatrixMultiplyNormalTranspose(Field{-1}, row_block, column_block,
                                         Field{1}, &update_block);
         }
@@ -525,6 +528,7 @@ Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix,
   }
   return num_pivots;
 }
+#endif  // ifdef _OPENMP
 
 template <class Field>
 Int LowerUnblockedLDLTransposeFactorization(BlasMatrix<Field>* matrix) {
@@ -613,10 +617,11 @@ Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix, Int blocksize) {
   return LowerBlockedLDLTransposeFactorization(matrix, blocksize);
 }
 
+#ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
-                                                std::vector<Field>* buffer,
-                                                Int blocksize) {
+Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
+                                                BlasMatrix<Field>* matrix,
+                                                std::vector<Field>* buffer) {
   const Int height = matrix->height;
 
   CATAMARI_ASSERT(
@@ -634,11 +639,11 @@ Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
   Field* const matrix_data CATAMARI_UNUSED = matrix->data;
 
   Int num_pivots = 0;
-  for (Int i = 0; i < height; i += blocksize) {
-    const Int bsize = std::min(height - i, blocksize);
+  for (Int i = 0; i < height; i += tile_size) {
+    const Int tsize = std::min(height - i, tile_size);
 
     // Overwrite the diagonal block with its LDL^T factorization.
-    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, tsize, tsize);
     bool failed_pivot = false;
     #pragma omp taskgroup
     #pragma omp task default(none)                                    \
@@ -652,29 +657,29 @@ Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
         failed_pivot = true;
       }
     }
-    if (failed_pivot || height == i + bsize) {
+    if (failed_pivot || height == i + tsize) {
       break;
     }
     const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
 
     // Solve for the remainder of the block column of L and then simultaneously
     // copy its conjugate into 'factor' and the solve against the diagonal.
-    for (Int i_sub = i + bsize; i_sub < height; i_sub += blocksize) {
+    for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
       #pragma omp task default(none)                          \
-          firstprivate(i, i_sub, const_diagonal_block, bsize) \
+          firstprivate(i, i_sub, const_diagonal_block, tsize) \
 	  shared(matrix, factor)                              \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
         // Solve agains the unit lower-triangle of the diagonal block.
-        const Int bsize_solve = std::min(height - i_sub, bsize);
+        const Int tsize_solve = std::min(height - i_sub, tsize);
         BlasMatrix<Field> subdiagonal_block =
-            matrix->Submatrix(i_sub, i, bsize_solve, bsize);
+            matrix->Submatrix(i_sub, i, tsize_solve, tsize);
         RightLowerTransposeUnitTriangularSolves(const_diagonal_block,
                                                 &subdiagonal_block);
 
         // Copy into 'factor' and solve against the diagonal.
         BlasMatrix<Field> factor_block =
-            factor.Submatrix(i_sub, i, bsize_solve, bsize);
+            factor.Submatrix(i_sub, i, tsize_solve, tsize);
         for (Int j = 0; j < subdiagonal_block.width; ++j) {
           const Field delta = const_diagonal_block(j, j);
           for (Int k = 0; k < subdiagonal_block.height; ++k) {
@@ -685,41 +690,41 @@ Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
       }
     }
 
-    // Perform the Hermitian rank-bsize update.
-    for (Int j_sub = i + bsize; j_sub < height; j_sub += blocksize) {
+    // Perform the Hermitian rank-tsize update.
+    for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
       #pragma omp task default(none)                       \
-          firstprivate(i, j_sub, bsize)                    \
+          firstprivate(i, j_sub, tsize)                    \
 	  shared(matrix, factor)                           \
           depend(in: matrix_data[j_sub + i * leading_dim]) \
           depend(inout: matrix_data[j_sub + j_sub * leading_dim])
       {
-        const Int column_bsize = std::min(height - j_sub, bsize);
+        const Int column_tsize = std::min(height - j_sub, tsize);
         const ConstBlasMatrix<Field> row_block =
-            matrix->Submatrix(j_sub, i, column_bsize, bsize).ToConst();
+            matrix->Submatrix(j_sub, i, column_tsize, tsize).ToConst();
         const ConstBlasMatrix<Field> column_block =
-            factor.Submatrix(j_sub, i, column_bsize, bsize);
+            factor.Submatrix(j_sub, i, column_tsize, tsize);
         BlasMatrix<Field> update_block =
-            matrix->Submatrix(j_sub, j_sub, column_bsize, column_bsize);
+            matrix->Submatrix(j_sub, j_sub, column_tsize, column_tsize);
         MatrixMultiplyLowerNormalTranspose(Field{-1}, row_block, column_block,
                                            Field{1}, &update_block);
       }
 
-      for (Int i_sub = j_sub + bsize; i_sub < height; i_sub += blocksize) {
+      for (Int i_sub = j_sub + tsize; i_sub < height; i_sub += tile_size) {
         #pragma omp task default(none)                     \
-          firstprivate(i, i_sub, j_sub,bsize)              \
+          firstprivate(i, i_sub, j_sub, tsize)             \
 	  shared(matrix, factor)                           \
           depend(in: matrix_data[i_sub + i * leading_dim], \
               matrix_data[j_sub + i * leading_dim])        \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
         {
-          const Int row_bsize = std::min(height - i_sub, bsize);
-          const Int column_bsize = std::min(height - j_sub, bsize);
+          const Int row_tsize = std::min(height - i_sub, tsize);
+          const Int column_tsize = std::min(height - j_sub, tsize);
           const ConstBlasMatrix<Field> row_block =
-              matrix->Submatrix(i_sub, i, row_bsize, bsize).ToConst();
+              matrix->Submatrix(i_sub, i, row_tsize, tsize).ToConst();
           const ConstBlasMatrix<Field> column_block =
-              factor.Submatrix(j_sub, i, column_bsize, bsize);
+              factor.Submatrix(j_sub, i, column_tsize, tsize);
           BlasMatrix<Field> update_block =
-              matrix->Submatrix(i_sub, j_sub, row_bsize, column_bsize);
+              matrix->Submatrix(i_sub, j_sub, row_tsize, column_tsize);
           MatrixMultiplyNormalTranspose(Field{-1}, row_block, column_block,
                                         Field{1}, &update_block);
         }
@@ -728,6 +733,7 @@ Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
   }
   return num_pivots;
 }
+#endif  // ifdef _OPENMP
 
 template <class Field>
 std::vector<Int> LowerUnblockedFactorAndSampleDPP(
@@ -839,11 +845,13 @@ std::vector<Int> LowerFactorAndSampleDPP(
                                         uniform_dist, blocksize);
 }
 
+#ifdef _OPENMP
 template <class Field>
 std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
-    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
+    Int tile_size, bool maximum_likelihood, BlasMatrix<Field>* matrix,
+    std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
-    std::vector<Field>* buffer, Int blocksize) {
+    std::vector<Field>* buffer) {
   const Int height = matrix->height;
 
   std::vector<Int> sample;
@@ -864,11 +872,11 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
   Field* const matrix_data CATAMARI_UNUSED = matrix->data;
 
   std::vector<Int> block_sample;
-  for (Int i = 0; i < height; i += blocksize) {
-    const Int bsize = std::min(height - i, blocksize);
+  for (Int i = 0; i < height; i += tile_size) {
+    const Int tsize = std::min(height - i, tile_size);
 
     // Overwrite the diagonal block with its LDL' factorization.
-    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
+    BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, tsize, tsize);
     #pragma omp taskgroup
     #pragma omp task default(none)                                  \
         firstprivate(i, diagonal_block)                             \
@@ -882,29 +890,29 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
         sample.push_back(i + index);
       }
     }
-    if (height == i + bsize) {
+    if (height == i + tsize) {
       break;
     }
     const ConstBlasMatrix<Field> const_diagonal_block = diagonal_block;
 
     // Solve for the remainder of the block column of L and then simultaneously
     // copy its conjugate into 'factor' and the solve against the diagonal.
-    for (Int i_sub = i + bsize; i_sub < height; i_sub += blocksize) {
+    for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
       #pragma omp task default(none)                          \
-          firstprivate(i, i_sub, const_diagonal_block, bsize) \
+          firstprivate(i, i_sub, const_diagonal_block, tsize) \
 	  shared(matrix, factor)                              \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
         // Solve agains the unit lower-triangle of the diagonal block.
-        const Int bsize_solve = std::min(height - i_sub, bsize);
+        const Int tsize_solve = std::min(height - i_sub, tsize);
         BlasMatrix<Field> subdiagonal_block =
-            matrix->Submatrix(i_sub, i, bsize_solve, bsize);
+            matrix->Submatrix(i_sub, i, tsize_solve, tsize);
         RightLowerAdjointUnitTriangularSolves(const_diagonal_block,
                                               &subdiagonal_block);
 
         // Copy the conjugate into 'factor' and solve against the diagonal.
         BlasMatrix<Field> factor_block =
-            factor.Submatrix(i_sub, i, bsize_solve, bsize);
+            factor.Submatrix(i_sub, i, tsize_solve, tsize);
         for (Int j = 0; j < subdiagonal_block.width; ++j) {
           const ComplexBase<Field> delta = RealPart(const_diagonal_block(j, j));
           for (Int k = 0; k < subdiagonal_block.height; ++k) {
@@ -915,41 +923,41 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
       }
     }
 
-    // Perform the Hermitian rank-bsize update.
-    for (Int j_sub = i + bsize; j_sub < height; j_sub += blocksize) {
+    // Perform the Hermitian rank-tsize update.
+    for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
       #pragma omp task default(none)                       \
-          firstprivate(i, j_sub, bsize)                    \
+          firstprivate(i, j_sub, tsize)                    \
 	  shared(matrix, factor)                           \
           depend(in: matrix_data[j_sub + i * leading_dim]) \
           depend(inout: matrix_data[j_sub + j_sub * leading_dim])
       {
-        const Int column_bsize = std::min(height - j_sub, bsize);
+        const Int column_tsize = std::min(height - j_sub, tsize);
         const ConstBlasMatrix<Field> row_block =
-            matrix->Submatrix(j_sub, i, column_bsize, bsize).ToConst();
+            matrix->Submatrix(j_sub, i, column_tsize, tsize).ToConst();
         const ConstBlasMatrix<Field> column_block =
-            factor.Submatrix(j_sub, i, column_bsize, bsize);
+            factor.Submatrix(j_sub, i, column_tsize, tsize);
         BlasMatrix<Field> update_block =
-            matrix->Submatrix(j_sub, j_sub, column_bsize, column_bsize);
+            matrix->Submatrix(j_sub, j_sub, column_tsize, column_tsize);
         MatrixMultiplyLowerNormalTranspose(Field{-1}, row_block, column_block,
                                            Field{1}, &update_block);
       }
 
-      for (Int i_sub = j_sub + bsize; i_sub < height; i_sub += blocksize) {
+      for (Int i_sub = j_sub + tsize; i_sub < height; i_sub += tile_size) {
         #pragma omp task default(none)                     \
-          firstprivate(i, i_sub, j_sub, bsize)             \
+          firstprivate(i, i_sub, j_sub, tsize)             \
 	  shared(matrix, factor)                           \
           depend(in: matrix_data[i_sub + i * leading_dim], \
               matrix_data[j_sub + i * leading_dim])        \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
         {
-          const Int row_bsize = std::min(height - i_sub, bsize);
-          const Int column_bsize = std::min(height - j_sub, bsize);
+          const Int row_tsize = std::min(height - i_sub, tsize);
+          const Int column_tsize = std::min(height - j_sub, tsize);
           const ConstBlasMatrix<Field> row_block =
-              matrix->Submatrix(i_sub, i, row_bsize, bsize).ToConst();
+              matrix->Submatrix(i_sub, i, row_tsize, tsize).ToConst();
           const ConstBlasMatrix<Field> column_block =
-              factor.Submatrix(j_sub, i, column_bsize, bsize);
+              factor.Submatrix(j_sub, i, column_tsize, tsize);
           BlasMatrix<Field> update_block =
-              matrix->Submatrix(i_sub, j_sub, row_bsize, column_bsize);
+              matrix->Submatrix(i_sub, j_sub, row_tsize, column_tsize);
           MatrixMultiplyNormalTranspose(Field{-1}, row_block, column_block,
                                         Field{1}, &update_block);
         }
@@ -958,6 +966,7 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
   }
   return sample;
 }
+#endif  // ifdef _OPENMP
 
 }  // namespace catamari
 

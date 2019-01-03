@@ -22,9 +22,11 @@ namespace catamari {
 template <class Field>
 Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix, Int blocksize = 64);
 
+#ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix,
-                                            Int blocksize = 128);
+Int MultithreadedLowerCholeskyFactorization(Int tile_size,
+                                            BlasMatrix<Field>* matrix);
+#endif  // ifdef _OPENMP
 
 // Attempts to overwrite the lower triangle of an (implicitly) Hermitian
 // matrix with its L D L^H factorization, where L is lower-triangular with
@@ -35,10 +37,12 @@ Int MultithreadedLowerCholeskyFactorization(BlasMatrix<Field>* matrix,
 template <class Field>
 Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix, Int blocksize = 64);
 
+#ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix,
-                                              std::vector<Field>* buffer,
-                                              Int blocksize = 128);
+Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
+                                              BlasMatrix<Field>* matrix,
+                                              std::vector<Field>* buffer);
+#endif  // ifdef _OPENMP
 
 // Attempts to overwrite the lower triangle of an (implicitly) symmetric
 // matrix with its L D L^T factorization, where L is lower-triangular with
@@ -50,10 +54,12 @@ template <class Field>
 Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
                                    Int blocksize = 64);
 
+#ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
-                                                std::vector<Field>* buffer,
-                                                Int blocksize = 128);
+Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
+                                                BlasMatrix<Field>* matrix,
+                                                std::vector<Field>* buffer);
+#endif  // ifdef _OPENMP
 
 // Returns a sample from the Determinantal Point Process implied by the
 // marginal kernel matrix (i.e., a Hermitian matrix with all eigenvalues
@@ -66,11 +72,14 @@ std::vector<Int> LowerFactorAndSampleDPP(
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     Int blocksize = 64);
 
+#ifdef _OPENMP
 template <class Field>
 std::vector<Int> MultithreadedLowerFactorAndSampleDPP(
-    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
+    Int tile_size, bool maximum_likelihood, BlasMatrix<Field>* matrix,
+    std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
-    std::vector<Field>* buffer, Int blocksize = 128);
+    std::vector<Field>* buffer);
+#endif  // ifdef _OPENMP
 
 }  // namespace catamari
 
