@@ -793,7 +793,7 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
   // TODO(Jack Poulson): Make this value configurable, perhaps with a default
   // value that signals that an intelligent preset should be used (e.g.,
   // log2(max_threads).
-  const Int max_parallel_levels = std::ceil(std::log2(max_threads));
+  const Int max_parallel_levels = std::ceil(std::log2(max_threads)) + 1;
 
   const Int level = 0;
   if (max_parallel_levels == 0) {
