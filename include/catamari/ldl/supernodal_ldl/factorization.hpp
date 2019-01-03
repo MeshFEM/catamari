@@ -171,8 +171,9 @@ class Factorization {
       LeftLookingSharedState* shared_state,
       std::vector<LeftLookingPrivateState>* private_states);
 
-  bool MultithreadedLeftLookingSupernodeFinalize(Int main_supernode,
-                                                 LDLResult* result);
+  bool MultithreadedLeftLookingSupernodeFinalize(
+      Int main_supernode, std::vector<LeftLookingPrivateState>* private_states,
+      LDLResult* result);
 
   bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
                           const std::vector<Int>& supernode_parents,

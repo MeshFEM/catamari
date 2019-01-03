@@ -37,6 +37,7 @@ Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix, Int blocksize = 64);
 
 template <class Field>
 Int MultithreadedLowerLDLAdjointFactorization(BlasMatrix<Field>* matrix,
+                                              std::vector<Field>* buffer,
                                               Int blocksize = 128);
 
 // Attempts to overwrite the lower triangle of an (implicitly) symmetric
@@ -51,6 +52,7 @@ Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
 
 template <class Field>
 Int MultithreadedLowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
+                                                std::vector<Field>* buffer,
                                                 Int blocksize = 128);
 
 // Returns a sample from the Determinantal Point Process implied by the
@@ -68,7 +70,7 @@ template <class Field>
 std::vector<Int> MultithreadedLowerFactorAndSampleDPP(
     bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
-    Int blocksize = 128);
+    std::vector<Field>* buffer, Int blocksize = 128);
 
 }  // namespace catamari
 

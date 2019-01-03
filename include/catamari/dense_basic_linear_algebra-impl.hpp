@@ -671,6 +671,12 @@ inline void MatrixMultiplyNormalNormal(
                   "Output width was incompatible");
   CATAMARI_ASSERT(left_matrix.width == right_matrix.height,
                   "Contraction dimensions were incompatible.");
+  CATAMARI_ASSERT(left_matrix.leading_dim >= left_matrix.height,
+                  "Left matrix had too small a leading dimension.");
+  CATAMARI_ASSERT(right_matrix.leading_dim >= right_matrix.height,
+                  "Right matrix had too small a leading dimension.");
+  CATAMARI_ASSERT(output_matrix->leading_dim >= output_matrix->height,
+                  "Output matrix had too small a leading dimension.");
   const char trans_left = 'N';
   const char trans_right = 'N';
   const BlasInt output_height_blas = output_matrix->height;
