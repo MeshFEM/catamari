@@ -35,6 +35,9 @@ enum LDLAlgorithm {
   // An up-looking LDL factorization. Cf. Section 4.7 of Tim Davis,
   // "Direct Methods for Sparse Linear Systems".
   kUpLookingLDL,
+
+  // A right-looking (multifrontal) factorization.
+  kRightLookingLDL,
 };
 
 // Statistics from running an LDL' or Cholesky factorization.
@@ -63,6 +66,7 @@ struct Control {
   SymmetricFactorizationType factorization_type = kLDLAdjointFactorization;
 
   // The choice of either left-looking or up-looking LDL' factorization.
+  // There is currently no scalar multifrontal support.
   LDLAlgorithm algorithm = kUpLookingLDL;
 };
 

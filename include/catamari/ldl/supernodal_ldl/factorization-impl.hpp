@@ -536,22 +536,26 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
   const Int child_end = supernode_child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
-  BlasMatrix<Field>& diagonal_block = diagonal_factor->blocks[supernode];
-  BlasMatrix<Field>& lower_block = lower_factor->blocks[supernode];
+  BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
+  BlasMatrix<Field> lower_block = lower_factor->blocks[supernode];
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
 
   // Initialize this supernode's Schur complement as the zero matrix.
   std::vector<Field>& schur_complement_buffer =
       shared_state->schur_complement_buffers[supernode];
-  BlasMatrix<Field>& schur_complement =
+  {
+    BlasMatrix<Field>& schur_complement =
+        shared_state->schur_complements[supernode];
+    schur_complement_buffer.clear();
+    schur_complement_buffer.resize(degree * degree, Field{0});
+    schur_complement.height = degree;
+    schur_complement.width = degree;
+    schur_complement.leading_dim = degree;
+    schur_complement.data = schur_complement_buffer.data();
+  }
+  BlasMatrix<Field> schur_complement =
       shared_state->schur_complements[supernode];
-  schur_complement_buffer.clear();
-  schur_complement_buffer.resize(degree * degree, Field{0});
-  schur_complement.height = degree;
-  schur_complement.width = degree;
-  schur_complement.leading_dim = degree;
-  schur_complement.data = schur_complement_buffer.data();
 
   // TODO(Jack Poulson): Extract the child updates into a subroutine.
   const Int supernode_start = supernode_starts[supernode];
@@ -587,8 +591,9 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     }
 
     // Add the child Schur complement into this supernode's front.
-    #pragma omp for
-    for (Int j = 0; j < num_child_diag_indices; ++j) {
+    // TODO(Jack Poulson): Parallelize this.
+    //#pragma omp for
+    for (Int j = 0; j < child_degree; ++j) {
       const Int j_rel = child_rel_indices[j];
       if (j < num_child_diag_indices) {
         // Contribute into the upper-left diagonal block of the front.
@@ -633,6 +638,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
       result->num_successful_pivots += num_supernode_pivots;
     }
   }
+
   if (num_supernode_pivots < supernode_size) {
     return false;
   }
@@ -667,7 +673,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     #pragma omp taskgroup
     for (Int j = 0; j < degree; j += tile_size) {
       #pragma omp task default(none) \
-          firstprivate(j) shared(schur_complement, lower_block)
+          firstprivate(j, lower_block, schur_complement)
       {
         const Int tsize = std::min(degree - j, tile_size);
         const ConstBlasMatrix<Field> column_block =
@@ -680,7 +686,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
 
       for (Int i = j + tile_size; i < degree; i += tile_size) {
         #pragma omp task default(none) \
-            firstprivate(i, j) shared(schur_complement, lower_block)
+            firstprivate(i, j, lower_block, schur_complement)
         {
           const Int row_tsize = std::min(degree - i, tile_size);
           const Int column_tsize = std::min(degree - j, tile_size);
@@ -711,8 +717,8 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     #pragma omp taskgroup
     for (Int j = 0; j < degree; j += tile_size) {
       #pragma omp task default(none) \
-          firstprivate(j) \
-          shared(schur_complement, lower_block, scaled_transpose)
+         firstprivate(j, supernode_size, degree, lower_block, \
+             schur_complement, scaled_transpose)
       {
         const Int tsize = std::min(degree - j, tile_size);
         const ConstBlasMatrix<Field> row_block =
@@ -727,8 +733,8 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
 
       for (Int i = j + tile_size; i < degree; i += tile_size) {
         #pragma omp task default(none) \
-            firstprivate(i, j) \
-            shared(schur_complement, lower_block, scaled_transpose)
+            firstprivate(i, j, supernode_size, degree, lower_block, \
+                schur_complement, scaled_transpose)
         {
           const Int row_tsize = std::min(degree - i, tile_size);
           const Int column_tsize = std::min(degree - j, tile_size);
@@ -767,7 +773,6 @@ bool Factorization<Field>::RightLookingSubtree(
     const Int child = supernode_children[child_beg + child_index];
     CATAMARI_ASSERT(supernode_parents[child] == supernode,
                     "Incorrect child index");
-
     LDLResult& result_contribution = result_contributions[child_index];
     successes[child_index] = RightLookingSubtree(
         child, matrix, supernode_parents, supernode_children,
@@ -839,9 +844,9 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
   #pragma omp taskgroup
   {
     for (Int child_index = 0; child_index < num_children; ++child_index) {
-      #pragma omp task default(none)                                       \
+      #pragma omp task default(none)                                     \
         firstprivate(level, max_parallel_levels, supernode, child_index, \
-            shared_state) \
+            shared_state)                                                \
         shared(successes, matrix, supernode_parents, supernode_children, \
             supernode_child_offsets, result_contributions)
       {
@@ -1538,9 +1543,13 @@ LDLResult Factorization<Field>::Factor(
       control.forward_solve_out_of_place_supernode_threshold;
   backward_solve_out_of_place_supernode_threshold =
       control.backward_solve_out_of_place_supernode_threshold;
+  const bool use_leftlooking = control.algorithm == kLeftLookingLDL;
 
-  // TODO(Jack Poulson): Provide an option for using RightLooking.
-  return LeftLooking(matrix, control);
+  if (use_leftlooking) {
+    return LeftLooking(matrix, control);
+  } else {
+    return RightLooking(matrix, control);
+  }
 }
 
 template <class Field>

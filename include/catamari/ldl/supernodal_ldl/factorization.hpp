@@ -23,6 +23,10 @@ struct Control {
   // Configuration for the supernodal relaxation.
   SupernodalRelaxationControl relaxation_control;
 
+  // The choice of either left-looking or right-looking LDL' factorization.
+  // There is currently no supernodal up-looking support.
+  LDLAlgorithm algorithm = kRightLookingLDL;
+
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.
   Int forward_solve_out_of_place_supernode_threshold = 10;

@@ -1225,8 +1225,8 @@ int main(int argc, char** argv) {
   const int ldl_algorithm_int =
       parser.OptionalInput<int>("ldl_algorithm_int",
                                 "The LDL algorithm type.\n"
-                                "0:left-looking, 1:up-looking",
-                                1);
+                                "0:left-looking, 1:up-looking, 2:right-looking",
+                                2);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
   if (!parser.OK()) {
@@ -1251,6 +1251,8 @@ int main(int argc, char** argv) {
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
   ldl_control.supernodal_control.factorization_type =
       catamari::kLDLTransposeFactorization;
+  ldl_control.supernodal_control.algorithm =
+      static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
   ldl_control.supernodal_control.relaxation_control.relax_supernodes =
       relax_supernodes;
   ldl_control.supernodal_control.relaxation_control.allowable_supernode_zeros =
