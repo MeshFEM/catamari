@@ -142,6 +142,17 @@ class Factorization {
     std::vector<Field> workspace_buffer;
   };
 
+  struct RightLookingSharedState {
+    // The Schur complement matrices for each of the supernodes in the
+    // multifrontal method. Each front should only be allocated while it is
+    // actively in use.
+    std::vector<BlasMatrix<Field>> schur_complements;
+
+    // The underlying buffers for the Schur complement portions of the fronts.
+    // They are allocated and deallocated as the factorization progresses.
+    std::vector<std::vector<Field>> schur_complement_buffers;
+  };
+
   // Form the (possibly relaxed) supernodes for the factorization.
   void FormSupernodes(const CoordinateMatrix<Field>& matrix,
                       const SupernodalRelaxationControl& control,
@@ -149,12 +160,30 @@ class Factorization {
                       std::vector<Int>* supernode_degrees,
                       std::vector<Int>* supernode_parents);
 
+  void InitializeFactors(const CoordinateMatrix<Field>& matrix,
+                         const std::vector<Int>& parents,
+                         const std::vector<Int>& supernode_degrees);
+
   LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
                         const Control& control);
 
-  void InitializeLeftLookingFactors(const CoordinateMatrix<Field>& matrix,
-                                    const std::vector<Int>& parents,
-                                    const std::vector<Int>& supernode_degrees);
+  LDLResult RightLooking(const CoordinateMatrix<Field>& matrix,
+                         const Control& control);
+
+  bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
+                          const std::vector<Int>& supernode_parents,
+                          const std::vector<Int>& supernode_children,
+                          const std::vector<Int>& supernode_child_offsets,
+                          LeftLookingSharedState* shared_state,
+                          LeftLookingPrivateState* private_state,
+                          LDLResult* result);
+
+  bool RightLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
+                           const std::vector<Int>& supernode_parents,
+                           const std::vector<Int>& supernode_children,
+                           const std::vector<Int>& supernode_child_offsets,
+                           RightLookingSharedState* shared_state,
+                           LDLResult* result);
 
   void LeftLookingSupernodeUpdate(Int main_supernode,
                                   const CoordinateMatrix<Field>& matrix,
@@ -163,6 +192,11 @@ class Factorization {
                                   LeftLookingPrivateState* private_state);
 
   bool LeftLookingSupernodeFinalize(Int main_supernode, LDLResult* result);
+
+  bool RightLookingSupernodeFinalize(
+      Int supernode, const std::vector<Int>& supernode_children,
+      const std::vector<Int>& supernode_child_offsets,
+      RightLookingSharedState* shared_state, LDLResult* result);
 
 #ifdef _OPENMP
   void MultithreadedLeftLookingSupernodeUpdate(
@@ -175,14 +209,6 @@ class Factorization {
       Int main_supernode, std::vector<LeftLookingPrivateState>* private_states,
       LDLResult* result);
 
-  bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
-                          const std::vector<Int>& supernode_parents,
-                          const std::vector<Int>& supernode_children,
-                          const std::vector<Int>& supernode_child_offsets,
-                          LeftLookingSharedState* shared_state,
-                          LeftLookingPrivateState* private_state,
-                          LDLResult* result);
-
   bool MultithreadedLeftLookingSubtree(
       Int level, Int max_parallel_levels, Int supernode,
       const CoordinateMatrix<Field>& matrix,
@@ -194,6 +220,9 @@ class Factorization {
 
   LDLResult MultithreadedLeftLooking(const CoordinateMatrix<Field>& matrix,
                                      const Control& control);
+
+  LDLResult MultithreadedRightLooking(const CoordinateMatrix<Field>& matrix,
+                                      const Control& control);
 #endif  // ifdef _OPENMP
 };
 
