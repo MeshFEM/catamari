@@ -223,6 +223,19 @@ class Factorization {
 
   LDLResult MultithreadedRightLooking(const CoordinateMatrix<Field>& matrix,
                                       const Control& control);
+
+  bool MultithreadedRightLookingSubtree(
+      Int level, Int max_parallel_levels, Int supernode,
+      const CoordinateMatrix<Field>& matrix,
+      const std::vector<Int>& supernode_parents,
+      const std::vector<Int>& supernode_children,
+      const std::vector<Int>& supernode_child_offsets,
+      RightLookingSharedState* shared_state, LDLResult* result);
+
+  bool MultithreadedRightLookingSupernodeFinalize(
+      Int supernode, const std::vector<Int>& supernode_children,
+      const std::vector<Int>& supernode_child_offsets,
+      RightLookingSharedState* shared_state, LDLResult* result);
 #endif  // ifdef _OPENMP
 };
 

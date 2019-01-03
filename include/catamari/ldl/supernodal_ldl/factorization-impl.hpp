@@ -12,7 +12,6 @@
 
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/dense_factorizations.hpp"
-#include "quotient/timer.hpp"
 
 #include "catamari/ldl/supernodal_ldl.hpp"
 
@@ -409,6 +408,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   schur_complement.leading_dim = degree;
   schur_complement.data = schur_complement_buffer.data();
 
+  // TODO(Jack Poulson): Extract the child updates into a subroutine.
   const Int supernode_start = supernode_starts[supernode];
   const Int* main_indices = lower_factor->Structure(supernode);
   for (Int child_index = 0; child_index < num_children; ++child_index) {
@@ -508,19 +508,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   if (factorization_type == kCholeskyFactorization) {
     LowerNormalHermitianOuterProduct(Real{-1}, lower_block.ToConst(), Real{1},
                                      &schur_complement);
-  } else if (factorization_type == kLDLAdjointFactorization) {
-    std::vector<Field> scaled_transpose_buffer(degree * supernode_size);
-    BlasMatrix<Field> scaled_transpose;
-    scaled_transpose.height = supernode_size;
-    scaled_transpose.width = degree;
-    scaled_transpose.leading_dim = supernode_size;
-    scaled_transpose.data = scaled_transpose_buffer.data();
-    FormScaledTranspose(factorization_type, diagonal_block.ToConst(),
-                        lower_block.ToConst(), &scaled_transpose);
-    MatrixMultiplyLowerNormalNormal(Field{-1}, lower_block.ToConst(),
-                                    scaled_transpose.ToConst(), Field{1},
-                                    &schur_complement);
-  } else if (factorization_type == kLDLTransposeFactorization) {
+  } else {
     std::vector<Field> scaled_transpose_buffer(degree * supernode_size);
     BlasMatrix<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;
@@ -536,6 +524,232 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
 
   return true;
 }
+
+#ifdef _OPENMP
+template <class Field>
+bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
+    Int supernode, const std::vector<Int>& supernode_children,
+    const std::vector<Int>& supernode_child_offsets,
+    RightLookingSharedState* shared_state, LDLResult* result) {
+  typedef ComplexBase<Field> Real;
+  const Int child_beg = supernode_child_offsets[supernode];
+  const Int child_end = supernode_child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+
+  BlasMatrix<Field>& diagonal_block = diagonal_factor->blocks[supernode];
+  BlasMatrix<Field>& lower_block = lower_factor->blocks[supernode];
+  const Int degree = lower_block.height;
+  const Int supernode_size = lower_block.width;
+
+  // Initialize this supernode's Schur complement as the zero matrix.
+  std::vector<Field>& schur_complement_buffer =
+      shared_state->schur_complement_buffers[supernode];
+  BlasMatrix<Field>& schur_complement =
+      shared_state->schur_complements[supernode];
+  schur_complement_buffer.clear();
+  schur_complement_buffer.resize(degree * degree, Field{0});
+  schur_complement.height = degree;
+  schur_complement.width = degree;
+  schur_complement.leading_dim = degree;
+  schur_complement.data = schur_complement_buffer.data();
+
+  // TODO(Jack Poulson): Extract the child updates into a subroutine.
+  const Int supernode_start = supernode_starts[supernode];
+  const Int* main_indices = lower_factor->Structure(supernode);
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child = supernode_children[child_beg + child_index];
+    const Int* child_indices = lower_factor->Structure(child);
+    std::vector<Field>& child_schur_complement_buffer =
+        shared_state->schur_complement_buffers[child];
+    BlasMatrix<Field>& child_schur_complement =
+        shared_state->schur_complements[child];
+    const Int child_degree = child_schur_complement.height;
+
+    // Fill the mapping from the child structure into the parent front.
+    Int num_child_diag_indices = 0;
+    std::vector<Int> child_rel_indices(child_degree);
+    {
+      Int i_rel = 0;
+      for (Int i = 0; i < child_degree; ++i) {
+        const Int row = child_indices[i];
+        if (row < supernode_start + supernode_size) {
+          child_rel_indices[i] = i_rel = row - supernode_start;
+          ++num_child_diag_indices;
+        } else {
+          while (main_indices[i_rel - supernode_size] != row) {
+            ++i_rel;
+            CATAMARI_ASSERT(i_rel < supernode_size + degree,
+                            "Relative index is out-of-bounds.");
+          }
+          child_rel_indices[i] = i_rel;
+        }
+      }
+    }
+
+    // Add the child Schur complement into this supernode's front.
+    #pragma omp for
+    for (Int j = 0; j < num_child_diag_indices; ++j) {
+      const Int j_rel = child_rel_indices[j];
+      if (j < num_child_diag_indices) {
+        // Contribute into the upper-left diagonal block of the front.
+        for (Int i = j; i < num_child_diag_indices; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          diagonal_block(i_rel, j_rel) += child_schur_complement(i, j);
+        }
+
+        // Contribute into the lower-left block of the front.
+        for (Int i = num_child_diag_indices; i < child_degree; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          lower_block(i_rel - supernode_size, j_rel) +=
+              child_schur_complement(i, j);
+        }
+      } else {
+        // Contribute into the bottom-right block of the front.
+        for (Int i = j; i < child_degree; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          schur_complement(i_rel - supernode_size, j_rel - supernode_size) +=
+              child_schur_complement(i, j);
+        }
+      }
+    }
+
+    child_schur_complement.height = 0;
+    child_schur_complement.width = 0;
+    child_schur_complement.data = nullptr;
+    std::vector<Field>().swap(child_schur_complement_buffer);
+  }
+
+  // TODO(Jack Poulson): Make this configurable.
+  const Int tile_size = 128;
+
+  Int num_supernode_pivots;
+  {
+    std::vector<Field> multithreaded_buffer(supernode_size * supernode_size);
+    #pragma omp taskgroup
+    {
+      num_supernode_pivots = MultithreadedFactorDiagonalBlock(
+          tile_size, factorization_type, &diagonal_block,
+          &multithreaded_buffer);
+      result->num_successful_pivots += num_supernode_pivots;
+    }
+  }
+  if (num_supernode_pivots < supernode_size) {
+    return false;
+  }
+
+  // Finish updating the result structure.
+  result->largest_supernode =
+      std::max(result->largest_supernode, supernode_size);
+  result->num_factorization_entries +=
+      (supernode_size * (supernode_size + 1)) / 2 + supernode_size * degree;
+
+  // Add the approximate number of flops for the diagonal block
+  // factorization.
+  result->num_factorization_flops += std::pow(1. * supernode_size, 3.) / 3. +
+                                     std::pow(1. * supernode_size, 2.) / 2.;
+
+  // Add the approximate number of flops for the triangular solves of the
+  // diagonal block against its structure.
+  result->num_factorization_flops += std::pow(1. * degree, 2.) * supernode_size;
+
+  if (!degree) {
+    // We can early exit.
+    return true;
+  }
+
+  #pragma omp taskgroup
+  MultithreadedSolveAgainstDiagonalBlock(
+      tile_size, factorization_type, diagonal_block.ToConst(), &lower_block);
+
+  if (factorization_type == kCholeskyFactorization) {
+    // Perform the multi-threaded LowerNormalHermitianOuterProduct.
+    // TODO(Jack Poulson): Extract this functionality as a subroutine.
+    #pragma omp taskgroup
+    for (Int j = 0; j < degree; j += tile_size) {
+      #pragma omp task default(none) \
+          firstprivate(j, degree, supernode_size, tile_size, lower_block, \
+              schur_complement)
+      {
+        const Int tsize = std::min(degree - j, tile_size);
+        const ConstBlasMatrix<Field> column_block =
+            lower_block.Submatrix(j, 0, tsize, supernode_size);
+        BlasMatrix<Field> schur_complement_block =
+            schur_complement.Submatrix(j, j, tsize, tsize);
+        LowerNormalHermitianOuterProduct(Real{-1}, column_block, Real{1},
+                                         &schur_complement_block);
+      }
+
+      for (Int i = j + tile_size; i < degree; i += tile_size) {
+        #pragma omp task default(none) \
+          firstprivate(i, j, degree, supernode_size, tile_size, lower_block, \
+              schur_complement)
+        {
+          const Int row_tsize = std::min(degree - i, tile_size);
+          const Int column_tsize = std::min(degree - j, tile_size);
+          const ConstBlasMatrix<Field> row_block =
+              lower_block.Submatrix(i, 0, row_tsize, supernode_size);
+          const ConstBlasMatrix<Field> column_block =
+              lower_block.Submatrix(j, 0, column_tsize, supernode_size);
+          BlasMatrix<Field> schur_complement_block =
+              schur_complement.Submatrix(i, j, row_tsize, column_tsize);
+          MatrixMultiplyNormalAdjoint(Field{-1}, row_block, column_block,
+                                      Field{1}, &schur_complement_block);
+        }
+      }
+    }
+  } else {
+    std::vector<Field> scaled_transpose_buffer(degree * supernode_size);
+    BlasMatrix<Field> scaled_transpose;
+    scaled_transpose.height = supernode_size;
+    scaled_transpose.width = degree;
+    scaled_transpose.leading_dim = supernode_size;
+    scaled_transpose.data = scaled_transpose_buffer.data();
+    // TODO(Jack Poulson): Multi-thread this copy.
+    FormScaledTranspose(factorization_type, diagonal_block.ToConst(),
+                        lower_block.ToConst(), &scaled_transpose);
+
+    // Perform the multi-threaded MatrixMultiplyLowerNormalNormal.
+    // TODO(Jack Poulson): Extract this functionality as a subroutine.
+    #pragma omp taskgroup
+    for (Int j = 0; j < degree; j += tile_size) {
+      #pragma omp task default(none) \
+          firstprivate(j, degree, supernode_size, tile_size, lower_block, \
+              scaled_transpose, schur_complement)
+      {
+        const Int tsize = std::min(degree - j, tile_size);
+        const ConstBlasMatrix<Field> row_block =
+            lower_block.Submatrix(j, 0, tsize, supernode_size);
+        const ConstBlasMatrix<Field> column_block =
+            scaled_transpose.Submatrix(0, j, supernode_size, tsize);
+        BlasMatrix<Field> schur_complement_block =
+            schur_complement.Submatrix(j, j, tsize, tsize);
+        MatrixMultiplyLowerNormalNormal(Field{-1}, row_block, column_block,
+                                        Field{1}, &schur_complement_block);
+      }
+
+      for (Int i = j + tile_size; i < degree; i += tile_size) {
+        #pragma omp task default(none) \
+          firstprivate(i, j, degree, supernode_size, tile_size, lower_block, \
+              scaled_transpose, schur_complement)
+        {
+          const Int row_tsize = std::min(degree - i, tile_size);
+          const Int column_tsize = std::min(degree - j, tile_size);
+          const ConstBlasMatrix<Field> row_block =
+              lower_block.Submatrix(i, 0, row_tsize, supernode_size);
+          const ConstBlasMatrix<Field> column_block =
+              scaled_transpose.Submatrix(0, j, supernode_size, column_tsize);
+          BlasMatrix<Field> schur_complement_block =
+              schur_complement.Submatrix(i, j, row_tsize, column_tsize);
+          MatrixMultiplyNormalNormal(Field{-1}, row_block, column_block,
+                                     Field{1}, &schur_complement_block);
+        }
+      }
+    }
+  }
+
+  return true;
+}
+#endif  // ifdef _OPENMP
 
 template <class Field>
 bool Factorization<Field>::RightLookingSubtree(
@@ -600,16 +814,96 @@ bool Factorization<Field>::RightLookingSubtree(
   return succeeded;
 }
 
+#ifdef _OPENMP
+template <class Field>
+bool Factorization<Field>::MultithreadedRightLookingSubtree(
+    Int level, Int max_parallel_levels, Int supernode,
+    const CoordinateMatrix<Field>& matrix,
+    const std::vector<Int>& supernode_parents,
+    const std::vector<Int>& supernode_children,
+    const std::vector<Int>& supernode_child_offsets,
+    RightLookingSharedState* shared_state, LDLResult* result) {
+  if (level >= max_parallel_levels) {
+    return RightLookingSubtree(supernode, matrix, supernode_parents,
+                               supernode_children, supernode_child_offsets,
+                               shared_state, result);
+  }
+
+  const Int child_beg = supernode_child_offsets[supernode];
+  const Int child_end = supernode_child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+
+  std::vector<int> successes(num_children);
+  std::vector<LDLResult> result_contributions(num_children);
+
+  // As of Jan. 1, 2019, OpenMP 4.5 is still not pervasive, and so we avoid
+  // dependence on the more natural approach of a 'taskloop'.
+  #pragma omp taskgroup
+  {
+    for (Int child_index = 0; child_index < num_children; ++child_index) {
+      #pragma omp task default(none)                                       \
+        firstprivate(level, max_parallel_levels, supernode, child_index, \
+            shared_state) \
+        shared(successes, matrix, supernode_parents, supernode_children, \
+            supernode_child_offsets, result_contributions)
+      {
+        const Int child = supernode_children[child_beg + child_index];
+        LDLResult& result_contribution = result_contributions[child_index];
+        successes[child_index] = MultithreadedRightLookingSubtree(
+            level + 1, max_parallel_levels, child, matrix, supernode_parents,
+            supernode_children, supernode_child_offsets, shared_state,
+            &result_contribution);
+      }
+    }
+  }
+
+  bool succeeded = true;
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    if (!successes[child_index]) {
+      succeeded = false;
+      break;
+    }
+    const LDLResult& contribution = result_contributions[child_index];
+
+    // TODO(Jack Poulson): Switch to calling a reduction routine.
+    result->num_successful_pivots += contribution.num_successful_pivots;
+    result->largest_supernode =
+        std::max(result->largest_supernode, contribution.largest_supernode);
+    result->num_factorization_entries += contribution.num_factorization_entries;
+    result->num_factorization_flops += contribution.num_factorization_flops;
+  }
+
+  if (succeeded) {
+    #pragma omp taskgroup
+    succeeded = MultithreadedRightLookingSupernodeFinalize(
+        supernode, supernode_children, supernode_child_offsets, shared_state,
+        result);
+  } else {
+    // Clear the child fronts.
+    for (Int child_index = 0; child_index < num_children; ++child_index) {
+      const Int child = supernode_children[child_beg + child_index];
+      std::vector<Field>& child_schur_complement_buffer =
+          shared_state->schur_complement_buffers[child];
+      BlasMatrix<Field>& child_schur_complement =
+          shared_state->schur_complements[child];
+      child_schur_complement.height = 0;
+      child_schur_complement.width = 0;
+      child_schur_complement.data = nullptr;
+      std::vector<Field>().swap(child_schur_complement_buffer);
+    }
+  }
+
+  return succeeded;
+}
+#endif  // ifdef _OPENMP
+
 template <class Field>
 LDLResult Factorization<Field>::RightLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
 #ifdef _OPENMP
-  // TODO(Jack Poulson)
-  /*
   if (omp_get_max_threads() > 1) {
     return MultithreadedRightLooking(matrix, control);
   }
-  */
 #endif
 
   std::vector<Int> supernode_parents;
@@ -1025,14 +1319,10 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
   if (succeeded) {
     // Handle the current supernode's elimination.
     #pragma omp taskgroup
-    #pragma omp task default(none) firstprivate(supernode) \
-        shared(matrix, supernode_parents, shared_state, private_states)
     MultithreadedLeftLookingSupernodeUpdate(
         supernode, matrix, supernode_parents, shared_state, private_states);
 
     #pragma omp taskgroup
-    #pragma omp task default(none) firstprivate(supernode) \
-        shared(private_states, result, succeeded)
     succeeded = MultithreadedLeftLookingSupernodeFinalize(
         supernode, private_states, result);
   }
@@ -1123,6 +1413,95 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
             level + 1, max_parallel_levels, root, matrix, supernode_parents,
             supernode_children, supernode_child_offsets, &shared_state,
             &private_states, &result_contribution);
+      }
+    }
+
+    SetNumBlasThreads(old_max_threads);
+  }
+
+  for (Int index = 0; index < num_roots; ++index) {
+    if (!successes[index]) {
+      break;
+    }
+
+    const LDLResult& contribution = result_contributions[index];
+
+    // TODO(Jack Poulson): Switch to calling a reduction routine.
+    result.num_successful_pivots += contribution.num_successful_pivots;
+    result.largest_supernode =
+        std::max(result.largest_supernode, contribution.largest_supernode);
+    result.num_factorization_entries += contribution.num_factorization_entries;
+    result.num_factorization_flops += contribution.num_factorization_flops;
+  }
+
+  return result;
+}
+
+template <class Field>
+LDLResult Factorization<Field>::MultithreadedRightLooking(
+    const CoordinateMatrix<Field>& matrix, const Control& control) {
+  std::vector<Int> supernode_parents;
+  {
+    std::vector<Int> parents;
+    std::vector<Int> supernode_degrees;
+    FormSupernodes(matrix, control.relaxation_control, &parents,
+                   &supernode_degrees, &supernode_parents);
+    InitializeFactors(matrix, parents, supernode_degrees);
+  }
+  const Int num_supernodes = supernode_sizes.size();
+  const Int max_threads = omp_get_max_threads();
+
+  RightLookingSharedState shared_state;
+  shared_state.schur_complement_buffers.resize(num_supernodes);
+  shared_state.schur_complements.resize(num_supernodes);
+
+  // Form the downlinks for the supernodal elimination tree.
+  std::vector<Int> supernode_children;
+  std::vector<Int> supernode_child_offsets;
+  std::vector<Int> roots;
+  EliminationChildrenFromParents(supernode_parents, &supernode_children,
+                                 &supernode_child_offsets, &roots);
+  const Int num_roots = roots.size();
+
+  LDLResult result;
+
+  std::vector<int> successes(num_roots);
+  std::vector<LDLResult> result_contributions(num_roots);
+
+  // TODO(Jack Poulson): Make this value configurable.
+  const Int max_parallel_levels = std::ceil(std::log2(max_threads)) + 3;
+
+  const Int level = 0;
+  if (max_parallel_levels == 0) {
+    for (Int root_index = 0; root_index < num_roots; ++root_index) {
+      const Int root = roots[root_index];
+      LDLResult& result_contribution = result_contributions[root_index];
+      successes[root_index] = RightLookingSubtree(
+          root, matrix, supernode_parents, supernode_children,
+          supernode_child_offsets, &shared_state, &result_contribution);
+    }
+  } else {
+    const int old_max_threads = GetMaxBlasThreads();
+    SetNumBlasThreads(1);
+
+    // As of Jan. 1, 2019, OpenMP 4.5 is still not pervasive, and so we avoid
+    // dependence on the more natural approach of a 'taskloop'.
+    #pragma omp parallel
+    #pragma omp single
+    #pragma omp taskgroup
+    for (Int root_index = 0; root_index < num_roots; ++root_index) {
+      #pragma omp task default(none)                          \
+          firstprivate(root_index)                            \
+          shared(roots, successes, matrix, supernode_parents, \
+              supernode_children, supernode_child_offsets,    \
+              result_contributions, shared_state)
+      {
+        const Int root = roots[root_index];
+        LDLResult& result_contribution = result_contributions[root_index];
+        successes[root_index] = MultithreadedRightLookingSubtree(
+            level + 1, max_parallel_levels, root, matrix, supernode_parents,
+            supernode_children, supernode_child_offsets, &shared_state,
+            &result_contribution);
       }
     }
 
