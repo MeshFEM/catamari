@@ -526,6 +526,105 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
 }
 
 #ifdef _OPENMP
+// Performs the multi-threaded MatrixMultiplyLowerNormalNormal.
+// TODO(Jack Poulson): Move this into blas-impl.hpp
+template <class Field>
+void MultithreadedMatrixMultiplyLowerNormalNormal(
+    Int tile_size, const Field& alpha,
+    const ConstBlasMatrix<Field>& left_matrix,
+    const ConstBlasMatrix<Field>& right_matrix, const Field& beta,
+    BlasMatrix<Field>* output_matrix) {
+  const Int height = output_matrix->height;
+  const Int rank = left_matrix.width;
+  const Field alpha_copy = alpha;
+  const Field beta_copy = beta;
+  const ConstBlasMatrix<Field> left_matrix_copy = left_matrix;
+  const ConstBlasMatrix<Field> right_matrix_copy = right_matrix;
+  CATAMARI_ASSERT(left_matrix.width == right_matrix.height,
+                  "Contraction dimensions do not match.");
+
+  for (Int j = 0; j < height; j += tile_size) {
+    #pragma omp task default(none) \
+       firstprivate(tile_size, j, height, rank, left_matrix_copy, \
+           right_matrix_copy, output_matrix, alpha_copy, beta_copy)
+    {
+      const Int tsize = std::min(height - j, tile_size);
+      const ConstBlasMatrix<Field> row_block =
+          left_matrix_copy.Submatrix(j, 0, tsize, rank);
+      const ConstBlasMatrix<Field> column_block =
+          right_matrix_copy.Submatrix(0, j, rank, tsize);
+      BlasMatrix<Field> output_block =
+          output_matrix->Submatrix(j, j, tsize, tsize);
+      MatrixMultiplyLowerNormalNormal(alpha_copy, row_block, column_block,
+                                      beta_copy, &output_block);
+    }
+
+    for (Int i = j + tile_size; i < height; i += tile_size) {
+      #pragma omp task default(none) \
+	  firstprivate(tile_size, i, j, height, rank, left_matrix_copy, \
+              right_matrix_copy, output_matrix, alpha_copy, beta_copy)
+      {
+        const Int row_tsize = std::min(height - i, tile_size);
+        const Int column_tsize = std::min(height - j, tile_size);
+        const ConstBlasMatrix<Field> row_block =
+            left_matrix_copy.Submatrix(i, 0, row_tsize, rank);
+        const ConstBlasMatrix<Field> column_block =
+            right_matrix_copy.Submatrix(0, j, rank, column_tsize);
+        BlasMatrix<Field> output_block =
+            output_matrix->Submatrix(i, j, row_tsize, column_tsize);
+        MatrixMultiplyNormalNormal(alpha_copy, row_block, column_block,
+                                   beta_copy, &output_block);
+      }
+    }
+  }
+}
+
+template <class Field>
+void MultithreadedLowerNormalHermitianOuterProduct(
+    Int tile_size, const ComplexBase<Field>& alpha,
+    const ConstBlasMatrix<Field>& left_matrix, const ComplexBase<Field>& beta,
+    BlasMatrix<Field>* output_matrix) {
+  typedef ComplexBase<Field> Real;
+  const Int height = output_matrix->height;
+  const Int rank = left_matrix.width;
+  const Real alpha_copy = alpha;
+  const Real beta_copy = beta;
+  const ConstBlasMatrix<Field> left_matrix_copy = left_matrix;
+
+  for (Int j = 0; j < height; j += tile_size) {
+    #pragma omp task default(none) \
+        firstprivate(tile_size, j, left_matrix_copy, output_matrix, \
+            alpha_copy, beta_copy)
+    {
+      const Int tsize = std::min(height - j, tile_size);
+      const ConstBlasMatrix<Field> column_block =
+          left_matrix_copy.Submatrix(j, 0, tsize, rank);
+      BlasMatrix<Field> output_block =
+          output_matrix->Submatrix(j, j, tsize, tsize);
+      LowerNormalHermitianOuterProduct(alpha_copy, column_block, beta_copy,
+                                       &output_block);
+    }
+
+    for (Int i = j + tile_size; i < height; i += tile_size) {
+      #pragma omp task default(none) \
+          firstprivate(tile_size, i, j, left_matrix_copy, output_matrix, \
+              alpha_copy, beta_copy)
+      {
+        const Int row_tsize = std::min(height - i, tile_size);
+        const Int column_tsize = std::min(height - j, tile_size);
+        const ConstBlasMatrix<Field> row_block =
+            left_matrix_copy.Submatrix(i, 0, row_tsize, rank);
+        const ConstBlasMatrix<Field> column_block =
+            left_matrix_copy.Submatrix(j, 0, column_tsize, rank);
+        BlasMatrix<Field> output_block =
+            output_matrix->Submatrix(i, j, row_tsize, column_tsize);
+        MatrixMultiplyNormalAdjoint(Field{alpha_copy}, row_block, column_block,
+                                    Field{beta_copy}, &output_block);
+      }
+    }
+  }
+}
+
 template <class Field>
 bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     Int supernode, const std::vector<Int>& supernode_children,
@@ -668,39 +767,9 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
       tile_size, factorization_type, diagonal_block.ToConst(), &lower_block);
 
   if (factorization_type == kCholeskyFactorization) {
-    // Perform the multi-threaded LowerNormalHermitianOuterProduct.
-    // TODO(Jack Poulson): Extract this functionality as a subroutine.
     #pragma omp taskgroup
-    for (Int j = 0; j < degree; j += tile_size) {
-      #pragma omp task default(none) \
-          firstprivate(j, lower_block, schur_complement)
-      {
-        const Int tsize = std::min(degree - j, tile_size);
-        const ConstBlasMatrix<Field> column_block =
-            lower_block.Submatrix(j, 0, tsize, supernode_size);
-        BlasMatrix<Field> schur_complement_block =
-            schur_complement.Submatrix(j, j, tsize, tsize);
-        LowerNormalHermitianOuterProduct(Real{-1}, column_block, Real{1},
-                                         &schur_complement_block);
-      }
-
-      for (Int i = j + tile_size; i < degree; i += tile_size) {
-        #pragma omp task default(none) \
-            firstprivate(i, j, lower_block, schur_complement)
-        {
-          const Int row_tsize = std::min(degree - i, tile_size);
-          const Int column_tsize = std::min(degree - j, tile_size);
-          const ConstBlasMatrix<Field> row_block =
-              lower_block.Submatrix(i, 0, row_tsize, supernode_size);
-          const ConstBlasMatrix<Field> column_block =
-              lower_block.Submatrix(j, 0, column_tsize, supernode_size);
-          BlasMatrix<Field> schur_complement_block =
-              schur_complement.Submatrix(i, j, row_tsize, column_tsize);
-          MatrixMultiplyNormalAdjoint(Field{-1}, row_block, column_block,
-                                      Field{1}, &schur_complement_block);
-        }
-      }
-    }
+    MultithreadedLowerNormalHermitianOuterProduct(
+        tile_size, Real{-1}, lower_block.ToConst(), Real{1}, &schur_complement);
   } else {
     std::vector<Field> scaled_transpose_buffer(degree * supernode_size);
     BlasMatrix<Field> scaled_transpose;
@@ -713,42 +782,10 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
                         lower_block.ToConst(), &scaled_transpose);
 
     // Perform the multi-threaded MatrixMultiplyLowerNormalNormal.
-    // TODO(Jack Poulson): Extract this functionality as a subroutine.
     #pragma omp taskgroup
-    for (Int j = 0; j < degree; j += tile_size) {
-      #pragma omp task default(none) \
-         firstprivate(j, supernode_size, degree, lower_block, \
-             schur_complement, scaled_transpose)
-      {
-        const Int tsize = std::min(degree - j, tile_size);
-        const ConstBlasMatrix<Field> row_block =
-            lower_block.Submatrix(j, 0, tsize, supernode_size);
-        const ConstBlasMatrix<Field> column_block =
-            scaled_transpose.Submatrix(0, j, supernode_size, tsize);
-        BlasMatrix<Field> schur_complement_block =
-            schur_complement.Submatrix(j, j, tsize, tsize);
-        MatrixMultiplyLowerNormalNormal(Field{-1}, row_block, column_block,
-                                        Field{1}, &schur_complement_block);
-      }
-
-      for (Int i = j + tile_size; i < degree; i += tile_size) {
-        #pragma omp task default(none) \
-            firstprivate(i, j, supernode_size, degree, lower_block, \
-                schur_complement, scaled_transpose)
-        {
-          const Int row_tsize = std::min(degree - i, tile_size);
-          const Int column_tsize = std::min(degree - j, tile_size);
-          const ConstBlasMatrix<Field> row_block =
-              lower_block.Submatrix(i, 0, row_tsize, supernode_size);
-          const ConstBlasMatrix<Field> column_block =
-              scaled_transpose.Submatrix(0, j, supernode_size, column_tsize);
-          BlasMatrix<Field> schur_complement_block =
-              schur_complement.Submatrix(i, j, row_tsize, column_tsize);
-          MatrixMultiplyNormalNormal(Field{-1}, row_block, column_block,
-                                     Field{1}, &schur_complement_block);
-        }
-      }
-    }
+    MultithreadedMatrixMultiplyLowerNormalNormal(
+        tile_size, Field{-1}, lower_block.ToConst(), scaled_transpose.ToConst(),
+        Field{1}, &schur_complement);
   }
 
   return true;
@@ -825,6 +862,7 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
     const std::vector<Int>& supernode_parents,
     const std::vector<Int>& supernode_children,
     const std::vector<Int>& supernode_child_offsets,
+    const std::vector<double>& work_estimates,
     RightLookingSharedState* shared_state, LDLResult* result) {
   if (level >= max_parallel_levels) {
     return RightLookingSubtree(supernode, matrix, supernode_parents,
@@ -844,18 +882,21 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
   #pragma omp taskgroup
   {
     for (Int child_index = 0; child_index < num_children; ++child_index) {
-      #pragma omp task default(none)                                     \
-        firstprivate(level, max_parallel_levels, supernode, child_index, \
-            shared_state)                                                \
+      const Int child = supernode_children[child_beg + child_index];
+      const Int task_priority = std::pow(work_estimates[child], 0.25);
+
+      #pragma omp task priority(task_priority)                           \
+        default(none)                                                    \
+        firstprivate(level, max_parallel_levels, supernode, child,       \
+            child_index, shared_state)                                   \
         shared(successes, matrix, supernode_parents, supernode_children, \
-            supernode_child_offsets, result_contributions)
+            supernode_child_offsets, result_contributions, work_estimates)
       {
-        const Int child = supernode_children[child_beg + child_index];
         LDLResult& result_contribution = result_contributions[child_index];
         successes[child_index] = MultithreadedRightLookingSubtree(
             level + 1, max_parallel_levels, child, matrix, supernode_parents,
-            supernode_children, supernode_child_offsets, shared_state,
-            &result_contribution);
+            supernode_children, supernode_child_offsets, work_estimates,
+            shared_state, &result_contribution);
       }
     }
   }
@@ -1288,10 +1329,10 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
   {
     for (Int child_index = 0; child_index < num_children; ++child_index) {
       #pragma omp task default(none)                                       \
-        firstprivate(level, max_parallel_levels, supernode, child_index, \
-            shared_state, private_states) \
-        shared(successes, matrix, supernode_parents, supernode_children, \
-            supernode_child_offsets, result_contributions)
+          firstprivate(level, max_parallel_levels, supernode, child_index, \
+              shared_state, private_states)                                \
+          shared(successes, matrix, supernode_parents, supernode_children, \
+              supernode_child_offsets, result_contributions)
       {
         const Int child = supernode_children[child_beg + child_index];
         LDLResult& result_contribution = result_contributions[child_index];
@@ -1466,6 +1507,14 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
                                  &supernode_child_offsets, &roots);
   const Int num_roots = roots.size();
 
+  // Compute flop-count estimates so that we may prioritize the expensive
+  // tasks before the cheaper ones.
+  std::vector<double> work_estimates(num_supernodes);
+  for (const Int& root : roots) {
+    FillSubtreeWorkEstimates(root, supernode_children, supernode_child_offsets,
+                             *lower_factor, &work_estimates);
+  }
+
   LDLResult result;
 
   std::vector<int> successes(num_roots);
@@ -1493,18 +1542,20 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
     #pragma omp single
     #pragma omp taskgroup
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
-      #pragma omp task default(none)                          \
-          firstprivate(root_index)                            \
+      const Int root = roots[root_index];
+      const Int task_priority = std::pow(work_estimates[root], 0.25);
+
+      #pragma omp task priority(task_priority)                \
+          default(none) firstprivate(root, root_index)        \
           shared(roots, successes, matrix, supernode_parents, \
               supernode_children, supernode_child_offsets,    \
-              result_contributions, shared_state)
+              result_contributions, shared_state, work_estimates)
       {
-        const Int root = roots[root_index];
         LDLResult& result_contribution = result_contributions[root_index];
         successes[root_index] = MultithreadedRightLookingSubtree(
             level + 1, max_parallel_levels, root, matrix, supernode_parents,
-            supernode_children, supernode_child_offsets, &shared_state,
-            &result_contribution);
+            supernode_children, supernode_child_offsets, work_estimates,
+            &shared_state, &result_contribution);
       }
     }
 

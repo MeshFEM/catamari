@@ -234,6 +234,7 @@ class Factorization {
       const std::vector<Int>& supernode_parents,
       const std::vector<Int>& supernode_children,
       const std::vector<Int>& supernode_child_offsets,
+      const std::vector<double>& work_estimates,
       RightLookingSharedState* shared_state, LDLResult* result);
 
   bool MultithreadedRightLookingSupernodeFinalize(
