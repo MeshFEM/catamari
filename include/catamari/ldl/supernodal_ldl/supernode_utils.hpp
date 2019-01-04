@@ -55,6 +55,12 @@ void EliminationForestFromParents(const std::vector<Int>& parents,
                                   std::vector<Int>* children,
                                   std::vector<Int>* child_offsets);
 
+// Create the packed downlinks from the uplinks of an elimination forest.
+void EliminationForestAndRootsFromParents(const std::vector<Int>& parents,
+                                          std::vector<Int>* children,
+                                          std::vector<Int>* child_offsets,
+                                          std::vector<Int>* roots);
+
 // Builds an elimination forest over the supernodes from an elimination forest
 // over the nodes.
 void ConvertFromScalarToSupernodalEliminationForest(
@@ -162,6 +168,43 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
                        const std::vector<Int>& member_to_index,
                        const std::vector<Int>& parents,
                        std::vector<Int>* supernode_degrees);
+
+// Fills an estimate of the work required to eliminate the subtree in a
+// right-looking factorization.
+template <class Field>
+void FillSubtreeWorkEstimates(Int root,
+                              const std::vector<Int>& supernode_children,
+                              const std::vector<Int>& supernode_child_offsets,
+                              const LowerFactor<Field>& lower_factor,
+                              std::vector<double>* work_estimates);
+
+// Perform an in-place LDL' factorization of the supernodal diagonal block.
+template <class Field>
+Int FactorDiagonalBlock(SymmetricFactorizationType factorization_type,
+                        BlasMatrix<Field>* diagonal_block);
+
+#ifdef _OPENMP
+// Perform an in-place LDL' factorization of the supernodal diagonal block.
+template <class Field>
+Int MultithreadedFactorDiagonalBlock(
+    Int tile_size, SymmetricFactorizationType factorization_type,
+    BlasMatrix<Field>* diagonal_block, std::vector<Field>* buffer);
+#endif  // ifdef _OPENMP
+
+// L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
+template <class Field>
+void SolveAgainstDiagonalBlock(SymmetricFactorizationType factorization_type,
+                               const ConstBlasMatrix<Field>& triangular_matrix,
+                               BlasMatrix<Field>* lower_matrix);
+
+#ifdef _OPENMP
+// L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
+template <class Field>
+void MultithreadedSolveAgainstDiagonalBlock(
+    Int tile_size, SymmetricFactorizationType factorization_type,
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* lower_matrix);
+#endif  // ifdef _OPENMP
 
 }  // namespace supernodal_ldl
 }  // namespace catamari

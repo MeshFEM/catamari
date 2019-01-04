@@ -57,6 +57,48 @@ inline void EliminationForestFromParents(const std::vector<Int>& parents,
   }
 }
 
+inline void EliminationForestAndRootsFromParents(
+    const std::vector<Int>& parents, std::vector<Int>* children,
+    std::vector<Int>* child_offsets, std::vector<Int>* roots) {
+  const Int num_indices = parents.size();
+
+  // Compute the number of children (initially stored in 'child_offsets') of
+  // each vertex. Along the way, count the number of trees in the forest.
+  Int num_roots = 0;
+  child_offsets->clear();
+  child_offsets->resize(num_indices + 1, 0);
+  for (Int index = 0; index < num_indices; ++index) {
+    const Int parent = parents[index];
+    if (parent >= 0) {
+      ++(*child_offsets)[parent];
+    } else {
+      ++num_roots;
+    }
+  }
+
+  // Compute the child offsets using an in-place scan.
+  Int num_total_children = 0;
+  for (Int index = 0; index < num_indices; ++index) {
+    const Int num_children = (*child_offsets)[index];
+    (*child_offsets)[index] = num_total_children;
+    num_total_children += num_children;
+  }
+  (*child_offsets)[num_indices] = num_total_children;
+
+  // Pack the children into the 'children' buffer.
+  children->resize(num_total_children);
+  roots->reserve(num_roots);
+  std::vector<Int> offsets_copy = *child_offsets;
+  for (Int index = 0; index < num_indices; ++index) {
+    const Int parent = parents[index];
+    if (parent >= 0) {
+      (*children)[offsets_copy[parent]++] = index;
+    } else {
+      roots->push_back(index);
+    }
+  }
+}
+
 inline void ConvertFromScalarToSupernodalEliminationForest(
     Int num_supernodes, const std::vector<Int>& parents,
     const std::vector<Int>& member_to_index,
@@ -659,6 +701,139 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
     }
   }
 }
+
+template <class Field>
+void FillSubtreeWorkEstimates(Int root,
+                              const std::vector<Int>& supernode_children,
+                              const std::vector<Int>& supernode_child_offsets,
+                              const LowerFactor<Field>& lower_factor,
+                              std::vector<double>* work_estimates) {
+  const Int child_beg = supernode_child_offsets[root];
+  const Int child_end = supernode_child_offsets[root + 1];
+  const Int num_children = child_end - child_beg;
+
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child = supernode_children[child_beg + child_index];
+    FillSubtreeWorkEstimates(child, supernode_children, supernode_child_offsets,
+                             lower_factor, work_estimates);
+    (*work_estimates)[root] += (*work_estimates)[child];
+  }
+
+  const ConstBlasMatrix<Field>& lower_block =
+      lower_factor.blocks[root].ToConst();
+  const Int supernode_size = lower_block.width;
+  const Int degree = lower_block.height;
+  (*work_estimates)[root] += std::pow(1. * supernode_size, 3.) / 3;
+  (*work_estimates)[root] += std::pow(1. * degree, 2.) * supernode_size;
+}
+
+template <class Field>
+Int FactorDiagonalBlock(SymmetricFactorizationType factorization_type,
+                        BlasMatrix<Field>* diagonal_block) {
+  Int num_pivots;
+  if (factorization_type == kCholeskyFactorization) {
+    num_pivots = LowerCholeskyFactorization(diagonal_block);
+  } else if (factorization_type == kLDLAdjointFactorization) {
+    num_pivots = LowerLDLAdjointFactorization(diagonal_block);
+  } else {
+    num_pivots = LowerLDLTransposeFactorization(diagonal_block);
+  }
+  return num_pivots;
+}
+
+#ifdef _OPENMP
+template <class Field>
+Int MultithreadedFactorDiagonalBlock(
+    Int tile_size, SymmetricFactorizationType factorization_type,
+    BlasMatrix<Field>* diagonal_block, std::vector<Field>* buffer) {
+  Int num_pivots;
+  if (factorization_type == kCholeskyFactorization) {
+    num_pivots =
+        MultithreadedLowerCholeskyFactorization(tile_size, diagonal_block);
+  } else if (factorization_type == kLDLAdjointFactorization) {
+    num_pivots = MultithreadedLowerLDLAdjointFactorization(
+        tile_size, diagonal_block, buffer);
+  } else {
+    num_pivots = MultithreadedLowerLDLTransposeFactorization(
+        tile_size, diagonal_block, buffer);
+  }
+  return num_pivots;
+}
+#endif  // ifdef _OPENMP
+
+template <class Field>
+void SolveAgainstDiagonalBlock(SymmetricFactorizationType factorization_type,
+                               const ConstBlasMatrix<Field>& triangular_matrix,
+                               BlasMatrix<Field>* lower_matrix) {
+  if (!lower_matrix->height) {
+    return;
+  }
+  if (factorization_type == kCholeskyFactorization) {
+    // Solve against the lower-triangular matrix L(K, K)' from the right.
+    RightLowerAdjointTriangularSolves(triangular_matrix, lower_matrix);
+  } else if (factorization_type == kLDLAdjointFactorization) {
+    // Solve against D(K, K) L(K, K)' from the right.
+    RightDiagonalTimesLowerAdjointUnitTriangularSolves(triangular_matrix,
+                                                       lower_matrix);
+  } else {
+    // Solve against D(K, K) L(K, K)^T from the right.
+    RightDiagonalTimesLowerTransposeUnitTriangularSolves(triangular_matrix,
+                                                         lower_matrix);
+  }
+}
+
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedSolveAgainstDiagonalBlock(
+    Int tile_size, SymmetricFactorizationType factorization_type,
+    const ConstBlasMatrix<Field>& triangular_matrix,
+    BlasMatrix<Field>* lower_matrix) {
+  if (!lower_matrix->height) {
+    return;
+  }
+
+  const Int height = lower_matrix->height;
+  const Int width = lower_matrix->width;
+  if (factorization_type == kCholeskyFactorization) {
+    // Solve against the lower-triangular matrix L(K, K)' from the right.
+    for (Int i = 0; i < height; i += tile_size) {
+      #pragma omp task default(none) firstprivate(i, tile_size) \
+          shared(triangular_matrix, lower_matrix)
+      {
+        const Int tsize = std::min(height - i, tile_size);
+        BlasMatrix<Field> lower_block =
+            lower_matrix->Submatrix(i, 0, tsize, width);
+        RightLowerAdjointTriangularSolves(triangular_matrix, &lower_block);
+      }
+    }
+  } else if (factorization_type == kLDLAdjointFactorization) {
+    // Solve against D(K, K) L(K, K)' from the right.
+    for (Int i = 0; i < height; i += tile_size) {
+      #pragma omp task default(none) firstprivate(i, tile_size) \
+          shared(triangular_matrix, lower_matrix)
+      {
+        const Int tsize = std::min(height - i, tile_size);
+        BlasMatrix<Field> lower_block =
+            lower_matrix->Submatrix(i, 0, tsize, width);
+        RightLowerAdjointUnitTriangularSolves(triangular_matrix, &lower_block);
+      }
+    }
+  } else {
+    // Solve against D(K, K) L(K, K)^T from the right.
+    for (Int i = 0; i < height; i += tile_size) {
+      #pragma omp task default(none) firstprivate(i, tile_size) \
+          shared(triangular_matrix, lower_matrix)
+      {
+        const Int tsize = std::min(height - i, tile_size);
+        BlasMatrix<Field> lower_block =
+            lower_matrix->Submatrix(i, 0, tsize, width);
+        RightDiagonalTimesLowerTransposeUnitTriangularSolves(triangular_matrix,
+                                                             &lower_block);
+      }
+    }
+  }
+}
+#endif  // ifdef _OPENMP
 
 }  // namespace supernodal_ldl
 }  // namespace catamari
