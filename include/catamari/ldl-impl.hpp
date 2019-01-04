@@ -21,12 +21,14 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   const quotient::MinimumDegreeResult analysis =
       quotient::MinimumDegree(*graph, control.md_control);
   graph.reset();
-  const std::vector<Int> permutation = analysis.Permutation();
 
-  const Int num_rows = permutation.size();
-  std::vector<Int> inverse_permutation(num_rows);
+  SymmetricOrdering ordering;
+  ordering.permutation = analysis.Permutation();
+
+  const Int num_rows = ordering.permutation.size();
+  ordering.inverse_permutation.resize(num_rows);
   for (Int row = 0; row < num_rows; ++row) {
-    inverse_permutation[permutation[row]] = row;
+    ordering.inverse_permutation[ordering.permutation[row]] = row;
   }
 
   bool use_supernodal;
@@ -43,19 +45,19 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   is_supernodal = use_supernodal;
   if (use_supernodal) {
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
-    return supernodal_factorization->Factor(
-        matrix, permutation, inverse_permutation, control.supernodal_control);
+    return supernodal_factorization->Factor(matrix, ordering,
+                                            control.supernodal_control);
   } else {
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
-    return scalar_factorization->Factor(
-        matrix, permutation, inverse_permutation, control.scalar_control);
+    return scalar_factorization->Factor(matrix, ordering,
+                                        control.scalar_control);
   }
 }
 
 template <class Field>
-LDLResult LDLFactorization<Field>::Factor(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation, const LDLControl& control) {
+LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
+                                          const SymmetricOrdering& ordering,
+                                          const LDLControl& control) {
   bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {
     use_supernodal = false;
@@ -69,12 +71,12 @@ LDLResult LDLFactorization<Field>::Factor(
   is_supernodal = use_supernodal;
   if (use_supernodal) {
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
-    return supernodal_factorization->Factor(
-        matrix, permutation, inverse_permutation, control.supernodal_control);
+    return supernodal_factorization->Factor(matrix, ordering,
+                                            control.supernodal_control);
   } else {
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
-    return scalar_factorization->Factor(
-        matrix, permutation, inverse_permutation, control.scalar_control);
+    return scalar_factorization->Factor(matrix, ordering,
+                                        control.scalar_control);
   }
 }
 

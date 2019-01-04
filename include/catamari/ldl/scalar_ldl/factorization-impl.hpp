@@ -63,19 +63,21 @@ void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
   LowerStructure& lower_structure = lower_factor.structure;
   const Int num_rows = matrix.NumRows();
   const Int num_entries = lower_structure.indices.size();
-  const bool have_permutation = !permutation.empty();
+  const bool have_permutation = !ordering.permutation.empty();
 
   lower_factor.values.resize(num_entries, Field{0});
   diagonal_factor.values.resize(num_rows, Field{0});
 
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
-    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int column = have_permutation ? permutation[entry.column] : entry.column;
+      Int column =
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
 
       if (column == row) {
         diagonal_factor.values[column] = entry.value;
@@ -107,11 +109,12 @@ template <class Field>
 void Factorization<Field>::LeftLookingSetup(
     const CoordinateMatrix<Field>& matrix, std::vector<Int>* parents) {
   std::vector<Int> degrees;
-  EliminationForestAndDegrees(matrix, permutation, inverse_permutation, parents,
-                              &degrees);
+  EliminationForestAndDegrees(matrix, ordering.permutation,
+                              ordering.inverse_permutation, parents, &degrees);
 
-  FillStructureIndices(matrix, permutation, inverse_permutation, *parents,
-                       degrees, &lower_factor.structure);
+  FillStructureIndices(matrix, ordering.permutation,
+                       ordering.inverse_permutation, *parents, degrees,
+                       &lower_factor.structure);
   FillNonzeros(matrix);
 }
 
@@ -121,8 +124,8 @@ void Factorization<Field>::UpLookingSetup(const CoordinateMatrix<Field>& matrix,
   LowerStructure& lower_structure = lower_factor.structure;
 
   std::vector<Int> degrees;
-  EliminationForestAndDegrees(matrix, permutation, inverse_permutation, parents,
-                              &degrees);
+  EliminationForestAndDegrees(matrix, ordering.permutation,
+                              ordering.inverse_permutation, parents, &degrees);
 
   const Int num_rows = matrix.NumRows();
   diagonal_factor.values.resize(num_rows);
@@ -217,9 +220,9 @@ LDLResult Factorization<Field>::LeftLooking(
     column_update_ptrs[column] = lower_structure.column_offsets[column];
 
     // Compute the row pattern.
-    const Int num_packed =
-        ComputeRowPattern(matrix, permutation, inverse_permutation, parents,
-                          column, pattern_flags.data(), row_structure.data());
+    const Int num_packed = ComputeRowPattern(
+        matrix, ordering.permutation, ordering.inverse_permutation, parents,
+        column, pattern_flags.data(), row_structure.data());
 
     // for j = find(L(column, :))
     //   L(column:n, column) -= L(column:n, j) * (d(j) * conj(L(column, j)))
@@ -351,8 +354,8 @@ LDLResult Factorization<Field>::UpLooking(
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
     const Int start = ComputeTopologicalRowPatternAndScatterNonzeros(
-        matrix, permutation, inverse_permutation, parents, row,
-        pattern_flags.data(), row_structure.data(), row_workspace.data());
+        matrix, ordering.permutation, ordering.inverse_permutation, parents,
+        row, pattern_flags.data(), row_structure.data(), row_workspace.data());
 
     // Pull the diagonal entry out of the workspace.
     diagonal_factor.values[row] = row_workspace[row];
@@ -397,11 +400,11 @@ LDLResult Factorization<Field>::UpLooking(
 
 template <class Field>
 void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
-  const bool have_permutation = !permutation.empty();
+  const bool have_permutation = !ordering.permutation.empty();
 
   // Reorder the input into the relaxation permutation of the factorization.
   if (have_permutation) {
-    Permute(permutation, matrix);
+    Permute(ordering.permutation, matrix);
   }
 
   LowerTriangularSolve(matrix);
@@ -410,7 +413,7 @@ void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
 
   // Reverse the factorization relxation permutation.
   if (have_permutation) {
-    Permute(inverse_permutation, matrix);
+    Permute(ordering.inverse_permutation, matrix);
   }
 }
 
@@ -503,27 +506,16 @@ void Factorization<Field>::LowerTransposeTriangularSolve(
 }
 
 template <class Field>
-LDLResult Factorization<Field>::Factor(
-    const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& manual_permutation,
-    const std::vector<Int>& inverse_manual_permutation,
-    const Control& control) {
-  permutation = manual_permutation;
-  inverse_permutation = inverse_manual_permutation;
+LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
+                                       const SymmetricOrdering& manual_ordering,
+                                       const Control& control) {
+  ordering = manual_ordering;
   factorization_type = control.factorization_type;
   if (control.algorithm == kLeftLookingLDL) {
     return LeftLooking(matrix);
   } else {
     return UpLooking(matrix);
   }
-}
-
-template <class Field>
-LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
-                                       const Control& control) {
-  std::vector<Int> manual_permutation, inverse_manual_permutation;
-  return Factor(matrix, manual_permutation, inverse_manual_permutation,
-                control);
 }
 
 }  // namespace scalar_ldl

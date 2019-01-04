@@ -71,10 +71,7 @@ class Factorization {
   // matrix P A P' has been factored. Typically, this permutation is the
   // composition of a fill-reducing ordering and a supernodal relaxation
   // permutation.
-  std::vector<Int> permutation;
-
-  // The inverse of the above permutation (if it is nontrivial).
-  std::vector<Int> inverse_permutation;
+  SymmetricOrdering ordering;
 
   // The subdiagonal-block portion of the lower-triangular factor.
   std::unique_ptr<LowerFactor<Field>> lower_factor;
@@ -90,14 +87,9 @@ class Factorization {
   // used.
   Int backward_solve_out_of_place_supernode_threshold;
 
-  // Factors the given matrix using an automatically determined permutation.
-  LDLResult Factor(const CoordinateMatrix<Field>& matrix,
-                   const Control& control);
-
   // Factors the given matrix using the prescribed permutation.
   LDLResult Factor(const CoordinateMatrix<Field>& matrix,
-                   const std::vector<Int>& manual_permutation,
-                   const std::vector<Int>& inverse_manual_permutation,
+                   const SymmetricOrdering& manual_ordering,
                    const Control& control);
 
   // Solve a set of linear systems using the factorization.

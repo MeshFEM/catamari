@@ -16,6 +16,19 @@
 
 namespace catamari {
 
+// A mechanism for passing reordering information into the factorization.
+struct SymmetricOrdering {
+  // If non-empty, the permutation mapping the original matrix ordering into the
+  // factorization ordering.
+  std::vector<Int> permutation;
+
+  // If non-empty, the inverse of the permutation mapping the original matrix
+  // ordering into the factorization ordering.
+  std::vector<Int> inverse_permutation;
+
+  // TODO(Jack Poulson): An assembly forest.
+};
+
 enum SymmetricFactorizationType {
   // Computes lower-triangular L such that P A P' = L L'.
   kCholeskyFactorization,
@@ -112,25 +125,13 @@ class Factorization {
   // The diagonal factor, D.
   DiagonalFactor<Field> diagonal_factor;
 
-  // If non-empty, the permutation mapping the original matrix ordering into the
-  // factorization ordering.
-  std::vector<Int> permutation;
-
-  // If non-empty, the inverse of the permutation mapping the original matrix
-  // ordering into the factorization ordering.
-  std::vector<Int> inverse_permutation;
-
-  // Set the factor to the L L^T, L D L^T, or L D L' factorization of an
-  // automatically-determined permutation of the given matrix.
-  LDLResult Factor(const CoordinateMatrix<Field>& matrix,
-                   const Control& control);
+  // The reordering of the input matrix used for the factorization.
+  SymmetricOrdering ordering;
 
   // Set the factor to the L L^T, L D L^T, or L D L' factorization of the given
   // permutation of the given matrix.
   LDLResult Factor(const CoordinateMatrix<Field>& matrix,
-                   const std::vector<Int>& manual_permutation,
-                   const std::vector<Int>& inverse_manual_permutation,
-                   const Control& control);
+                   const SymmetricOrdering& ordering, const Control& control);
 
   // Pretty-prints the diagonal matrix.
   void PrintDiagonalFactor(const std::string& label, std::ostream& os) const;

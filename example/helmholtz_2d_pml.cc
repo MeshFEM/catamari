@@ -893,11 +893,10 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   catamari::LDLFactorization<Field> ldl_factorization;
   catamari::LDLResult result;
   if (analytical_ordering) {
-    std::vector<Int> permutation, inverse_permutation;
-    AnalyticalOrdering(num_x_elements, num_y_elements, &permutation,
-                       &inverse_permutation);
-    result = ldl_factorization.Factor(matrix, permutation, inverse_permutation,
-                                      ldl_control);
+    catamari::SymmetricOrdering ordering;
+    AnalyticalOrdering(num_x_elements, num_y_elements, &ordering.permutation,
+                       &ordering.inverse_permutation);
+    result = ldl_factorization.Factor(matrix, ordering, ldl_control);
   } else {
     result = ldl_factorization.Factor(matrix, ldl_control);
   }

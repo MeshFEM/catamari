@@ -61,8 +61,7 @@ class LDLFactorization {
 
   // Performs the factorization using a prescribed ordering.
   LDLResult Factor(const CoordinateMatrix<Field>& matrix,
-                   const std::vector<Int>& permutation,
-                   const std::vector<Int>& inverse_permutation,
+                   const SymmetricOrdering& ordering,
                    const LDLControl& control);
 
   // Solves a set of linear systems using the factorization.

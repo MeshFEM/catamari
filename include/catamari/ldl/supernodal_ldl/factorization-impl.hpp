@@ -25,15 +25,16 @@ void Factorization<Field>::FormSupernodes(
     std::vector<Int>* supernode_degrees, std::vector<Int>* supernode_parents) {
   // Compute the non-supernodal elimination tree using the original ordering.
   std::vector<Int> orig_parents, orig_degrees;
-  scalar_ldl::EliminationForestAndDegrees(
-      matrix, permutation, inverse_permutation, &orig_parents, &orig_degrees);
+  scalar_ldl::EliminationForestAndDegrees(matrix, ordering.permutation,
+                                          ordering.inverse_permutation,
+                                          &orig_parents, &orig_degrees);
 
   // Greedily compute a supernodal partition using the original ordering.
   std::vector<Int> orig_supernode_sizes;
   scalar_ldl::LowerStructure scalar_structure;
-  FormFundamentalSupernodes(matrix, permutation, inverse_permutation,
-                            orig_parents, orig_degrees, &orig_supernode_sizes,
-                            &scalar_structure);
+  FormFundamentalSupernodes(
+      matrix, ordering.permutation, ordering.inverse_permutation, orig_parents,
+      orig_degrees, &orig_supernode_sizes, &scalar_structure);
 
 #ifdef CATAMARI_DEBUG
   {
@@ -53,7 +54,7 @@ void Factorization<Field>::FormSupernodes(
   MemberToIndex(matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
 
   std::vector<Int> orig_supernode_degrees;
-  SupernodalDegrees(matrix, permutation, inverse_permutation,
+  SupernodalDegrees(matrix, ordering.permutation, ordering.inverse_permutation,
                     orig_supernode_sizes, orig_supernode_starts,
                     orig_member_to_index, orig_parents,
                     &orig_supernode_degrees);
@@ -68,9 +69,10 @@ void Factorization<Field>::FormSupernodes(
     RelaxSupernodes(orig_parents, orig_supernode_sizes, orig_supernode_starts,
                     orig_supernode_parents, orig_supernode_degrees,
                     orig_member_to_index, scalar_structure, control,
-                    &permutation, &inverse_permutation, parents,
-                    supernode_parents, supernode_degrees, &supernode_sizes,
-                    &supernode_starts, &supernode_member_to_index);
+                    &ordering.permutation, &ordering.inverse_permutation,
+                    parents, supernode_parents, supernode_degrees,
+                    &supernode_sizes, &supernode_starts,
+                    &supernode_member_to_index);
   } else {
     *parents = orig_parents;
     *supernode_degrees = orig_supernode_degrees;
@@ -100,13 +102,14 @@ void Factorization<Field>::InitializeFactors(
   max_degree =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
 
-  FillStructureIndices(matrix, permutation, inverse_permutation, parents,
-                       supernode_sizes, supernode_member_to_index,
-                       lower_factor.get(), &max_descendant_entries);
+  FillStructureIndices(matrix, ordering.permutation,
+                       ordering.inverse_permutation, parents, supernode_sizes,
+                       supernode_member_to_index, lower_factor.get(),
+                       &max_descendant_entries);
 
-  FillNonzeros(matrix, permutation, inverse_permutation, supernode_starts,
-               supernode_sizes, supernode_member_to_index, lower_factor.get(),
-               diagonal_factor.get());
+  FillNonzeros(matrix, ordering.permutation, ordering.inverse_permutation,
+               supernode_starts, supernode_sizes, supernode_member_to_index,
+               lower_factor.get(), diagonal_factor.get());
 }
 
 template <class Field>
@@ -128,9 +131,9 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
 
   // Compute the supernodal row pattern.
   const Int num_packed = ComputeRowPattern(
-      matrix, permutation, inverse_permutation, supernode_sizes,
-      supernode_starts, supernode_member_to_index, supernode_parents,
-      main_supernode, private_state->pattern_flags.data(),
+      matrix, ordering.permutation, ordering.inverse_permutation,
+      supernode_sizes, supernode_starts, supernode_member_to_index,
+      supernode_parents, main_supernode, private_state->pattern_flags.data(),
       private_state->row_structure.data());
 
   // for J = find(L(K, :))
@@ -939,9 +942,10 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
   // Compute the supernodal row pattern.
   pattern_flags[main_supernode] = main_supernode;
   const Int num_packed = ComputeRowPattern(
-      matrix, permutation, inverse_permutation, supernode_sizes,
-      supernode_starts, supernode_member_to_index, supernode_parents,
-      main_supernode, pattern_flags.data(), row_structure.data());
+      matrix, ordering.permutation, ordering.inverse_permutation,
+      supernode_sizes, supernode_starts, supernode_member_to_index,
+      supernode_parents, main_supernode, pattern_flags.data(),
+      row_structure.data());
 
   // OpenMP pragmas cannot operate on object members or function results.
   const SymmetricFactorizationType factorization_type_copy = factorization_type;
@@ -1423,13 +1427,10 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
 #endif  // ifdef _OPENMP
 
 template <class Field>
-LDLResult Factorization<Field>::Factor(
-    const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& manual_permutation,
-    const std::vector<Int>& inverse_manual_permutation,
-    const Control& control) {
-  permutation = manual_permutation;
-  inverse_permutation = inverse_manual_permutation;
+LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
+                                       const SymmetricOrdering& manual_ordering,
+                                       const Control& control) {
+  ordering = manual_ordering;
   factorization_type = control.factorization_type;
   forward_solve_out_of_place_supernode_threshold =
       control.forward_solve_out_of_place_supernode_threshold;
@@ -1445,22 +1446,14 @@ LDLResult Factorization<Field>::Factor(
 }
 
 template <class Field>
-LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
-                                       const Control& control) {
-  std::vector<Int> manual_permutation, inverse_manual_permutation;
-  return Factor(matrix, manual_permutation, inverse_manual_permutation,
-                control);
-}
-
-template <class Field>
 void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
-  const bool have_permutation = !permutation.empty();
+  const bool have_permutation = !ordering.permutation.empty();
 
   // TODO(Jack Poulson): Add multithreaded tree parallelism.
 
   // Reorder the input into the permutation of the factorization.
   if (have_permutation) {
-    Permute(permutation, matrix);
+    Permute(ordering.permutation, matrix);
   }
 
   LowerTriangularSolve(matrix);
@@ -1469,7 +1462,7 @@ void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
 
   // Reverse the factorization permutation.
   if (have_permutation) {
-    Permute(inverse_permutation, matrix);
+    Permute(ordering.inverse_permutation, matrix);
   }
 }
 

@@ -13,15 +13,79 @@
 namespace catamari {
 namespace scalar_ldl {
 
-// TODO(Jack Poulson): Provide a multithreaded equivalent which uses a
-// distribution of the row indices and performs a reduction of the degree
-// counts afterwards.
+// TODO(Jack Poulson): Provide a multithreaded equivalent which takes in a the
+// reordering tree as a means of breaking the sequential dependency chain
+// of the 'parent' computations.
 template <class Field>
 void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
                                  const std::vector<Int>& permutation,
                                  const std::vector<Int>& inverse_permutation,
                                  std::vector<Int>* parents,
                                  std::vector<Int>* degrees) {
+  const Int num_rows = matrix.NumRows();
+  const bool have_permutation = !permutation.empty();
+
+  // Initialize all of the parent indices as unset.
+  parents->resize(num_rows, -1);
+
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> pattern_flags(num_rows);
+
+  // Initialize the number of subdiagonal entries that will be stored into
+  // each column.
+  degrees->clear();
+  degrees->resize(num_rows, 0);
+
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int row = 0; row < num_rows; ++row) {
+    pattern_flags[row] = row;
+
+    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      Int column = have_permutation ? permutation[entry.column] : entry.column;
+
+      // We are traversing the strictly lower triangle and know that the
+      // indices are sorted.
+      if (column >= row) {
+        if (have_permutation) {
+          continue;
+        } else {
+          break;
+        }
+      }
+
+      // Look for new entries in the pattern by walking up to the root of this
+      // subtree of the elimination forest from index 'column'. Any unset
+      // parent pointers can be filled in during the traversal, as the current
+      // row index would then be the parent.
+      while (pattern_flags[column] != row) {
+        // Mark index 'column' as in the pattern of row 'row'.
+        pattern_flags[column] = row;
+        ++(*degrees)[column];
+
+        if ((*parents)[column] == -1) {
+          // This is the first occurrence of 'column' in a row pattern.
+          (*parents)[column] = row;
+        }
+
+        // Move up to the parent in this subtree of the elimination forest.
+        // Moving to the parent will increase the index (but remain bounded
+        // from above by 'row').
+        column = (*parents)[column];
+      }
+    }
+  }
+}
+
+template <class Field>
+void MultithreadedEliminationForestAndDegrees(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
+    const std::vector<Int>& inverse_permutation, std::vector<Int>* parents,
+    std::vector<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
   const bool have_permutation = !permutation.empty();
 
