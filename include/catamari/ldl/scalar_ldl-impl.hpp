@@ -48,6 +48,9 @@ void Permute(const std::vector<Int>& permutation, BlasMatrix<Field>* matrix) {
 
 namespace scalar_ldl {
 
+// TODO(Jack Poulson): Provide a multithreaded equivalent which uses a
+// distribution of the row indices and performs a reduction of the degree
+// counts afterwards.
 template <class Field>
 void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
                                  const std::vector<Int>& permutation,
@@ -202,6 +205,8 @@ Int ComputeTopologicalRowPatternAndScatterNonzeros(
   return start;
 }
 
+// TODO(Jack Poulson): Provide a multi-threaded equivalent which splits the rows
+// among the threads then sorts the combined structures.
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const std::vector<Int>& permutation,
