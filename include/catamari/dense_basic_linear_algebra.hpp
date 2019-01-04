@@ -217,6 +217,29 @@ template <class Field>
 void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
     const ConstBlasMatrix<Field>& triangular_matrix, BlasMatrix<Field>* matrix);
 
+#ifdef _OPENMP
+// Performs a multi-threaded MatrixMultiplyLowerNormalNormal using OpenMP tasks.
+// In most circumstances, it should be surrounded by:
+//     #pragma parallel
+//     #pragma taskgroup
+template <class Field>
+void MultithreadedMatrixMultiplyLowerNormalNormal(
+    Int tile_size, const Field& alpha,
+    const ConstBlasMatrix<Field>& left_matrix,
+    const ConstBlasMatrix<Field>& right_matrix, const Field& beta,
+    BlasMatrix<Field>* output_matrix);
+
+// Performs a multi-threaded lower-triangular GEMM using OpenMP tasks.
+// In most circumstances, it should be surrounded by:
+//     #pragma parallel
+//     #pragma taskgroup
+template <class Field>
+void MultithreadedLowerNormalHermitianOuterProduct(
+    Int tile_size, const ComplexBase<Field>& alpha,
+    const ConstBlasMatrix<Field>& left_matrix, const ComplexBase<Field>& beta,
+    BlasMatrix<Field>* output_matrix);
+#endif  // ifdef _OPENMP
+
 }  // namespace catamari
 
 #include "catamari/dense_basic_linear_algebra-impl.hpp"
