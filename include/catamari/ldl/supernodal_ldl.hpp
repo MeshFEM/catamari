@@ -8,6 +8,7 @@
 #ifndef CATAMARI_LDL_SUPERNODAL_LDL_H_
 #define CATAMARI_LDL_SUPERNODAL_LDL_H_
 
+#include "catamari/index_utils.hpp"
 #include "catamari/ldl/scalar_ldl.hpp"
 #include "catamari/ldl/supernodal_ldl/factorization.hpp"
 #include "catamari/ldl/supernodal_ldl/supernode_utils.hpp"

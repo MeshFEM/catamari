@@ -240,6 +240,10 @@ void MultithreadedLowerNormalHermitianOuterProduct(
     BlasMatrix<Field>* output_matrix);
 #endif  // ifdef _OPENMP
 
+// Applies a row permutation to a dense matrix.
+template <class Field>
+void Permute(const std::vector<Int>& permutation, BlasMatrix<Field>* matrix);
+
 }  // namespace catamari
 
 #include "catamari/dense_basic_linear_algebra-impl.hpp"

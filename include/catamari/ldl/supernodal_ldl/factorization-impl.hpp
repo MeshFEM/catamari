@@ -23,7 +23,6 @@ void Factorization<Field>::FormSupernodes(
     const CoordinateMatrix<Field>& matrix,
     const SupernodalRelaxationControl& control, std::vector<Int>* parents,
     std::vector<Int>* supernode_degrees, std::vector<Int>* supernode_parents) {
-
   // Compute the non-supernodal elimination tree using the original ordering.
   std::vector<Int> orig_parents, orig_degrees;
   scalar_ldl::EliminationForestAndDegrees(

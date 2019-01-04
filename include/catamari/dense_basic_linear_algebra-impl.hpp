@@ -2828,6 +2828,22 @@ void MultithreadedLowerNormalHermitianOuterProduct(
 }
 #endif  // ifdef _OPENMP
 
+template <class Field>
+void Permute(const std::vector<Int>& permutation, BlasMatrix<Field>* matrix) {
+  for (Int j = 0; j < matrix->width; ++j) {
+    // Make a copy of the current column.
+    std::vector<Field> column_copy(matrix->height);
+    for (Int i = 0; i < matrix->height; ++i) {
+      column_copy[i] = matrix->Entry(i, j);
+    }
+
+    // Apply the permutation.
+    for (Int i = 0; i < matrix->height; ++i) {
+      matrix->Entry(permutation[i], j) = column_copy[i];
+    }
+  }
+}
+
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_DENSE_BASIC_LINEAR_ALGEBRA_IMPL_H_
