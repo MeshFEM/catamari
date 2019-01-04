@@ -197,6 +197,11 @@ class Factorization {
 
   bool LeftLookingSupernodeFinalize(Int main_supernode, LDLResult* result);
 
+  void MergeChildSchurComplements(
+      Int supernode, const std::vector<Int>& supernode_children,
+      const std::vector<Int>& supernode_child_offsets,
+      RightLookingSharedState* shared_state);
+
   bool RightLookingSupernodeFinalize(
       Int supernode, const std::vector<Int>& supernode_children,
       const std::vector<Int>& supernode_child_offsets,
@@ -236,6 +241,11 @@ class Factorization {
       const std::vector<Int>& supernode_child_offsets,
       const std::vector<double>& work_estimates,
       RightLookingSharedState* shared_state, LDLResult* result);
+
+  void MultithreadedMergeChildSchurComplements(
+      Int supernode, const std::vector<Int>& supernode_children,
+      const std::vector<Int>& supernode_child_offsets,
+      RightLookingSharedState* shared_state);
 
   bool MultithreadedRightLookingSupernodeFinalize(
       Int supernode, const std::vector<Int>& supernode_children,

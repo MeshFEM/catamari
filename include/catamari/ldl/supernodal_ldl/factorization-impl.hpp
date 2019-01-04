@@ -381,34 +381,21 @@ LDLResult Factorization<Field>::LeftLooking(
   return result;
 }
 
+// Extract the child updates into a subroutine.
 template <class Field>
-bool Factorization<Field>::RightLookingSupernodeFinalize(
+void Factorization<Field>::MergeChildSchurComplements(
     Int supernode, const std::vector<Int>& supernode_children,
     const std::vector<Int>& supernode_child_offsets,
-    RightLookingSharedState* shared_state, LDLResult* result) {
-  typedef ComplexBase<Field> Real;
+    RightLookingSharedState* shared_state) {
   const Int child_beg = supernode_child_offsets[supernode];
   const Int child_end = supernode_child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
-
-  BlasMatrix<Field>& diagonal_block = diagonal_factor->blocks[supernode];
-  BlasMatrix<Field>& lower_block = lower_factor->blocks[supernode];
-  const Int degree = lower_block.height;
-  const Int supernode_size = lower_block.width;
-
-  // Initialize this supernode's Schur complement as the zero matrix.
-  std::vector<Field>& schur_complement_buffer =
-      shared_state->schur_complement_buffers[supernode];
-  BlasMatrix<Field>& schur_complement =
+  BlasMatrix<Field> lower_block = lower_factor->blocks[supernode];
+  BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
+  BlasMatrix<Field> schur_complement =
       shared_state->schur_complements[supernode];
-  schur_complement_buffer.clear();
-  schur_complement_buffer.resize(degree * degree, Field{0});
-  schur_complement.height = degree;
-  schur_complement.width = degree;
-  schur_complement.leading_dim = degree;
-  schur_complement.data = schur_complement_buffer.data();
 
-  // TODO(Jack Poulson): Extract the child updates into a subroutine.
+  const Int supernode_size = supernode_sizes[supernode];
   const Int supernode_start = supernode_starts[supernode];
   const Int* main_indices = lower_factor->Structure(supernode);
   for (Int child_index = 0; child_index < num_children; ++child_index) {
@@ -442,30 +429,28 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
     }
 
     // Add the child Schur complement into this supernode's front.
-    for (Int j = 0; j < num_child_diag_indices; ++j) {
+    for (Int j = 0; j < child_degree; ++j) {
       const Int j_rel = child_rel_indices[j];
+      if (j < num_child_diag_indices) {
+        // Contribute into the upper-left diagonal block of the front.
+        for (Int i = j; i < num_child_diag_indices; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          diagonal_block(i_rel, j_rel) += child_schur_complement(i, j);
+        }
 
-      // Contribute into the upper-left diagonal block of the front.
-      for (Int i = j; i < num_child_diag_indices; ++i) {
-        const Int i_rel = child_rel_indices[i];
-        diagonal_block(i_rel, j_rel) += child_schur_complement(i, j);
-      }
-
-      // Contribute into the lower-left block of the front.
-      for (Int i = num_child_diag_indices; i < child_degree; ++i) {
-        const Int i_rel = child_rel_indices[i];
-        lower_block(i_rel - supernode_size, j_rel) +=
-            child_schur_complement(i, j);
-      }
-    }
-
-    // Contribute into the bottom-right block of the front.
-    for (Int j = num_child_diag_indices; j < child_degree; ++j) {
-      const Int j_rel = child_rel_indices[j];
-      for (Int i = j; i < child_degree; ++i) {
-        const Int i_rel = child_rel_indices[i];
-        schur_complement(i_rel - supernode_size, j_rel - supernode_size) +=
-            child_schur_complement(i, j);
+        // Contribute into the lower-left block of the front.
+        for (Int i = num_child_diag_indices; i < child_degree; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          lower_block(i_rel - supernode_size, j_rel) +=
+              child_schur_complement(i, j);
+        }
+      } else {
+        // Contribute into the bottom-right block of the front.
+        for (Int i = j; i < child_degree; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          schur_complement(i_rel - supernode_size, j_rel - supernode_size) +=
+              child_schur_complement(i, j);
+        }
       }
     }
 
@@ -474,90 +459,24 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
     child_schur_complement.data = nullptr;
     std::vector<Field>().swap(child_schur_complement_buffer);
   }
-
-  const Int num_supernode_pivots =
-      FactorDiagonalBlock(factorization_type, &diagonal_block);
-  result->num_successful_pivots += num_supernode_pivots;
-  if (num_supernode_pivots < supernode_size) {
-    return false;
-  }
-
-  // Finish updating the result structure.
-  result->largest_supernode =
-      std::max(result->largest_supernode, supernode_size);
-  result->num_factorization_entries +=
-      (supernode_size * (supernode_size + 1)) / 2 + supernode_size * degree;
-
-  // Add the approximate number of flops for the diagonal block
-  // factorization.
-  result->num_factorization_flops += std::pow(1. * supernode_size, 3.) / 3. +
-                                     std::pow(1. * supernode_size, 2.) / 2.;
-
-  // Add the approximate number of flops for the triangular solves of the
-  // diagonal block against its structure.
-  result->num_factorization_flops += std::pow(1. * degree, 2.) * supernode_size;
-
-  if (!degree) {
-    // We can early exit.
-    return true;
-  }
-
-  SolveAgainstDiagonalBlock(factorization_type, diagonal_block.ToConst(),
-                            &lower_block);
-
-  if (factorization_type == kCholeskyFactorization) {
-    LowerNormalHermitianOuterProduct(Real{-1}, lower_block.ToConst(), Real{1},
-                                     &schur_complement);
-  } else {
-    std::vector<Field> scaled_transpose_buffer(degree * supernode_size);
-    BlasMatrix<Field> scaled_transpose;
-    scaled_transpose.height = supernode_size;
-    scaled_transpose.width = degree;
-    scaled_transpose.leading_dim = supernode_size;
-    scaled_transpose.data = scaled_transpose_buffer.data();
-    FormScaledTranspose(factorization_type, diagonal_block.ToConst(),
-                        lower_block.ToConst(), &scaled_transpose);
-    MatrixMultiplyLowerNormalNormal(Field{-1}, lower_block.ToConst(),
-                                    scaled_transpose.ToConst(), Field{1},
-                                    &schur_complement);
-  }
-
-  return true;
 }
 
 #ifdef _OPENMP
+// Extract the child updates into a subroutine.
 template <class Field>
-bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
+void Factorization<Field>::MultithreadedMergeChildSchurComplements(
     Int supernode, const std::vector<Int>& supernode_children,
     const std::vector<Int>& supernode_child_offsets,
-    RightLookingSharedState* shared_state, LDLResult* result) {
-  typedef ComplexBase<Field> Real;
+    RightLookingSharedState* shared_state) {
   const Int child_beg = supernode_child_offsets[supernode];
   const Int child_end = supernode_child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
-
-  BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
   BlasMatrix<Field> lower_block = lower_factor->blocks[supernode];
-  const Int degree = lower_block.height;
-  const Int supernode_size = lower_block.width;
-
-  // Initialize this supernode's Schur complement as the zero matrix.
-  std::vector<Field>& schur_complement_buffer =
-      shared_state->schur_complement_buffers[supernode];
-  {
-    BlasMatrix<Field>& schur_complement =
-        shared_state->schur_complements[supernode];
-    schur_complement_buffer.clear();
-    schur_complement_buffer.resize(degree * degree, Field{0});
-    schur_complement.height = degree;
-    schur_complement.width = degree;
-    schur_complement.leading_dim = degree;
-    schur_complement.data = schur_complement_buffer.data();
-  }
+  BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
   BlasMatrix<Field> schur_complement =
       shared_state->schur_complements[supernode];
 
-  // TODO(Jack Poulson): Extract the child updates into a subroutine.
+  const Int supernode_size = supernode_sizes[supernode];
   const Int supernode_start = supernode_starts[supernode];
   const Int* main_indices = lower_factor->Structure(supernode);
   for (Int child_index = 0; child_index < num_children; ++child_index) {
@@ -623,9 +542,118 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     child_schur_complement.data = nullptr;
     std::vector<Field>().swap(child_schur_complement_buffer);
   }
+}
+#endif  // ifdef _OPENMP
+
+template <class Field>
+bool Factorization<Field>::RightLookingSupernodeFinalize(
+    Int supernode, const std::vector<Int>& supernode_children,
+    const std::vector<Int>& supernode_child_offsets,
+    RightLookingSharedState* shared_state, LDLResult* result) {
+  typedef ComplexBase<Field> Real;
+  BlasMatrix<Field>& diagonal_block = diagonal_factor->blocks[supernode];
+  BlasMatrix<Field>& lower_block = lower_factor->blocks[supernode];
+  const Int degree = lower_block.height;
+  const Int supernode_size = lower_block.width;
+
+  // Initialize this supernode's Schur complement as the zero matrix.
+  std::vector<Field>& schur_complement_buffer =
+      shared_state->schur_complement_buffers[supernode];
+  BlasMatrix<Field>& schur_complement =
+      shared_state->schur_complements[supernode];
+  schur_complement_buffer.clear();
+  schur_complement_buffer.resize(degree * degree, Field{0});
+  schur_complement.height = degree;
+  schur_complement.width = degree;
+  schur_complement.leading_dim = degree;
+  schur_complement.data = schur_complement_buffer.data();
+
+  MergeChildSchurComplements(supernode, supernode_children,
+                             supernode_child_offsets, shared_state);
+
+  const Int num_supernode_pivots =
+      FactorDiagonalBlock(factorization_type, &diagonal_block);
+  result->num_successful_pivots += num_supernode_pivots;
+  if (num_supernode_pivots < supernode_size) {
+    return false;
+  }
+
+  // Finish updating the result structure.
+  result->largest_supernode =
+      std::max(result->largest_supernode, supernode_size);
+  result->num_factorization_entries +=
+      (supernode_size * (supernode_size + 1)) / 2 + supernode_size * degree;
+
+  // Add the approximate number of flops for the diagonal block
+  // factorization.
+  result->num_factorization_flops += std::pow(1. * supernode_size, 3.) / 3. +
+                                     std::pow(1. * supernode_size, 2.) / 2.;
+
+  // Add the approximate number of flops for the triangular solves of the
+  // diagonal block against its structure.
+  result->num_factorization_flops += std::pow(1. * degree, 2.) * supernode_size;
+
+  if (!degree) {
+    // We can early exit.
+    return true;
+  }
+
+  SolveAgainstDiagonalBlock(factorization_type, diagonal_block.ToConst(),
+                            &lower_block);
+
+  if (factorization_type == kCholeskyFactorization) {
+    LowerNormalHermitianOuterProduct(Real{-1}, lower_block.ToConst(), Real{1},
+                                     &schur_complement);
+  } else {
+    std::vector<Field> scaled_transpose_buffer(degree * supernode_size);
+    BlasMatrix<Field> scaled_transpose;
+    scaled_transpose.height = supernode_size;
+    scaled_transpose.width = degree;
+    scaled_transpose.leading_dim = supernode_size;
+    scaled_transpose.data = scaled_transpose_buffer.data();
+    FormScaledTranspose(factorization_type, diagonal_block.ToConst(),
+                        lower_block.ToConst(), &scaled_transpose);
+    MatrixMultiplyLowerNormalNormal(Field{-1}, lower_block.ToConst(),
+                                    scaled_transpose.ToConst(), Field{1},
+                                    &schur_complement);
+  }
+
+  return true;
+}
+
+#ifdef _OPENMP
+template <class Field>
+bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
+    Int supernode, const std::vector<Int>& supernode_children,
+    const std::vector<Int>& supernode_child_offsets,
+    RightLookingSharedState* shared_state, LDLResult* result) {
+  typedef ComplexBase<Field> Real;
+  BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
+  BlasMatrix<Field> lower_block = lower_factor->blocks[supernode];
+  const Int degree = lower_block.height;
+  const Int supernode_size = lower_block.width;
 
   // TODO(Jack Poulson): Make this configurable.
   const Int tile_size = 128;
+
+  // Initialize this supernode's Schur complement as the zero matrix.
+  std::vector<Field>& schur_complement_buffer =
+      shared_state->schur_complement_buffers[supernode];
+  {
+    BlasMatrix<Field>& schur_complement =
+        shared_state->schur_complements[supernode];
+    schur_complement_buffer.clear();
+    schur_complement_buffer.resize(degree * degree, Field{0});
+    schur_complement.height = degree;
+    schur_complement.width = degree;
+    schur_complement.leading_dim = degree;
+    schur_complement.data = schur_complement_buffer.data();
+  }
+  BlasMatrix<Field> schur_complement =
+      shared_state->schur_complements[supernode];
+
+  MultithreadedMergeChildSchurComplements(
+      supernode, supernode_children, supernode_child_offsets, shared_state);
 
   Int num_supernode_pivots;
   {
@@ -678,6 +706,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     scaled_transpose.width = degree;
     scaled_transpose.leading_dim = supernode_size;
     scaled_transpose.data = scaled_transpose_buffer.data();
+
     // TODO(Jack Poulson): Multi-thread this copy.
     FormScaledTranspose(factorization_type, diagonal_block.ToConst(),
                         lower_block.ToConst(), &scaled_transpose);
