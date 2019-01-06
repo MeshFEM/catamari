@@ -344,11 +344,11 @@ void Factorization<Field>::MergeChildSchurComplements(
     Int num_child_diag_indices = 0;
     std::vector<Int> child_rel_indices(child_degree);
     {
-      Int i_rel = 0;
+      Int i_rel = supernode_size;
       for (Int i = 0; i < child_degree; ++i) {
         const Int row = child_indices[i];
         if (row < supernode_start + supernode_size) {
-          child_rel_indices[i] = i_rel = row - supernode_start;
+          child_rel_indices[i] = row - supernode_start;
           ++num_child_diag_indices;
         } else {
           while (main_indices[i_rel - supernode_size] != row) {
@@ -425,11 +425,11 @@ void Factorization<Field>::MultithreadedMergeChildSchurComplements(
     Int num_child_diag_indices = 0;
     std::vector<Int> child_rel_indices(child_degree);
     {
-      Int i_rel = 0;
+      Int i_rel = supernode_size;
       for (Int i = 0; i < child_degree; ++i) {
         const Int row = child_indices[i];
         if (row < supernode_start + supernode_size) {
-          child_rel_indices[i] = i_rel = row - supernode_start;
+          child_rel_indices[i] = row - supernode_start;
           ++num_child_diag_indices;
         } else {
           while (main_indices[i_rel - supernode_size] != row) {
