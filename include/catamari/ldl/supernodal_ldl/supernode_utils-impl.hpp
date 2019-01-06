@@ -615,15 +615,14 @@ inline void RelaxSupernodes(
     *relaxed_permutation = relaxation_permutation;
     *relaxed_inverse_permutation = relaxation_inverse_permutation;
   } else {
+    // Compuse the relaxation and original permutations.
     std::vector<Int> perm_copy = *relaxed_permutation;
     for (Int row = 0; row < num_rows; ++row) {
       (*relaxed_permutation)[row] = relaxation_permutation[perm_copy[row]];
     }
 
     // Invert the composed permutation.
-    for (Int row = 0; row < num_rows; ++row) {
-      (*relaxed_inverse_permutation)[(*relaxed_permutation)[row]] = row;
-    }
+    InvertPermutation(*relaxed_permutation, relaxed_inverse_permutation);
   }
 }
 
@@ -1123,8 +1122,7 @@ void SeekForMainActiveRelativeRow(
   CATAMARI_ASSERT(active_supernode > main_supernode,
                   "Active supernode " + std::to_string(active_supernode) +
                       " was <= the main supernode " +
-                      std::to_string(main_supernode) + " in update on thread " +
-                      std::to_string(omp_get_thread_num()));
+                      std::to_string(main_supernode));
 
   Int main_active_intersect_size = **main_active_intersect_sizes;
   Int main_active_first_row = main_indices[*main_active_rel_row];

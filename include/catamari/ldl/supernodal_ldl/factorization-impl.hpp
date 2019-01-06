@@ -19,6 +19,20 @@ namespace catamari {
 namespace supernodal_ldl {
 
 template <class Field>
+void Factorization<Field>::IncorporateSupernodeIntoLDLResult(
+    Int supernode_size, Int degree, LDLResult* result) {
+  // Finish updating the result structure.
+  result->largest_supernode =
+      std::max(result->largest_supernode, supernode_size);
+  result->num_factorization_entries +=
+      (supernode_size * (supernode_size + 1)) / 2 + supernode_size * degree;
+
+  // Add the approximate number of flops for the diagonal block factorization.
+  result->num_factorization_flops += std::pow(1. * supernode_size, 3.) / 3. +
+                                     std::pow(1. * supernode_size, 2.) / 2.;
+}
+
+template <class Field>
 void Factorization<Field>::FormSupernodes(
     const CoordinateMatrix<Field>& matrix,
     const SupernodalRelaxationControl& control, std::vector<Int>* parents,
@@ -242,26 +256,14 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(Int main_supernode,
   if (num_supernode_pivots < main_supernode_size) {
     return false;
   }
+  IncorporateSupernodeIntoLDLResult(main_supernode_size, main_degree, result);
+  if (!main_degree) {
+    return true;
+  }
 
+  CATAMARI_ASSERT(main_supernode_size > 0, "Supernode size was non-positive.");
   SolveAgainstDiagonalBlock(factorization_type, main_diagonal_block.ToConst(),
                             &main_lower_block);
-
-  // Finish updating the result structure.
-  result->largest_supernode =
-      std::max(result->largest_supernode, main_supernode_size);
-  result->num_factorization_entries +=
-      (main_supernode_size * (main_supernode_size + 1)) / 2 +
-      main_supernode_size * main_degree;
-
-  // Add the approximate number of flops for the diagonal block factorization.
-  result->num_factorization_flops +=
-      std::pow(1. * main_supernode_size, 3.) / 3. +
-      std::pow(1. * main_supernode_size, 2.) / 2.;
-
-  // Add the approximate number of flops for the triangular solves of the
-  // diagonal block against its structure.
-  result->num_factorization_flops +=
-      std::pow(1. * main_degree, 2.) * main_supernode_size;
 
   return true;
 }
@@ -351,7 +353,7 @@ void Factorization<Field>::MergeChildSchurComplements(
         } else {
           while (main_indices[i_rel - supernode_size] != row) {
             ++i_rel;
-            CATAMARI_ASSERT(i_rel < supernode_size + degree,
+            CATAMARI_ASSERT(i_rel < supernode_size + schur_complement.height,
                             "Relative index is out-of-bounds.");
           }
           child_rel_indices[i] = i_rel;
@@ -432,7 +434,7 @@ void Factorization<Field>::MultithreadedMergeChildSchurComplements(
         } else {
           while (main_indices[i_rel - supernode_size] != row) {
             ++i_rel;
-            CATAMARI_ASSERT(i_rel < supernode_size + degree,
+            CATAMARI_ASSERT(i_rel < supernode_size + schur_complement.height,
                             "Relative index is out-of-bounds.");
           }
           child_rel_indices[i] = i_rel;
@@ -508,27 +510,14 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   if (num_supernode_pivots < supernode_size) {
     return false;
   }
-
-  // Finish updating the result structure.
-  result->largest_supernode =
-      std::max(result->largest_supernode, supernode_size);
-  result->num_factorization_entries +=
-      (supernode_size * (supernode_size + 1)) / 2 + supernode_size * degree;
-
-  // Add the approximate number of flops for the diagonal block
-  // factorization.
-  result->num_factorization_flops += std::pow(1. * supernode_size, 3.) / 3. +
-                                     std::pow(1. * supernode_size, 2.) / 2.;
-
-  // Add the approximate number of flops for the triangular solves of the
-  // diagonal block against its structure.
-  result->num_factorization_flops += std::pow(1. * degree, 2.) * supernode_size;
+  IncorporateSupernodeIntoLDLResult(supernode_size, degree, result);
 
   if (!degree) {
     // We can early exit.
     return true;
   }
 
+  CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
   SolveAgainstDiagonalBlock(factorization_type, diagonal_block.ToConst(),
                             &lower_block);
 
@@ -597,31 +586,17 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
       result->num_successful_pivots += num_supernode_pivots;
     }
   }
-
   if (num_supernode_pivots < supernode_size) {
     return false;
   }
-
-  // Finish updating the result structure.
-  result->largest_supernode =
-      std::max(result->largest_supernode, supernode_size);
-  result->num_factorization_entries +=
-      (supernode_size * (supernode_size + 1)) / 2 + supernode_size * degree;
-
-  // Add the approximate number of flops for the diagonal block
-  // factorization.
-  result->num_factorization_flops += std::pow(1. * supernode_size, 3.) / 3. +
-                                     std::pow(1. * supernode_size, 2.) / 2.;
-
-  // Add the approximate number of flops for the triangular solves of the
-  // diagonal block against its structure.
-  result->num_factorization_flops += std::pow(1. * degree, 2.) * supernode_size;
+  IncorporateSupernodeIntoLDLResult(supernode_size, degree, result);
 
   if (!degree) {
     // We can early exit.
     return true;
   }
 
+  CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
   #pragma omp taskgroup
   MultithreadedSolveAgainstDiagonalBlock(
       tile_size, factorization_type, diagonal_block.ToConst(), &lower_block);
@@ -1118,28 +1093,16 @@ bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
   if (num_supernode_pivots < main_supernode_size) {
     return false;
   }
+  IncorporateSupernodeIntoLDLResult(main_supernode_size, main_degree, result);
+  if (!main_degree) {
+    return true;
+  }
 
+  CATAMARI_ASSERT(main_supernode_size > 0, "Supernode size was non-positive.");
   #pragma omp taskgroup
   MultithreadedSolveAgainstDiagonalBlock(tile_size, factorization_type,
                                          main_diagonal_block.ToConst(),
                                          &main_lower_block);
-
-  // Finish updating the result structure.
-  result->largest_supernode =
-      std::max(result->largest_supernode, main_supernode_size);
-  result->num_factorization_entries +=
-      (main_supernode_size * (main_supernode_size + 1)) / 2 +
-      main_supernode_size * main_degree;
-
-  // Add the approximate number of flops for the diagonal block factorization.
-  result->num_factorization_flops +=
-      std::pow(1. * main_supernode_size, 3.) / 3. +
-      std::pow(1. * main_supernode_size, 2.) / 2.;
-
-  // Add the approximate number of flops for the triangular solves of the
-  // diagonal block against its structure.
-  result->num_factorization_flops +=
-      std::pow(1. * main_degree, 2.) * main_supernode_size;
 
   return true;
 }

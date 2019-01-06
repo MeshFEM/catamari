@@ -24,12 +24,11 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 
   SymmetricOrdering ordering;
   ordering.permutation = analysis.Permutation();
+  InvertPermutation(ordering.permutation, &ordering.inverse_permutation);
 
-  const Int num_rows = ordering.permutation.size();
-  ordering.inverse_permutation.resize(num_rows);
-  for (Int row = 0; row < num_rows; ++row) {
-    ordering.inverse_permutation[ordering.permutation[row]] = row;
-  }
+  // TODO(Jack Poulson): Fill in 'permuted_supernode_sizes' and
+  // 'permuted_assembly_parents' from 'supernode_sizes' and
+  // 'inverse_permutation'.
 
   bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {

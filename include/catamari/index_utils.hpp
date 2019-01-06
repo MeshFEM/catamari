@@ -19,6 +19,10 @@ namespace catamari {
 // the sum of the sizes whose indices are less than i.
 void OffsetScan(const std::vector<Int>& sizes, std::vector<Int>* offsets);
 
+// Forms the inverse of a permutation.
+void InvertPermutation(const std::vector<Int>& permutation,
+                       std::vector<Int>* inverse_permutation);
+
 }  // namespace catamari
 
 #include "catamari/index_utils-impl.hpp"

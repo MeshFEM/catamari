@@ -25,6 +25,16 @@ inline void OffsetScan(const std::vector<Int>& sizes,
   (*offsets)[num_indices] = offset;
 }
 
+inline void InvertPermutation(const std::vector<Int>& permutation,
+                              std::vector<Int>* inverse_permutation) {
+  const Int num_indices = permutation.size();
+  inverse_permutation->clear();
+  inverse_permutation->resize(num_indices);
+  for (Int index = 0; index < num_indices; ++index) {
+    (*inverse_permutation)[permutation[index]] = index;
+  }
+}
+
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_INDEX_UTILS_IMPL_H_

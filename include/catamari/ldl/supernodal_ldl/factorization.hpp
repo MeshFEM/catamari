@@ -111,6 +111,11 @@ class Factorization {
   // Prints the unit lower-triangular matrix.
   void PrintLowerFactor(const std::string& label, std::ostream& os) const;
 
+  // Incorporates the details and work required to process the supernode with
+  // the given size and degree into the factorization result.
+  static void IncorporateSupernodeIntoLDLResult(Int supernode_size, Int degree,
+                                                LDLResult* result);
+
  private:
   struct LeftLookingSharedState {
     // The relative index of the active supernode within each supernode's

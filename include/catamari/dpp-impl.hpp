@@ -20,11 +20,8 @@ DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
       quotient::MinimumDegree(*graph, control.md_control);
   const std::vector<Int> permutation = analysis.Permutation();
 
-  const Int num_rows = permutation.size();
-  std::vector<Int> inverse_permutation(num_rows);
-  for (Int row = 0; row < num_rows; ++row) {
-    inverse_permutation[permutation[row]] = row;
-  }
+  std::vector<Int> inverse_permutation;
+  InvertPermutation(permutation, &inverse_permutation);
 
   supernodal_dpp_.reset(new SupernodalDPP<Field>(
       matrix, permutation, inverse_permutation, control.supernodal_control,
