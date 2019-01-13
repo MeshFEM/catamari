@@ -49,12 +49,6 @@ struct MergableStatus {
 void MemberToIndex(Int num_rows, const std::vector<Int>& supernode_starts,
                    std::vector<Int>* member_to_index);
 
-// Builds a packed set of child links for an elimination forest given the
-// parent links (with root nodes having their parent set to -1).
-void EliminationForestFromParents(const std::vector<Int>& parents,
-                                  std::vector<Int>* children,
-                                  std::vector<Int>* child_offsets);
-
 // Create the packed downlinks from the uplinks of an elimination forest.
 void EliminationForestAndRootsFromParents(const std::vector<Int>& parents,
                                           std::vector<Int>* children,

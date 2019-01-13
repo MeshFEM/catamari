@@ -10,6 +10,8 @@
 
 #include "catamari/ldl/supernodal_ldl/supernode_utils.hpp"
 
+#include "quotient/index_utils.hpp"
+
 namespace catamari {
 namespace supernodal_ldl {
 
@@ -30,31 +32,6 @@ inline void MemberToIndex(Int num_rows,
   }
   CATAMARI_ASSERT(supernode == static_cast<Int>(supernode_starts.size()) - 2,
                   "Did not end on the last supernode.");
-}
-
-inline void EliminationForestFromParents(const std::vector<Int>& parents,
-                                         std::vector<Int>* children,
-                                         std::vector<Int>* child_offsets) {
-  const Int num_indices = parents.size();
-
-  std::vector<Int> num_children(num_indices, 0);
-  for (Int index = 0; index < num_indices; ++index) {
-    const Int parent = parents[index];
-    if (parent >= 0) {
-      ++num_children[parent];
-    }
-  }
-
-  OffsetScan(num_children, child_offsets);
-
-  children->resize(num_indices);
-  auto offsets_copy = *child_offsets;
-  for (Int index = 0; index < num_indices; ++index) {
-    const Int parent = parents[index];
-    if (parent >= 0) {
-      (*children)[offsets_copy[parent]++] = index;
-    }
-  }
 }
 
 inline void EliminationForestAndRootsFromParents(
@@ -487,8 +464,8 @@ inline void RelaxSupernodes(
   // Construct the down-links for the elimination forest.
   std::vector<Int> children;
   std::vector<Int> child_offsets;
-  EliminationForestFromParents(orig_supernode_parents, &children,
-                               &child_offsets);
+  quotient::ChildrenFromParents(orig_supernode_parents, &children,
+                                &child_offsets);
 
   // Initialize the sizes of the merged supernodes, using the original indexing
   // and absorbing child sizes into the parents.
