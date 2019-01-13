@@ -1206,43 +1206,50 @@ void MultithreadedSolveAgainstDiagonalBlock(
     return;
   }
 
+  const ConstBlasMatrix<Field> triangular_matrix_copy = triangular_matrix;
+  BlasMatrix<Field> lower_matrix_copy = *lower_matrix;
+
   const Int height = lower_matrix->height;
   const Int width = lower_matrix->width;
   if (factorization_type == kCholeskyFactorization) {
     // Solve against the lower-triangular matrix L(K, K)' from the right.
     for (Int i = 0; i < height; i += tile_size) {
-      #pragma omp task default(none) firstprivate(i, tile_size) \
-          shared(triangular_matrix, lower_matrix)
+      #pragma omp task default(none) \
+          firstprivate(i, height, width, tile_size, triangular_matrix_copy, \
+              lower_matrix_copy)
       {
         const Int tsize = std::min(height - i, tile_size);
         BlasMatrix<Field> lower_block =
-            lower_matrix->Submatrix(i, 0, tsize, width);
-        RightLowerAdjointTriangularSolves(triangular_matrix, &lower_block);
+            lower_matrix_copy.Submatrix(i, 0, tsize, width);
+        RightLowerAdjointTriangularSolves(triangular_matrix_copy, &lower_block);
       }
     }
   } else if (factorization_type == kLDLAdjointFactorization) {
     // Solve against D(K, K) L(K, K)' from the right.
     for (Int i = 0; i < height; i += tile_size) {
-      #pragma omp task default(none) firstprivate(i, tile_size) \
-          shared(triangular_matrix, lower_matrix)
+      #pragma omp task default(none) \
+          firstprivate(i, height, width, tile_size, triangular_matrix_copy, \
+          lower_matrix_copy)
       {
         const Int tsize = std::min(height - i, tile_size);
         BlasMatrix<Field> lower_block =
-            lower_matrix->Submatrix(i, 0, tsize, width);
-        RightLowerAdjointUnitTriangularSolves(triangular_matrix, &lower_block);
+            lower_matrix_copy.Submatrix(i, 0, tsize, width);
+        RightLowerAdjointUnitTriangularSolves(triangular_matrix_copy,
+                                              &lower_block);
       }
     }
   } else {
     // Solve against D(K, K) L(K, K)^T from the right.
     for (Int i = 0; i < height; i += tile_size) {
-      #pragma omp task default(none) firstprivate(i, tile_size) \
-          shared(triangular_matrix, lower_matrix)
+      #pragma omp task default(none) \
+          firstprivate(i, height, width, tile_size, triangular_matrix_copy, \
+              lower_matrix_copy)
       {
         const Int tsize = std::min(height - i, tile_size);
         BlasMatrix<Field> lower_block =
-            lower_matrix->Submatrix(i, 0, tsize, width);
-        RightDiagonalTimesLowerTransposeUnitTriangularSolves(triangular_matrix,
-                                                             &lower_block);
+            lower_matrix_copy.Submatrix(i, 0, tsize, width);
+        RightDiagonalTimesLowerTransposeUnitTriangularSolves(
+            triangular_matrix_copy, &lower_block);
       }
     }
   }

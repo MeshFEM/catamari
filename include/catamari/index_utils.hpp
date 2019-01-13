@@ -8,23 +8,13 @@
 #ifndef CATAMARI_INDEX_UTILS_H_
 #define CATAMARI_INDEX_UTILS_H_
 
-#include <vector>
-
-#include "catamari/blas_matrix.hpp"
-#include "catamari/integers.hpp"
+#include "quotient/index_utils.hpp"
 
 namespace catamari {
 
-// Fills 'offsets' with a length 'num_indices + 1' array whose i'th index is
-// the sum of the sizes whose indices are less than i.
-void OffsetScan(const std::vector<Int>& sizes, std::vector<Int>* offsets);
-
-// Forms the inverse of a permutation.
-void InvertPermutation(const std::vector<Int>& permutation,
-                       std::vector<Int>* inverse_permutation);
+using quotient::InvertPermutation;
+using quotient::OffsetScan;
 
 }  // namespace catamari
-
-#include "catamari/index_utils-impl.hpp"
 
 #endif  // ifndef CATAMARI_INDEX_UTILS_H_

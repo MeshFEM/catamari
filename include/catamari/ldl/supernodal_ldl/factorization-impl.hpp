@@ -719,9 +719,16 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
   {
     for (Int child_index = 0; child_index < num_children; ++child_index) {
       const Int child = supernode_children[child_beg + child_index];
-      const Int task_priority = std::pow(work_estimates[child], 0.25);
 
-      #pragma omp task priority(task_priority)                           \
+      // One could make use of OpenMP task priorities, e.g., with an integer
+      // priority of:
+      //
+      //   const Int task_priority = std::pow(work_estimates[child], 0.25);
+      //
+      // But support for task priorities in current compilers is shaky at
+      // best (and I have not yet personally observed a performance
+      // improvement from it).
+      #pragma omp task                                                   \
         default(none)                                                    \
         firstprivate(level, max_parallel_levels, supernode, child,       \
             child_index, shared_state)                                   \
@@ -1351,9 +1358,13 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
     #pragma omp taskgroup
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = roots[root_index];
-      const Int task_priority = std::pow(work_estimates[root], 0.25);
 
-      #pragma omp task priority(task_priority)                \
+      // As above, one could make use of OpenMP task priorities, e.g., with an
+      // integer priority of:
+      //
+      //   const Int task_priority = std::pow(work_estimates[child], 0.25);
+      //
+      #pragma omp task                                        \
           default(none) firstprivate(root, root_index)        \
           shared(roots, successes, matrix, supernode_parents, \
               supernode_children, supernode_child_offsets,    \
