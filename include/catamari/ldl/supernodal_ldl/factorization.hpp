@@ -34,6 +34,11 @@ struct Control {
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.
   Int backward_solve_out_of_place_supernode_threshold = 10;
+
+#ifdef _OPENMP
+  // The size of the matrix tiles for OpenMP tasks.
+  Int tile_size = 128;
+#endif  // ifdef _OPENMP
 };
 
 // The user-facing data structure for storing a supernodal LDL' factorization.
@@ -212,11 +217,11 @@ class Factorization {
       std::vector<LeftLookingPrivateState>* private_states);
 
   bool MultithreadedLeftLookingSupernodeFinalize(
-      Int main_supernode, std::vector<LeftLookingPrivateState>* private_states,
-      LDLResult* result);
+      Int tile_size, Int supernode,
+      std::vector<LeftLookingPrivateState>* private_states, LDLResult* result);
 
   bool MultithreadedLeftLookingSubtree(
-      Int level, Int max_parallel_levels, Int supernode,
+      Int tile_size, Int level, Int max_parallel_levels, Int supernode,
       const CoordinateMatrix<Field>& matrix,
       const std::vector<Int>& supernode_parents,
       const std::vector<Int>& supernode_children,
@@ -231,7 +236,7 @@ class Factorization {
                                       const Control& control);
 
   bool MultithreadedRightLookingSubtree(
-      Int level, Int max_parallel_levels, Int supernode,
+      Int tile_size, Int level, Int max_parallel_levels, Int supernode,
       const CoordinateMatrix<Field>& matrix,
       const std::vector<Int>& supernode_parents,
       const std::vector<Int>& supernode_children,
@@ -245,7 +250,7 @@ class Factorization {
       RightLookingSharedState* shared_state);
 
   bool MultithreadedRightLookingSupernodeFinalize(
-      Int supernode, const std::vector<Int>& supernode_children,
+      Int tile_size, Int supernode, const std::vector<Int>& supernode_children,
       const std::vector<Int>& supernode_child_offsets,
       RightLookingSharedState* shared_state, LDLResult* result);
 #endif  // ifdef _OPENMP
