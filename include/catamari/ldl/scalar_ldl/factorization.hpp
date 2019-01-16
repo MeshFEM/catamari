@@ -177,6 +177,39 @@ class Factorization {
   void LowerTransposeTriangularSolve(BlasMatrix<Field>* matrix) const;
 
  private:
+  // The temporary state used by the left-looking factorization.
+  struct LeftLookingState {
+    // Since we will sequentially access each of the entries in each column of
+    // L during the updates of the active column, we can avoid the need for
+    // binary search by maintaining a separate counter for each column.
+    std::vector<Int> column_update_ptrs;
+
+    // An integer workspace for storing the indices in the current row pattern.
+    std::vector<Int> row_structure;
+
+    // A data structure for marking whether or not an index is in the pattern
+    // of the active row of the lower-triangular factor.
+    std::vector<Int> pattern_flags;
+  };
+
+  // The temporary state used by the up-looking factorization.
+  struct UpLookingState {
+    // An array for holding the active index to insert the new entry of each
+    // column into.
+    std::vector<Int> column_update_ptrs;
+
+    // A data structure for marking whether or not an index is in the pattern
+    // of the active row of the lower-triangular factor.
+    std::vector<Int> pattern_flags;
+
+    // Set up an integer workspace that could hold any row nonzero pattern.
+    std::vector<Int> row_structure;
+
+    // Set up a workspace for performing a triangular solve against a row of the
+    // input matrix.
+    std::vector<Field> row_workspace;
+  };
+
   // Performs a non-supernodal left-looking LDL' factorization.
   // Cf. Section 4.8 of Tim Davis, "Direct Methods for Sparse Linear Systems".
   //

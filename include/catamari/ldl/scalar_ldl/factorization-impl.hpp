@@ -191,7 +191,6 @@ void Factorization<Field>::UpLookingRowUpdate(Int row, Int column,
   lower_factor.values[factor_column_end] = lambda;
 }
 
-// TODO(Jack Poulson): Factor out the LeftLookingState.
 template <class Field>
 LDLResult Factorization<Field>::LeftLooking(
     const CoordinateMatrix<Field>& matrix) {
@@ -202,36 +201,29 @@ LDLResult Factorization<Field>::LeftLooking(
   LeftLookingSetup(matrix, &parents);
   const LowerStructure& lower_structure = lower_factor.structure;
 
-  // A data structure for marking whether or not an index is in the pattern
-  // of the active row of the lower-triangular factor.
-  std::vector<Int> pattern_flags(num_rows);
-
-  // Set up an integer workspace that could hold any row nonzero pattern.
-  std::vector<Int> row_structure(num_rows);
-
-  // Since we will sequentially access each of the entries in each column of
-  // L during the updates of the active column, we can avoid the need for
-  // binary search by maintaining a separate counter for each column.
-  std::vector<Int> column_update_ptrs(num_rows);
+  LeftLookingState state;
+  state.column_update_ptrs.resize(num_rows);
+  state.row_structure.resize(num_rows);
+  state.pattern_flags.resize(num_rows);
 
   LDLResult result;
   for (Int column = 0; column < num_rows; ++column) {
-    pattern_flags[column] = column;
-    column_update_ptrs[column] = lower_structure.column_offsets[column];
+    state.pattern_flags[column] = column;
+    state.column_update_ptrs[column] = lower_structure.column_offsets[column];
 
     // Compute the row pattern.
     const Int num_packed = ComputeRowPattern(
         matrix, ordering.permutation, ordering.inverse_permutation, parents,
-        column, pattern_flags.data(), row_structure.data());
+        column, state.pattern_flags.data(), state.row_structure.data());
 
     // for j = find(L(column, :))
     //   L(column:n, column) -= L(column:n, j) * (d(j) * conj(L(column, j)))
     for (Int index = 0; index < num_packed; ++index) {
-      const Int j = row_structure[index];
+      const Int j = state.row_structure[index];
       CATAMARI_ASSERT(j < column, "Looking into upper triangle.");
 
       // Find L(column, j) in the j'th column.
-      Int j_ptr = column_update_ptrs[j]++;
+      Int j_ptr = state.column_update_ptrs[j]++;
       const Int j_end = lower_structure.column_offsets[j + 1];
       CATAMARI_ASSERT(j_ptr != j_end, "Left column looking for L(column, j)");
       CATAMARI_ASSERT(lower_structure.indices[j_ptr] == column,
@@ -320,7 +312,6 @@ LDLResult Factorization<Field>::LeftLooking(
   return result;
 }
 
-// TODO(Jack Poulson): Factor out the UpLookingState.
 template <class Field>
 LDLResult Factorization<Field>::UpLooking(
     const CoordinateMatrix<Field>& matrix) {
@@ -331,42 +322,34 @@ LDLResult Factorization<Field>::UpLooking(
   UpLookingSetup(matrix, &parents);
   const LowerStructure& lower_structure = lower_factor.structure;
 
-  // A data structure for marking whether or not an index is in the pattern
-  // of the active row of the lower-triangular factor.
-  std::vector<Int> pattern_flags(num_rows);
-
-  // Set up an integer workspace that could hold any row nonzero pattern.
-  std::vector<Int> row_structure(num_rows);
-
-  // An array for holding the active index to insert the new entry of each
-  // column into.
-  std::vector<Int> column_update_ptrs(num_rows);
-
-  // Set up a workspace for performing a triangular solve against a row of the
-  // input matrix.
-  std::vector<Field> row_workspace(num_rows, Field{0});
+  UpLookingState state;
+  state.column_update_ptrs.resize(num_rows);
+  state.pattern_flags.resize(num_rows);
+  state.row_structure.resize(num_rows);
+  state.row_workspace.resize(num_rows, Field{0});
 
   LDLResult result;
   for (Int row = 0; row < num_rows; ++row) {
-    pattern_flags[row] = row;
-    column_update_ptrs[row] = lower_structure.column_offsets[row];
+    state.pattern_flags[row] = row;
+    state.column_update_ptrs[row] = lower_structure.column_offsets[row];
 
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
     const Int start = ComputeTopologicalRowPatternAndScatterNonzeros(
         matrix, ordering.permutation, ordering.inverse_permutation, parents,
-        row, pattern_flags.data(), row_structure.data(), row_workspace.data());
+        row, state.pattern_flags.data(), state.row_structure.data(),
+        state.row_workspace.data());
 
     // Pull the diagonal entry out of the workspace.
-    diagonal_factor.values[row] = row_workspace[row];
-    row_workspace[row] = Field{0};
+    diagonal_factor.values[row] = state.row_workspace[row];
+    state.row_workspace[row] = Field{0};
 
     // Compute L(row, :) using a sparse triangular solve. In particular,
     //   L(row, :) := matrix(row, :) / L(0 : row - 1, 0 : row - 1)'.
     for (Int index = start; index < num_rows; ++index) {
-      const Int column = row_structure[index];
-      UpLookingRowUpdate(row, column, column_update_ptrs.data(),
-                         row_workspace.data());
+      const Int column = state.row_structure[index];
+      UpLookingRowUpdate(row, column, state.column_update_ptrs.data(),
+                         state.row_workspace.data());
     }
 
     // Early exit if solving would involve division by zero.
