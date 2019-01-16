@@ -16,6 +16,23 @@
 
 namespace catamari {
 
+// A representation of a (scalar or supernodal) assembly forest via its up and
+// down links.
+struct AssemblyForest {
+  // The parents in the assembly forest.The length of the array is the number
+  // of (super)nodes.
+  std::vector<Int> parents;
+
+  // The packed downlinks of the forest; the uplinks are given by 'parents'.
+  std::vector<Int> children;
+
+  // The offsets associated with the packed downlinks. The children of
+  // (super)node 'j' would be stored between indices 'child_offsets[j]' and
+  // 'child_offsets[j + 1]'. The length of this array is one more than the
+  // number of (super)nodes.
+  std::vector<Int> child_offsets;
+};
+
 // A mechanism for passing reordering information into the factorization.
 struct SymmetricOrdering {
   // If non-empty, the permutation mapping the original matrix ordering into the
@@ -33,23 +50,8 @@ struct SymmetricOrdering {
   // allows for the factorization to parallelize its symbolic analysis.
   std::vector<Int> permuted_supernode_sizes;
 
-  // The parents in the supernodal assembly forest in the new ordering.
-  // The length of the array is the number of supernodes from the reordering.
-  //
-  // This member is optional, but, if coupled with 'permuted_supernode_sizes',
-  // allows for the factorization to parallelize its symbolic analysis.
-  std::vector<Int> permuted_assembly_parents;
-
-  // The (optional) packed downlinks of the permuted assembly forest; the
-  // uplinks are optionally provided by 'permuted_assembly_parents'..
-  std::vector<Int> permuted_assembly_children;
-
-  // The (optional) offsets associated with the packed downlinks in the
-  // permuted assembly forest. The children of permuted supernode 'j' would
-  // be stored between indices 'permuted_assembly_child_offsets[j]' and
-  // 'permuted_assembly_child_offsets[j + 1]'. The length of this array is
-  // therefore one more than the number of supernodes.
-  std::vector<Int> permuted_assembly_child_offsets;
+  // The (optional) supernodal assembly forest in the permuted ordering.
+  AssemblyForest permuted_assembly_forest;
 };
 
 enum SymmetricFactorizationType {

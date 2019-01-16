@@ -16,13 +16,11 @@ namespace catamari {
 
 template <class Field>
 SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
-                                    const std::vector<Int>& permutation,
-                                    const std::vector<Int>& inverse_permutation,
+                                    const SymmetricOrdering& ordering,
                                     const SupernodalDPPControl& control,
                                     unsigned int random_seed)
     : matrix_(matrix),
-      permutation_(permutation),
-      inverse_permutation_(inverse_permutation),
+      ordering_(ordering),
       control_(control),
       generator_(random_seed),
       unit_uniform_(ComplexBase<Field>{0}, ComplexBase<Field>{1}) {
@@ -33,15 +31,15 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void SupernodalDPP<Field>::FormSupernodes() {
   std::vector<Int> orig_parents, orig_degrees;
-  scalar_ldl::EliminationForestAndDegrees(matrix_, permutation_,
-                                          inverse_permutation_, &orig_parents,
-                                          &orig_degrees);
+  scalar_ldl::EliminationForestAndDegrees(matrix_, ordering_.permutation,
+                                          ordering_.inverse_permutation,
+                                          &orig_parents, &orig_degrees);
 
   std::vector<Int> orig_supernode_sizes;
   scalar_ldl::LowerStructure scalar_structure;
   supernodal_ldl::FormFundamentalSupernodes(
-      matrix_, permutation_, inverse_permutation_, orig_parents, orig_degrees,
-      &orig_supernode_sizes, &scalar_structure);
+      matrix_, ordering_.permutation, ordering_.inverse_permutation,
+      orig_parents, orig_degrees, &orig_supernode_sizes, &scalar_structure);
 
   std::vector<Int> orig_supernode_starts;
   OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
@@ -51,10 +49,10 @@ void SupernodalDPP<Field>::FormSupernodes() {
                                 &orig_member_to_index);
 
   std::vector<Int> orig_supernode_degrees;
-  supernodal_ldl::SupernodalDegrees(matrix_, permutation_, inverse_permutation_,
-                                    orig_supernode_sizes, orig_supernode_starts,
-                                    orig_member_to_index, orig_parents,
-                                    &orig_supernode_degrees);
+  supernodal_ldl::SupernodalDegrees(
+      matrix_, ordering_.permutation, ordering_.inverse_permutation,
+      orig_supernode_sizes, orig_supernode_starts, orig_member_to_index,
+      orig_parents, &orig_supernode_degrees);
 
   const Int num_orig_supernodes = orig_supernode_sizes.size();
   std::vector<Int> orig_supernode_parents;
@@ -66,8 +64,8 @@ void SupernodalDPP<Field>::FormSupernodes() {
     supernodal_ldl::RelaxSupernodes(
         orig_parents, orig_supernode_sizes, orig_supernode_starts,
         orig_supernode_parents, orig_supernode_degrees, orig_member_to_index,
-        scalar_structure, control_.relaxation_control, &permutation_,
-        &inverse_permutation_, &parents_, &supernode_parents_,
+        scalar_structure, control_.relaxation_control, &ordering_.permutation,
+        &ordering_.inverse_permutation, &parents_, &supernode_parents_,
         &supernode_degrees_, &supernode_sizes_, &supernode_starts_,
         &supernode_member_to_index_);
   } else {
@@ -91,8 +89,8 @@ void SupernodalDPP<Field>::FormStructure() {
       new supernodal_ldl::DiagonalFactor<Field>(supernode_sizes_));
 
   supernodal_ldl::FillStructureIndices(
-      matrix_, permutation_, inverse_permutation_, parents_, supernode_sizes_,
-      supernode_member_to_index_, lower_factor_.get(),
+      matrix_, ordering_.permutation, ordering_.inverse_permutation, parents_,
+      supernode_sizes_, supernode_member_to_index_, lower_factor_.get(),
       &max_descendant_entries_);
 
   max_supernode_size_ =
@@ -123,9 +121,10 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
 
   // Compute the supernodal row pattern.
   const Int num_packed = supernodal_ldl::ComputeRowPattern(
-      matrix_, permutation_, inverse_permutation_, supernode_sizes_,
-      supernode_starts_, supernode_member_to_index_, supernode_parents_,
-      main_supernode, state->pattern_flags.data(), state->row_structure.data());
+      matrix_, ordering_.permutation, ordering_.inverse_permutation,
+      supernode_sizes_, supernode_starts_, supernode_member_to_index_,
+      supernode_parents_, main_supernode, state->pattern_flags.data(),
+      state->row_structure.data());
 
   // for J = find(L(K, :))
   //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
@@ -233,10 +232,10 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
       maximum_likelihood, &main_diagonal_block, &generator_, &unit_uniform_);
   for (const Int& index : supernode_sample) {
     const Int orig_row = main_supernode_start + index;
-    if (inverse_permutation_.empty()) {
+    if (ordering_.inverse_permutation.empty()) {
       sample->push_back(orig_row);
     } else {
-      sample->push_back(inverse_permutation_[orig_row]);
+      sample->push_back(ordering_.inverse_permutation[orig_row]);
     }
   }
 
@@ -265,10 +264,10 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   }
 
   // Initialize the factors with the input matrix.
-  supernodal_ldl::FillNonzeros(matrix_, permutation_, inverse_permutation_,
-                               supernode_starts_, supernode_sizes_,
-                               supernode_member_to_index_, lower_factor_.get(),
-                               diagonal_factor_.get());
+  supernodal_ldl::FillNonzeros(matrix_, ordering_.permutation,
+                               ordering_.inverse_permutation, supernode_starts_,
+                               supernode_sizes_, supernode_member_to_index_,
+                               lower_factor_.get(), diagonal_factor_.get());
 
   std::vector<Int> sample;
   sample.reserve(num_rows);

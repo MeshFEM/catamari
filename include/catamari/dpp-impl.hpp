@@ -18,14 +18,20 @@ DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
   std::unique_ptr<quotient::CoordinateGraph> graph = matrix.CoordinateGraph();
   const quotient::MinimumDegreeResult analysis =
       quotient::MinimumDegree(*graph, control.md_control);
-  const std::vector<Int> permutation = analysis.Permutation();
 
-  std::vector<Int> inverse_permutation;
-  InvertPermutation(permutation, &inverse_permutation);
+  SymmetricOrdering ordering;
+  ordering.permutation = analysis.permutation;
+  ordering.inverse_permutation = analysis.inverse_permutation;
+  ordering.permuted_supernode_sizes = analysis.permuted_supernode_sizes;
+  ordering.permuted_assembly_forest.parents =
+      analysis.permuted_assembly_parents;
+  quotient::ChildrenFromParents(
+      ordering.permuted_assembly_forest.parents,
+      &ordering.permuted_assembly_forest.children,
+      &ordering.permuted_assembly_forest.child_offsets);
 
   supernodal_dpp_.reset(new SupernodalDPP<Field>(
-      matrix, permutation, inverse_permutation, control.supernodal_control,
-      control.random_seed));
+      matrix, ordering, control.supernodal_control, control.random_seed));
 }
 
 template <class Field>

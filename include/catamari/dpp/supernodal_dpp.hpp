@@ -24,8 +24,7 @@ template <class Field>
 class SupernodalDPP {
  public:
   SupernodalDPP(const CoordinateMatrix<Field>& matrix,
-                const std::vector<Int>& permutation,
-                const std::vector<Int>& inverse_permutation,
+                const SymmetricOrdering& ordering,
                 const SupernodalDPPControl& control, unsigned int random_seed);
 
   // Return a sample from the DPP. If 'maximum_likelihood' is true, then each
@@ -62,14 +61,9 @@ class SupernodalDPP {
   // A copy of the input matrix.
   CoordinateMatrix<Field> matrix_;
 
-  // If the following is nonempty, then, if the permutation is a matrix P, the
-  // matrix P A P' has been factored. Typically, this permutation is the
-  // composition of a fill-reducing ordering and a supernodal relaxation
-  // permutation.
-  std::vector<Int> permutation_;
-
-  // The inverse of the above permutation (if it is nontrivial).
-  std::vector<Int> inverse_permutation_;
+  // A representation of the permutation and supernodes associated with a
+  // reordering choice for the DPP sampling.
+  SymmetricOrdering ordering_;
 
   // The up-links of the scalar elimination tree.
   std::vector<Int> parents_;
