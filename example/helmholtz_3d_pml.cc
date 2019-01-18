@@ -858,7 +858,8 @@ struct IntegerBox {
 inline void AnalyticalOrderingRecursion(Int num_x_elements, Int num_y_elements,
                                         Int num_z_elements, Int offset,
                                         const IntegerBox& box,
-                                        std::vector<Int>* inverse_permutation) {
+                                        Int* supernode_index,
+                                        catamari::SymmetricOrdering* ordering) {
   const Int y_stride = num_x_elements + 1;
   const Int z_stride = y_stride * (num_y_elements + 1);
   const Int min_cut_size = 5;
@@ -874,10 +875,19 @@ inline void AnalyticalOrderingRecursion(Int num_x_elements, Int num_y_elements,
     for (Int z = box.z_beg; z < box.z_end; ++z) {
       for (Int y = box.y_beg; y < box.y_end; ++y) {
         for (Int x = box.x_beg; x < box.x_end; ++x) {
-          (*inverse_permutation)[offset++] = x + y * y_stride + z * z_stride;
+          ordering->inverse_permutation[offset++] =
+              x + y * y_stride + z * z_stride;
         }
       }
     }
+
+    const Int supernode_size = (box.z_end - box.z_beg) *
+                               (box.y_end - box.y_beg) *
+                               (box.x_end - box.x_beg);
+    ordering->permuted_supernode_sizes.push_back(supernode_size);
+    ordering->permuted_assembly_forest.parents.push_back(-1);
+    ++(*supernode_index);
+
     return;
   }
 
@@ -900,19 +910,33 @@ inline void AnalyticalOrderingRecursion(Int num_x_elements, Int num_y_elements,
 
     // Fill the left child.
     AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
-                                left_offset, left_box, inverse_permutation);
+                                left_offset, left_box, supernode_index,
+                                ordering);
+    const Int left_child = *supernode_index - 1;
 
     // Fill the right child.
     AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
-                                right_offset, right_box, inverse_permutation);
+                                right_offset, right_box, supernode_index,
+                                ordering);
+    const Int right_child = *supernode_index - 1;
 
     // Fill the separator.
     offset = cut_offset;
     for (Int z = box.z_beg; z < box.z_end; ++z) {
       for (Int y = box.y_beg; y < box.y_end; ++y) {
-        (*inverse_permutation)[offset++] = x_cut + y * y_stride + z * z_stride;
+        ordering->inverse_permutation[offset++] =
+            x_cut + y * y_stride + z * z_stride;
       }
     }
+
+    const Int supernode = *supernode_index;
+    const Int supernode_size =
+        (box.z_end - box.z_beg) * (box.y_end - box.y_beg);
+    ordering->permuted_supernode_sizes.push_back(supernode_size);
+    ordering->permuted_assembly_forest.parents[left_child] = supernode;
+    ordering->permuted_assembly_forest.parents[right_child] = supernode;
+    ordering->permuted_assembly_forest.parents.push_back(-1);
+    ++(*supernode_index);
   } else if (y_size == max_size) {
     // Cut the y dimension.
     const Int y_cut = box.y_beg + (box.y_end - box.y_beg) / 2;
@@ -932,19 +956,33 @@ inline void AnalyticalOrderingRecursion(Int num_x_elements, Int num_y_elements,
 
     // Fill the left child.
     AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
-                                left_offset, left_box, inverse_permutation);
+                                left_offset, left_box, supernode_index,
+                                ordering);
+    const Int left_child = *supernode_index - 1;
 
     // Fill the right child.
     AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
-                                right_offset, right_box, inverse_permutation);
+                                right_offset, right_box, supernode_index,
+                                ordering);
+    const Int right_child = *supernode_index - 1;
 
     // Fill the separator.
     offset = cut_offset;
     for (Int z = box.z_beg; z < box.z_end; ++z) {
       for (Int x = box.x_beg; x < box.x_end; ++x) {
-        (*inverse_permutation)[offset++] = x + y_cut * y_stride + z * z_stride;
+        ordering->inverse_permutation[offset++] =
+            x + y_cut * y_stride + z * z_stride;
       }
     }
+
+    const Int supernode = *supernode_index;
+    const Int supernode_size =
+        (box.z_end - box.z_beg) * (box.x_end - box.x_beg);
+    ordering->permuted_supernode_sizes.push_back(supernode_size);
+    ordering->permuted_assembly_forest.parents[left_child] = supernode;
+    ordering->permuted_assembly_forest.parents[right_child] = supernode;
+    ordering->permuted_assembly_forest.parents.push_back(-1);
+    ++(*supernode_index);
   } else {
     // Cut the z dimension.
     const Int z_cut = box.z_beg + (box.z_end - box.z_beg) / 2;
@@ -964,19 +1002,33 @@ inline void AnalyticalOrderingRecursion(Int num_x_elements, Int num_y_elements,
 
     // Fill the left child.
     AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
-                                left_offset, left_box, inverse_permutation);
+                                left_offset, left_box, supernode_index,
+                                ordering);
+    const Int left_child = *supernode_index - 1;
 
     // Fill the right child.
     AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
-                                right_offset, right_box, inverse_permutation);
+                                right_offset, right_box, supernode_index,
+                                ordering);
+    const Int right_child = *supernode_index - 1;
 
     // Fill the separator.
     offset = cut_offset;
     for (Int y = box.y_beg; y < box.y_end; ++y) {
       for (Int x = box.x_beg; x < box.x_end; ++x) {
-        (*inverse_permutation)[offset++] = x + y * y_stride + z_cut * z_stride;
+        ordering->inverse_permutation[offset++] =
+            x + y * y_stride + z_cut * z_stride;
       }
     }
+
+    const Int supernode = *supernode_index;
+    const Int supernode_size =
+        (box.y_end - box.y_beg) * (box.x_end - box.x_beg);
+    ordering->permuted_supernode_sizes.push_back(supernode_size);
+    ordering->permuted_assembly_forest.parents[left_child] = supernode;
+    ordering->permuted_assembly_forest.parents[right_child] = supernode;
+    ordering->permuted_assembly_forest.parents.push_back(-1);
+    ++(*supernode_index);
   }
 }
 
@@ -984,23 +1036,30 @@ inline void AnalyticalOrderingRecursion(Int num_x_elements, Int num_y_elements,
 // analytical nested-dissection ordering with a width of 1.
 inline void AnalyticalOrdering(Int num_x_elements, Int num_y_elements,
                                Int num_z_elements,
-                               std::vector<Int>* permutation,
-                               std::vector<Int>* inverse_permutation) {
+                               catamari::SymmetricOrdering* ordering) {
   const Int num_rows =
       (num_x_elements + 1) * (num_y_elements + 1) * (num_z_elements + 1);
-  permutation->resize(num_rows);
-  inverse_permutation->resize(num_rows);
+  ordering->permutation.resize(num_rows);
+  ordering->inverse_permutation.resize(num_rows);
+  ordering->permuted_supernode_sizes.reserve(num_rows);
+  ordering->permuted_assembly_forest.parents.reserve(num_rows);
 
   Int offset = 0;
   IntegerBox box{0, num_x_elements + 1, 0, num_y_elements + 1,
                  0, num_z_elements + 1};
+  Int supernode_index = 0;
   AnalyticalOrderingRecursion(num_x_elements, num_y_elements, num_z_elements,
-                              offset, box, inverse_permutation);
+                              offset, box, &supernode_index, ordering);
 
   // Invert the inverse permutation.
   for (Int row = 0; row < num_rows; ++row) {
-    (*permutation)[(*inverse_permutation)[row]] = row;
+    ordering->permutation[ordering->inverse_permutation[row]] = row;
   }
+
+  quotient::ChildrenFromParents(
+      ordering->permuted_assembly_forest.parents,
+      &ordering->permuted_assembly_forest.children,
+      &ordering->permuted_assembly_forest.child_offsets);
 }
 
 // A list of properties to measure from a sparse LDL factorization / solve.
@@ -1107,7 +1166,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   if (analytical_ordering) {
     catamari::SymmetricOrdering ordering;
     AnalyticalOrdering(num_x_elements, num_y_elements, num_z_elements,
-                       &ordering.permutation, &ordering.inverse_permutation);
+                       &ordering);
     result = ldl_factorization.Factor(matrix, ordering, ldl_control);
   } else {
     result = ldl_factorization.Factor(matrix, ldl_control);
