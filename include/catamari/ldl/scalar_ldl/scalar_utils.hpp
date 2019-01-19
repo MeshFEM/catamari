@@ -13,6 +13,7 @@
 #include "catamari/blas_matrix.hpp"
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"
+#include "catamari/symmetric_ordering.hpp"
 
 #include "catamari/ldl/scalar_ldl.hpp"
 
@@ -25,17 +26,21 @@ namespace scalar_ldl {
 // Cf. Tim Davis's "LDL"'s symbolic factorization.
 template <class Field>
 void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
-                                 const std::vector<Int>& permutation,
-                                 const std::vector<Int>& inverse_permutation,
+                                 const SymmetricOrdering& ordering,
                                  std::vector<Int>* parents,
                                  std::vector<Int>* degrees);
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedEliminationForestAndDegrees(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    std::vector<Int>* parents, std::vector<Int>* degrees);
+#endif  // ifdef _OPENMP
 
 // Computes the nonzero pattern of L(row, :) in
 // row_structure[0 : num_packed - 1].
 template <class Field>
 Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
-                      const std::vector<Int>& permutation,
-                      const std::vector<Int>& inverse_permutation,
+                      const SymmetricOrdering& ordering,
                       const std::vector<Int>& parents, Int row,
                       Int* pattern_flags, Int* row_structure);
 
@@ -44,16 +49,14 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
 // row_workspace.
 template <class Field>
 Int ComputeTopologicalRowPatternAndScatterNonzeros(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation,
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const std::vector<Int>& parents, Int row, Int* pattern_flags,
     Int* row_structure, Field* row_workspace);
 
 // Fills in the structure indices for the lower factor.
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
-                          const std::vector<Int>& permutation,
-                          const std::vector<Int>& inverse_permutation,
+                          const SymmetricOrdering& ordering,
                           const std::vector<Int>& parents,
                           const std::vector<Int>& degrees,
                           LowerStructure* lower_structure);

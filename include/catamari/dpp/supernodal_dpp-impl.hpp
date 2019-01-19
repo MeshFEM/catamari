@@ -31,15 +31,14 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void SupernodalDPP<Field>::FormSupernodes() {
   std::vector<Int> orig_parents, orig_degrees;
-  scalar_ldl::EliminationForestAndDegrees(matrix_, ordering_.permutation,
-                                          ordering_.inverse_permutation,
-                                          &orig_parents, &orig_degrees);
+  scalar_ldl::EliminationForestAndDegrees(matrix_, ordering_, &orig_parents,
+                                          &orig_degrees);
 
   std::vector<Int> orig_supernode_sizes;
   scalar_ldl::LowerStructure scalar_structure;
-  supernodal_ldl::FormFundamentalSupernodes(
-      matrix_, ordering_.permutation, ordering_.inverse_permutation,
-      orig_parents, orig_degrees, &orig_supernode_sizes, &scalar_structure);
+  supernodal_ldl::FormFundamentalSupernodes(matrix_, ordering_, orig_parents,
+                                            orig_degrees, &orig_supernode_sizes,
+                                            &scalar_structure);
 
   std::vector<Int> orig_supernode_starts;
   OffsetScan(orig_supernode_sizes, &orig_supernode_starts);

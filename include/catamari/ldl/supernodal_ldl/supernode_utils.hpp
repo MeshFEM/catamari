@@ -67,8 +67,7 @@ void ConvertFromScalarToSupernodalEliminationForest(
 // supernodes.
 template <class Field>
 bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
-                                const std::vector<Int>& permutation,
-                                const std::vector<Int>& inverse_permutation,
+                                const SymmetricOrdering& ordering,
                                 const std::vector<Int>& supernode_sizes);
 
 // Compute an unrelaxed supernodal partition using the existing ordering.
@@ -76,8 +75,7 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 // below the diagonal block.
 template <class Field>
 void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
-                               const std::vector<Int>& permutation,
-                               const std::vector<Int>& inverse_permutation,
+                               const SymmetricOrdering& ordering,
                                const std::vector<Int>& parents,
                                const std::vector<Int>& degrees,
                                std::vector<Int>* supernode_sizes,

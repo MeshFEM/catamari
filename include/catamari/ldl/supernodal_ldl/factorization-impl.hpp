@@ -39,16 +39,14 @@ void Factorization<Field>::FormSupernodes(
     std::vector<Int>* supernode_degrees, std::vector<Int>* supernode_parents) {
   // Compute the non-supernodal elimination tree using the original ordering.
   std::vector<Int> orig_parents, orig_degrees;
-  scalar_ldl::EliminationForestAndDegrees(matrix, ordering.permutation,
-                                          ordering.inverse_permutation,
-                                          &orig_parents, &orig_degrees);
+  scalar_ldl::EliminationForestAndDegrees(matrix, ordering, &orig_parents,
+                                          &orig_degrees);
 
   // Greedily compute a supernodal partition using the original ordering.
   std::vector<Int> orig_supernode_sizes;
   scalar_ldl::LowerStructure scalar_structure;
-  FormFundamentalSupernodes(
-      matrix, ordering.permutation, ordering.inverse_permutation, orig_parents,
-      orig_degrees, &orig_supernode_sizes, &scalar_structure);
+  FormFundamentalSupernodes(matrix, ordering, orig_parents, orig_degrees,
+                            &orig_supernode_sizes, &scalar_structure);
 
 #ifdef CATAMARI_DEBUG
   {

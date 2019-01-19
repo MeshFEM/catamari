@@ -109,11 +109,9 @@ template <class Field>
 void Factorization<Field>::LeftLookingSetup(
     const CoordinateMatrix<Field>& matrix, std::vector<Int>* parents) {
   std::vector<Int> degrees;
-  EliminationForestAndDegrees(matrix, ordering.permutation,
-                              ordering.inverse_permutation, parents, &degrees);
+  EliminationForestAndDegrees(matrix, ordering, parents, &degrees);
 
-  FillStructureIndices(matrix, ordering.permutation,
-                       ordering.inverse_permutation, *parents, degrees,
+  FillStructureIndices(matrix, ordering, *parents, degrees,
                        &lower_factor.structure);
   FillNonzeros(matrix);
 }
@@ -124,8 +122,7 @@ void Factorization<Field>::UpLookingSetup(const CoordinateMatrix<Field>& matrix,
   LowerStructure& lower_structure = lower_factor.structure;
 
   std::vector<Int> degrees;
-  EliminationForestAndDegrees(matrix, ordering.permutation,
-                              ordering.inverse_permutation, parents, &degrees);
+  EliminationForestAndDegrees(matrix, ordering, parents, &degrees);
 
   const Int num_rows = matrix.NumRows();
   diagonal_factor.values.resize(num_rows);
@@ -212,9 +209,9 @@ LDLResult Factorization<Field>::LeftLooking(
     state.column_update_ptrs[column] = lower_structure.column_offsets[column];
 
     // Compute the row pattern.
-    const Int num_packed = ComputeRowPattern(
-        matrix, ordering.permutation, ordering.inverse_permutation, parents,
-        column, state.pattern_flags.data(), state.row_structure.data());
+    const Int num_packed = ComputeRowPattern(matrix, ordering, parents, column,
+                                             state.pattern_flags.data(),
+                                             state.row_structure.data());
 
     // for j = find(L(column, :))
     //   L(column:n, column) -= L(column:n, j) * (d(j) * conj(L(column, j)))
@@ -336,9 +333,8 @@ LDLResult Factorization<Field>::UpLooking(
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
     const Int start = ComputeTopologicalRowPatternAndScatterNonzeros(
-        matrix, ordering.permutation, ordering.inverse_permutation, parents,
-        row, state.pattern_flags.data(), state.row_structure.data(),
-        state.row_workspace.data());
+        matrix, ordering, parents, row, state.pattern_flags.data(),
+        state.row_structure.data(), state.row_workspace.data());
 
     // Pull the diagonal entry out of the workspace.
     diagonal_factor.values[row] = state.row_workspace[row];

@@ -13,17 +13,13 @@
 namespace catamari {
 namespace scalar_ldl {
 
-// TODO(Jack Poulson): Provide a multithreaded equivalent which takes in a the
-// reordering tree as a means of breaking the sequential dependency chain
-// of the 'parent' computations.
 template <class Field>
 void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
-                                 const std::vector<Int>& permutation,
-                                 const std::vector<Int>& inverse_permutation,
+                                 const SymmetricOrdering& ordering,
                                  std::vector<Int>* parents,
                                  std::vector<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
-  const bool have_permutation = !permutation.empty();
+  const bool have_permutation = !ordering.permutation.empty();
 
   // Initialize all of the parent indices as unset.
   parents->resize(num_rows, -1);
@@ -41,12 +37,14 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
   for (Int row = 0; row < num_rows; ++row) {
     pattern_flags[row] = row;
 
-    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int column = have_permutation ? permutation[entry.column] : entry.column;
+      Int column =
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
 
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
@@ -81,13 +79,14 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
   }
 }
 
+#ifdef _OPENMP
+// TODO(Jack Poulson): Use the assembly forest to parallelize this.
 template <class Field>
 void MultithreadedEliminationForestAndDegrees(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation, std::vector<Int>* parents,
-    std::vector<Int>* degrees) {
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    std::vector<Int>* parents, std::vector<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
-  const bool have_permutation = !permutation.empty();
+  const bool have_permutation = !ordering.permutation.empty();
 
   // Initialize all of the parent indices as unset.
   parents->resize(num_rows, -1);
@@ -105,12 +104,14 @@ void MultithreadedEliminationForestAndDegrees(
   for (Int row = 0; row < num_rows; ++row) {
     pattern_flags[row] = row;
 
-    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int column = have_permutation ? permutation[entry.column] : entry.column;
+      Int column =
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
 
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
@@ -144,23 +145,25 @@ void MultithreadedEliminationForestAndDegrees(
     }
   }
 }
+#endif  // ifdef _OPENMP
 
 template <class Field>
 Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
-                      const std::vector<Int>& permutation,
-                      const std::vector<Int>& inverse_permutation,
+                      const SymmetricOrdering& ordering,
                       const std::vector<Int>& parents, Int row,
                       Int* pattern_flags, Int* row_structure) {
-  const bool have_permutation = !permutation.empty();
+  const bool have_permutation = !ordering.permutation.empty();
 
-  const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+  const Int orig_row =
+      have_permutation ? ordering.inverse_permutation[row] : row;
   const Int row_beg = matrix.RowEntryOffset(orig_row);
   const Int row_end = matrix.RowEntryOffset(orig_row + 1);
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   Int num_packed = 0;
   for (Int index = row_beg; index < row_end; ++index) {
     const MatrixEntry<Field>& entry = entries[index];
-    Int column = have_permutation ? permutation[entry.column] : entry.column;
+    Int column =
+        have_permutation ? ordering.permutation[entry.column] : entry.column;
 
     if (column >= row) {
       if (have_permutation) {
@@ -187,20 +190,21 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
 
 template <class Field>
 Int ComputeTopologicalRowPatternAndScatterNonzeros(
-    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& permutation,
-    const std::vector<Int>& inverse_permutation,
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const std::vector<Int>& parents, Int row, Int* pattern_flags,
     Int* row_structure, Field* row_workspace) {
-  const bool have_permutation = !permutation.empty();
+  const bool have_permutation = !ordering.permutation.empty();
   Int start = matrix.NumRows();
 
-  const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+  const Int orig_row =
+      have_permutation ? ordering.inverse_permutation[row] : row;
   const Int row_beg = matrix.RowEntryOffset(orig_row);
   const Int row_end = matrix.RowEntryOffset(orig_row + 1);
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int index = row_beg; index < row_end; ++index) {
     const MatrixEntry<Field>& entry = entries[index];
-    Int column = have_permutation ? permutation[entry.column] : entry.column;
+    Int column =
+        have_permutation ? ordering.permutation[entry.column] : entry.column;
 
     if (column > row) {
       if (have_permutation) {
@@ -238,13 +242,12 @@ Int ComputeTopologicalRowPatternAndScatterNonzeros(
 // among the threads then sorts the combined structures.
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
-                          const std::vector<Int>& permutation,
-                          const std::vector<Int>& inverse_permutation,
+                          const SymmetricOrdering& ordering,
                           const std::vector<Int>& parents,
                           const std::vector<Int>& degrees,
                           LowerStructure* lower_structure) {
   const Int num_rows = matrix.NumRows();
-  const bool have_permutation = !permutation.empty();
+  const bool have_permutation = !ordering.permutation.empty();
 
   // Set up the column offsets and allocate space (initializing the values of
   // the unit-lower and diagonal and all zeros).
@@ -264,12 +267,14 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     pattern_flags[row] = row;
     column_ptrs[row] = lower_structure->column_offsets[row];
 
-    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int column = have_permutation ? permutation[entry.column] : entry.column;
+      Int column =
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
 
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.

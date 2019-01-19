@@ -98,14 +98,12 @@ inline void ConvertFromScalarToSupernodalEliminationForest(
 
 template <class Field>
 bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
-                                const std::vector<Int>& permutation,
-                                const std::vector<Int>& inverse_permutation,
+                                const SymmetricOrdering& ordering,
                                 const std::vector<Int>& supernode_sizes) {
   const Int num_rows = matrix.NumRows();
 
   std::vector<Int> parents, degrees;
-  scalar_ldl::EliminationForestAndDegrees(
-      matrix, permutation, inverse_permutation, &parents, &degrees);
+  scalar_ldl::EliminationForestAndDegrees(matrix, ordering, &parents, &degrees);
 
   std::vector<Int> supernode_starts, member_to_index;
   OffsetScan(supernode_sizes, &supernode_starts);
@@ -120,8 +118,8 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 
     pattern_flags[row] = row;
     const Int num_packed = scalar_ldl::ComputeRowPattern(
-        matrix, permutation, inverse_permutation, parents, row,
-        pattern_flags.data(), row_structure.data());
+        matrix, ordering, parents, row, pattern_flags.data(),
+        row_structure.data());
     std::sort(row_structure.data(), row_structure.data() + num_packed);
 
     // TODO(Jack Poulson): Extend the tests to ensure that the diagonal blocks
@@ -162,8 +160,7 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 // and patches together any overlapping supernodes.
 template <class Field>
 void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
-                               const std::vector<Int>& permutation,
-                               const std::vector<Int>& inverse_permutation,
+                               const SymmetricOrdering& ordering,
                                const std::vector<Int>& parents,
                                const std::vector<Int>& degrees,
                                std::vector<Int>* supernode_sizes,
@@ -171,8 +168,8 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
   const Int num_rows = matrix.NumRows();
 
   // We will only fill the indices and offsets of the factorization.
-  scalar_ldl::FillStructureIndices(matrix, permutation, inverse_permutation,
-                                   parents, degrees, scalar_structure);
+  scalar_ldl::FillStructureIndices(matrix, ordering, parents, degrees,
+                                   scalar_structure);
 
   supernode_sizes->clear();
   if (!num_rows) {
@@ -247,8 +244,7 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
   }
 
 #ifdef CATAMARI_DEBUG
-  if (!ValidFundamentalSupernodes(matrix, permutation, inverse_permutation,
-                                  *supernode_sizes)) {
+  if (!ValidFundamentalSupernodes(matrix, ordering, *supernode_sizes)) {
     std::cerr << "Invalid fundamental supernodes." << std::endl;
     return;
   }
