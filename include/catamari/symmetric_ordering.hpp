@@ -27,6 +27,9 @@ struct AssemblyForest {
   // 'child_offsets[j + 1]'. The length of this array is one more than the
   // number of (super)nodes.
   std::vector<Int> child_offsets;
+
+  // The indices of the root supernodes in the forest.
+  std::vector<Int> roots;
 };
 
 // A mechanism for passing reordering information into the factorization.
@@ -44,10 +47,15 @@ struct SymmetricOrdering {
   //
   // This member is optional, but, if coupled with 'permuted_assembly_parents',
   // allows for the factorization to parallelize its symbolic analysis.
-  std::vector<Int> permuted_supernode_sizes;
+  std::vector<Int> supernode_sizes;
+
+  // The array of length 'num_supernodes + 1' such that permuted supernode 'j'
+  // corresponds to indices 'permuted_supernode_offsets[j]' through
+  // 'permuted_supernode_offsets[j + 1]'.
+  std::vector<Int> supernode_offsets;
 
   // The (optional) supernodal assembly forest in the permuted ordering.
-  AssemblyForest permuted_assembly_forest;
+  AssemblyForest assembly_forest;
 };
 
 }  // namespace catamari

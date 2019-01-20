@@ -18,6 +18,13 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
                                  const SymmetricOrdering& ordering,
                                  std::vector<Int>* parents,
                                  std::vector<Int>* degrees) {
+#ifdef _OPENMP
+  if (omp_get_max_threads() > 1) {
+    MultithreadedEliminationForestAndDegrees(matrix, ordering, parents,
+                                             degrees);
+    return;
+  }
+#endif  // ifdef _OPENMP
   const Int num_rows = matrix.NumRows();
   const bool have_permutation = !ordering.permutation.empty();
 
@@ -80,29 +87,31 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
 }
 
 #ifdef _OPENMP
-// TODO(Jack Poulson): Use the assembly forest to parallelize this.
 template <class Field>
-void MultithreadedEliminationForestAndDegrees(
+void MultithreadedEliminationForestAndDegreesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    std::vector<Int>* parents, std::vector<Int>* degrees) {
-  const Int num_rows = matrix.NumRows();
+    Int root, std::vector<Int>* parents, std::vector<Int>* degrees,
+    std::vector<Int>* pattern_flags) {
   const bool have_permutation = !ordering.permutation.empty();
-
-  // Initialize all of the parent indices as unset.
-  parents->resize(num_rows, -1);
-
-  // A data structure for marking whether or not an index is in the pattern
-  // of the active row of the lower-triangular factor.
-  std::vector<Int> pattern_flags(num_rows);
-
-  // Initialize the number of subdiagonal entries that will be stored into
-  // each column.
-  degrees->clear();
-  degrees->resize(num_rows, 0);
-
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
-  for (Int row = 0; row < num_rows; ++row) {
-    pattern_flags[row] = row;
+
+  const Int child_beg = ordering.assembly_forest.child_offsets[root];
+  const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
+  #pragma omp taskgroup
+  for (Int index = child_beg; index < child_end; ++index) {
+    const Int child = ordering.assembly_forest.children[index];
+
+    #pragma omp task default(none) firstprivate(child) \
+        shared(matrix, ordering, parents, degrees, pattern_flags)
+    MultithreadedEliminationForestAndDegreesRecursion(
+        matrix, ordering, child, parents, degrees, pattern_flags);
+  }
+
+  const Int supernode_size = ordering.supernode_sizes[root];
+  const Int supernode_offset = ordering.supernode_offsets[root];
+  for (Int index = 0; index < supernode_size; ++index) {
+    const Int row = supernode_offset + index;
+    (*pattern_flags)[row] = row;
 
     const Int orig_row =
         have_permutation ? ordering.inverse_permutation[row] : row;
@@ -127,9 +136,9 @@ void MultithreadedEliminationForestAndDegrees(
       // subtree of the elimination forest from index 'column'. Any unset
       // parent pointers can be filled in during the traversal, as the current
       // row index would then be the parent.
-      while (pattern_flags[column] != row) {
+      while ((*pattern_flags)[column] != row) {
         // Mark index 'column' as in the pattern of row 'row'.
-        pattern_flags[column] = row;
+        (*pattern_flags)[column] = row;
         ++(*degrees)[column];
 
         if ((*parents)[column] == -1) {
@@ -143,6 +152,33 @@ void MultithreadedEliminationForestAndDegrees(
         column = (*parents)[column];
       }
     }
+  }
+}
+
+template <class Field>
+void MultithreadedEliminationForestAndDegrees(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    std::vector<Int>* parents, std::vector<Int>* degrees) {
+  const Int num_rows = matrix.NumRows();
+
+  // Initialize all of the parent indices as unset.
+  parents->resize(num_rows, -1);
+
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> pattern_flags(num_rows);
+
+  // Initialize the number of subdiagonal entries that will be stored into
+  // each column.
+  degrees->clear();
+  degrees->resize(num_rows, 0);
+
+  #pragma omp taskgroup
+  for (const Int root : ordering.assembly_forest.roots) {
+    #pragma omp task default(none) firstprivate(root) \
+        shared(matrix, ordering, parents, degrees, pattern_flags)
+    MultithreadedEliminationForestAndDegreesRecursion(
+        matrix, ordering, root, parents, degrees, &pattern_flags);
   }
 }
 #endif  // ifdef _OPENMP
@@ -238,8 +274,6 @@ Int ComputeTopologicalRowPatternAndScatterNonzeros(
   return start;
 }
 
-// TODO(Jack Poulson): Provide a multi-threaded equivalent which splits the rows
-// among the threads then sorts the combined structures.
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const SymmetricOrdering& ordering,
@@ -301,6 +335,104 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     }
   }
 }
+
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedFillStructureIndicesRecursion(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const std::vector<Int>& parents, const std::vector<Int>& degrees, Int root,
+    LowerStructure* lower_structure, std::vector<Int>* pattern_flags,
+    std::vector<Int>* column_ptrs) {
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const bool have_permutation = !ordering.permutation.empty();
+
+  const Int child_beg = ordering.assembly_forest.child_offsets[root];
+  const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
+  #pragma omp taskgroup
+  for (Int index = child_beg; index < child_end; ++index) {
+    const Int child = ordering.assembly_forest.children[index];
+
+    #pragma omp task default(none) firstprivate(child) \
+        shared(matrix, ordering, parents, degrees, lower_structure, \
+            pattern_flags, column_ptrs)
+    MultithreadedFillStructureIndicesRecursion(matrix, ordering, parents,
+                                               degrees, child, lower_structure,
+                                               pattern_flags, column_ptrs);
+  }
+
+  const Int supernode_size = ordering.supernode_sizes[root];
+  const Int supernode_offset = ordering.supernode_offsets[root];
+  for (Int index = 0; index < supernode_size; ++index) {
+    const Int row = supernode_offset + index;
+    (*pattern_flags)[row] = row;
+    (*column_ptrs)[row] = lower_structure->column_offsets[row];
+
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      Int column =
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
+
+      // We are traversing the strictly lower triangle and know that the
+      // indices are sorted.
+      if (column >= row) {
+        if (have_permutation) {
+          continue;
+        } else {
+          break;
+        }
+      }
+
+      // Look for new entries in the pattern by walking up to the root of this
+      // subtree of the elimination forest from index 'column'.
+      while ((*pattern_flags)[column] != row) {
+        // Mark index 'column' as in the pattern of row 'row'.
+        (*pattern_flags)[column] = row;
+        lower_structure->indices[(*column_ptrs)[column]++] = row;
+
+        // Move up to the parent in this subtree of the elimination forest.
+        // Moving to the parent will increase the index (but remain bounded
+        // from above by 'row').
+        column = parents[column];
+      }
+    }
+  }
+}
+
+template <class Field>
+void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
+                                       const SymmetricOrdering& ordering,
+                                       const std::vector<Int>& parents,
+                                       const std::vector<Int>& degrees,
+                                       LowerStructure* lower_structure) {
+  const Int num_rows = matrix.NumRows();
+
+  // Set up the column offsets and allocate space (initializing the values of
+  // the unit-lower and diagonal and all zeros).
+  OffsetScan(degrees, &lower_structure->column_offsets);
+  lower_structure->indices.resize(lower_structure->column_offsets.back());
+
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> pattern_flags(num_rows);
+
+  // A set of pointers for keeping track of where to insert column pattern
+  // indices.
+  std::vector<Int> column_ptrs(num_rows);
+
+  #pragma omp taskgroup
+  for (const Int root : ordering.assembly_forest.roots) {
+    #pragma omp task default(none) firstprivate(root) \
+        shared(matrix, ordering, parents, degrees, lower_structure, \
+            pattern_flags, column_ptrs)
+    MultithreadedFillStructureIndicesRecursion(
+        matrix, ordering, parents, degrees, root, &pattern_flags, &column_ptrs);
+  }
+}
+#endif  // ifdef _OPENMP
 
 }  // namespace scalar_ldl
 }  // namespace catamari

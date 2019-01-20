@@ -95,6 +95,71 @@ void Factorization<Field>::FormSupernodes(
   }
 }
 
+#ifdef _OPENMP
+template <class Field>
+void Factorization<Field>::MultithreadedFormSupernodes(
+    const CoordinateMatrix<Field>& matrix,
+    const SupernodalRelaxationControl& control, std::vector<Int>* parents,
+    std::vector<Int>* supernode_degrees, std::vector<Int>* supernode_parents) {
+  // Compute the non-supernodal elimination tree using the original ordering.
+  std::vector<Int> orig_parents, orig_degrees;
+  scalar_ldl::MultithreadedEliminationForestAndDegrees(
+      matrix, ordering, &orig_parents, &orig_degrees);
+
+  // Greedily compute a supernodal partition using the original ordering.
+  std::vector<Int> orig_supernode_sizes;
+  scalar_ldl::LowerStructure scalar_structure;
+  FormFundamentalSupernodes(matrix, ordering, orig_parents, orig_degrees,
+                            &orig_supernode_sizes, &scalar_structure);
+
+#ifdef CATAMARI_DEBUG
+  {
+    Int supernode_size_sum = 0;
+    for (const Int& supernode_size : orig_supernode_sizes) {
+      supernode_size_sum += supernode_size;
+    }
+    CATAMARI_ASSERT(supernode_size_sum == matrix.NumRows(),
+                    "Supernodes did not sum to the matrix size.");
+  }
+#endif
+
+  std::vector<Int> orig_supernode_starts;
+  OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
+
+  std::vector<Int> orig_member_to_index;
+  MemberToIndex(matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
+
+  std::vector<Int> orig_supernode_degrees;
+  SupernodalDegrees(matrix, ordering.permutation, ordering.inverse_permutation,
+                    orig_supernode_sizes, orig_supernode_starts,
+                    orig_member_to_index, orig_parents,
+                    &orig_supernode_degrees);
+
+  const Int num_orig_supernodes = orig_supernode_sizes.size();
+  std::vector<Int> orig_supernode_parents;
+  ConvertFromScalarToSupernodalEliminationForest(
+      num_orig_supernodes, orig_parents, orig_member_to_index,
+      &orig_supernode_parents);
+
+  if (control.relax_supernodes) {
+    RelaxSupernodes(orig_parents, orig_supernode_sizes, orig_supernode_starts,
+                    orig_supernode_parents, orig_supernode_degrees,
+                    orig_member_to_index, scalar_structure, control,
+                    &ordering.permutation, &ordering.inverse_permutation,
+                    parents, supernode_parents, supernode_degrees,
+                    &supernode_sizes, &supernode_starts,
+                    &supernode_member_to_index);
+  } else {
+    *parents = orig_parents;
+    *supernode_degrees = orig_supernode_degrees;
+    *supernode_parents = orig_supernode_parents;
+    supernode_sizes = orig_supernode_sizes;
+    supernode_starts = orig_supernode_starts;
+    supernode_member_to_index = orig_member_to_index;
+  }
+}
+#endif  // ifdef _OPENMP
+
 template <class Field>
 void Factorization<Field>::InitializeFactors(
     const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
@@ -114,8 +179,7 @@ void Factorization<Field>::InitializeFactors(
   max_degree =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
 
-  FillStructureIndices(matrix, ordering.permutation,
-                       ordering.inverse_permutation, parents, supernode_sizes,
+  FillStructureIndices(matrix, ordering, parents, supernode_sizes,
                        supernode_member_to_index, lower_factor.get(),
                        &max_descendant_entries);
 
@@ -123,6 +187,36 @@ void Factorization<Field>::InitializeFactors(
                supernode_starts, supernode_sizes, supernode_member_to_index,
                lower_factor.get(), diagonal_factor.get());
 }
+
+#ifdef _OPENMP
+template <class Field>
+void Factorization<Field>::MultithreadedInitializeFactors(
+    const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
+    const std::vector<Int>& supernode_degrees) {
+  lower_factor.reset(
+      new LowerFactor<Field>(supernode_sizes, supernode_degrees));
+  diagonal_factor.reset(new DiagonalFactor<Field>(supernode_sizes));
+
+  CATAMARI_ASSERT(supernode_degrees.size() == supernode_sizes.size(),
+                  "Invalid supernode degrees size.");
+
+  // Store the largest supernode size of the factorization.
+  max_supernode_size =
+      *std::max_element(supernode_sizes.begin(), supernode_sizes.end());
+
+  // Store the largest degree of the factorization for use in the solve phase.
+  max_degree =
+      *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
+
+  MultithreadedFillStructureIndices(
+      matrix, ordering, parents, supernode_sizes, supernode_member_to_index,
+      lower_factor.get(), &max_descendant_entries);
+
+  FillNonzeros(matrix, ordering.permutation, ordering.inverse_permutation,
+               supernode_starts, supernode_sizes, supernode_member_to_index,
+               lower_factor.get(), diagonal_factor.get());
+}
+#endif  // ifdef _OPENMP
 
 template <class Field>
 void Factorization<Field>::LeftLookingSupernodeUpdate(
@@ -1185,9 +1279,17 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
   {
     std::vector<Int> parents;
     std::vector<Int> supernode_degrees;
-    FormSupernodes(matrix, control.relaxation_control, &parents,
-                   &supernode_degrees, &supernode_parents);
-    InitializeFactors(matrix, parents, supernode_degrees);
+
+    #pragma omp parallel
+    #pragma omp single
+    {
+      #pragma omp taskgroup
+      MultithreadedFormSupernodes(matrix, control.relaxation_control, &parents,
+                                  &supernode_degrees, &supernode_parents);
+
+      #pragma omp taskgroup
+      MultithreadedInitializeFactors(matrix, parents, supernode_degrees);
+    }
   }
   const Int num_supernodes = supernode_sizes.size();
   const Int max_threads = omp_get_max_threads();
@@ -1293,10 +1395,17 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
   {
     std::vector<Int> parents;
     std::vector<Int> supernode_degrees;
-    FormSupernodes(matrix, control.relaxation_control, &parents,
-                   &supernode_degrees, &supernode_parents);
 
-    InitializeFactors(matrix, parents, supernode_degrees);
+    #pragma omp parallel
+    #pragma omp single
+    {
+      #pragma omp taskgroup
+      MultithreadedFormSupernodes(matrix, control.relaxation_control, &parents,
+                                  &supernode_degrees, &supernode_parents);
+
+      #pragma omp taskgroup
+      MultithreadedInitializeFactors(matrix, parents, supernode_degrees);
+    }
   }
   const Int num_supernodes = supernode_sizes.size();
   const Int max_threads = omp_get_max_threads();

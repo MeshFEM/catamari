@@ -165,10 +165,22 @@ class Factorization {
                       std::vector<Int>* parents,
                       std::vector<Int>* supernode_degrees,
                       std::vector<Int>* supernode_parents);
+#ifdef _OPENMP
+  void MultithreadedFormSupernodes(const CoordinateMatrix<Field>& matrix,
+                                   const SupernodalRelaxationControl& control,
+                                   std::vector<Int>* parents,
+                                   std::vector<Int>* supernode_degrees,
+                                   std::vector<Int>* supernode_parents);
+#endif  // ifdef _OPENMP
 
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
                          const std::vector<Int>& parents,
                          const std::vector<Int>& supernode_degrees);
+#ifdef _OPENMP
+  void MultithreadedInitializeFactors(
+      const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
+      const std::vector<Int>& supernode_degrees);
+#endif  // ifdef _OPENMP
 
   LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
                         const Control& control);

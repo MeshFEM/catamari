@@ -80,6 +80,14 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                const std::vector<Int>& degrees,
                                std::vector<Int>* supernode_sizes,
                                scalar_ldl::LowerStructure* scalar_structure);
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedFormFundamentalSupernodes(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const std::vector<Int>& parents, const std::vector<Int>& degrees,
+    std::vector<Int>* supernode_sizes,
+    scalar_ldl::LowerStructure* scalar_structure);
+#endif  // ifdef _OPENMP
 
 // Returns whether or not the child supernode can be merged into its parent by
 // counting the number of explicit zeros that would be introduced by the
@@ -173,13 +181,20 @@ void FillSubtreeWorkEstimates(Int root,
 // Fills in the structure indices for the lower factor.
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
-                          const std::vector<Int>& permutation,
-                          const std::vector<Int>& inverse_permutation,
+                          const SymmetricOrdering& ordering,
                           const std::vector<Int>& parents,
                           const std::vector<Int>& supernode_sizes,
                           const std::vector<Int>& supernode_member_to_index,
                           LowerFactor<Field>* lower_factor,
                           Int* max_descendant_entries);
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedFillStructureIndices(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const std::vector<Int>& parents, const std::vector<Int>& supernode_sizes,
+    const std::vector<Int>& supernode_member_to_index,
+    LowerFactor<Field>* lower_factor, Int* max_descendant_entries);
+#endif  // ifdef _OPENMP
 
 // Fill in the nonzeros from the original sparse matrix.
 template <class Field>

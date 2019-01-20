@@ -34,6 +34,7 @@ inline void MemberToIndex(Int num_rows,
                   "Did not end on the last supernode.");
 }
 
+// TODO(Jack Poulson): Switch to filling an AssemblyForest?
 inline void EliminationForestAndRootsFromParents(
     const std::vector<Int>& parents, std::vector<Int>* children,
     std::vector<Int>* child_offsets, std::vector<Int>* roots) {
@@ -156,8 +157,6 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
   return valid;
 }
 
-// TODO(Jack Poulson): Provide a multithreaded version which splits the columns
-// and patches together any overlapping supernodes.
 template <class Field>
 void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                const SymmetricOrdering& ordering,
@@ -250,6 +249,100 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
   }
 #endif
 }
+
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedFormFundamentalSupernodes(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const std::vector<Int>& parents, const std::vector<Int>& degrees,
+    std::vector<Int>* supernode_sizes,
+    scalar_ldl::LowerStructure* scalar_structure) {
+  const Int num_rows = matrix.NumRows();
+
+  // We will only fill the indices and offsets of the factorization.
+  scalar_ldl::FillStructureIndices(matrix, ordering, parents, degrees,
+                                   scalar_structure);
+
+  supernode_sizes->clear();
+  if (!num_rows) {
+    return;
+  }
+
+  // We will iterate down each column structure to determine the supernodes.
+  std::vector<Int> column_ptrs = scalar_structure->column_offsets;
+
+  Int supernode_start = 0;
+  supernode_sizes->reserve(num_rows);
+  supernode_sizes->push_back(1);
+  for (Int column = 1; column < num_rows; ++column) {
+    // Ensure that the diagonal block would be fully-connected. Due to the
+    // loop invariant, each column pointer in the current supernode would need
+    // to be pointing to index 'column'.
+    bool dense_diagonal_block = true;
+    for (Int j = supernode_start; j < column; ++j) {
+      const Int index = column_ptrs[j];
+      const Int next_column_beg = scalar_structure->column_offsets[j + 1];
+      if (index < next_column_beg &&
+          scalar_structure->indices[index] == column) {
+        ++column_ptrs[j];
+      } else {
+        dense_diagonal_block = false;
+        break;
+      }
+    }
+    if (!dense_diagonal_block) {
+      // This column begins a new supernode.
+      supernode_start = column;
+      supernode_sizes->push_back(1);
+      continue;
+    }
+
+    // Test if the structure of this supernode matches that of the previous
+    // column (with all indices up to this column removed). We first test that
+    // the set sizes are equal and then test the individual entries.
+
+    // Test that the set sizes match.
+    const Int column_beg = column_ptrs[column];
+    const Int structure_size = column_ptrs[column + 1] - column_beg;
+    const Int prev_column_ptr = column_ptrs[column - 1];
+    const Int prev_remaining_structure_size = column_beg - prev_column_ptr;
+    if (structure_size != prev_remaining_structure_size) {
+      // This column begins a new supernode.
+      supernode_start = column;
+      supernode_sizes->push_back(1);
+      continue;
+    }
+
+    // Test that the individual entries match.
+    bool equal_structures = true;
+    for (Int i = 0; i < structure_size; ++i) {
+      const Int row = scalar_structure->indices[column_beg + i];
+      const Int prev_row = scalar_structure->indices[prev_column_ptr + i];
+      if (prev_row != row) {
+        equal_structures = false;
+        break;
+      }
+    }
+    if (!equal_structures) {
+      // This column begins a new supernode.
+      supernode_start = column;
+      supernode_sizes->push_back(1);
+      continue;
+    }
+
+    // All tests passed, so we may extend the current supernode to incorporate
+    // this column.
+    ++supernode_sizes->back();
+  }
+
+#ifdef CATAMARI_DEBUG
+  if (!ValidFundamentalSupernodes(matrix, ordering, *supernode_sizes)) {
+    std::cerr << "Invalid fundamental supernodes." << std::endl;
+    return;
+  }
+#endif
+}
+#endif  // ifdef _OPENMP
 
 inline MergableStatus MergableSupernode(
     Int child_tail, Int parent_tail, Int child_size, Int parent_size,
@@ -678,8 +771,7 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
 
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
-                          const std::vector<Int>& permutation,
-                          const std::vector<Int>& inverse_permutation,
+                          const SymmetricOrdering& ordering,
                           const std::vector<Int>& parents,
                           const std::vector<Int>& supernode_sizes,
                           const std::vector<Int>& supernode_member_to_index,
@@ -687,7 +779,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           Int* max_descendant_entries) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = supernode_sizes.size();
-  const bool have_permutation = !permutation.empty();
+  const bool have_permutation = !ordering.permutation.empty();
 
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor.
@@ -711,13 +803,14 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     pattern_flags[row] = row;
     supernode_pattern_flags[main_supernode] = row;
 
-    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       Int descendant =
-          have_permutation ? permutation[entry.column] : entry.column;
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
       Int descendant_supernode = supernode_member_to_index[descendant];
 
       if (descendant >= row) {
@@ -797,6 +890,129 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
   lower_factor->FillIntersectionSizes(
       supernode_sizes, supernode_member_to_index, max_descendant_entries);
 }
+
+#ifdef _OPENMP
+// TODO(Jack Poulson): Parallelize this routine.
+template <class Field>
+void MultithreadedFillStructureIndices(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const std::vector<Int>& parents, const std::vector<Int>& supernode_sizes,
+    const std::vector<Int>& supernode_member_to_index,
+    LowerFactor<Field>* lower_factor, Int* max_descendant_entries) {
+  const Int num_rows = matrix.NumRows();
+  const Int num_supernodes = supernode_sizes.size();
+  const bool have_permutation = !ordering.permutation.empty();
+
+  // A data structure for marking whether or not a node is in the pattern of
+  // the active row of the lower-triangular factor.
+  std::vector<Int> pattern_flags(num_rows);
+
+  // A data structure for marking whether or not a supernode is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> supernode_pattern_flags(num_supernodes);
+
+  // A set of pointers for keeping track of where to insert supernode pattern
+  // indices.
+  std::vector<Int*> supernode_ptrs(num_supernodes);
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    supernode_ptrs[supernode] = lower_factor->Structure(supernode);
+  }
+
+  // Fill in the structure indices.
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int row = 0; row < num_rows; ++row) {
+    const Int main_supernode = supernode_member_to_index[row];
+    pattern_flags[row] = row;
+    supernode_pattern_flags[main_supernode] = row;
+
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      Int descendant =
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
+      Int descendant_supernode = supernode_member_to_index[descendant];
+
+      if (descendant >= row) {
+        if (have_permutation) {
+          continue;
+        } else {
+          // We are traversing the strictly lower triangle and know that the
+          // indices are sorted.
+          break;
+        }
+      }
+
+      // Look for new entries in the pattern by walking up to the root of this
+      // subtree of the elimination forest.
+      while (pattern_flags[descendant] != row) {
+        // Mark 'descendant' as in the pattern of this row.
+        pattern_flags[descendant] = row;
+
+        descendant_supernode = supernode_member_to_index[descendant];
+        CATAMARI_ASSERT(descendant_supernode <= main_supernode,
+                        "Descendant supernode was larger than main supernode.");
+        if (descendant_supernode == main_supernode) {
+          break;
+        }
+
+        if (supernode_pattern_flags[descendant_supernode] != row) {
+          supernode_pattern_flags[descendant_supernode] = row;
+          CATAMARI_ASSERT(
+              descendant_supernode < main_supernode,
+              "Descendant supernode was as large as main supernode.");
+          CATAMARI_ASSERT(
+              supernode_ptrs[descendant_supernode] >=
+                      lower_factor->Structure(descendant_supernode) &&
+                  supernode_ptrs[descendant_supernode] <
+                      lower_factor->Structure(descendant_supernode + 1),
+              "Left supernode's indices.");
+          *supernode_ptrs[descendant_supernode] = row;
+          ++supernode_ptrs[descendant_supernode];
+        }
+
+        // Move up to the parent in this subtree of the elimination forest.
+        // Moving to the parent will increase the index (but remain bounded
+        // from above by 'row').
+        descendant = parents[descendant];
+      }
+    }
+  }
+
+#ifdef CATAMARI_DEBUG
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int* index_beg = lower_factor->Structure(supernode);
+    const Int* index_end = lower_factor->Structure(supernode + 1);
+    CATAMARI_ASSERT(supernode_ptrs[supernode] == index_end,
+                    "Supernode pointers did not match index offsets.");
+    bool sorted = true;
+    Int last_row = -1;
+    for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
+      const Int row = *row_ptr;
+      if (row <= last_row) {
+        sorted = false;
+        break;
+      }
+      last_row = row;
+    }
+
+    if (!sorted) {
+      std::cerr << "Supernode " << supernode << " did not have sorted indices."
+                << std::endl;
+      for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
+        std::cout << *row_ptr << " ";
+      }
+      std::cout << std::endl;
+    }
+  }
+#endif
+
+  lower_factor->FillIntersectionSizes(
+      supernode_sizes, supernode_member_to_index, max_descendant_entries);
+}
+#endif  // ifdef _OPENMP
 
 template <class Field>
 void FillSubtreeWorkEstimates(Int root,

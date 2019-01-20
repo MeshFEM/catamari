@@ -88,8 +88,8 @@ void SupernodalDPP<Field>::FormStructure() {
       new supernodal_ldl::DiagonalFactor<Field>(supernode_sizes_));
 
   supernodal_ldl::FillStructureIndices(
-      matrix_, ordering_.permutation, ordering_.inverse_permutation, parents_,
-      supernode_sizes_, supernode_member_to_index_, lower_factor_.get(),
+      matrix_, ordering_, parents_, supernode_sizes_,
+      supernode_member_to_index_, lower_factor_.get(),
       &max_descendant_entries_);
 
   max_supernode_size_ =
