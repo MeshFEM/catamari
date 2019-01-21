@@ -793,31 +793,28 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
   // As of Jan. 1, 2019, OpenMP 4.5 is still not pervasive, and so we avoid
   // dependence on the more natural approach of a 'taskloop'.
   #pragma omp taskgroup
-  {
-    for (Int child_index = 0; child_index < num_children; ++child_index) {
-      const Int child = supernode_forest.children[child_beg + child_index];
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child = supernode_forest.children[child_beg + child_index];
 
-      // One could make use of OpenMP task priorities, e.g., with an integer
-      // priority of:
-      //
-      //   const Int task_priority = std::pow(work_estimates[child], 0.25);
-      //
-      // But support for task priorities in current compilers is shaky at
-      // best (and I have not yet personally observed a performance
-      // improvement from it).
-      #pragma omp task                                                    \
-        default(none)                                                     \
-        firstprivate(tile_size, level, max_parallel_levels, supernode,    \
-            child, child_index, shared_state)                             \
-        shared(successes, matrix, supernode_forest, result_contributions, \
-            work_estimates)
-      {
-        LDLResult& result_contribution = result_contributions[child_index];
-        successes[child_index] = MultithreadedRightLookingSubtree(
-            tile_size, level + 1, max_parallel_levels, child, matrix,
-            supernode_forest, work_estimates, shared_state,
-            &result_contribution);
-      }
+    // One could make use of OpenMP task priorities, e.g., with an integer
+    // priority of:
+    //
+    //   const Int task_priority = std::pow(work_estimates[child], 0.25);
+    //
+    // But support for task priorities in current compilers is shaky at best
+    // (and I have not yet personally observed a performance improvement from
+    // it).
+    #pragma omp task                                                        \
+      default(none)                                                         \
+      firstprivate(tile_size, level, max_parallel_levels, supernode, child, \
+          child_index, shared_state)                                        \
+      shared(successes, matrix, supernode_forest, result_contributions,     \
+          work_estimates)
+    {
+      LDLResult& result_contribution = result_contributions[child_index];
+      successes[child_index] = MultithreadedRightLookingSubtree(
+          tile_size, level + 1, max_parallel_levels, child, matrix,
+          supernode_forest, work_estimates, shared_state, &result_contribution);
     }
   }
 
@@ -1203,20 +1200,17 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
   // As of Jan. 1, 2019, OpenMP 4.5 is still not pervasive, and so we avoid
   // dependence on the more natural approach of a 'taskloop'.
   #pragma omp taskgroup
-  {
-    for (Int child_index = 0; child_index < num_children; ++child_index) {
-      #pragma omp task default(none)                                       \
-          firstprivate(tile_size, level, max_parallel_levels, supernode,   \
-              child_index, shared_state, private_states)                   \
-          shared(successes, matrix, supernode_forest, result_contributions)
-      {
-        const Int child = supernode_forest.children[child_beg + child_index];
-        LDLResult& result_contribution = result_contributions[child_index];
-        successes[child_index] = MultithreadedLeftLookingSubtree(
-            tile_size, level + 1, max_parallel_levels, child, matrix,
-            supernode_forest, shared_state, private_states,
-            &result_contribution);
-      }
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    #pragma omp task default(none)                                     \
+        firstprivate(tile_size, level, max_parallel_levels, supernode, \
+            child_index, shared_state, private_states)                 \
+        shared(successes, matrix, supernode_forest, result_contributions)
+    {
+      const Int child = supernode_forest.children[child_beg + child_index];
+      LDLResult& result_contribution = result_contributions[child_index];
+      successes[child_index] = MultithreadedLeftLookingSubtree(
+          tile_size, level + 1, max_parallel_levels, child, matrix,
+          supernode_forest, shared_state, private_states, &result_contribution);
     }
   }
 
