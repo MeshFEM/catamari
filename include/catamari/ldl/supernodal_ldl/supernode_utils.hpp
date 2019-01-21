@@ -190,13 +190,17 @@ void MultithreadedFillStructureIndices(
 // Fill in the nonzeros from the original sparse matrix.
 template <class Field>
 void FillNonzeros(const CoordinateMatrix<Field>& matrix,
-                  const std::vector<Int>& permutation,
-                  const std::vector<Int>& inverse_permutation,
-                  const std::vector<Int>& supernode_starts,
-                  const std::vector<Int>& supernode_sizes,
+                  const SymmetricOrdering& ordering,
                   const std::vector<Int>& supernode_member_to_index,
                   LowerFactor<Field>* lower_factor,
                   DiagonalFactor<Field>* diagonal_factor);
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedFillNonzeros(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const std::vector<Int>& supernode_member_to_index,
+    LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor);
+#endif  // ifdef _OPENMP
 
 // Computes the supernodal nonzero pattern of L(row, :) in
 // row_structure[0 : num_packed - 1].

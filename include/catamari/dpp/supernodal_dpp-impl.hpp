@@ -272,10 +272,8 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   }
 
   // Initialize the factors with the input matrix.
-  supernodal_ldl::FillNonzeros(
-      matrix_, ordering_.permutation, ordering_.inverse_permutation,
-      ordering_.supernode_offsets, ordering_.supernode_sizes,
-      supernode_member_to_index_, lower_factor_.get(), diagonal_factor_.get());
+  supernodal_ldl::FillNonzeros(matrix_, ordering_, supernode_member_to_index_,
+                               lower_factor_.get(), diagonal_factor_.get());
 
   std::vector<Int> sample;
   sample.reserve(num_rows);

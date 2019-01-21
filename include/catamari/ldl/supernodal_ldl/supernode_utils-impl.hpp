@@ -1054,28 +1054,26 @@ void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_forest,
 
 template <class Field>
 void FillNonzeros(const CoordinateMatrix<Field>& matrix,
-                  const std::vector<Int>& permutation,
-                  const std::vector<Int>& inverse_permutation,
-                  const std::vector<Int>& supernode_starts,
-                  const std::vector<Int>& supernode_sizes,
+                  const SymmetricOrdering& ordering,
                   const std::vector<Int>& supernode_member_to_index,
                   LowerFactor<Field>* lower_factor,
                   DiagonalFactor<Field>* diagonal_factor) {
   const Int num_rows = matrix.NumRows();
-  const bool have_permutation = !permutation.empty();
+  const bool have_permutation = !ordering.permutation.empty();
 
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
     const Int supernode = supernode_member_to_index[row];
-    const Int supernode_start = supernode_starts[supernode];
+    const Int supernode_start = ordering.supernode_offsets[supernode];
 
-    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       const Int column =
-          have_permutation ? permutation[entry.column] : entry.column;
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
       const Int column_supernode = supernode_member_to_index[column];
 
       if (column_supernode == supernode) {
@@ -1105,11 +1103,98 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
                                         std::to_string(column) +
                                         ") wasn't in the structure.");
       const Int rel_row = std::distance(column_index_beg, iter);
-      const Int rel_column = column - supernode_starts[column_supernode];
+      const Int rel_column =
+          column - ordering.supernode_offsets[column_supernode];
       lower_factor->blocks[column_supernode](rel_row, rel_column) = entry.value;
     }
   }
 }
+
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedFillNonzerosRecursion(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const std::vector<Int>& supernode_member_to_index, Int root,
+    LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor) {
+  const Int child_beg = ordering.assembly_forest.child_offsets[root];
+  const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
+  #pragma omp taskgroup
+  for (Int child_index = child_beg; child_index < child_end; ++child_index) {
+    const Int child = ordering.assembly_forest.children[child_index];
+    #pragma omp task default(none) firstprivate(child) \
+        shared(matrix, ordering, supernode_member_to_index, lower_factor, \
+            diagonal_factor)
+    MultithreadedFillNonzerosRecursion(matrix, ordering,
+                                       supernode_member_to_index, child,
+                                       lower_factor, diagonal_factor);
+  }
+
+  const bool have_permutation = !ordering.permutation.empty();
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const Int supernode_size = ordering.supernode_sizes[root];
+  const Int supernode_offset = ordering.supernode_offsets[root];
+  for (Int index = 0; index < supernode_size; ++index) {
+    const Int row = supernode_offset + index;
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      const Int column =
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
+      const Int column_supernode = supernode_member_to_index[column];
+
+      if (column_supernode == root) {
+        // Insert the value into the diagonal block.
+        const Int rel_row = row - supernode_offset;
+        const Int rel_column = column - supernode_offset;
+        diagonal_factor->blocks[root](rel_row, rel_column) = entry.value;
+        continue;
+      }
+
+      if (column_supernode > root) {
+        if (have_permutation) {
+          continue;
+        } else {
+          break;
+        }
+      }
+
+      // Insert the value into the subdiagonal block.
+      const Int* column_index_beg = lower_factor->Structure(column_supernode);
+      const Int* column_index_end =
+          lower_factor->Structure(column_supernode + 1);
+      const Int* iter =
+          std::lower_bound(column_index_beg, column_index_end, row);
+      CATAMARI_ASSERT(iter != column_index_end, "Exceeded column indices.");
+      CATAMARI_ASSERT(*iter == row, "Entry (" + std::to_string(row) + ", " +
+                                        std::to_string(column) +
+                                        ") wasn't in the structure.");
+      const Int rel_row = std::distance(column_index_beg, iter);
+      const Int rel_column =
+          column - ordering.supernode_offsets[column_supernode];
+      lower_factor->blocks[column_supernode](rel_row, rel_column) = entry.value;
+    }
+  }
+}
+
+template <class Field>
+void MultithreadedFillNonzeros(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const std::vector<Int>& supernode_member_to_index,
+    LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor) {
+  #pragma omp taskgroup
+  for (const Int root : ordering.assembly_forest.roots) {
+    #pragma omp task default(none) firstprivate(root) \
+        shared(matrix, ordering, supernode_member_to_index, lower_factor, \
+            diagonal_factor)
+    MultithreadedFillNonzerosRecursion(matrix, ordering,
+                                       supernode_member_to_index, root,
+                                       lower_factor, diagonal_factor);
+  }
+}
+#endif  // ifdef _OPENMP
 
 template <class Field>
 Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,

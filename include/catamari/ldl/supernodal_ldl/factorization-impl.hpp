@@ -195,10 +195,8 @@ void Factorization<Field>::InitializeFactors(
                                          supernode_member_to_index_);
   }
 
-  FillNonzeros(matrix, ordering_.permutation, ordering_.inverse_permutation,
-               ordering_.supernode_offsets, ordering_.supernode_sizes,
-               supernode_member_to_index_, lower_factor_.get(),
-               diagonal_factor_.get());
+  FillNonzeros(matrix, ordering_, supernode_member_to_index_,
+               lower_factor_.get(), diagonal_factor_.get());
 }
 
 #ifdef _OPENMP
@@ -230,11 +228,8 @@ void Factorization<Field>::MultithreadedInitializeFactors(
                                          supernode_member_to_index_);
   }
 
-  // TODO(Jack Poulson): Switch to a multithreaded equivalent.
-  FillNonzeros(matrix, ordering_.permutation, ordering_.inverse_permutation,
-               ordering_.supernode_offsets, ordering_.supernode_sizes,
-               supernode_member_to_index_, lower_factor_.get(),
-               diagonal_factor_.get());
+  MultithreadedFillNonzeros(matrix, ordering_, supernode_member_to_index_,
+                            lower_factor_.get(), diagonal_factor_.get());
 }
 #endif  // ifdef _OPENMP
 
