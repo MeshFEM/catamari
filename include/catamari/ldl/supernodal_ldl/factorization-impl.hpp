@@ -131,15 +131,19 @@ void Factorization<Field>::MultithreadedFormSupernodes(
   std::vector<Int> orig_supernode_starts;
   OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
 
+  // TODO(Jack Poulson): Parallelize MemberToIndex (low priority).
   std::vector<Int> orig_member_to_index;
   MemberToIndex(matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
 
+  // TODO(Jack Poulson): Parallelize SupernodalDegrees.
   std::vector<Int> orig_supernode_degrees;
   SupernodalDegrees(matrix, ordering_.permutation,
                     ordering_.inverse_permutation, orig_supernode_sizes,
                     orig_supernode_starts, orig_member_to_index, orig_parents,
                     &orig_supernode_degrees);
 
+  // TODO(Jack Poulson): Parallelize
+  //     ConvertFromScalarToSupernodalEliminationForest.
   const Int num_orig_supernodes = orig_supernode_sizes.size();
   std::vector<Int> orig_supernode_parents;
   ConvertFromScalarToSupernodalEliminationForest(
@@ -147,6 +151,7 @@ void Factorization<Field>::MultithreadedFormSupernodes(
       &orig_supernode_parents);
 
   if (control.relax_supernodes) {
+    // TODO(Jack Poulson): Parallelize RelaxSupernodes.
     RelaxSupernodes(orig_parents, orig_supernode_sizes, orig_supernode_starts,
                     orig_supernode_parents, orig_supernode_degrees,
                     orig_member_to_index, scalar_structure, control,
@@ -188,8 +193,8 @@ void Factorization<Field>::InitializeFactors(
   max_degree_ =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
 
-  FillStructureIndices(matrix, ordering_, parents, ordering_.supernode_sizes,
-                       supernode_member_to_index_, lower_factor_.get());
+  FillStructureIndices(matrix, ordering_, parents, supernode_member_to_index_,
+                       lower_factor_.get());
   if (algorithm_ == kLeftLookingLDL) {
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                          supernode_member_to_index_);
@@ -219,9 +224,9 @@ void Factorization<Field>::MultithreadedInitializeFactors(
   max_degree_ =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
 
-  MultithreadedFillStructureIndices(
-      matrix, ordering_, parents, ordering_.supernode_sizes,
-      supernode_member_to_index_, lower_factor_.get());
+  MultithreadedFillStructureIndices(matrix, ordering_, parents,
+                                    supernode_member_to_index_,
+                                    lower_factor_.get());
   if (algorithm_ == kLeftLookingLDL) {
     // TODO(Jack Poulson): Switch to a multithreaded equivalent.
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,

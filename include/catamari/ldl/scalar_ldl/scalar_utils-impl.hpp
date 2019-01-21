@@ -18,15 +18,7 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
                                  const SymmetricOrdering& ordering,
                                  std::vector<Int>* parents,
                                  std::vector<Int>* degrees) {
-#ifdef _OPENMP
-  if (omp_get_max_threads() > 1) {
-    MultithreadedEliminationForestAndDegrees(matrix, ordering, parents,
-                                             degrees);
-    return;
-  }
-#endif  // ifdef _OPENMP
   const Int num_rows = matrix.NumRows();
-  const bool have_permutation = !ordering.permutation.empty();
 
   // Initialize all of the parent indices as unset.
   parents->resize(num_rows, -1);
@@ -41,6 +33,7 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
   degrees->resize(num_rows, 0);
 
   const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const bool have_permutation = !ordering.permutation.empty();
   for (Int row = 0; row < num_rows; ++row) {
     pattern_flags[row] = row;
 
@@ -92,9 +85,6 @@ void MultithreadedEliminationForestAndDegreesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     Int root, std::vector<Int>* parents, std::vector<Int>* degrees,
     std::vector<Int>* pattern_flags) {
-  const bool have_permutation = !ordering.permutation.empty();
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
-
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
@@ -107,6 +97,8 @@ void MultithreadedEliminationForestAndDegreesRecursion(
         matrix, ordering, child, parents, degrees, pattern_flags);
   }
 
+  const bool have_permutation = !ordering.permutation.empty();
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
   const Int supernode_size = ordering.supernode_sizes[root];
   const Int supernode_offset = ordering.supernode_offsets[root];
   for (Int index = 0; index < supernode_size; ++index) {
@@ -343,9 +335,6 @@ void MultithreadedFillStructureIndicesRecursion(
     const std::vector<Int>& parents, const std::vector<Int>& degrees, Int root,
     LowerStructure* lower_structure, std::vector<Int>* pattern_flags,
     std::vector<Int>* column_ptrs) {
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
-  const bool have_permutation = !ordering.permutation.empty();
-
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
@@ -360,6 +349,8 @@ void MultithreadedFillStructureIndicesRecursion(
                                                pattern_flags, column_ptrs);
   }
 
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const bool have_permutation = !ordering.permutation.empty();
   const Int supernode_size = ordering.supernode_sizes[root];
   const Int supernode_offset = ordering.supernode_offsets[root];
   for (Int index = 0; index < supernode_size; ++index) {

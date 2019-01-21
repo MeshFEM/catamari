@@ -91,9 +91,9 @@ void SupernodalDPP<Field>::FormStructure() {
   diagonal_factor_.reset(
       new supernodal_ldl::DiagonalFactor<Field>(ordering_.supernode_sizes));
 
-  supernodal_ldl::FillStructureIndices(
-      matrix_, ordering_, parents_, ordering_.supernode_sizes,
-      supernode_member_to_index_, lower_factor_.get());
+  supernodal_ldl::FillStructureIndices(matrix_, ordering_, parents_,
+                                       supernode_member_to_index_,
+                                       lower_factor_.get());
 
   // TODO(Jack Poulson): Do not compute this for right-looking factorizations
   // (once support is added).
