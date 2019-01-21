@@ -20,6 +20,8 @@ struct SupernodalDPPControl {
 
 // The user-facing data structure for storing a supernodal LDL'-based DPP
 // sampler.
+//
+// TODO(Jack Poulson): Add support for a right-looking supernodal factorization.
 template <class Field>
 class SupernodalDPP {
  public:
@@ -89,11 +91,6 @@ class SupernodalDPP {
 
   // The size of the largest supernode of the factorization.
   Int max_supernode_size_;
-
-  // The largest number of entries in the block row to the left of a diagonal
-  // block.
-  // NOTE: This is only needed for multithreaded sampling.
-  Int max_descendant_entries_;
 
   // The subdiagonal-block portion of the lower-triangular factor.
   mutable std::unique_ptr<supernodal_ldl::LowerFactor<Field>> lower_factor_;

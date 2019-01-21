@@ -89,8 +89,12 @@ void SupernodalDPP<Field>::FormStructure() {
 
   supernodal_ldl::FillStructureIndices(
       matrix_, ordering_, parents_, supernode_sizes_,
-      supernode_member_to_index_, lower_factor_.get(),
-      &max_descendant_entries_);
+      supernode_member_to_index_, lower_factor_.get());
+
+  // TODO(Jack Poulson): Do not compute this for right-looking factorizations
+  // (once support is added).
+  lower_factor_->FillIntersectionSizes(supernode_sizes_,
+                                       supernode_member_to_index_);
 
   max_supernode_size_ =
       *std::max_element(supernode_sizes_.begin(), supernode_sizes_.end());

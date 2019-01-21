@@ -35,8 +35,7 @@ class LowerFactor {
   const Int* IntersectionSizes(Int supernode) const;
 
   void FillIntersectionSizes(const std::vector<Int>& supernode_sizes,
-                             const std::vector<Int>& supernode_member_to_index,
-                             Int* max_descendant_entries);
+                             const std::vector<Int>& supernode_member_to_index);
 
  private:
   // The concatenation of the structures of the supernodes. The structure of

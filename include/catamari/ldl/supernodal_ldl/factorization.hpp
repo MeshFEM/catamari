@@ -45,53 +45,6 @@ struct Control {
 template <class Field>
 class Factorization {
  public:
-  // Marks the type of factorization employed.
-  SymmetricFactorizationType factorization_type;
-
-  // An array of length 'num_supernodes'; the i'th member is the size of the
-  // i'th supernode.
-  std::vector<Int> supernode_sizes;
-
-  // An array of length 'num_supernodes + 1'; the i'th member, for
-  // 0 <= i < num_supernodes, is the principal member of the i'th supernode.
-  // The last member is equal to 'num_rows'.
-  std::vector<Int> supernode_starts;
-
-  // An array of length 'num_rows'; the i'th member is the index of the
-  // supernode containing column 'i'.
-  std::vector<Int> supernode_member_to_index;
-
-  // The largest supernode size in the factorization.
-  Int max_supernode_size;
-
-  // The largest degree of a supernode in the factorization.
-  Int max_degree;
-
-  // The largest number of entries in the block row to the left of a diagonal
-  // block.
-  // NOTE: This is only needed for multithreaded factorizations.
-  Int max_descendant_entries;
-
-  // If the following is nonempty, then, if the permutation is a matrix P, the
-  // matrix P A P' has been factored. Typically, this permutation is the
-  // composition of a fill-reducing ordering and a supernodal relaxation
-  // permutation.
-  SymmetricOrdering ordering;
-
-  // The subdiagonal-block portion of the lower-triangular factor.
-  std::unique_ptr<LowerFactor<Field>> lower_factor;
-
-  // The block-diagonal factor.
-  std::unique_ptr<DiagonalFactor<Field>> diagonal_factor;
-
-  // The minimal supernode size for an out-of-place trapezoidal solve to be
-  // used.
-  Int forward_solve_out_of_place_supernode_threshold;
-
-  // The minimal supernode size for an out-of-place trapezoidal solve to be
-  // used.
-  Int backward_solve_out_of_place_supernode_threshold;
-
   // Factors the given matrix using the prescribed permutation.
   LDLResult Factor(const CoordinateMatrix<Field>& matrix,
                    const SymmetricOrdering& manual_ordering,
@@ -158,6 +111,50 @@ class Factorization {
     // They are allocated and deallocated as the factorization progresses.
     std::vector<std::vector<Field>> schur_complement_buffers;
   };
+
+  // The representation of the permutation matrix P so that P A P' should be
+  // factored. Typically, this permutation is the composition of a
+  // fill-reducing ordering and a supernodal relaxation permutation.
+  SymmetricOrdering ordering_;
+
+  // Marks the type of factorization employed.
+  SymmetricFactorizationType factorization_type_;
+
+  // Whether a left-looking or right-looking factorization is to be used.
+  LDLAlgorithm algorithm_;
+
+  // An array of length 'num_supernodes'; the i'th member is the size of the
+  // i'th supernode.
+  std::vector<Int> supernode_sizes_;
+
+  // An array of length 'num_supernodes + 1'; the i'th member, for
+  // 0 <= i < num_supernodes, is the principal member of the i'th supernode.
+  // The last member is equal to 'num_rows'.
+  std::vector<Int> supernode_starts_;
+
+  // An array of length 'num_rows'; the i'th member is the index of the
+  // supernode containing column 'i'.
+  std::vector<Int> supernode_member_to_index_;
+
+  // The largest supernode size in the factorization.
+  Int max_supernode_size_;
+
+  // The largest degree of a supernode in the factorization.
+  Int max_degree_;
+
+  // The minimal supernode size for an out-of-place trapezoidal solve to be
+  // used.
+  Int forward_solve_out_of_place_supernode_threshold_;
+
+  // The minimal supernode size for an out-of-place trapezoidal solve to be
+  // used.
+  Int backward_solve_out_of_place_supernode_threshold_;
+
+  // The subdiagonal-block portion of the lower-triangular factor.
+  std::unique_ptr<LowerFactor<Field>> lower_factor_;
+
+  // The block-diagonal factor.
+  std::unique_ptr<DiagonalFactor<Field>> diagonal_factor_;
 
   // Form the (possibly relaxed) supernodes for the factorization.
   void FormSupernodes(const CoordinateMatrix<Field>& matrix,

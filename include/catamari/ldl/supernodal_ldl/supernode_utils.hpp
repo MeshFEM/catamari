@@ -183,15 +183,14 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const std::vector<Int>& parents,
                           const std::vector<Int>& supernode_sizes,
                           const std::vector<Int>& supernode_member_to_index,
-                          LowerFactor<Field>* lower_factor,
-                          Int* max_descendant_entries);
+                          LowerFactor<Field>* lower_factor);
 #ifdef _OPENMP
 template <class Field>
 void MultithreadedFillStructureIndices(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const std::vector<Int>& parents, const std::vector<Int>& supernode_sizes,
     const std::vector<Int>& supernode_member_to_index,
-    LowerFactor<Field>* lower_factor, Int* max_descendant_entries);
+    LowerFactor<Field>* lower_factor);
 #endif  // ifdef _OPENMP
 
 // Fill in the nonzeros from the original sparse matrix.

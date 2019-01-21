@@ -775,8 +775,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const std::vector<Int>& parents,
                           const std::vector<Int>& supernode_sizes,
                           const std::vector<Int>& supernode_member_to_index,
-                          LowerFactor<Field>* lower_factor,
-                          Int* max_descendant_entries) {
+                          LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = supernode_sizes.size();
   const bool have_permutation = !ordering.permutation.empty();
@@ -886,9 +885,6 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
     }
   }
 #endif
-
-  lower_factor->FillIntersectionSizes(
-      supernode_sizes, supernode_member_to_index, max_descendant_entries);
 }
 
 #ifdef _OPENMP
@@ -898,7 +894,7 @@ void MultithreadedFillStructureIndices(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const std::vector<Int>& parents, const std::vector<Int>& supernode_sizes,
     const std::vector<Int>& supernode_member_to_index,
-    LowerFactor<Field>* lower_factor, Int* max_descendant_entries) {
+    LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = supernode_sizes.size();
   const bool have_permutation = !ordering.permutation.empty();
@@ -1008,9 +1004,6 @@ void MultithreadedFillStructureIndices(
     }
   }
 #endif
-
-  lower_factor->FillIntersectionSizes(
-      supernode_sizes, supernode_member_to_index, max_descendant_entries);
 }
 #endif  // ifdef _OPENMP
 

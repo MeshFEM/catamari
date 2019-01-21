@@ -73,8 +73,7 @@ const Int* LowerFactor<Field>::IntersectionSizes(Int supernode) const {
 template <class Field>
 void LowerFactor<Field>::FillIntersectionSizes(
     const std::vector<Int>& supernode_sizes,
-    const std::vector<Int>& supernode_member_to_index,
-    Int* max_descendant_entries) {
+    const std::vector<Int>& supernode_member_to_index) {
   const Int num_supernodes = blocks.size();
 
   // Compute the supernode offsets.
@@ -102,11 +101,9 @@ void LowerFactor<Field>::FillIntersectionSizes(
   // number of intersecting descendant entries for each supernode).
   intersect_sizes_.resize(num_supernode_intersects);
   num_supernode_intersects = 0;
-  std::vector<Int> num_descendant_entries(num_supernodes, 0);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     Int last_supernode = -1;
     Int intersect_size = 0;
-    const Int supernode_size = supernode_sizes[supernode];
 
     const Int* index_beg = Structure(supernode);
     const Int* index_end = Structure(supernode + 1);
@@ -117,8 +114,6 @@ void LowerFactor<Field>::FillIntersectionSizes(
         if (last_supernode != -1) {
           // Close out the supernodal intersection.
           intersect_sizes_[num_supernode_intersects++] = intersect_size;
-          num_descendant_entries[row_supernode] +=
-              intersect_size * supernode_size;
         }
         last_supernode = row_supernode;
         intersect_size = 0;
@@ -128,17 +123,11 @@ void LowerFactor<Field>::FillIntersectionSizes(
     if (last_supernode != -1) {
       // Close out the last intersection count for this column supernode.
       intersect_sizes_[num_supernode_intersects++] = intersect_size;
-      num_descendant_entries[last_supernode] += intersect_size * supernode_size;
     }
   }
   CATAMARI_ASSERT(
       num_supernode_intersects == static_cast<Int>(intersect_sizes_.size()),
       "Incorrect number of supernode intersections");
-
-  // NOTE: This only needs to be computed for multithreaded factorizations,
-  // and the same applies to the num_descendant_entries array.
-  *max_descendant_entries = *std::max_element(num_descendant_entries.begin(),
-                                              num_descendant_entries.end());
 }
 
 }  // namespace supernodal_ldl
