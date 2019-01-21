@@ -70,18 +70,6 @@ class SupernodalDPP {
   // The up-links of the scalar elimination tree.
   std::vector<Int> parents_;
 
-  // The up-links of the supernodal elimination tree.
-  std::vector<Int> supernode_parents_;
-
-  // An array of length 'num_supernodes'; the i'th member is the size of the
-  // i'th supernode.
-  std::vector<Int> supernode_sizes_;
-
-  // An array of length 'num_supernodes + 1'; the i'th member, for
-  // 0 <= i < num_supernodes, is the principal member of the i'th supernode.
-  // The last member is equal to 'num_rows'.
-  std::vector<Int> supernode_starts_;
-
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.
   std::vector<Int> supernode_member_to_index_;

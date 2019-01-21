@@ -30,6 +30,8 @@ struct AssemblyForest {
 
   // The indices of the root supernodes in the forest.
   std::vector<Int> roots;
+
+  void FillFromParents();
 };
 
 // A mechanism for passing reordering information into the factorization.
@@ -57,6 +59,47 @@ struct SymmetricOrdering {
   // The (optional) supernodal assembly forest in the permuted ordering.
   AssemblyForest assembly_forest;
 };
+
+inline void AssemblyForest::FillFromParents() {
+  const Int num_indices = parents.size();
+
+  // Compute the number of children (initially stored in 'child_offsets') of
+  // each vertex. Along the way, count the number of trees in the forest.
+  Int num_roots = 0;
+  child_offsets.clear();
+  child_offsets.resize(num_indices + 1, 0);
+  for (Int index = 0; index < num_indices; ++index) {
+    const Int parent = parents[index];
+    if (parent >= 0) {
+      ++child_offsets[parent];
+    } else {
+      ++num_roots;
+    }
+  }
+
+  // Compute the child offsets using an in-place scan.
+  Int num_total_children = 0;
+  for (Int index = 0; index < num_indices; ++index) {
+    const Int num_children = child_offsets[index];
+    child_offsets[index] = num_total_children;
+    num_total_children += num_children;
+  }
+  child_offsets[num_indices] = num_total_children;
+
+  // Pack the children into the 'children' buffer.
+  children.resize(num_total_children);
+  roots.clear();
+  roots.reserve(num_roots);
+  std::vector<Int> offsets_copy = child_offsets;
+  for (Int index = 0; index < num_indices; ++index) {
+    const Int parent = parents[index];
+    if (parent >= 0) {
+      children[offsets_copy[parent]++] = index;
+    } else {
+      roots.push_back(index);
+    }
+  }
+}
 
 }  // namespace catamari
 

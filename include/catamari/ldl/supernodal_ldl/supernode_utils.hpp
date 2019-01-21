@@ -49,12 +49,6 @@ struct MergableStatus {
 void MemberToIndex(Int num_rows, const std::vector<Int>& supernode_starts,
                    std::vector<Int>* member_to_index);
 
-// Create the packed downlinks from the uplinks of an elimination forest.
-void EliminationForestAndRootsFromParents(const std::vector<Int>& parents,
-                                          std::vector<Int>* children,
-                                          std::vector<Int>* child_offsets,
-                                          std::vector<Int>* roots);
-
 // Builds an elimination forest over the supernodes from an elimination forest
 // over the nodes.
 void ConvertFromScalarToSupernodalEliminationForest(
@@ -172,7 +166,7 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
 // Fills an estimate of the work required to eliminate the subtree in a
 // right-looking factorization.
 template <class Field>
-void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_ofrest,
+void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_forest,
                               const LowerFactor<Field>& lower_factor,
                               std::vector<double>* work_estimates);
 

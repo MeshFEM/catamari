@@ -123,15 +123,6 @@ class Factorization {
   // Whether a left-looking or right-looking factorization is to be used.
   LDLAlgorithm algorithm_;
 
-  // An array of length 'num_supernodes'; the i'th member is the size of the
-  // i'th supernode.
-  std::vector<Int> supernode_sizes_;
-
-  // An array of length 'num_supernodes + 1'; the i'th member, for
-  // 0 <= i < num_supernodes, is the principal member of the i'th supernode.
-  // The last member is equal to 'num_rows'.
-  std::vector<Int> supernode_starts_;
-
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.
   std::vector<Int> supernode_member_to_index_;
@@ -160,14 +151,12 @@ class Factorization {
   void FormSupernodes(const CoordinateMatrix<Field>& matrix,
                       const SupernodalRelaxationControl& control,
                       std::vector<Int>* parents,
-                      std::vector<Int>* supernode_degrees,
-                      std::vector<Int>* supernode_parents);
+                      std::vector<Int>* supernode_degrees);
 #ifdef _OPENMP
   void MultithreadedFormSupernodes(const CoordinateMatrix<Field>& matrix,
                                    const SupernodalRelaxationControl& control,
                                    std::vector<Int>* parents,
-                                   std::vector<Int>* supernode_degrees,
-                                   std::vector<Int>* supernode_parents);
+                                   std::vector<Int>* supernode_degrees);
 #endif  // ifdef _OPENMP
 
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
@@ -194,7 +183,6 @@ class Factorization {
 #endif  // ifdef _OPENMP
 
   bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
-                          const AssemblyForest& supernode_forest,
                           LeftLookingSharedState* shared_state,
                           LeftLookingPrivateState* private_state,
                           LDLResult* result);
@@ -202,33 +190,28 @@ class Factorization {
   bool MultithreadedLeftLookingSubtree(
       Int tile_size, Int level, Int max_parallel_levels, Int supernode,
       const CoordinateMatrix<Field>& matrix,
-      const AssemblyForest& supernode_forest,
       LeftLookingSharedState* shared_state,
       std::vector<LeftLookingPrivateState>* private_states, LDLResult* result);
 #endif  // ifdef _OPENMP
 
   bool RightLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
-                           const AssemblyForest& supernode_forest,
                            RightLookingSharedState* shared_state,
                            LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedRightLookingSubtree(
       Int tile_size, Int level, Int max_parallel_levels, Int supernode,
       const CoordinateMatrix<Field>& matrix,
-      const AssemblyForest& supernode_forest,
       const std::vector<double>& work_estimates,
       RightLookingSharedState* shared_state, LDLResult* result);
 #endif  // ifdef _OPENMP
 
   void LeftLookingSupernodeUpdate(Int main_supernode,
                                   const CoordinateMatrix<Field>& matrix,
-                                  const AssemblyForest& supernode_forest,
                                   LeftLookingSharedState* shared_state,
                                   LeftLookingPrivateState* private_state);
 #ifdef _OPENMP
   void MultithreadedLeftLookingSupernodeUpdate(
       Int main_supernode, const CoordinateMatrix<Field>& matrix,
-      const AssemblyForest& supernode_forest,
       LeftLookingSharedState* shared_state,
       std::vector<LeftLookingPrivateState>* private_states);
 #endif  // ifdef _OPENMP
@@ -241,22 +224,19 @@ class Factorization {
 #endif  // ifdef _OPENMP
 
   void MergeChildSchurComplements(Int supernode,
-                                  const AssemblyForest& supernode_forest,
                                   RightLookingSharedState* shared_state);
 #ifdef _OPENMP
   void MultithreadedMergeChildSchurComplements(
-      Int supernode, const AssemblyForest& supernode_forest,
-      RightLookingSharedState* shared_state);
+      Int supernode, RightLookingSharedState* shared_state);
 #endif  // ifdef _OPENMP
 
   bool RightLookingSupernodeFinalize(Int supernode,
-                                     const AssemblyForest& supernode_forest,
                                      RightLookingSharedState* shared_state,
                                      LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedRightLookingSupernodeFinalize(
-      Int tile_size, Int supernode, const AssemblyForest& supernode_forest,
-      RightLookingSharedState* shared_state, LDLResult* result);
+      Int tile_size, Int supernode, RightLookingSharedState* shared_state,
+      LDLResult* result);
 #endif  // ifdef _OPENMP
 };
 
