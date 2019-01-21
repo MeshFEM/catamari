@@ -113,8 +113,9 @@ void Factorization<Field>::MultithreadedFormSupernodes(
   // Greedily compute a supernodal partition using the original ordering.
   std::vector<Int> orig_supernode_sizes;
   scalar_ldl::LowerStructure scalar_structure;
-  FormFundamentalSupernodes(matrix, ordering_, orig_parents, orig_degrees,
-                            &orig_supernode_sizes, &scalar_structure);
+  MultithreadedFormFundamentalSupernodes(matrix, ordering_, orig_parents,
+                                         orig_degrees, &orig_supernode_sizes,
+                                         &scalar_structure);
 
 #ifdef CATAMARI_DEBUG
   {

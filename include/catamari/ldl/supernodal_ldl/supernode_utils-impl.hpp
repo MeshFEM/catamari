@@ -209,39 +209,42 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFormFundamentalSupernodes(
+void MultithreadedFormFundamentalSupernodesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& parents, const std::vector<Int>& degrees,
-    std::vector<Int>* supernode_sizes,
-    scalar_ldl::LowerStructure* scalar_structure) {
-  const Int num_rows = matrix.NumRows();
+    const std::vector<Int>& parents, const std::vector<Int>& degrees, Int root,
+    std::vector<Int>* flat_supernode_sizes,
+    scalar_ldl::LowerStructure* scalar_structure,
+    std::vector<Int>* column_ptrs) {
+  const Int child_beg = ordering.assembly_forest.child_offsets[root];
+  const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
+  #pragma omp taskgroup
+  for (Int index = child_beg; index < child_end; ++index) {
+    const Int child = ordering.assembly_forest.children[index];
 
-  // We will only fill the indices and offsets of the factorization.
-  scalar_ldl::FillStructureIndices(matrix, ordering, parents, degrees,
-                                   scalar_structure);
-
-  supernode_sizes->clear();
-  if (!num_rows) {
-    return;
+    #pragma omp task default(none) firstprivate(child) \
+        shared(matrix, ordering, parents, degrees, flat_supernode_sizes, \
+            scalar_structure, column_ptrs)
+    MultithreadedFormFundamentalSupernodesRecursion(
+        matrix, ordering, parents, degrees, child, flat_supernode_sizes,
+        scalar_structure, column_ptrs);
   }
 
-  // We will iterate down each column structure to determine the supernodes.
-  std::vector<Int> column_ptrs = scalar_structure->column_offsets;
-
-  Int supernode_start = 0;
-  supernode_sizes->reserve(num_rows);
-  supernode_sizes->push_back(1);
-  for (Int column = 1; column < num_rows; ++column) {
+  const Int orig_supernode_size = ordering.supernode_sizes[root];
+  const Int orig_supernode_start = ordering.supernode_offsets[root];
+  Int supernode_start = orig_supernode_start;
+  (*flat_supernode_sizes)[supernode_start] = 1;
+  for (Int column = supernode_start + 1;
+       column < orig_supernode_start + orig_supernode_size; ++column) {
     // Ensure that the diagonal block would be fully-connected. Due to the
     // loop invariant, each column pointer in the current supernode would need
     // to be pointing to index 'column'.
     bool dense_diagonal_block = true;
     for (Int j = supernode_start; j < column; ++j) {
-      const Int index = column_ptrs[j];
+      const Int index = (*column_ptrs)[j];
       const Int next_column_beg = scalar_structure->column_offsets[j + 1];
       if (index < next_column_beg &&
           scalar_structure->indices[index] == column) {
-        ++column_ptrs[j];
+        ++(*column_ptrs)[j];
       } else {
         dense_diagonal_block = false;
         break;
@@ -249,8 +252,8 @@ void MultithreadedFormFundamentalSupernodes(
     }
     if (!dense_diagonal_block) {
       // This column begins a new supernode.
+      (*flat_supernode_sizes)[column] = 1;
       supernode_start = column;
-      supernode_sizes->push_back(1);
       continue;
     }
 
@@ -259,14 +262,14 @@ void MultithreadedFormFundamentalSupernodes(
     // the set sizes are equal and then test the individual entries.
 
     // Test that the set sizes match.
-    const Int column_beg = column_ptrs[column];
-    const Int structure_size = column_ptrs[column + 1] - column_beg;
-    const Int prev_column_ptr = column_ptrs[column - 1];
+    const Int column_beg = (*column_ptrs)[column];
+    const Int structure_size = (*column_ptrs)[column + 1] - column_beg;
+    const Int prev_column_ptr = (*column_ptrs)[column - 1];
     const Int prev_remaining_structure_size = column_beg - prev_column_ptr;
     if (structure_size != prev_remaining_structure_size) {
       // This column begins a new supernode.
+      (*flat_supernode_sizes)[column] = 1;
       supernode_start = column;
-      supernode_sizes->push_back(1);
       continue;
     }
 
@@ -282,14 +285,76 @@ void MultithreadedFormFundamentalSupernodes(
     }
     if (!equal_structures) {
       // This column begins a new supernode.
+      (*flat_supernode_sizes)[column] = 1;
       supernode_start = column;
-      supernode_sizes->push_back(1);
       continue;
     }
 
     // All tests passed, so we may extend the current supernode to incorporate
     // this column.
-    ++supernode_sizes->back();
+    ++(*flat_supernode_sizes)[supernode_start];
+    (*flat_supernode_sizes)[column] = 0;
+  }
+}
+
+template <class Field>
+void MultithreadedFormFundamentalSupernodes(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const std::vector<Int>& parents, const std::vector<Int>& degrees,
+    std::vector<Int>* supernode_sizes,
+    scalar_ldl::LowerStructure* scalar_structure) {
+  const Int num_rows = matrix.NumRows();
+
+  // We will only fill the indices and offsets of the factorization.
+  #pragma omp taskgroup
+  scalar_ldl::MultithreadedFillStructureIndices(matrix, ordering, parents,
+                                                degrees, scalar_structure);
+
+  supernode_sizes->clear();
+  if (!num_rows) {
+    return;
+  }
+
+  // We will iterate down each column structure to determine the supernodes.
+  std::vector<Int> column_ptrs = scalar_structure->column_offsets;
+
+  // In order to allow for parallel decomposition of the reordering supernodes
+  // into fundamental supernodes, we mark the principal members of supernodes
+  // with the supernode size and non-principal members with zero. After filling
+  // this structure in parallel, we can easily reduce into the compressed form.
+  std::vector<Int> flat_supernode_sizes(num_rows);
+
+  #pragma omp taskgroup
+  for (const Int root : ordering.assembly_forest.roots) {
+    #pragma omp task default(none) firstprivate(root)                    \
+        shared(matrix, ordering, parents, degrees, flat_supernode_sizes, \
+            scalar_structure, column_ptrs)
+    MultithreadedFormFundamentalSupernodesRecursion(
+        matrix, ordering, parents, degrees, root, &flat_supernode_sizes,
+        scalar_structure, &column_ptrs);
+  }
+
+  // Compress flat_supernode_sizes into supernode_sizes.
+  {
+    // Count the number of supernodes.
+    Int num_supernodes = 0;
+    Int index = 0;
+    while (index < num_rows) {
+      const Int supernode_size = flat_supernode_sizes[index];
+      supernode_sizes->push_back(supernode_size);
+      index += supernode_size;
+      ++num_supernodes;
+    }
+
+    // Fill the supernode sizes.
+    supernode_sizes->resize(num_supernodes);
+    index = 0;
+    num_supernodes = 0;
+    while (index < num_rows) {
+      const Int supernode_size = flat_supernode_sizes[index];
+      (*supernode_sizes)[num_supernodes++] = supernode_size;
+      index += supernode_size;
+    }
   }
 
 #ifdef CATAMARI_DEBUG

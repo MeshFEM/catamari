@@ -425,11 +425,12 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
-    #pragma omp task default(none) firstprivate(root) \
+    #pragma omp task default(none) firstprivate(root)               \
         shared(matrix, ordering, parents, degrees, lower_structure, \
             pattern_flags, column_ptrs)
-    MultithreadedFillStructureIndicesRecursion(
-        matrix, ordering, parents, degrees, root, &pattern_flags, &column_ptrs);
+    MultithreadedFillStructureIndicesRecursion(matrix, ordering, parents,
+                                               degrees, root, lower_structure,
+                                               &pattern_flags, &column_ptrs);
   }
 }
 #endif  // ifdef _OPENMP
