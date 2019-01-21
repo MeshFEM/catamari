@@ -172,9 +172,7 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
 // Fills an estimate of the work required to eliminate the subtree in a
 // right-looking factorization.
 template <class Field>
-void FillSubtreeWorkEstimates(Int root,
-                              const std::vector<Int>& supernode_children,
-                              const std::vector<Int>& supernode_child_offsets,
+void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_ofrest,
                               const LowerFactor<Field>& lower_factor,
                               std::vector<double>* work_estimates);
 

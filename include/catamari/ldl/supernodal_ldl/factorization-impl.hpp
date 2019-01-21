@@ -221,7 +221,7 @@ void Factorization<Field>::MultithreadedInitializeFactors(
 template <class Field>
 void Factorization<Field>::LeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& supernode_parents,
+    const AssemblyForest& supernode_forest,
     LeftLookingSharedState* shared_state,
     LeftLookingPrivateState* private_state) {
   BlasMatrix<Field>& main_diagonal_block =
@@ -239,8 +239,8 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
   const Int num_packed = ComputeRowPattern(
       matrix, ordering.permutation, ordering.inverse_permutation,
       supernode_sizes, supernode_starts, supernode_member_to_index,
-      supernode_parents, main_supernode, private_state->pattern_flags.data(),
-      private_state->row_structure.data());
+      supernode_forest.parents, main_supernode,
+      private_state->pattern_flags.data(), private_state->row_structure.data());
 
   // for J = find(L(K, :))
   //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
@@ -369,12 +369,13 @@ LDLResult Factorization<Field>::LeftLooking(
   }
 #endif
 
-  std::vector<Int> supernode_parents;
+  // TODO(Jack Poulson): Completely switch to AssemblyForest.
+  AssemblyForest supernode_forest;
   {
     std::vector<Int> parents;
     std::vector<Int> supernode_degrees;
     FormSupernodes(matrix, control.relaxation_control, &parents,
-                   &supernode_degrees, &supernode_parents);
+                   &supernode_degrees, &supernode_forest.parents);
     InitializeFactors(matrix, parents, supernode_degrees);
   }
   const Int num_supernodes = supernode_sizes.size();
@@ -395,7 +396,7 @@ LDLResult Factorization<Field>::LeftLooking(
 
   // Note that any postordering of the supernodal elimination forest suffices.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    LeftLookingSupernodeUpdate(supernode, matrix, supernode_parents,
+    LeftLookingSupernodeUpdate(supernode, matrix, supernode_forest,
                                &shared_state, &private_state);
     const bool succeeded = LeftLookingSupernodeFinalize(supernode, &result);
     if (!succeeded) {
@@ -406,14 +407,12 @@ LDLResult Factorization<Field>::LeftLooking(
   return result;
 }
 
-// Extract the child updates into a subroutine.
 template <class Field>
 void Factorization<Field>::MergeChildSchurComplements(
-    Int supernode, const std::vector<Int>& supernode_children,
-    const std::vector<Int>& supernode_child_offsets,
+    Int supernode, const AssemblyForest& supernode_forest,
     RightLookingSharedState* shared_state) {
-  const Int child_beg = supernode_child_offsets[supernode];
-  const Int child_end = supernode_child_offsets[supernode + 1];
+  const Int child_beg = supernode_forest.child_offsets[supernode];
+  const Int child_end = supernode_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
   BlasMatrix<Field> lower_block = lower_factor->blocks[supernode];
   BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
@@ -424,7 +423,7 @@ void Factorization<Field>::MergeChildSchurComplements(
   const Int supernode_start = supernode_starts[supernode];
   const Int* main_indices = lower_factor->Structure(supernode);
   for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child = supernode_children[child_beg + child_index];
+    const Int child = supernode_forest.children[child_beg + child_index];
     const Int* child_indices = lower_factor->Structure(child);
     std::vector<Field>& child_schur_complement_buffer =
         shared_state->schur_complement_buffers[child];
@@ -489,11 +488,10 @@ void Factorization<Field>::MergeChildSchurComplements(
 #ifdef _OPENMP
 template <class Field>
 void Factorization<Field>::MultithreadedMergeChildSchurComplements(
-    Int supernode, const std::vector<Int>& supernode_children,
-    const std::vector<Int>& supernode_child_offsets,
+    Int supernode, const AssemblyForest& supernode_forest,
     RightLookingSharedState* shared_state) {
-  const Int child_beg = supernode_child_offsets[supernode];
-  const Int child_end = supernode_child_offsets[supernode + 1];
+  const Int child_beg = supernode_forest.child_offsets[supernode];
+  const Int child_end = supernode_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
   BlasMatrix<Field> lower_block = lower_factor->blocks[supernode];
   BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
@@ -504,7 +502,7 @@ void Factorization<Field>::MultithreadedMergeChildSchurComplements(
   const Int supernode_start = supernode_starts[supernode];
   const Int* main_indices = lower_factor->Structure(supernode);
   for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child = supernode_children[child_beg + child_index];
+    const Int child = supernode_forest.children[child_beg + child_index];
     const Int* child_indices = lower_factor->Structure(child);
     std::vector<Field>& child_schur_complement_buffer =
         shared_state->schur_complement_buffers[child];
@@ -572,8 +570,7 @@ void Factorization<Field>::MultithreadedMergeChildSchurComplements(
 
 template <class Field>
 bool Factorization<Field>::RightLookingSupernodeFinalize(
-    Int supernode, const std::vector<Int>& supernode_children,
-    const std::vector<Int>& supernode_child_offsets,
+    Int supernode, const AssemblyForest& supernode_forest,
     RightLookingSharedState* shared_state, LDLResult* result) {
   typedef ComplexBase<Field> Real;
   BlasMatrix<Field>& diagonal_block = diagonal_factor->blocks[supernode];
@@ -593,8 +590,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   schur_complement.leading_dim = degree;
   schur_complement.data = schur_complement_buffer.data();
 
-  MergeChildSchurComplements(supernode, supernode_children,
-                             supernode_child_offsets, shared_state);
+  MergeChildSchurComplements(supernode, supernode_forest, shared_state);
 
   const Int num_supernode_pivots =
       FactorDiagonalBlock(factorization_type, &diagonal_block);
@@ -636,8 +632,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
 #ifdef _OPENMP
 template <class Field>
 bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
-    Int tile_size, Int supernode, const std::vector<Int>& supernode_children,
-    const std::vector<Int>& supernode_child_offsets,
+    Int tile_size, Int supernode, const AssemblyForest& supernode_forest,
     RightLookingSharedState* shared_state, LDLResult* result) {
   typedef ComplexBase<Field> Real;
   BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
@@ -661,8 +656,8 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
   BlasMatrix<Field> schur_complement =
       shared_state->schur_complements[supernode];
 
-  MultithreadedMergeChildSchurComplements(
-      supernode, supernode_children, supernode_child_offsets, shared_state);
+  MultithreadedMergeChildSchurComplements(supernode, supernode_forest,
+                                          shared_state);
 
   Int num_supernode_pivots;
   {
@@ -720,25 +715,22 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
 template <class Field>
 bool Factorization<Field>::RightLookingSubtree(
     Int supernode, const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& supernode_parents,
-    const std::vector<Int>& supernode_children,
-    const std::vector<Int>& supernode_child_offsets,
+    const AssemblyForest& supernode_forest,
     RightLookingSharedState* shared_state, LDLResult* result) {
-  const Int child_beg = supernode_child_offsets[supernode];
-  const Int child_end = supernode_child_offsets[supernode + 1];
+  const Int child_beg = supernode_forest.child_offsets[supernode];
+  const Int child_end = supernode_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
   std::vector<int> successes(num_children);
   std::vector<LDLResult> result_contributions(num_children);
 
   for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child = supernode_children[child_beg + child_index];
-    CATAMARI_ASSERT(supernode_parents[child] == supernode,
+    const Int child = supernode_forest.children[child_beg + child_index];
+    CATAMARI_ASSERT(supernode_forest.parents[child] == supernode,
                     "Incorrect child index");
     LDLResult& result_contribution = result_contributions[child_index];
     successes[child_index] = RightLookingSubtree(
-        child, matrix, supernode_parents, supernode_children,
-        supernode_child_offsets, shared_state, &result_contribution);
+        child, matrix, supernode_forest, shared_state, &result_contribution);
   }
 
   bool succeeded = true;
@@ -758,13 +750,12 @@ bool Factorization<Field>::RightLookingSubtree(
   }
 
   if (succeeded) {
-    succeeded = RightLookingSupernodeFinalize(supernode, supernode_children,
-                                              supernode_child_offsets,
+    succeeded = RightLookingSupernodeFinalize(supernode, supernode_forest,
                                               shared_state, result);
   } else {
     // Clear the child fronts.
     for (Int child_index = 0; child_index < num_children; ++child_index) {
-      const Int child = supernode_children[child_beg + child_index];
+      const Int child = supernode_forest.children[child_beg + child_index];
       std::vector<Field>& child_schur_complement_buffer =
           shared_state->schur_complement_buffers[child];
       BlasMatrix<Field>& child_schur_complement =
@@ -784,19 +775,16 @@ template <class Field>
 bool Factorization<Field>::MultithreadedRightLookingSubtree(
     Int tile_size, Int level, Int max_parallel_levels, Int supernode,
     const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& supernode_parents,
-    const std::vector<Int>& supernode_children,
-    const std::vector<Int>& supernode_child_offsets,
+    const AssemblyForest& supernode_forest,
     const std::vector<double>& work_estimates,
     RightLookingSharedState* shared_state, LDLResult* result) {
   if (level >= max_parallel_levels) {
-    return RightLookingSubtree(supernode, matrix, supernode_parents,
-                               supernode_children, supernode_child_offsets,
+    return RightLookingSubtree(supernode, matrix, supernode_forest,
                                shared_state, result);
   }
 
-  const Int child_beg = supernode_child_offsets[supernode];
-  const Int child_end = supernode_child_offsets[supernode + 1];
+  const Int child_beg = supernode_forest.child_offsets[supernode];
+  const Int child_end = supernode_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
   std::vector<int> successes(num_children);
@@ -807,7 +795,7 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
   #pragma omp taskgroup
   {
     for (Int child_index = 0; child_index < num_children; ++child_index) {
-      const Int child = supernode_children[child_beg + child_index];
+      const Int child = supernode_forest.children[child_beg + child_index];
 
       // One could make use of OpenMP task priorities, e.g., with an integer
       // priority of:
@@ -817,18 +805,18 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
       // But support for task priorities in current compilers is shaky at
       // best (and I have not yet personally observed a performance
       // improvement from it).
-      #pragma omp task                                                   \
-        default(none)                                                    \
-        firstprivate(tile_size, level, max_parallel_levels, supernode,   \
-            child, child_index, shared_state)                            \
-        shared(successes, matrix, supernode_parents, supernode_children, \
-            supernode_child_offsets, result_contributions, work_estimates)
+      #pragma omp task                                                    \
+        default(none)                                                     \
+        firstprivate(tile_size, level, max_parallel_levels, supernode,    \
+            child, child_index, shared_state)                             \
+        shared(successes, matrix, supernode_forest, result_contributions, \
+            work_estimates)
       {
         LDLResult& result_contribution = result_contributions[child_index];
         successes[child_index] = MultithreadedRightLookingSubtree(
             tile_size, level + 1, max_parallel_levels, child, matrix,
-            supernode_parents, supernode_children, supernode_child_offsets,
-            work_estimates, shared_state, &result_contribution);
+            supernode_forest, work_estimates, shared_state,
+            &result_contribution);
       }
     }
   }
@@ -852,12 +840,11 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
   if (succeeded) {
     #pragma omp taskgroup
     succeeded = MultithreadedRightLookingSupernodeFinalize(
-        tile_size, supernode, supernode_children, supernode_child_offsets,
-        shared_state, result);
+        tile_size, supernode, supernode_forest, shared_state, result);
   } else {
     // Clear the child fronts.
     for (Int child_index = 0; child_index < num_children; ++child_index) {
-      const Int child = supernode_children[child_beg + child_index];
+      const Int child = supernode_forest.children[child_beg + child_index];
       std::vector<Field>& child_schur_complement_buffer =
           shared_state->schur_complement_buffers[child];
       BlasMatrix<Field>& child_schur_complement =
@@ -882,24 +869,23 @@ LDLResult Factorization<Field>::RightLooking(
   }
 #endif
 
-  std::vector<Int> supernode_parents;
+  // TODO(Jack Poulson): Completely switch to AssemblyForest.
+  AssemblyForest supernode_forest;
   {
     std::vector<Int> parents;
     std::vector<Int> supernode_degrees;
     FormSupernodes(matrix, control.relaxation_control, &parents,
-                   &supernode_degrees, &supernode_parents);
+                   &supernode_degrees, &supernode_forest.parents);
     InitializeFactors(matrix, parents, supernode_degrees);
   }
   const Int num_supernodes = supernode_sizes.size();
 
   // Form the downlinks for the supernodal elimination tree.
   // TODO(Jack Poulson): Store this in the factorization.
-  std::vector<Int> supernode_children;
-  std::vector<Int> supernode_child_offsets;
-  std::vector<Int> roots;
-  EliminationForestAndRootsFromParents(supernode_parents, &supernode_children,
-                                       &supernode_child_offsets, &roots);
-  const Int num_roots = roots.size();
+  EliminationForestAndRootsFromParents(
+      supernode_forest.parents, &supernode_forest.children,
+      &supernode_forest.child_offsets, &supernode_forest.roots);
+  const Int num_roots = supernode_forest.roots.size();
 
   RightLookingSharedState shared_state;
   shared_state.schur_complement_buffers.resize(num_supernodes);
@@ -911,11 +897,10 @@ LDLResult Factorization<Field>::RightLooking(
   std::vector<LDLResult> result_contributions(num_roots);
 
   for (Int root_index = 0; root_index < num_roots; ++root_index) {
-    const Int root = roots[root_index];
+    const Int root = supernode_forest.roots[root_index];
     LDLResult& result_contribution = result_contributions[root_index];
     successes[root_index] = RightLookingSubtree(
-        root, matrix, supernode_parents, supernode_children,
-        supernode_child_offsets, &shared_state, &result_contribution);
+        root, matrix, supernode_forest, &shared_state, &result_contribution);
   }
 
   for (Int index = 0; index < num_roots; ++index) {
@@ -939,28 +924,25 @@ LDLResult Factorization<Field>::RightLooking(
 template <class Field>
 bool Factorization<Field>::LeftLookingSubtree(
     Int supernode, const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& supernode_parents,
-    const std::vector<Int>& supernode_children,
-    const std::vector<Int>& supernode_child_offsets,
+    const AssemblyForest& supernode_forest,
     LeftLookingSharedState* shared_state,
     LeftLookingPrivateState* private_state, LDLResult* result) {
-  const Int child_beg = supernode_child_offsets[supernode];
-  const Int child_end = supernode_child_offsets[supernode + 1];
+  const Int child_beg = supernode_forest.child_offsets[supernode];
+  const Int child_end = supernode_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
   std::vector<int> successes(num_children);
   std::vector<LDLResult> result_contributions(num_children);
 
   for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child = supernode_children[child_beg + child_index];
-    CATAMARI_ASSERT(supernode_parents[child] == supernode,
+    const Int child = supernode_forest.children[child_beg + child_index];
+    CATAMARI_ASSERT(supernode_forest.parents[child] == supernode,
                     "Incorrect child index");
 
     LDLResult& result_contribution = result_contributions[child_index];
     successes[child_index] =
-        LeftLookingSubtree(child, matrix, supernode_parents, supernode_children,
-                           supernode_child_offsets, shared_state, private_state,
-                           &result_contribution);
+        LeftLookingSubtree(child, matrix, supernode_forest, shared_state,
+                           private_state, &result_contribution);
   }
 
   bool succeeded = true;
@@ -980,7 +962,7 @@ bool Factorization<Field>::LeftLookingSubtree(
   }
 
   if (succeeded) {
-    LeftLookingSupernodeUpdate(supernode, matrix, supernode_parents,
+    LeftLookingSupernodeUpdate(supernode, matrix, supernode_forest,
                                shared_state, private_state);
     succeeded = LeftLookingSupernodeFinalize(supernode, result);
   }
@@ -992,7 +974,7 @@ bool Factorization<Field>::LeftLookingSubtree(
 template <class Field>
 void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& supernode_parents,
+    const AssemblyForest& supernode_forest,
     LeftLookingSharedState* shared_state,
     std::vector<LeftLookingPrivateState>* private_states) {
   BlasMatrix<Field> main_diagonal_block =
@@ -1015,7 +997,7 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
   const Int num_packed = ComputeRowPattern(
       matrix, ordering.permutation, ordering.inverse_permutation,
       supernode_sizes, supernode_starts, supernode_member_to_index,
-      supernode_parents, main_supernode, pattern_flags.data(),
+      supernode_forest.parents, main_supernode, pattern_flags.data(),
       row_structure.data());
 
   // OpenMP pragmas cannot operate on object members or function results.
@@ -1202,20 +1184,17 @@ template <class Field>
 bool Factorization<Field>::MultithreadedLeftLookingSubtree(
     Int tile_size, Int level, Int max_parallel_levels, Int supernode,
     const CoordinateMatrix<Field>& matrix,
-    const std::vector<Int>& supernode_parents,
-    const std::vector<Int>& supernode_children,
-    const std::vector<Int>& supernode_child_offsets,
+    const AssemblyForest& supernode_forest,
     LeftLookingSharedState* shared_state,
     std::vector<LeftLookingPrivateState>* private_states, LDLResult* result) {
   if (level >= max_parallel_levels) {
     const int thread = omp_get_thread_num();
-    return LeftLookingSubtree(supernode, matrix, supernode_parents,
-                              supernode_children, supernode_child_offsets,
-                              shared_state, &(*private_states)[thread], result);
+    return LeftLookingSubtree(supernode, matrix, supernode_forest, shared_state,
+                              &(*private_states)[thread], result);
   }
 
-  const Int child_beg = supernode_child_offsets[supernode];
-  const Int child_end = supernode_child_offsets[supernode + 1];
+  const Int child_beg = supernode_forest.child_offsets[supernode];
+  const Int child_end = supernode_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
   std::vector<int> successes(num_children);
@@ -1229,15 +1208,14 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
       #pragma omp task default(none)                                       \
           firstprivate(tile_size, level, max_parallel_levels, supernode,   \
               child_index, shared_state, private_states)                   \
-          shared(successes, matrix, supernode_parents, supernode_children, \
-              supernode_child_offsets, result_contributions)
+          shared(successes, matrix, supernode_forest, result_contributions)
       {
-        const Int child = supernode_children[child_beg + child_index];
+        const Int child = supernode_forest.children[child_beg + child_index];
         LDLResult& result_contribution = result_contributions[child_index];
         successes[child_index] = MultithreadedLeftLookingSubtree(
             tile_size, level + 1, max_parallel_levels, child, matrix,
-            supernode_parents, supernode_children, supernode_child_offsets,
-            shared_state, private_states, &result_contribution);
+            supernode_forest, shared_state, private_states,
+            &result_contribution);
       }
     }
   }
@@ -1261,8 +1239,8 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
   if (succeeded) {
     // Handle the current supernode's elimination.
     #pragma omp taskgroup
-    MultithreadedLeftLookingSupernodeUpdate(
-        supernode, matrix, supernode_parents, shared_state, private_states);
+    MultithreadedLeftLookingSupernodeUpdate(supernode, matrix, supernode_forest,
+                                            shared_state, private_states);
 
     #pragma omp taskgroup
     succeeded = MultithreadedLeftLookingSupernodeFinalize(
@@ -1275,7 +1253,8 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
 template <class Field>
 LDLResult Factorization<Field>::MultithreadedLeftLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
-  std::vector<Int> supernode_parents;
+  // TODO(Jack Poulson): Completely switch to AssemblyForest.
+  AssemblyForest supernode_forest;
   {
     std::vector<Int> parents;
     std::vector<Int> supernode_degrees;
@@ -1285,7 +1264,8 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
     {
       #pragma omp taskgroup
       MultithreadedFormSupernodes(matrix, control.relaxation_control, &parents,
-                                  &supernode_degrees, &supernode_parents);
+                                  &supernode_degrees,
+                                  &supernode_forest.parents);
 
       #pragma omp taskgroup
       MultithreadedInitializeFactors(matrix, parents, supernode_degrees);
@@ -1316,12 +1296,10 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
   }
 
   // Form the downlinks for the supernodal elimination tree.
-  std::vector<Int> supernode_children;
-  std::vector<Int> supernode_child_offsets;
-  std::vector<Int> roots;
-  EliminationForestAndRootsFromParents(supernode_parents, &supernode_children,
-                                       &supernode_child_offsets, &roots);
-  const Int num_roots = roots.size();
+  EliminationForestAndRootsFromParents(
+      supernode_forest.parents, &supernode_forest.children,
+      &supernode_forest.child_offsets, &supernode_forest.roots);
+  const Int num_roots = supernode_forest.roots.size();
 
   LDLResult result;
 
@@ -1334,12 +1312,11 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
   const Int level = 0;
   if (max_parallel_levels == 0) {
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
-      const Int root = roots[root_index];
+      const Int root = supernode_forest.roots[root_index];
       LDLResult& result_contribution = result_contributions[root_index];
-      successes[root_index] = LeftLookingSubtree(
-          root, matrix, supernode_parents, supernode_children,
-          supernode_child_offsets, &shared_state, &private_states[0],
-          &result_contribution);
+      successes[root_index] =
+          LeftLookingSubtree(root, matrix, supernode_forest, &shared_state,
+                             &private_states[0], &result_contribution);
     }
   } else {
     const Int tile_size = control.tile_size;
@@ -1352,18 +1329,17 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
     #pragma omp single
     #pragma omp taskgroup
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
-      #pragma omp task default(none)                          \
-          firstprivate(tile_size, root_index)                 \
-          shared(roots, successes, matrix, supernode_parents, \
-              supernode_children, supernode_child_offsets,    \
-              result_contributions, shared_state, private_states)
+      #pragma omp task default(none)                                        \
+          firstprivate(tile_size, root_index)                               \
+          shared(successes, matrix, supernode_forest, result_contributions, \
+              shared_state, private_states)
       {
-        const Int root = roots[root_index];
+        const Int root = supernode_forest.roots[root_index];
         LDLResult& result_contribution = result_contributions[root_index];
         successes[root_index] = MultithreadedLeftLookingSubtree(
             tile_size, level + 1, max_parallel_levels, root, matrix,
-            supernode_parents, supernode_children, supernode_child_offsets,
-            &shared_state, &private_states, &result_contribution);
+            supernode_forest, &shared_state, &private_states,
+            &result_contribution);
       }
     }
 
@@ -1391,7 +1367,8 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
 template <class Field>
 LDLResult Factorization<Field>::MultithreadedRightLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
-  std::vector<Int> supernode_parents;
+  // TODO(Jack Poulson): Completely switch to AssemblyForest.
+  AssemblyForest supernode_forest;
   {
     std::vector<Int> parents;
     std::vector<Int> supernode_degrees;
@@ -1401,7 +1378,8 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
     {
       #pragma omp taskgroup
       MultithreadedFormSupernodes(matrix, control.relaxation_control, &parents,
-                                  &supernode_degrees, &supernode_parents);
+                                  &supernode_degrees,
+                                  &supernode_forest.parents);
 
       #pragma omp taskgroup
       MultithreadedInitializeFactors(matrix, parents, supernode_degrees);
@@ -1415,19 +1393,17 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
   shared_state.schur_complements.resize(num_supernodes);
 
   // Form the downlinks for the supernodal elimination tree.
-  std::vector<Int> supernode_children;
-  std::vector<Int> supernode_child_offsets;
-  std::vector<Int> roots;
-  EliminationForestAndRootsFromParents(supernode_parents, &supernode_children,
-                                       &supernode_child_offsets, &roots);
-  const Int num_roots = roots.size();
+  EliminationForestAndRootsFromParents(
+      supernode_forest.parents, &supernode_forest.children,
+      &supernode_forest.child_offsets, &supernode_forest.roots);
+  const Int num_roots = supernode_forest.roots.size();
 
   // Compute flop-count estimates so that we may prioritize the expensive
   // tasks before the cheaper ones.
   std::vector<double> work_estimates(num_supernodes);
-  for (const Int& root : roots) {
-    FillSubtreeWorkEstimates(root, supernode_children, supernode_child_offsets,
-                             *lower_factor, &work_estimates);
+  for (const Int& root : supernode_forest.roots) {
+    FillSubtreeWorkEstimates(root, supernode_forest, *lower_factor,
+                             &work_estimates);
   }
 
   LDLResult result;
@@ -1441,11 +1417,10 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
   const Int level = 0;
   if (max_parallel_levels == 0) {
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
-      const Int root = roots[root_index];
+      const Int root = supernode_forest.roots[root_index];
       LDLResult& result_contribution = result_contributions[root_index];
       successes[root_index] = RightLookingSubtree(
-          root, matrix, supernode_parents, supernode_children,
-          supernode_child_offsets, &shared_state, &result_contribution);
+          root, matrix, supernode_forest, &shared_state, &result_contribution);
     }
   } else {
     const Int tile_size = control.tile_size;
@@ -1458,24 +1433,23 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
     #pragma omp single
     #pragma omp taskgroup
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
-      const Int root = roots[root_index];
+      const Int root = supernode_forest.roots[root_index];
 
       // As above, one could make use of OpenMP task priorities, e.g., with an
       // integer priority of:
       //
       //   const Int task_priority = std::pow(work_estimates[child], 0.25);
       //
-      #pragma omp task                                            \
-          default(none) firstprivate(tile_size, root, root_index) \
-          shared(roots, successes, matrix, supernode_parents,     \
-              supernode_children, supernode_child_offsets,        \
-              result_contributions, shared_state, work_estimates)
+      #pragma omp task                                                      \
+          default(none) firstprivate(tile_size, root, root_index)           \
+          shared(successes, matrix, supernode_forest, result_contributions, \
+              shared_state, work_estimates)
       {
         LDLResult& result_contribution = result_contributions[root_index];
         successes[root_index] = MultithreadedRightLookingSubtree(
             tile_size, level + 1, max_parallel_levels, root, matrix,
-            supernode_parents, supernode_children, supernode_child_offsets,
-            work_estimates, &shared_state, &result_contribution);
+            supernode_forest, work_estimates, &shared_state,
+            &result_contribution);
       }
     }
 

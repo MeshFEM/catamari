@@ -184,86 +184,81 @@ class Factorization {
 
   LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
                         const Control& control);
+#ifdef _OPENMP
+  LDLResult MultithreadedLeftLooking(const CoordinateMatrix<Field>& matrix,
+                                     const Control& control);
+#endif  // ifdef _OPENMP
 
   LDLResult RightLooking(const CoordinateMatrix<Field>& matrix,
                          const Control& control);
+#ifdef _OPENMP
+  LDLResult MultithreadedRightLooking(const CoordinateMatrix<Field>& matrix,
+                                      const Control& control);
+#endif  // ifdef _OPENMP
 
   bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
-                          const std::vector<Int>& supernode_parents,
-                          const std::vector<Int>& supernode_children,
-                          const std::vector<Int>& supernode_child_offsets,
+                          const AssemblyForest& supernode_forest,
                           LeftLookingSharedState* shared_state,
                           LeftLookingPrivateState* private_state,
                           LDLResult* result);
-
-  bool RightLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
-                           const std::vector<Int>& supernode_parents,
-                           const std::vector<Int>& supernode_children,
-                           const std::vector<Int>& supernode_child_offsets,
-                           RightLookingSharedState* shared_state,
-                           LDLResult* result);
-
-  void LeftLookingSupernodeUpdate(Int main_supernode,
-                                  const CoordinateMatrix<Field>& matrix,
-                                  const std::vector<Int>& supernode_parents,
-                                  LeftLookingSharedState* shared_state,
-                                  LeftLookingPrivateState* private_state);
-
-  bool LeftLookingSupernodeFinalize(Int main_supernode, LDLResult* result);
-
-  void MergeChildSchurComplements(
-      Int supernode, const std::vector<Int>& supernode_children,
-      const std::vector<Int>& supernode_child_offsets,
-      RightLookingSharedState* shared_state);
-
-  bool RightLookingSupernodeFinalize(
-      Int supernode, const std::vector<Int>& supernode_children,
-      const std::vector<Int>& supernode_child_offsets,
-      RightLookingSharedState* shared_state, LDLResult* result);
-
 #ifdef _OPENMP
-  void MultithreadedLeftLookingSupernodeUpdate(
-      Int main_supernode, const CoordinateMatrix<Field>& matrix,
-      const std::vector<Int>& supernode_parents,
-      LeftLookingSharedState* shared_state,
-      std::vector<LeftLookingPrivateState>* private_states);
-
-  bool MultithreadedLeftLookingSupernodeFinalize(
-      Int tile_size, Int supernode,
-      std::vector<LeftLookingPrivateState>* private_states, LDLResult* result);
-
   bool MultithreadedLeftLookingSubtree(
       Int tile_size, Int level, Int max_parallel_levels, Int supernode,
       const CoordinateMatrix<Field>& matrix,
-      const std::vector<Int>& supernode_parents,
-      const std::vector<Int>& supernode_children,
-      const std::vector<Int>& supernode_child_offsets,
+      const AssemblyForest& supernode_forest,
       LeftLookingSharedState* shared_state,
       std::vector<LeftLookingPrivateState>* private_states, LDLResult* result);
+#endif  // ifdef _OPENMP
 
-  LDLResult MultithreadedLeftLooking(const CoordinateMatrix<Field>& matrix,
-                                     const Control& control);
-
-  LDLResult MultithreadedRightLooking(const CoordinateMatrix<Field>& matrix,
-                                      const Control& control);
-
+  bool RightLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
+                           const AssemblyForest& supernode_forest,
+                           RightLookingSharedState* shared_state,
+                           LDLResult* result);
+#ifdef _OPENMP
   bool MultithreadedRightLookingSubtree(
       Int tile_size, Int level, Int max_parallel_levels, Int supernode,
       const CoordinateMatrix<Field>& matrix,
-      const std::vector<Int>& supernode_parents,
-      const std::vector<Int>& supernode_children,
-      const std::vector<Int>& supernode_child_offsets,
+      const AssemblyForest& supernode_forest,
       const std::vector<double>& work_estimates,
       RightLookingSharedState* shared_state, LDLResult* result);
+#endif  // ifdef _OPENMP
 
+  void LeftLookingSupernodeUpdate(Int main_supernode,
+                                  const CoordinateMatrix<Field>& matrix,
+                                  const AssemblyForest& supernode_forest,
+                                  LeftLookingSharedState* shared_state,
+                                  LeftLookingPrivateState* private_state);
+#ifdef _OPENMP
+  void MultithreadedLeftLookingSupernodeUpdate(
+      Int main_supernode, const CoordinateMatrix<Field>& matrix,
+      const AssemblyForest& supernode_forest,
+      LeftLookingSharedState* shared_state,
+      std::vector<LeftLookingPrivateState>* private_states);
+#endif  // ifdef _OPENMP
+
+  bool LeftLookingSupernodeFinalize(Int main_supernode, LDLResult* result);
+#ifdef _OPENMP
+  bool MultithreadedLeftLookingSupernodeFinalize(
+      Int tile_size, Int supernode,
+      std::vector<LeftLookingPrivateState>* private_states, LDLResult* result);
+#endif  // ifdef _OPENMP
+
+  void MergeChildSchurComplements(Int supernode,
+                                  const AssemblyForest& supernode_forest,
+                                  RightLookingSharedState* shared_state);
+#ifdef _OPENMP
   void MultithreadedMergeChildSchurComplements(
-      Int supernode, const std::vector<Int>& supernode_children,
-      const std::vector<Int>& supernode_child_offsets,
+      Int supernode, const AssemblyForest& supernode_forest,
       RightLookingSharedState* shared_state);
+#endif  // ifdef _OPENMP
 
+  bool RightLookingSupernodeFinalize(Int supernode,
+                                     const AssemblyForest& supernode_forest,
+                                     RightLookingSharedState* shared_state,
+                                     LDLResult* result);
+#ifdef _OPENMP
   bool MultithreadedRightLookingSupernodeFinalize(
-      Int tile_size, Int supernode, const std::vector<Int>& supernode_children,
-      const std::vector<Int>& supernode_child_offsets,
+      Int tile_size, Int supernode, const AssemblyForest& supernode_forest,
       RightLookingSharedState* shared_state, LDLResult* result);
 #endif  // ifdef _OPENMP
 };

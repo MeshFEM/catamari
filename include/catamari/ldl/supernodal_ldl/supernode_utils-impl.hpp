@@ -1015,19 +1015,17 @@ void MultithreadedFillStructureIndices(
 #endif  // ifdef _OPENMP
 
 template <class Field>
-void FillSubtreeWorkEstimates(Int root,
-                              const std::vector<Int>& supernode_children,
-                              const std::vector<Int>& supernode_child_offsets,
+void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_forest,
                               const LowerFactor<Field>& lower_factor,
                               std::vector<double>* work_estimates) {
-  const Int child_beg = supernode_child_offsets[root];
-  const Int child_end = supernode_child_offsets[root + 1];
+  const Int child_beg = supernode_forest.child_offsets[root];
+  const Int child_end = supernode_forest.child_offsets[root + 1];
   const Int num_children = child_end - child_beg;
 
   for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child = supernode_children[child_beg + child_index];
-    FillSubtreeWorkEstimates(child, supernode_children, supernode_child_offsets,
-                             lower_factor, work_estimates);
+    const Int child = supernode_forest.children[child_beg + child_index];
+    FillSubtreeWorkEstimates(child, supernode_forest, lower_factor,
+                             work_estimates);
     (*work_estimates)[root] += (*work_estimates)[child];
   }
 
