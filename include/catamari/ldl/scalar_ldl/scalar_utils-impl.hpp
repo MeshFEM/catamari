@@ -332,64 +332,84 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void MultithreadedFillStructureIndicesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& parents, const std::vector<Int>& degrees, Int root,
-    LowerStructure* lower_structure, std::vector<Int>* pattern_flags,
-    std::vector<Int>* column_ptrs) {
+    const AssemblyForest& scalar_forest, Int root,
+    LowerStructure* lower_structure,
+    std::vector<std::vector<Int>>* private_pattern_flags) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
   for (Int index = child_beg; index < child_end; ++index) {
     const Int child = ordering.assembly_forest.children[index];
 
-    #pragma omp task default(none) firstprivate(child) \
-        shared(matrix, ordering, parents, degrees, lower_structure, \
-            pattern_flags, column_ptrs)
-    MultithreadedFillStructureIndicesRecursion(matrix, ordering, parents,
-                                               degrees, child, lower_structure,
-                                               pattern_flags, column_ptrs);
+    #pragma omp task default(none) firstprivate(child)           \
+        shared(matrix, ordering, scalar_forest, lower_structure, \
+            private_pattern_flags)
+    MultithreadedFillStructureIndicesRecursion(matrix, ordering, scalar_forest,
+                                               child, lower_structure,
+                                               private_pattern_flags);
   }
 
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
-  const bool have_permutation = !ordering.permutation.empty();
+  const int thread = omp_get_thread_num();
+  std::vector<Int>& pattern_flags = (*private_pattern_flags)[thread];
+
   const Int supernode_size = ordering.supernode_sizes[root];
   const Int supernode_offset = ordering.supernode_offsets[root];
-  for (Int index = 0; index < supernode_size; ++index) {
-    const Int row = supernode_offset + index;
-    (*pattern_flags)[row] = row;
-    (*column_ptrs)[row] = lower_structure->column_offsets[row];
-
-    const Int orig_row =
-        have_permutation ? ordering.inverse_permutation[row] : row;
-    const Int row_beg = matrix.RowEntryOffset(orig_row);
-    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
-    for (Int index = row_beg; index < row_end; ++index) {
-      const MatrixEntry<Field>& entry = entries[index];
-      Int column =
-          have_permutation ? ordering.permutation[entry.column] : entry.column;
-
-      // We are traversing the strictly lower triangle and know that the
-      // indices are sorted.
-      if (column >= row) {
-        if (have_permutation) {
+  const bool have_permutation = !ordering.permutation.empty();
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int column = supernode_offset;
+       column < supernode_offset + supernode_size; ++column) {
+    // Form this node's structure by unioning that of its direct children
+    // (removing portions that intersect this supernode).
+    const Int scalar_child_beg = scalar_forest.child_offsets[column];
+    const Int scalar_child_end = scalar_forest.child_offsets[column + 1];
+    const Int struct_beg = lower_structure->column_offsets[column];
+    const Int struct_end = lower_structure->column_offsets[column + 1];
+    Int struct_ptr = struct_beg;
+    for (Int child_index = scalar_child_beg; child_index < scalar_child_end;
+         ++child_index) {
+      const Int child = scalar_forest.children[child_index];
+      const Int child_struct_beg = lower_structure->column_offsets[child];
+      const Int child_struct_end = lower_structure->column_offsets[child + 1];
+      for (Int child_struct_ptr = child_struct_beg;
+           child_struct_ptr != child_struct_end; ++child_struct_ptr) {
+        const Int row = lower_structure->indices[child_struct_ptr];
+        if (row == column) {
           continue;
-        } else {
-          break;
+        }
+
+        if (pattern_flags[row] != column) {
+          CATAMARI_ASSERT(row > column, "row was < column.");
+          pattern_flags[row] = column;
+          lower_structure->indices[struct_ptr++] = row;
         }
       }
+    }
 
-      // Look for new entries in the pattern by walking up to the root of this
-      // subtree of the elimination forest from index 'column'.
-      while ((*pattern_flags)[column] != row) {
-        // Mark index 'column' as in the pattern of row 'row'.
-        (*pattern_flags)[column] = row;
-        lower_structure->indices[(*column_ptrs)[column]++] = row;
+    // Incorporate this column's structure.
+    const Int orig_column =
+        have_permutation ? ordering.inverse_permutation[column] : column;
+    const Int column_beg = matrix.RowEntryOffset(orig_column);
+    const Int column_end = matrix.RowEntryOffset(orig_column + 1);
+    for (Int index = column_beg; index < column_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      const Int row =
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
+      if (row <= column) {
+        continue;
+      }
 
-        // Move up to the parent in this subtree of the elimination forest.
-        // Moving to the parent will increase the index (but remain bounded
-        // from above by 'row').
-        column = parents[column];
+      if (pattern_flags[row] != column) {
+        pattern_flags[row] = column;
+        lower_structure->indices[struct_ptr++] = row;
       }
     }
+
+    CATAMARI_ASSERT(struct_ptr <= struct_end, "Stored too many indices.");
+    CATAMARI_ASSERT(struct_ptr >= struct_end, "Stored too few indices.");
+
+    // TODO(Jack Poulson): Incorporate a parallel sort?
+    std::sort(&lower_structure->indices[struct_beg],
+              &lower_structure->indices[struct_end]);
   }
 }
 
@@ -406,22 +426,29 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
   OffsetScan(degrees, &lower_structure->column_offsets);
   lower_structure->indices.resize(lower_structure->column_offsets.back());
 
-  // A data structure for marking whether or not an index is in the pattern
-  // of the active row of the lower-triangular factor.
-  std::vector<Int> pattern_flags(num_rows);
+  // TODO(Jack Poulson): Decide if this computation should be hoisted above
+  // FillStructureIndices (and possibly parallelized).
+  AssemblyForest scalar_forest;
+  scalar_forest.parents = parents;
+  scalar_forest.FillFromParents();
 
-  // A set of pointers for keeping track of where to insert column pattern
-  // indices.
-  std::vector<Int> column_ptrs(num_rows);
+  // A data structure for marking whether or not a node is in the pattern of
+  // the active row of the lower-triangular factor. Each thread potentially
+  // needs its own since different subtrees can have intersecting structure.
+  const int max_threads = omp_get_max_threads();
+  std::vector<std::vector<Int>> private_pattern_flags(max_threads);
+  for (int thread = 0; thread < max_threads; ++thread) {
+    private_pattern_flags[thread].resize(num_rows, -1);
+  }
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
-    #pragma omp task default(none) firstprivate(root)               \
-        shared(matrix, ordering, parents, degrees, lower_structure, \
-            pattern_flags, column_ptrs)
-    MultithreadedFillStructureIndicesRecursion(matrix, ordering, parents,
-                                               degrees, root, lower_structure,
-                                               &pattern_flags, &column_ptrs);
+    #pragma omp task default(none) firstprivate(root)            \
+        shared(matrix, ordering, scalar_forest, lower_structure, \
+            private_pattern_flags)
+    MultithreadedFillStructureIndicesRecursion(matrix, ordering, scalar_forest,
+                                               root, lower_structure,
+                                               &private_pattern_flags);
   }
 }
 #endif  // ifdef _OPENMP
