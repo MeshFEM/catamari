@@ -716,16 +716,13 @@ inline void RelaxSupernodes(
 
 template <class Field>
 void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
-                       const std::vector<Int>& permutation,
-                       const std::vector<Int>& inverse_permutation,
-                       const std::vector<Int>& supernode_sizes,
-                       const std::vector<Int>& supernode_starts,
+                       const SymmetricOrdering& ordering,
                        const std::vector<Int>& member_to_index,
                        const AssemblyForest& forest,
                        std::vector<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
-  const Int num_supernodes = supernode_sizes.size();
-  const bool have_permutation = !permutation.empty();
+  const Int num_supernodes = ordering.supernode_sizes.size();
+  const bool have_permutation = !ordering.permutation.empty();
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -745,13 +742,14 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
     pattern_flags[row] = row;
     supernode_pattern_flags[main_supernode] = row;
 
-    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       Int descendant =
-          have_permutation ? permutation[entry.column] : entry.column;
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
       Int descendant_supernode = member_to_index[descendant];
 
       // We are traversing the strictly lower triangle and know that the
@@ -793,18 +791,18 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
 
 #ifdef _OPENMP
 // TODO(Jack Poulson): Parallelize this with a right-looking scheme.
+// TODO(Jack Poulson): Decide how we can compute the sizes of the portions of
+// the child structures which do not intersect the current supernode without
+// explicitly storing the child structures...
 template <class Field>
 void MultithreadedSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
-                                    const std::vector<Int>& permutation,
-                                    const std::vector<Int>& inverse_permutation,
-                                    const std::vector<Int>& supernode_sizes,
-                                    const std::vector<Int>& supernode_starts,
+                                    const SymmetricOrdering& ordering,
                                     const std::vector<Int>& member_to_index,
                                     const AssemblyForest& forest,
                                     std::vector<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
-  const Int num_supernodes = supernode_sizes.size();
-  const bool have_permutation = !permutation.empty();
+  const Int num_supernodes = ordering.supernode_sizes.size();
+  const bool have_permutation = !ordering.permutation.empty();
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -824,13 +822,14 @@ void MultithreadedSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
     pattern_flags[row] = row;
     supernode_pattern_flags[main_supernode] = row;
 
-    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int orig_row =
+        have_permutation ? ordering.inverse_permutation[row] : row;
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       Int descendant =
-          have_permutation ? permutation[entry.column] : entry.column;
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
       Int descendant_supernode = member_to_index[descendant];
 
       // We are traversing the strictly lower triangle and know that the

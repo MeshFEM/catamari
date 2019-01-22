@@ -199,9 +199,9 @@ int main(int argc, char** argv) {
       "diagonal_shift", "The value to add to the diagonal.", 0.);
   const double scale = parser.OptionalInput<double>(
       "scale", "The two-norm, in [0, 1], of the shifted negative Laplacian.",
-      1.);
+      0.75);
   const bool maximum_likelihood = parser.OptionalInput<bool>(
-      "maximum_likelihood", "Make the maximum-likelihood decisions?", false);
+      "maximum_likelihood", "Make the maximum-likelihood decisions?", true);
   const bool ascii_display = parser.OptionalInput<bool>(
       "ascii_display", "Display sample in ASCII?", true);
   const char missing_char = parser.OptionalInput<char>(
@@ -219,7 +219,7 @@ int main(int argc, char** argv) {
       "allowable_supernode_zero_ratio",
       "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const Int num_samples =
-      parser.OptionalInput<Int>("num_samples", "The number of DPP samples.", 5);
+      parser.OptionalInput<Int>("num_samples", "The number of DPP samples.", 1);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
 #ifdef _OPENMP

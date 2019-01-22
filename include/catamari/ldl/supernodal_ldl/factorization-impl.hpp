@@ -38,69 +38,61 @@ void Factorization<Field>::FormSupernodes(
     const SupernodalRelaxationControl& control, AssemblyForest* forest,
     std::vector<Int>* supernode_degrees) {
   // Compute the non-supernodal elimination tree using the original ordering.
-  std::vector<Int> orig_parents, orig_degrees;
-  scalar_ldl::EliminationForestAndDegrees(matrix, ordering_, &orig_parents,
-                                          &orig_degrees);
-
-  AssemblyForest orig_forest;
-  orig_forest.parents = orig_parents;
-  orig_forest.FillFromParents();
+  AssemblyForest orig_scalar_forest;
+  std::vector<Int> orig_scalar_degrees;
+  scalar_ldl::EliminationForestAndDegrees(
+      matrix, ordering_, &orig_scalar_forest.parents, &orig_scalar_degrees);
+  orig_scalar_forest.FillFromParents();
 
   // Greedily compute a supernodal partition using the original ordering.
-  std::vector<Int> orig_supernode_sizes;
+  // TODO(Jack Poulson): Decide if we can overwrite 'ordering_' instead.
+  // It seems not (except for 'permutation' and 'inverse_permutation' since
+  // RelaxSupernodes reads 'fund_ordering' and writes into 'ordering_'.
+  SymmetricOrdering fund_ordering;
+  fund_ordering.permutation = ordering_.permutation;
+  fund_ordering.inverse_permutation = ordering_.inverse_permutation;
   scalar_ldl::LowerStructure scalar_structure;
-  FormFundamentalSupernodes(matrix, ordering_, orig_forest, orig_degrees,
-                            &orig_supernode_sizes, &scalar_structure);
+  FormFundamentalSupernodes(matrix, ordering_, orig_scalar_forest,
+                            orig_scalar_degrees, &fund_ordering.supernode_sizes,
+                            &scalar_structure);
+  OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
+  CATAMARI_ASSERT(fund_ordering.supernode_offsets.back() == matrix.NumRows(),
+                  "Supernodes did not sum to the matrix size.");
 
-#ifdef CATAMARI_DEBUG
-  {
-    Int supernode_size_sum = 0;
-    for (const Int& supernode_size : orig_supernode_sizes) {
-      supernode_size_sum += supernode_size;
-    }
-    CATAMARI_ASSERT(supernode_size_sum == matrix.NumRows(),
-                    "Supernodes did not sum to the matrix size.");
-  }
-#endif
+  std::vector<Int> fund_member_to_index;
+  MemberToIndex(matrix.NumRows(), fund_ordering.supernode_offsets,
+                &fund_member_to_index);
 
-  std::vector<Int> orig_supernode_starts;
-  OffsetScan(orig_supernode_sizes, &orig_supernode_starts);
-
-  std::vector<Int> orig_member_to_index;
-  MemberToIndex(matrix.NumRows(), orig_supernode_starts, &orig_member_to_index);
-
-  std::vector<Int> orig_supernode_degrees;
-  SupernodalDegrees(matrix, ordering_.permutation,
-                    ordering_.inverse_permutation, orig_supernode_sizes,
-                    orig_supernode_starts, orig_member_to_index, orig_forest,
-                    &orig_supernode_degrees);
-
-  const Int num_orig_supernodes = orig_supernode_sizes.size();
-  std::vector<Int> orig_supernode_parents;
+  const Int num_fund_supernodes = fund_ordering.supernode_sizes.size();
   ConvertFromScalarToSupernodalEliminationForest(
-      num_orig_supernodes, orig_parents, orig_member_to_index,
-      &orig_supernode_parents);
+      num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
+      &fund_ordering.assembly_forest.parents);
+
+  std::vector<Int> fund_supernode_degrees;
+  SupernodalDegrees(matrix, fund_ordering, fund_member_to_index,
+                    orig_scalar_forest, &fund_supernode_degrees);
 
   if (control.relax_supernodes) {
-    RelaxSupernodes(orig_parents, orig_supernode_sizes, orig_supernode_starts,
-                    orig_supernode_parents, orig_supernode_degrees,
-                    orig_member_to_index, scalar_structure, control,
-                    &ordering_.permutation, &ordering_.inverse_permutation,
-                    &forest->parents, &ordering_.assembly_forest.parents,
-                    supernode_degrees, &ordering_.supernode_sizes,
-                    &ordering_.supernode_offsets, &supernode_member_to_index_);
+    RelaxSupernodes(
+        orig_scalar_forest.parents, fund_ordering.supernode_sizes,
+        fund_ordering.supernode_offsets, fund_ordering.assembly_forest.parents,
+        fund_supernode_degrees, fund_member_to_index, scalar_structure, control,
+        &ordering_.permutation, &ordering_.inverse_permutation,
+        &forest->parents, &ordering_.assembly_forest.parents, supernode_degrees,
+        &ordering_.supernode_sizes, &ordering_.supernode_offsets,
+        &supernode_member_to_index_);
     forest->FillFromParents();
     ordering_.assembly_forest.FillFromParents();
   } else {
-    *forest = orig_forest;
-    *supernode_degrees = orig_supernode_degrees;
+    *forest = orig_scalar_forest;
 
-    ordering_.supernode_sizes = orig_supernode_sizes;
-    ordering_.supernode_offsets = orig_supernode_starts;
-    ordering_.assembly_forest.parents = orig_supernode_parents;
+    ordering_.supernode_sizes = fund_ordering.supernode_sizes;
+    ordering_.supernode_offsets = fund_ordering.supernode_offsets;
+    ordering_.assembly_forest.parents = fund_ordering.assembly_forest.parents;
     ordering_.assembly_forest.FillFromParents();
 
-    supernode_member_to_index_ = orig_member_to_index;
+    supernode_member_to_index_ = fund_member_to_index;
+    *supernode_degrees = fund_supernode_degrees;
   }
 }
 
@@ -111,75 +103,66 @@ void Factorization<Field>::MultithreadedFormSupernodes(
     const SupernodalRelaxationControl& control, AssemblyForest* forest,
     std::vector<Int>* supernode_degrees) {
   // Compute the non-supernodal elimination tree using the original ordering.
-  std::vector<Int> orig_parents, orig_degrees;
+  AssemblyForest orig_scalar_forest;
+  std::vector<Int> orig_scalar_degrees;
   scalar_ldl::MultithreadedEliminationForestAndDegrees(
-      matrix, ordering_, &orig_parents, &orig_degrees);
-
-  // TODO(Jack Poulson): Parallelize this formation?
-  AssemblyForest orig_forest;
-  orig_forest.parents = orig_parents;
-  orig_forest.FillFromParents();
+      matrix, ordering_, &orig_scalar_forest.parents, &orig_scalar_degrees);
+  orig_scalar_forest.FillFromParents();
 
   // Greedily compute a supernodal partition using the original ordering.
-  std::vector<Int> fund_supernode_sizes;
+  // TODO(Jack Poulson): Decide if we can overwrite 'ordering_' instead.
+  // It seems not (except for 'permutation' and 'inverse_permutation' since
+  // RelaxSupernodes reads 'fund_ordering' and writes into 'ordering_'.
+  SymmetricOrdering fund_ordering;
+  fund_ordering.permutation = ordering_.permutation;
+  fund_ordering.inverse_permutation = ordering_.inverse_permutation;
   scalar_ldl::LowerStructure scalar_structure;
-  MultithreadedFormFundamentalSupernodes(matrix, ordering_, orig_forest,
-                                         orig_degrees, &fund_supernode_sizes,
-                                         &scalar_structure);
-
-#ifdef CATAMARI_DEBUG
-  {
-    Int supernode_size_sum = 0;
-    for (const Int& supernode_size : fund_supernode_sizes) {
-      supernode_size_sum += supernode_size;
-    }
-    CATAMARI_ASSERT(supernode_size_sum == matrix.NumRows(),
-                    "Supernodes did not sum to the matrix size.");
-  }
-#endif
-
-  std::vector<Int> fund_supernode_starts;
-  OffsetScan(fund_supernode_sizes, &fund_supernode_starts);
+  MultithreadedFormFundamentalSupernodes(
+      matrix, ordering_, orig_scalar_forest, orig_scalar_degrees,
+      &fund_ordering.supernode_sizes, &scalar_structure);
+  OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
+  CATAMARI_ASSERT(fund_ordering.supernode_offsets.back() == matrix.NumRows(),
+                  "Supernodes did not sum to the matrix size.");
 
   // TODO(Jack Poulson): Parallelize MemberToIndex (low priority).
   std::vector<Int> fund_member_to_index;
-  MemberToIndex(matrix.NumRows(), fund_supernode_starts, &fund_member_to_index);
-
-  std::vector<Int> fund_supernode_degrees;
-  MultithreadedSupernodalDegrees(
-      matrix, ordering_.permutation, ordering_.inverse_permutation,
-      fund_supernode_sizes, fund_supernode_starts, fund_member_to_index,
-      orig_forest, &fund_supernode_degrees);
+  MemberToIndex(matrix.NumRows(), fund_ordering.supernode_offsets,
+                &fund_member_to_index);
 
   // TODO(Jack Poulson): Parallelize
   //     ConvertFromScalarToSupernodalEliminationForest.
-  const Int num_fund_supernodes = fund_supernode_sizes.size();
+  const Int num_fund_supernodes = fund_ordering.supernode_sizes.size();
   std::vector<Int> fund_supernode_parents;
   ConvertFromScalarToSupernodalEliminationForest(
-      num_fund_supernodes, orig_parents, fund_member_to_index,
-      &fund_supernode_parents);
+      num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
+      &fund_ordering.assembly_forest.parents);
+
+  std::vector<Int> fund_supernode_degrees;
+  MultithreadedSupernodalDegrees(matrix, fund_ordering, fund_member_to_index,
+                                 orig_scalar_forest, &fund_supernode_degrees);
 
   if (control.relax_supernodes) {
     // TODO(Jack Poulson): Parallelize RelaxSupernodes.
-    RelaxSupernodes(orig_parents, fund_supernode_sizes, fund_supernode_starts,
-                    fund_supernode_parents, fund_supernode_degrees,
-                    fund_member_to_index, scalar_structure, control,
-                    &ordering_.permutation, &ordering_.inverse_permutation,
-                    &forest->parents, &ordering_.assembly_forest.parents,
-                    supernode_degrees, &ordering_.supernode_sizes,
-                    &ordering_.supernode_offsets, &supernode_member_to_index_);
+    RelaxSupernodes(
+        orig_scalar_forest.parents, fund_ordering.supernode_sizes,
+        fund_ordering.supernode_offsets, fund_ordering.assembly_forest.parents,
+        fund_supernode_degrees, fund_member_to_index, scalar_structure, control,
+        &ordering_.permutation, &ordering_.inverse_permutation,
+        &forest->parents, &ordering_.assembly_forest.parents, supernode_degrees,
+        &ordering_.supernode_sizes, &ordering_.supernode_offsets,
+        &supernode_member_to_index_);
     forest->FillFromParents();
     ordering_.assembly_forest.FillFromParents();
   } else {
-    *forest = orig_forest;
-    *supernode_degrees = fund_supernode_degrees;
+    *forest = orig_scalar_forest;
 
-    ordering_.supernode_sizes = fund_supernode_sizes;
-    ordering_.supernode_offsets = fund_supernode_starts;
-    ordering_.assembly_forest.parents = fund_supernode_parents;
+    ordering_.supernode_sizes = fund_ordering.supernode_sizes;
+    ordering_.supernode_offsets = fund_ordering.supernode_offsets;
+    ordering_.assembly_forest.parents = fund_ordering.assembly_forest.parents;
     ordering_.assembly_forest.FillFromParents();
 
     supernode_member_to_index_ = fund_member_to_index;
+    *supernode_degrees = fund_supernode_degrees;
   }
 }
 #endif  // ifdef _OPENMP
