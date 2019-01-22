@@ -914,9 +914,8 @@ void MultithreadedFillStructureIndicesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const std::vector<Int>& parents,
     const std::vector<Int>& supernode_member_to_index, Int root,
-    LowerFactor<Field>* lower_factor, std::vector<Int>* pattern_flags,
-    std::vector<Int>* supernode_pattern_flags,
-    std::vector<Int*>* supernode_ptrs) {
+    LowerFactor<Field>* lower_factor,
+    std::vector<std::vector<Int>>* private_pattern_flags) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
@@ -924,77 +923,73 @@ void MultithreadedFillStructureIndicesRecursion(
     const Int child = ordering.assembly_forest.children[child_index];
     #pragma omp task default(none) firstprivate(child)               \
         shared(matrix, ordering, parents, supernode_member_to_index, \
-            lower_factor, pattern_flags, supernode_pattern_flags,    \
-            supernode_ptrs)
+            lower_factor, private_pattern_flags)
     MultithreadedFillStructureIndicesRecursion(
         matrix, ordering, parents, supernode_member_to_index, child,
-        lower_factor, pattern_flags, supernode_pattern_flags, supernode_ptrs);
+        lower_factor, private_pattern_flags);
   }
 
-  const bool have_permutation = !ordering.permutation.empty();
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
-  const Int supernode_size = ordering.supernode_sizes[root];
-  const Int supernode_offset = ordering.supernode_offsets[root];
-  for (Int index = 0; index < supernode_size; ++index) {
-    const Int row = supernode_offset + index;
-    (*pattern_flags)[row] = row;
-    (*supernode_pattern_flags)[root] = row;
+  const int thread = omp_get_thread_num();
+  std::vector<Int>& pattern_flags = (*private_pattern_flags)[thread];
 
-    const Int orig_row =
-        have_permutation ? ordering.inverse_permutation[row] : row;
-    const Int row_beg = matrix.RowEntryOffset(orig_row);
-    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
-    for (Int index = row_beg; index < row_end; ++index) {
-      const MatrixEntry<Field>& entry = entries[index];
-      Int descendant =
-          have_permutation ? ordering.permutation[entry.column] : entry.column;
-      Int descendant_supernode = supernode_member_to_index[descendant];
-
-      if (descendant >= row) {
-        if (have_permutation) {
-          continue;
-        } else {
-          // We are traversing the strictly lower triangle and know that the
-          // indices are sorted.
-          break;
-        }
+  // Form this node's structure by unioning that of its direct children
+  // (removing portions that intersect this supernode).
+  Int* struct_beg = lower_factor->Structure(root);
+  Int* struct_end = lower_factor->Structure(root + 1);
+  Int* struct_ptr = struct_beg;
+  for (Int child_index = child_beg; child_index < child_end; ++child_index) {
+    const Int child = ordering.assembly_forest.children[child_index];
+    const Int* child_struct_beg = lower_factor->Structure(child);
+    const Int* child_struct_end = lower_factor->Structure(child + 1);
+    for (const Int* child_struct_ptr = child_struct_beg;
+         child_struct_ptr != child_struct_end; ++child_struct_ptr) {
+      const Int row = *child_struct_ptr;
+      const Int row_supernode = supernode_member_to_index[row];
+      if (row_supernode == root) {
+        continue;
       }
 
-      // Look for new entries in the pattern by walking up to the root of this
-      // subtree of the elimination forest.
-      while ((*pattern_flags)[descendant] != row) {
-        // Mark 'descendant' as in the pattern of this row.
-        (*pattern_flags)[descendant] = row;
-
-        descendant_supernode = supernode_member_to_index[descendant];
-        CATAMARI_ASSERT(descendant_supernode <= root,
-                        "Descendant supernode was larger than main supernode.");
-        if (descendant_supernode == root) {
-          break;
-        }
-
-        if ((*supernode_pattern_flags)[descendant_supernode] != row) {
-          (*supernode_pattern_flags)[descendant_supernode] = row;
-          CATAMARI_ASSERT(
-              descendant_supernode < root,
-              "Descendant supernode was as large as main supernode.");
-          CATAMARI_ASSERT(
-              (*supernode_ptrs)[descendant_supernode] >=
-                      lower_factor->Structure(descendant_supernode) &&
-                  (*supernode_ptrs)[descendant_supernode] <
-                      lower_factor->Structure(descendant_supernode + 1),
-              "Left supernode's indices.");
-          *(*supernode_ptrs)[descendant_supernode] = row;
-          ++(*supernode_ptrs)[descendant_supernode];
-        }
-
-        // Move up to the parent in this subtree of the elimination forest.
-        // Moving to the parent will increase the index (but remain bounded
-        // from above by 'row').
-        descendant = parents[descendant];
+      if (pattern_flags[row] != root) {
+        CATAMARI_ASSERT(row_supernode > root, "row supernode was < root.");
+        pattern_flags[row] = root;
+        *struct_ptr = row;
+        ++struct_ptr;
       }
     }
   }
+
+  // Incorporate this supernode's structure.
+  const Int supernode_size = ordering.supernode_sizes[root];
+  const Int supernode_offset = ordering.supernode_offsets[root];
+  const bool have_permutation = !ordering.permutation.empty();
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int column = supernode_offset;
+       column < supernode_offset + supernode_size; ++column) {
+    const Int orig_column =
+        have_permutation ? ordering.inverse_permutation[column] : column;
+    const Int column_beg = matrix.RowEntryOffset(orig_column);
+    const Int column_end = matrix.RowEntryOffset(orig_column + 1);
+    for (Int index = column_beg; index < column_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      const Int row =
+          have_permutation ? ordering.permutation[entry.column] : entry.column;
+      const Int row_supernode = supernode_member_to_index[row];
+      if (row_supernode <= root) {
+        continue;
+      }
+
+      if (pattern_flags[row] != root) {
+        pattern_flags[row] = root;
+        *struct_ptr = row;
+        ++struct_ptr;
+      }
+    }
+  }
+  CATAMARI_ASSERT(struct_ptr <= struct_end, "Stored too many indices.");
+  CATAMARI_ASSERT(struct_ptr >= struct_end, "Stored too few indices.");
+
+  // TODO(Jack Poulson): Use a parallel sort?
+  std::sort(struct_beg, struct_end);
 }
 
 template <class Field>
@@ -1004,41 +999,31 @@ void MultithreadedFillStructureIndices(
     const std::vector<Int>& supernode_member_to_index,
     LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
-  const Int num_supernodes = ordering.supernode_sizes.size();
 
   // A data structure for marking whether or not a node is in the pattern of
-  // the active row of the lower-triangular factor.
-  std::vector<Int> pattern_flags(num_rows);
-
-  // A data structure for marking whether or not a supernode is in the pattern
-  // of the active row of the lower-triangular factor.
-  std::vector<Int> supernode_pattern_flags(num_supernodes);
-
-  // A set of pointers for keeping track of where to insert supernode pattern
-  // indices.
-  std::vector<Int*> supernode_ptrs(num_supernodes);
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    supernode_ptrs[supernode] = lower_factor->Structure(supernode);
+  // the active row of the lower-triangular factor. Each thread potentially
+  // needs its own since different subtrees can have intersecting structure.
+  const int max_threads = omp_get_max_threads();
+  std::vector<std::vector<Int>> private_pattern_flags(max_threads);
+  for (int thread = 0; thread < max_threads; ++thread) {
+    private_pattern_flags[thread].resize(num_rows, -1);
   }
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
     #pragma omp task default(none) firstprivate(root)                \
         shared(matrix, ordering, parents, supernode_member_to_index, \
-            lower_factor, pattern_flags, supernode_pattern_flags,    \
-            supernode_ptrs)
+            lower_factor, private_pattern_flags)
     MultithreadedFillStructureIndicesRecursion(
         matrix, ordering, parents, supernode_member_to_index, root,
-        lower_factor, &pattern_flags, &supernode_pattern_flags,
-        &supernode_ptrs);
+        lower_factor, &private_pattern_flags);
   }
 
 #ifdef CATAMARI_DEBUG
+  const Int num_supernodes = ordering.supernode_sizes.size();
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int* index_beg = lower_factor->Structure(supernode);
     const Int* index_end = lower_factor->Structure(supernode + 1);
-    CATAMARI_ASSERT(supernode_ptrs[supernode] == index_end,
-                    "Supernode pointers did not match index offsets.");
     bool sorted = true;
     Int last_row = -1;
     for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
