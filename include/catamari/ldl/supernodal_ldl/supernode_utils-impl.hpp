@@ -117,14 +117,14 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                const SymmetricOrdering& ordering,
-                               const std::vector<Int>& parents,
+                               const AssemblyForest& forest,
                                const std::vector<Int>& degrees,
                                std::vector<Int>* supernode_sizes,
                                scalar_ldl::LowerStructure* scalar_structure) {
   const Int num_rows = matrix.NumRows();
 
   // We will only fill the indices and offsets of the factorization.
-  scalar_ldl::FillStructureIndices(matrix, ordering, parents, degrees,
+  scalar_ldl::FillStructureIndices(matrix, ordering, forest, degrees,
                                    scalar_structure);
 
   supernode_sizes->clear();
@@ -211,7 +211,7 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void MultithreadedFormFundamentalSupernodesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& parents, const std::vector<Int>& degrees, Int root,
+    const std::vector<Int>& degrees, Int root,
     std::vector<Int>* flat_supernode_sizes,
     scalar_ldl::LowerStructure* scalar_structure,
     std::vector<Int>* column_ptrs) {
@@ -222,10 +222,10 @@ void MultithreadedFormFundamentalSupernodesRecursion(
     const Int child = ordering.assembly_forest.children[index];
 
     #pragma omp task default(none) firstprivate(child) \
-        shared(matrix, ordering, parents, degrees, flat_supernode_sizes, \
+        shared(matrix, ordering, degrees, flat_supernode_sizes, \
             scalar_structure, column_ptrs)
     MultithreadedFormFundamentalSupernodesRecursion(
-        matrix, ordering, parents, degrees, child, flat_supernode_sizes,
+        matrix, ordering, degrees, child, flat_supernode_sizes,
         scalar_structure, column_ptrs);
   }
 
@@ -300,14 +300,14 @@ void MultithreadedFormFundamentalSupernodesRecursion(
 template <class Field>
 void MultithreadedFormFundamentalSupernodes(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& parents, const std::vector<Int>& degrees,
+    const AssemblyForest& forest, const std::vector<Int>& degrees,
     std::vector<Int>* supernode_sizes,
     scalar_ldl::LowerStructure* scalar_structure) {
   const Int num_rows = matrix.NumRows();
 
   // We will only fill the indices and offsets of the factorization.
   #pragma omp taskgroup
-  scalar_ldl::MultithreadedFillStructureIndices(matrix, ordering, parents,
+  scalar_ldl::MultithreadedFillStructureIndices(matrix, ordering, forest,
                                                 degrees, scalar_structure);
 
   supernode_sizes->clear();
@@ -326,11 +326,11 @@ void MultithreadedFormFundamentalSupernodes(
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
-    #pragma omp task default(none) firstprivate(root)                    \
-        shared(matrix, ordering, parents, degrees, flat_supernode_sizes, \
+    #pragma omp task default(none) firstprivate(root)           \
+        shared(matrix, ordering, degrees, flat_supernode_sizes, \
             scalar_structure, column_ptrs)
     MultithreadedFormFundamentalSupernodesRecursion(
-        matrix, ordering, parents, degrees, root, &flat_supernode_sizes,
+        matrix, ordering, degrees, root, &flat_supernode_sizes,
         scalar_structure, &column_ptrs);
   }
 
@@ -721,7 +721,7 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
                        const std::vector<Int>& supernode_sizes,
                        const std::vector<Int>& supernode_starts,
                        const std::vector<Int>& member_to_index,
-                       const std::vector<Int>& parents,
+                       const AssemblyForest& forest,
                        std::vector<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = supernode_sizes.size();
@@ -785,11 +785,91 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
         // Move up to the parent in this subtree of the elimination forest.
         // Moving to the parent will increase the index (but remain bounded
         // from above by 'row').
-        descendant = parents[descendant];
+        descendant = forest.parents[descendant];
       }
     }
   }
 }
+
+#ifdef _OPENMP
+// TODO(Jack Poulson): Parallelize this with a right-looking scheme.
+template <class Field>
+void MultithreadedSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
+                                    const std::vector<Int>& permutation,
+                                    const std::vector<Int>& inverse_permutation,
+                                    const std::vector<Int>& supernode_sizes,
+                                    const std::vector<Int>& supernode_starts,
+                                    const std::vector<Int>& member_to_index,
+                                    const AssemblyForest& forest,
+                                    std::vector<Int>* supernode_degrees) {
+  const Int num_rows = matrix.NumRows();
+  const Int num_supernodes = supernode_sizes.size();
+  const bool have_permutation = !permutation.empty();
+
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> pattern_flags(num_rows);
+
+  // A data structure for marking whether or not a supernode is in the pattern
+  // of the active row of the lower-triangular factor.
+  std::vector<Int> supernode_pattern_flags(num_supernodes);
+
+  // Initialize the number of entries that will be stored into each supernode
+  supernode_degrees->clear();
+  supernode_degrees->resize(num_supernodes, 0);
+
+  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int row = 0; row < num_rows; ++row) {
+    const Int main_supernode = member_to_index[row];
+    pattern_flags[row] = row;
+    supernode_pattern_flags[main_supernode] = row;
+
+    const Int orig_row = have_permutation ? inverse_permutation[row] : row;
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      Int descendant =
+          have_permutation ? permutation[entry.column] : entry.column;
+      Int descendant_supernode = member_to_index[descendant];
+
+      // We are traversing the strictly lower triangle and know that the
+      // indices are sorted.
+      if (descendant >= row) {
+        if (have_permutation) {
+          continue;
+        } else {
+          break;
+        }
+      }
+
+      // Look for new entries in the pattern by walking up to the root of this
+      // subtree of the elimination forest from index 'descendant'. Any unset
+      // parent pointers can be filled in during the traversal, as the current
+      // row index would then be the parent.
+      while (pattern_flags[descendant] != row) {
+        // Mark index 'descendant' as in the pattern of row 'row'.
+        pattern_flags[descendant] = row;
+
+        descendant_supernode = member_to_index[descendant];
+        CATAMARI_ASSERT(descendant_supernode <= main_supernode,
+                        "Descendant supernode was larger than main supernode.");
+        if (descendant_supernode < main_supernode) {
+          if (supernode_pattern_flags[descendant_supernode] != row) {
+            supernode_pattern_flags[descendant_supernode] = row;
+            ++(*supernode_degrees)[descendant_supernode];
+          }
+        }
+
+        // Move up to the parent in this subtree of the elimination forest.
+        // Moving to the parent will increase the index (but remain bounded
+        // from above by 'row').
+        descendant = forest.parents[descendant];
+      }
+    }
+  }
+}
+#endif  // ifdef _OPENMP
 
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,

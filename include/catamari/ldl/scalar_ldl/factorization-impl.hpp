@@ -111,8 +111,12 @@ void Factorization<Field>::LeftLookingSetup(
   std::vector<Int> degrees;
   EliminationForestAndDegrees(matrix, ordering, parents, &degrees);
 
-  FillStructureIndices(matrix, ordering, *parents, degrees,
+  AssemblyForest forest;
+  forest.parents = *parents;
+  forest.FillFromParents();
+  FillStructureIndices(matrix, ordering, forest, degrees,
                        &lower_factor.structure);
+
   FillNonzeros(matrix);
 }
 

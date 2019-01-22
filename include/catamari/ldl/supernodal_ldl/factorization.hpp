@@ -150,21 +150,21 @@ class Factorization {
   // Form the (possibly relaxed) supernodes for the factorization.
   void FormSupernodes(const CoordinateMatrix<Field>& matrix,
                       const SupernodalRelaxationControl& control,
-                      std::vector<Int>* parents,
+                      AssemblyForest* forest,
                       std::vector<Int>* supernode_degrees);
 #ifdef _OPENMP
   void MultithreadedFormSupernodes(const CoordinateMatrix<Field>& matrix,
                                    const SupernodalRelaxationControl& control,
-                                   std::vector<Int>* parents,
+                                   AssemblyForest* forest,
                                    std::vector<Int>* supernode_degrees);
 #endif  // ifdef _OPENMP
 
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
-                         const std::vector<Int>& parents,
+                         const AssemblyForest& forest,
                          const std::vector<Int>& supernode_degrees);
 #ifdef _OPENMP
   void MultithreadedInitializeFactors(
-      const CoordinateMatrix<Field>& matrix, const std::vector<Int>& parents,
+      const CoordinateMatrix<Field>& matrix, const AssemblyForest& forest,
       const std::vector<Int>& supernode_degrees);
 #endif  // ifdef _OPENMP
 

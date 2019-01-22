@@ -57,14 +57,14 @@ Int ComputeTopologicalRowPatternAndScatterNonzeros(
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const SymmetricOrdering& ordering,
-                          const std::vector<Int>& parents,
+                          const AssemblyForest& forest,
                           const std::vector<Int>& degrees,
                           LowerStructure* lower_structure);
 #ifdef _OPENMP
 template <class Field>
 void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
                                        const SymmetricOrdering& ordering,
-                                       const std::vector<Int>& parents,
+                                       const AssemblyForest& forest,
                                        const std::vector<Int>& degrees,
                                        LowerStructure* lower_structure);
 #endif  // ifdef _OPENMP

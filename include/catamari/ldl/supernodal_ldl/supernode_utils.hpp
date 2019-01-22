@@ -70,7 +70,7 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                const SymmetricOrdering& ordering,
-                               const std::vector<Int>& parents,
+                               const AssemblyForest& forest,
                                const std::vector<Int>& degrees,
                                std::vector<Int>* supernode_sizes,
                                scalar_ldl::LowerStructure* scalar_structure);
@@ -78,7 +78,7 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void MultithreadedFormFundamentalSupernodes(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& parents, const std::vector<Int>& degrees,
+    const AssemblyForest& forest, const std::vector<Int>& degrees,
     std::vector<Int>* supernode_sizes,
     scalar_ldl::LowerStructure* scalar_structure);
 #endif  // ifdef _OPENMP

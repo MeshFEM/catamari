@@ -269,7 +269,7 @@ Int ComputeTopologicalRowPatternAndScatterNonzeros(
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const SymmetricOrdering& ordering,
-                          const std::vector<Int>& parents,
+                          const AssemblyForest& forest,
                           const std::vector<Int>& degrees,
                           LowerStructure* lower_structure) {
   const Int num_rows = matrix.NumRows();
@@ -322,7 +322,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
         // Move up to the parent in this subtree of the elimination forest.
         // Moving to the parent will increase the index (but remain bounded
         // from above by 'row').
-        column = parents[column];
+        column = forest.parents[column];
       }
     }
   }
@@ -416,7 +416,7 @@ void MultithreadedFillStructureIndicesRecursion(
 template <class Field>
 void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
                                        const SymmetricOrdering& ordering,
-                                       const std::vector<Int>& parents,
+                                       const AssemblyForest& forest,
                                        const std::vector<Int>& degrees,
                                        LowerStructure* lower_structure) {
   const Int num_rows = matrix.NumRows();
@@ -425,12 +425,6 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
   // the unit-lower and diagonal and all zeros).
   OffsetScan(degrees, &lower_structure->column_offsets);
   lower_structure->indices.resize(lower_structure->column_offsets.back());
-
-  // TODO(Jack Poulson): Decide if this computation should be hoisted above
-  // FillStructureIndices (and possibly parallelized).
-  AssemblyForest scalar_forest;
-  scalar_forest.parents = parents;
-  scalar_forest.FillFromParents();
 
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor. Each thread potentially
@@ -443,11 +437,11 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
-    #pragma omp task default(none) firstprivate(root)            \
-        shared(matrix, ordering, scalar_forest, lower_structure, \
+    #pragma omp task default(none) firstprivate(root)     \
+        shared(matrix, ordering, forest, lower_structure, \
             private_pattern_flags)
-    MultithreadedFillStructureIndicesRecursion(matrix, ordering, scalar_forest,
-                                               root, lower_structure,
+    MultithreadedFillStructureIndicesRecursion(matrix, ordering, forest, root,
+                                               lower_structure,
                                                &private_pattern_flags);
   }
 }

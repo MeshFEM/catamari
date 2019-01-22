@@ -34,9 +34,13 @@ void SupernodalDPP<Field>::FormSupernodes() {
   scalar_ldl::EliminationForestAndDegrees(matrix_, ordering_, &orig_parents,
                                           &orig_degrees);
 
+  AssemblyForest orig_forest;
+  orig_forest.parents = orig_parents;
+  orig_forest.FillFromParents();
+
   std::vector<Int> orig_supernode_sizes;
   scalar_ldl::LowerStructure scalar_structure;
-  supernodal_ldl::FormFundamentalSupernodes(matrix_, ordering_, orig_parents,
+  supernodal_ldl::FormFundamentalSupernodes(matrix_, ordering_, orig_forest,
                                             orig_degrees, &orig_supernode_sizes,
                                             &scalar_structure);
 
@@ -51,7 +55,7 @@ void SupernodalDPP<Field>::FormSupernodes() {
   supernodal_ldl::SupernodalDegrees(
       matrix_, ordering_.permutation, ordering_.inverse_permutation,
       orig_supernode_sizes, orig_supernode_starts, orig_member_to_index,
-      orig_parents, &orig_supernode_degrees);
+      orig_forest, &orig_supernode_degrees);
 
   const Int num_orig_supernodes = orig_supernode_sizes.size();
   std::vector<Int> orig_supernode_parents;
