@@ -57,10 +57,11 @@ void SupernodalDPP<Field>::FormSupernodes() {
   supernodal_ldl::ConvertFromScalarToSupernodalEliminationForest(
       num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
       &fund_ordering.assembly_forest.parents);
+  fund_ordering.assembly_forest.FillFromParents();
 
   std::vector<Int> fund_supernode_degrees;
-  supernodal_ldl::SupernodalDegrees(matrix_, fund_ordering,
-                                    fund_member_to_index, orig_scalar_forest,
+  supernodal_ldl::SupernodalDegrees(matrix_, fund_ordering, orig_scalar_forest,
+                                    fund_member_to_index,
                                     &fund_supernode_degrees);
 
   if (control_.relaxation_control.relax_supernodes) {

@@ -67,10 +67,11 @@ void Factorization<Field>::FormSupernodes(
   ConvertFromScalarToSupernodalEliminationForest(
       num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
       &fund_ordering.assembly_forest.parents);
+  fund_ordering.assembly_forest.FillFromParents();
 
   std::vector<Int> fund_supernode_degrees;
-  SupernodalDegrees(matrix, fund_ordering, fund_member_to_index,
-                    orig_scalar_forest, &fund_supernode_degrees);
+  SupernodalDegrees(matrix, fund_ordering, orig_scalar_forest,
+                    fund_member_to_index, &fund_supernode_degrees);
 
   if (control.relax_supernodes) {
     RelaxSupernodes(
@@ -136,10 +137,11 @@ void Factorization<Field>::MultithreadedFormSupernodes(
   ConvertFromScalarToSupernodalEliminationForest(
       num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
       &fund_ordering.assembly_forest.parents);
+  fund_ordering.assembly_forest.FillFromParents();
 
   std::vector<Int> fund_supernode_degrees;
-  MultithreadedSupernodalDegrees(matrix, fund_ordering, fund_member_to_index,
-                                 orig_scalar_forest, &fund_supernode_degrees);
+  MultithreadedSupernodalDegrees(matrix, fund_ordering, orig_scalar_forest,
+                                 fund_member_to_index, &fund_supernode_degrees);
 
   if (control.relax_supernodes) {
     // TODO(Jack Poulson): Parallelize RelaxSupernodes.

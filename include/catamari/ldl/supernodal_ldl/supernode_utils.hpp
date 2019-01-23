@@ -155,13 +155,18 @@ void RelaxSupernodes(const std::vector<Int>& orig_parents,
 // Computes the sizes of the structures of a supernodal LDL' factorization.
 template <class Field>
 void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
-                       const std::vector<Int>& permutation,
-                       const std::vector<Int>& inverse_permutation,
-                       const std::vector<Int>& supernode_sizes,
-                       const std::vector<Int>& supernode_starts,
+                       const SymmetricOrdering& ordering,
+                       const AssemblyForest& forest,
                        const std::vector<Int>& member_to_index,
-                       const std::vector<Int>& parents,
                        std::vector<Int>* supernode_degrees);
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
+                                    const SymmetricOrdering& ordering,
+                                    const AssemblyForest& forest,
+                                    const std::vector<Int>& member_to_index,
+                                    std::vector<Int>* supernode_degrees);
+#endif  // ifdef _OPENMP
 
 // Fills an estimate of the work required to eliminate the subtree in a
 // right-looking factorization.
