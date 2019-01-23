@@ -186,8 +186,8 @@ void Factorization<Field>::InitializeFactors(
   max_degree_ =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
 
-  FillStructureIndices(matrix, ordering_, forest.parents,
-                       supernode_member_to_index_, lower_factor_.get());
+  FillStructureIndices(matrix, ordering_, forest, supernode_member_to_index_,
+                       lower_factor_.get());
   if (algorithm_ == kLeftLookingLDL) {
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                          supernode_member_to_index_);
@@ -217,7 +217,7 @@ void Factorization<Field>::MultithreadedInitializeFactors(
   max_degree_ =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
 
-  MultithreadedFillStructureIndices(matrix, ordering_, forest.parents,
+  MultithreadedFillStructureIndices(matrix, ordering_, forest,
                                     supernode_member_to_index_,
                                     lower_factor_.get());
   if (algorithm_ == kLeftLookingLDL) {

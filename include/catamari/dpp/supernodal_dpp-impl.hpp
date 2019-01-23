@@ -69,12 +69,12 @@ void SupernodalDPP<Field>::FormSupernodes() {
         fund_ordering.supernode_offsets, fund_ordering.assembly_forest.parents,
         fund_supernode_degrees, fund_member_to_index, scalar_structure,
         control_.relaxation_control, &ordering_.permutation,
-        &ordering_.inverse_permutation, &parents_,
+        &ordering_.inverse_permutation, &forest_.parents,
         &ordering_.assembly_forest.parents, &supernode_degrees_,
         &ordering_.supernode_sizes, &ordering_.supernode_offsets,
         &supernode_member_to_index_);
   } else {
-    parents_ = orig_scalar_forest.parents;
+    forest_ = orig_scalar_forest;
 
     ordering_.supernode_sizes = fund_ordering.supernode_sizes;
     ordering_.supernode_offsets = fund_ordering.supernode_offsets;
@@ -96,7 +96,7 @@ void SupernodalDPP<Field>::FormStructure() {
   diagonal_factor_.reset(
       new supernodal_ldl::DiagonalFactor<Field>(ordering_.supernode_sizes));
 
-  supernodal_ldl::FillStructureIndices(matrix_, ordering_, parents_,
+  supernodal_ldl::FillStructureIndices(matrix_, ordering_, forest_,
                                        supernode_member_to_index_,
                                        lower_factor_.get());
 

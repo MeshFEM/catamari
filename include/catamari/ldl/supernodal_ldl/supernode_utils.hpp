@@ -174,14 +174,14 @@ void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_forest,
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const SymmetricOrdering& ordering,
-                          const std::vector<Int>& parents,
+                          const AssemblyForest& forest,
                           const std::vector<Int>& supernode_member_to_index,
                           LowerFactor<Field>* lower_factor);
 #ifdef _OPENMP
 template <class Field>
 void MultithreadedFillStructureIndices(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& parents,
+    const AssemblyForest& forest,
     const std::vector<Int>& supernode_member_to_index,
     LowerFactor<Field>* lower_factor);
 #endif  // ifdef _OPENMP

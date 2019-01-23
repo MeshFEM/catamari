@@ -67,8 +67,8 @@ class SupernodalDPP {
   // reordering choice for the DPP sampling.
   SymmetricOrdering ordering_;
 
-  // The up-links of the scalar elimination tree.
-  std::vector<Int> parents_;
+  // The scalar elimination forest.
+  AssemblyForest forest_;
 
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.

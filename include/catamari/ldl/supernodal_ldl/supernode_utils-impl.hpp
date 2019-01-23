@@ -873,7 +873,7 @@ void MultithreadedSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const SymmetricOrdering& ordering,
-                          const std::vector<Int>& parents,
+                          const AssemblyForest& forest,
                           const std::vector<Int>& supernode_member_to_index,
                           LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
@@ -953,7 +953,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
         // Move up to the parent in this subtree of the elimination forest.
         // Moving to the parent will increase the index (but remain bounded
         // from above by 'row').
-        descendant = parents[descendant];
+        descendant = forest.parents[descendant];
       }
     }
   }
@@ -991,7 +991,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void MultithreadedFillStructureIndicesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& parents,
+    const AssemblyForest& forest,
     const std::vector<Int>& supernode_member_to_index, Int root,
     LowerFactor<Field>* lower_factor,
     std::vector<std::vector<Int>>* private_pattern_flags) {
@@ -1000,11 +1000,11 @@ void MultithreadedFillStructureIndicesRecursion(
   #pragma omp taskgroup
   for (Int child_index = child_beg; child_index < child_end; ++child_index) {
     const Int child = ordering.assembly_forest.children[child_index];
-    #pragma omp task default(none) firstprivate(child)               \
-        shared(matrix, ordering, parents, supernode_member_to_index, \
+    #pragma omp task default(none) firstprivate(child)              \
+        shared(matrix, ordering, forest, supernode_member_to_index, \
             lower_factor, private_pattern_flags)
     MultithreadedFillStructureIndicesRecursion(
-        matrix, ordering, parents, supernode_member_to_index, child,
+        matrix, ordering, forest, supernode_member_to_index, child,
         lower_factor, private_pattern_flags);
   }
 
@@ -1074,7 +1074,7 @@ void MultithreadedFillStructureIndicesRecursion(
 template <class Field>
 void MultithreadedFillStructureIndices(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& parents,
+    const AssemblyForest& forest,
     const std::vector<Int>& supernode_member_to_index,
     LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
@@ -1091,11 +1091,11 @@ void MultithreadedFillStructureIndices(
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
     #pragma omp task default(none) firstprivate(root)                \
-        shared(matrix, ordering, parents, supernode_member_to_index, \
+        shared(matrix, ordering, forest, supernode_member_to_index, \
             lower_factor, private_pattern_flags)
     MultithreadedFillStructureIndicesRecursion(
-        matrix, ordering, parents, supernode_member_to_index, root,
-        lower_factor, &private_pattern_flags);
+        matrix, ordering, forest, supernode_member_to_index, root, lower_factor,
+        &private_pattern_flags);
   }
 
 #ifdef CATAMARI_DEBUG
