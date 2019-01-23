@@ -909,7 +909,6 @@ void MultithreadedSupernodalDegrees(
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
-    std::cout << "root: " << root << std::endl;
     #pragma omp task default(none) firstprivate(root)               \
         shared(matrix, ordering, forest, supernode_member_to_index, \
             supernode_degrees, structures, private_pattern_flags)
