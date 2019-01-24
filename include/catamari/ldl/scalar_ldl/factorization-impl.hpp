@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Jack Poulson <jack@hodgestar.com>
+ * Copyright (c) 2018-2019 Jack Poulson <jack@hodgestar.com>
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -62,7 +62,7 @@ template <class Field>
 void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
   LowerStructure& lower_structure = lower_factor.structure;
   const Int num_rows = matrix.NumRows();
-  const Int num_entries = lower_structure.indices.size();
+  const Int num_entries = lower_structure.indices.Size();
   const bool have_permutation = !ordering.permutation.empty();
 
   lower_factor.values.resize(num_entries, Field{0});
@@ -93,13 +93,13 @@ void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
       const Int column_beg = lower_structure.column_offsets[column];
       const Int column_end = lower_structure.column_offsets[column + 1];
       Int* iter =
-          std::lower_bound(lower_structure.indices.data() + column_beg,
-                           lower_structure.indices.data() + column_end, row);
-      CATAMARI_ASSERT(iter != lower_structure.indices.data() + column_end,
+          std::lower_bound(lower_structure.indices.Data() + column_beg,
+                           lower_structure.indices.Data() + column_end, row);
+      CATAMARI_ASSERT(iter != lower_structure.indices.Data() + column_end,
                       "Exceeded column indices.");
       CATAMARI_ASSERT(*iter == row, "Did not find index.");
       const Int structure_index =
-          std::distance(lower_structure.indices.data(), iter);
+          std::distance(lower_structure.indices.Data(), iter);
       lower_factor.values[structure_index] = entry.value;
     }
   }
@@ -134,7 +134,7 @@ void Factorization<Field>::UpLookingSetup(const CoordinateMatrix<Field>& matrix,
   OffsetScan(degrees, &lower_structure.column_offsets);
   const Int num_entries = lower_structure.column_offsets.back();
 
-  lower_structure.indices.resize(num_entries);
+  lower_structure.indices.Resize(num_entries);
   lower_factor.values.resize(num_entries);
 }
 

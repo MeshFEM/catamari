@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Jack Poulson <jack@hodgestar.com>
+ * Copyright (c) 2018-2019 Jack Poulson <jack@hodgestar.com>
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -11,6 +11,7 @@
 #include <ostream>
 
 #include "catamari/blas_matrix.hpp"
+#include "catamari/buffer.hpp"
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"
 #include "catamari/symmetric_ordering.hpp"
@@ -79,7 +80,7 @@ struct LowerStructure {
 
   // A vector of length 'num_entries'; each segment, column_offsets[j] to
   // column_offsets[j + 1] - 1, contains the row indices for the j'th column.
-  std::vector<Int> indices;
+  Buffer<Int> indices;
 };
 
 // A column-major lower-triangular sparse matrix.
@@ -91,6 +92,8 @@ struct LowerFactor {
   // A vector of length 'num_entries'; each segment, column_offsets[j] to
   // column_offsets[j + 1] - 1, contains the (typically nonzero) entries for
   // the j'th column.
+  //
+  // TODO(Jack Poulson): Switch to 'Buffer'.
   std::vector<Field> values;
 };
 

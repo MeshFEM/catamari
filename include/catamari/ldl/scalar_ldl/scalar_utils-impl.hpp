@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Jack Poulson <jack@hodgestar.com>
+ * Copyright (c) 2018-2019 Jack Poulson <jack@hodgestar.com>
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -278,7 +278,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
   // Set up the column offsets and allocate space (initializing the values of
   // the unit-lower and diagonal and all zeros).
   OffsetScan(degrees, &lower_structure->column_offsets);
-  lower_structure->indices.resize(lower_structure->column_offsets.back());
+  lower_structure->indices.Resize(lower_structure->column_offsets.back());
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
@@ -424,7 +424,7 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
   // Set up the column offsets and allocate space (initializing the values of
   // the unit-lower and diagonal and all zeros).
   OffsetScan(degrees, &lower_structure->column_offsets);
-  lower_structure->indices.resize(lower_structure->column_offsets.back());
+  lower_structure->indices.Resize(lower_structure->column_offsets.back());
 
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor. Each thread potentially
