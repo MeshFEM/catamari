@@ -162,8 +162,10 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
     }
 
     // Test if the structure of this supernode matches that of the previous
-    // column (with all indices up to this column removed). We first test that
-    // the set sizes are equal and then test the individual entries.
+    // column (with all indices up to this column removed). Because the
+    // diagonal blocks are dense, each column is a child of the next, so that
+    // its structures are nested and their external degrees being equal implies
+    // that their structures are as well.
 
     // Test that the set sizes match.
     const Int column_beg = column_ptrs[column];
@@ -171,23 +173,6 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
     const Int prev_column_ptr = column_ptrs[column - 1];
     const Int prev_remaining_structure_size = column_beg - prev_column_ptr;
     if (structure_size != prev_remaining_structure_size) {
-      // This column begins a new supernode.
-      supernode_start = column;
-      supernode_sizes->push_back(1);
-      continue;
-    }
-
-    // Test that the individual entries match.
-    bool equal_structures = true;
-    for (Int i = 0; i < structure_size; ++i) {
-      const Int row = scalar_structure->indices[column_beg + i];
-      const Int prev_row = scalar_structure->indices[prev_column_ptr + i];
-      if (prev_row != row) {
-        equal_structures = false;
-        break;
-      }
-    }
-    if (!equal_structures) {
       // This column begins a new supernode.
       supernode_start = column;
       supernode_sizes->push_back(1);
@@ -221,7 +206,7 @@ void MultithreadedFormFundamentalSupernodesRecursion(
   for (Int index = child_beg; index < child_end; ++index) {
     const Int child = ordering.assembly_forest.children[index];
 
-    #pragma omp task default(none) firstprivate(child) \
+    #pragma omp task default(none) firstprivate(child)          \
         shared(matrix, ordering, degrees, flat_supernode_sizes, \
             scalar_structure, column_ptrs)
     MultithreadedFormFundamentalSupernodesRecursion(
@@ -258,8 +243,10 @@ void MultithreadedFormFundamentalSupernodesRecursion(
     }
 
     // Test if the structure of this supernode matches that of the previous
-    // column (with all indices up to this column removed). We first test that
-    // the set sizes are equal and then test the individual entries.
+    // column (with all indices up to this column removed). Because the
+    // diagonal blocks are dense, each column is a child of the next, so that
+    // its structures are nested and their external degrees being equal implies
+    // that their structures are as well.
 
     // Test that the set sizes match.
     const Int column_beg = (*column_ptrs)[column];
@@ -267,23 +254,6 @@ void MultithreadedFormFundamentalSupernodesRecursion(
     const Int prev_column_ptr = (*column_ptrs)[column - 1];
     const Int prev_remaining_structure_size = column_beg - prev_column_ptr;
     if (structure_size != prev_remaining_structure_size) {
-      // This column begins a new supernode.
-      (*flat_supernode_sizes)[column] = 1;
-      supernode_start = column;
-      continue;
-    }
-
-    // Test that the individual entries match.
-    bool equal_structures = true;
-    for (Int i = 0; i < structure_size; ++i) {
-      const Int row = scalar_structure->indices[column_beg + i];
-      const Int prev_row = scalar_structure->indices[prev_column_ptr + i];
-      if (prev_row != row) {
-        equal_structures = false;
-        break;
-      }
-    }
-    if (!equal_structures) {
       // This column begins a new supernode.
       (*flat_supernode_sizes)[column] = 1;
       supernode_start = column;
