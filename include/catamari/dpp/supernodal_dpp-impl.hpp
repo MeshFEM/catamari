@@ -31,7 +31,7 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void SupernodalDPP<Field>::FormSupernodes() {
   AssemblyForest orig_scalar_forest;
-  std::vector<Int> orig_scalar_degrees;
+  Buffer<Int> orig_scalar_degrees;
   scalar_ldl::EliminationForestAndDegrees(
       matrix_, ordering_, &orig_scalar_forest.parents, &orig_scalar_degrees);
   orig_scalar_forest.FillFromParents();
@@ -48,18 +48,18 @@ void SupernodalDPP<Field>::FormSupernodes() {
       &fund_ordering.supernode_sizes, &scalar_structure);
   OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
 
-  std::vector<Int> fund_member_to_index;
+  Buffer<Int> fund_member_to_index;
   supernodal_ldl::MemberToIndex(matrix_.NumRows(),
                                 fund_ordering.supernode_offsets,
                                 &fund_member_to_index);
 
-  const Int num_fund_supernodes = fund_ordering.supernode_sizes.size();
+  const Int num_fund_supernodes = fund_ordering.supernode_sizes.Size();
   supernodal_ldl::ConvertFromScalarToSupernodalEliminationForest(
       num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
       &fund_ordering.assembly_forest.parents);
   fund_ordering.assembly_forest.FillFromParents();
 
-  std::vector<Int> fund_supernode_degrees;
+  Buffer<Int> fund_supernode_degrees;
   supernodal_ldl::SupernodalDegrees(matrix_, fund_ordering, orig_scalar_forest,
                                     fund_member_to_index,
                                     &fund_supernode_degrees);
@@ -89,7 +89,7 @@ void SupernodalDPP<Field>::FormSupernodes() {
 
 template <class Field>
 void SupernodalDPP<Field>::FormStructure() {
-  CATAMARI_ASSERT(supernode_degrees_.size() == ordering_.supernode_sizes.size(),
+  CATAMARI_ASSERT(supernode_degrees_.Size() == ordering_.supernode_sizes.Size(),
                   "Invalid supernode degrees size.");
 
   lower_factor_.reset(new supernodal_ldl::LowerFactor<Field>(
@@ -137,7 +137,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
       matrix_, ordering_.permutation, ordering_.inverse_permutation,
       ordering_.supernode_sizes, ordering_.supernode_offsets,
       supernode_member_to_index_, ordering_.assembly_forest.parents,
-      main_supernode, state->pattern_flags.data(), state->row_structure.data());
+      main_supernode, state->pattern_flags.Data(), state->row_structure.Data());
 
   // for J = find(L(K, :))
   //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
@@ -163,7 +163,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
     scaled_transpose.height = descendant_supernode_size;
     scaled_transpose.width = descendant_main_intersect_size;
     scaled_transpose.leading_dim = descendant_supernode_size;
-    scaled_transpose.data = state->scaled_transpose_buffer.data();
+    scaled_transpose.data = state->scaled_transpose_buffer.Data();
 
     supernodal_ldl::FormScaledTranspose(
         factorization_type,
@@ -174,7 +174,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
     workspace_matrix.height = descendant_main_intersect_size;
     workspace_matrix.width = descendant_main_intersect_size;
     workspace_matrix.leading_dim = descendant_main_intersect_size;
-    workspace_matrix.data = state->workspace_buffer.data();
+    workspace_matrix.data = state->workspace_buffer.Data();
 
     supernodal_ldl::UpdateDiagonalBlock(
         factorization_type, ordering_.supernode_offsets, *lower_factor_,
@@ -246,7 +246,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
       maximum_likelihood, &main_diagonal_block, &generator_, &unit_uniform_);
   for (const Int& index : supernode_sample) {
     const Int orig_row = main_supernode_start + index;
-    if (ordering_.inverse_permutation.empty()) {
+    if (ordering_.inverse_permutation.Empty()) {
       sample->push_back(orig_row);
     } else {
       sample->push_back(ordering_.inverse_permutation[orig_row]);
@@ -260,8 +260,8 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
 template <class Field>
 std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
     bool maximum_likelihood) const {
-  const Int num_rows = ordering_.supernode_offsets.back();
-  const Int num_supernodes = ordering_.supernode_sizes.size();
+  const Int num_rows = ordering_.supernode_offsets.Back();
+  const Int num_supernodes = ordering_.supernode_sizes.Size();
 
   // Reset the lower factor to all zeros.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
@@ -285,13 +285,13 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   sample.reserve(num_rows);
 
   LeftLookingSampleState state;
-  state.row_structure.resize(num_supernodes);
-  state.pattern_flags.resize(num_supernodes);
-  state.rel_rows.resize(num_supernodes);
-  state.intersect_ptrs.resize(num_supernodes);
-  state.scaled_transpose_buffer.resize(
+  state.row_structure.Resize(num_supernodes);
+  state.pattern_flags.Resize(num_supernodes);
+  state.rel_rows.Resize(num_supernodes);
+  state.intersect_ptrs.Resize(num_supernodes);
+  state.scaled_transpose_buffer.Resize(
       max_supernode_size_ * max_supernode_size_, Field{0});
-  state.workspace_buffer.resize(max_supernode_size_ * (max_supernode_size_ - 1),
+  state.workspace_buffer.Resize(max_supernode_size_ * (max_supernode_size_ - 1),
                                 Field{0});
 
   // Note that any postordering of the supernodal elimination forest suffices.

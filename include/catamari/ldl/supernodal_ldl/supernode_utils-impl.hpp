@@ -15,10 +15,9 @@
 namespace catamari {
 namespace supernodal_ldl {
 
-inline void MemberToIndex(Int num_rows,
-                          const std::vector<Int>& supernode_starts,
-                          std::vector<Int>* member_to_index) {
-  member_to_index->resize(num_rows);
+inline void MemberToIndex(Int num_rows, const Buffer<Int>& supernode_starts,
+                          Buffer<Int>* member_to_index) {
+  member_to_index->Resize(num_rows);
 
   Int supernode = 0;
   for (Int column = 0; column < num_rows; ++column) {
@@ -30,16 +29,15 @@ inline void MemberToIndex(Int num_rows,
                     "Column was not in the marked supernode.");
     (*member_to_index)[column] = supernode;
   }
-  CATAMARI_ASSERT(supernode == static_cast<Int>(supernode_starts.size()) - 2,
+  CATAMARI_ASSERT(supernode == static_cast<Int>(supernode_starts.Size()) - 2,
                   "Did not end on the last supernode.");
 }
 
 inline void ConvertFromScalarToSupernodalEliminationForest(
-    Int num_supernodes, const std::vector<Int>& parents,
-    const std::vector<Int>& member_to_index,
-    std::vector<Int>* supernode_parents) {
-  const Int num_rows = parents.size();
-  supernode_parents->resize(num_supernodes, -1);
+    Int num_supernodes, const Buffer<Int>& parents,
+    const Buffer<Int>& member_to_index, Buffer<Int>* supernode_parents) {
+  const Int num_rows = parents.Size();
+  supernode_parents->Resize(num_supernodes, -1);
   for (Int row = 0; row < num_rows; ++row) {
     const Int supernode = member_to_index[row];
     const Int parent = parents[row];
@@ -57,18 +55,18 @@ inline void ConvertFromScalarToSupernodalEliminationForest(
 template <class Field>
 bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                 const SymmetricOrdering& ordering,
-                                const std::vector<Int>& supernode_sizes) {
+                                const Buffer<Int>& supernode_sizes) {
   const Int num_rows = matrix.NumRows();
 
-  std::vector<Int> parents, degrees;
+  Buffer<Int> parents, degrees;
   scalar_ldl::EliminationForestAndDegrees(matrix, ordering, &parents, &degrees);
 
-  std::vector<Int> supernode_starts, member_to_index;
+  Buffer<Int> supernode_starts, member_to_index;
   OffsetScan(supernode_sizes, &supernode_starts);
   MemberToIndex(num_rows, supernode_starts, &member_to_index);
 
-  std::vector<Int> row_structure(num_rows);
-  std::vector<Int> pattern_flags(num_rows);
+  Buffer<Int> row_structure(num_rows);
+  Buffer<Int> pattern_flags(num_rows);
 
   bool valid = true;
   for (Int row = 0; row < num_rows; ++row) {
@@ -76,9 +74,9 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 
     pattern_flags[row] = row;
     const Int num_packed = scalar_ldl::ComputeRowPattern(
-        matrix, ordering, parents, row, pattern_flags.data(),
-        row_structure.data());
-    std::sort(row_structure.data(), row_structure.data() + num_packed);
+        matrix, ordering, parents, row, pattern_flags.Data(),
+        row_structure.Data());
+    std::sort(row_structure.Data(), row_structure.Data() + num_packed);
 
     // TODO(Jack Poulson): Extend the tests to ensure that the diagonal blocks
     // of the supernodes are dense.
@@ -118,8 +116,8 @@ template <class Field>
 void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                const SymmetricOrdering& ordering,
                                const AssemblyForest& forest,
-                               const std::vector<Int>& degrees,
-                               std::vector<Int>* supernode_sizes,
+                               const Buffer<Int>& degrees,
+                               Buffer<Int>* supernode_sizes,
                                scalar_ldl::LowerStructure* scalar_structure) {
   const Int num_rows = matrix.NumRows();
 
@@ -127,17 +125,18 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
   scalar_ldl::FillStructureIndices(matrix, ordering, forest, degrees,
                                    scalar_structure);
 
-  supernode_sizes->clear();
+  supernode_sizes->Clear();
   if (!num_rows) {
     return;
   }
 
   // We will iterate down each column structure to determine the supernodes.
-  std::vector<Int> column_ptrs = scalar_structure->column_offsets;
+  Buffer<Int> column_ptrs = scalar_structure->column_offsets;
 
   Int supernode_start = 0;
-  supernode_sizes->reserve(num_rows);
-  supernode_sizes->push_back(1);
+  Int num_supernodes = 0;
+  supernode_sizes->Resize(num_rows);
+  (*supernode_sizes)[num_supernodes++] = 1;
   for (Int column = 1; column < num_rows; ++column) {
     // Ensure that the diagonal block would be fully-connected. Due to the
     // loop invariant, each column pointer in the current supernode would need
@@ -157,7 +156,7 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
     if (!dense_diagonal_block) {
       // This column begins a new supernode.
       supernode_start = column;
-      supernode_sizes->push_back(1);
+      (*supernode_sizes)[num_supernodes++] = 1;
       continue;
     }
 
@@ -175,14 +174,15 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
     if (structure_size != prev_remaining_structure_size) {
       // This column begins a new supernode.
       supernode_start = column;
-      supernode_sizes->push_back(1);
+      (*supernode_sizes)[num_supernodes++] = 1;
       continue;
     }
 
     // All tests passed, so we may extend the current supernode to incorporate
     // this column.
-    ++supernode_sizes->back();
+    ++supernode_sizes->Back();
   }
+  supernode_sizes->Resize(num_supernodes);
 
 #ifdef CATAMARI_DEBUG
   if (!ValidFundamentalSupernodes(matrix, ordering, *supernode_sizes)) {
@@ -196,10 +196,8 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void MultithreadedFormFundamentalSupernodesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& degrees, Int root,
-    std::vector<Int>* flat_supernode_sizes,
-    scalar_ldl::LowerStructure* scalar_structure,
-    std::vector<Int>* column_ptrs) {
+    const Buffer<Int>& degrees, Int root, Buffer<Int>* flat_supernode_sizes,
+    scalar_ldl::LowerStructure* scalar_structure, Buffer<Int>* column_ptrs) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
@@ -270,8 +268,8 @@ void MultithreadedFormFundamentalSupernodesRecursion(
 template <class Field>
 void MultithreadedFormFundamentalSupernodes(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest, const std::vector<Int>& degrees,
-    std::vector<Int>* supernode_sizes,
+    const AssemblyForest& forest, const Buffer<Int>& degrees,
+    Buffer<Int>* supernode_sizes,
     scalar_ldl::LowerStructure* scalar_structure) {
   const Int num_rows = matrix.NumRows();
 
@@ -280,19 +278,19 @@ void MultithreadedFormFundamentalSupernodes(
   scalar_ldl::MultithreadedFillStructureIndices(matrix, ordering, forest,
                                                 degrees, scalar_structure);
 
-  supernode_sizes->clear();
+  supernode_sizes->Clear();
   if (!num_rows) {
     return;
   }
 
   // We will iterate down each column structure to determine the supernodes.
-  std::vector<Int> column_ptrs = scalar_structure->column_offsets;
+  Buffer<Int> column_ptrs = scalar_structure->column_offsets;
 
   // In order to allow for parallel decomposition of the reordering supernodes
   // into fundamental supernodes, we mark the principal members of supernodes
   // with the supernode size and non-principal members with zero. After filling
   // this structure in parallel, we can easily reduce into the compressed form.
-  std::vector<Int> flat_supernode_sizes(num_rows);
+  Buffer<Int> flat_supernode_sizes(num_rows);
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
@@ -311,13 +309,12 @@ void MultithreadedFormFundamentalSupernodes(
     Int index = 0;
     while (index < num_rows) {
       const Int supernode_size = flat_supernode_sizes[index];
-      supernode_sizes->push_back(supernode_size);
       index += supernode_size;
       ++num_supernodes;
     }
 
     // Fill the supernode sizes.
-    supernode_sizes->resize(num_supernodes);
+    supernode_sizes->Resize(num_supernodes);
     index = 0;
     num_supernodes = 0;
     while (index < num_rows) {
@@ -339,7 +336,7 @@ void MultithreadedFormFundamentalSupernodes(
 inline MergableStatus MergableSupernode(
     Int child_tail, Int parent_tail, Int child_size, Int parent_size,
     Int num_child_explicit_zeros, Int num_parent_explicit_zeros,
-    const std::vector<Int>& orig_member_to_index,
+    const Buffer<Int>& orig_member_to_index,
     const scalar_ldl::LowerStructure& scalar_structure,
     const SupernodalRelaxationControl& control) {
   const Int parent = orig_member_to_index[parent_tail];
@@ -424,15 +421,17 @@ inline MergableStatus MergableSupernode(
   return status;
 }
 
-inline void MergeChildren(
-    Int parent, const std::vector<Int>& orig_supernode_starts,
-    const std::vector<Int>& orig_supernode_sizes,
-    const std::vector<Int>& orig_member_to_index,
-    const std::vector<Int>& children, const std::vector<Int>& child_offsets,
-    const scalar_ldl::LowerStructure& scalar_structure,
-    const SupernodalRelaxationControl& control,
-    std::vector<Int>* supernode_sizes, std::vector<Int>* num_explicit_zeros,
-    std::vector<Int>* last_merged_child, std::vector<Int>* merge_parents) {
+inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
+                          const Buffer<Int>& orig_supernode_sizes,
+                          const Buffer<Int>& orig_member_to_index,
+                          const Buffer<Int>& children,
+                          const Buffer<Int>& child_offsets,
+                          const scalar_ldl::LowerStructure& scalar_structure,
+                          const SupernodalRelaxationControl& control,
+                          Buffer<Int>* supernode_sizes,
+                          Buffer<Int>* num_explicit_zeros,
+                          Buffer<Int>* last_merged_child,
+                          Buffer<Int>* merge_parents) {
   const Int child_beg = child_offsets[parent];
   const Int num_children = child_offsets[parent + 1] - child_beg;
 
@@ -523,40 +522,36 @@ inline void MergeChildren(
 }
 
 inline void RelaxSupernodes(
-    const std::vector<Int>& orig_parents,
-    const std::vector<Int>& orig_supernode_sizes,
-    const std::vector<Int>& orig_supernode_starts,
-    const std::vector<Int>& orig_supernode_parents,
-    const std::vector<Int>& orig_supernode_degrees,
-    const std::vector<Int>& orig_member_to_index,
+    const Buffer<Int>& orig_parents, const Buffer<Int>& orig_supernode_sizes,
+    const Buffer<Int>& orig_supernode_starts,
+    const Buffer<Int>& orig_supernode_parents,
+    const Buffer<Int>& orig_supernode_degrees,
+    const Buffer<Int>& orig_member_to_index,
     const scalar_ldl::LowerStructure& scalar_structure,
     const SupernodalRelaxationControl& control,
-    std::vector<Int>* relaxed_permutation,
-    std::vector<Int>* relaxed_inverse_permutation,
-    std::vector<Int>* relaxed_parents,
-    std::vector<Int>* relaxed_supernode_parents,
-    std::vector<Int>* relaxed_supernode_degrees,
-    std::vector<Int>* relaxed_supernode_sizes,
-    std::vector<Int>* relaxed_supernode_starts,
-    std::vector<Int>* relaxed_supernode_member_to_index) {
-  const Int num_rows = orig_supernode_starts.back();
-  const Int num_supernodes = orig_supernode_sizes.size();
+    Buffer<Int>* relaxed_permutation, Buffer<Int>* relaxed_inverse_permutation,
+    Buffer<Int>* relaxed_parents, Buffer<Int>* relaxed_supernode_parents,
+    Buffer<Int>* relaxed_supernode_degrees,
+    Buffer<Int>* relaxed_supernode_sizes, Buffer<Int>* relaxed_supernode_starts,
+    Buffer<Int>* relaxed_supernode_member_to_index) {
+  const Int num_rows = orig_supernode_starts.Back();
+  const Int num_supernodes = orig_supernode_sizes.Size();
 
   // Construct the down-links for the elimination forest.
-  std::vector<Int> children;
-  std::vector<Int> child_offsets;
+  Buffer<Int> children;
+  Buffer<Int> child_offsets;
   quotient::ChildrenFromParents(orig_supernode_parents, &children,
                                 &child_offsets);
 
   // Initialize the sizes of the merged supernodes, using the original indexing
   // and absorbing child sizes into the parents.
-  std::vector<Int> supernode_sizes = orig_supernode_sizes;
+  Buffer<Int> supernode_sizes = orig_supernode_sizes;
 
   // Initialize the number of explicit zeros stored in each original supernode.
-  std::vector<Int> num_explicit_zeros(num_supernodes, 0);
+  Buffer<Int> num_explicit_zeros(num_supernodes, 0);
 
-  std::vector<Int> last_merged_children(num_supernodes, -1);
-  std::vector<Int> merge_parents(num_supernodes, -1);
+  Buffer<Int> last_merged_children(num_supernodes, -1);
+  Buffer<Int> merge_parents(num_supernodes, -1);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     MergeChildren(supernode, orig_supernode_starts, orig_supernode_sizes,
                   orig_member_to_index, children, child_offsets,
@@ -566,7 +561,7 @@ inline void RelaxSupernodes(
 
   // Count the number of remaining supernodes and construct a map from the
   // original to relaxed indices.
-  std::vector<Int> original_to_relaxed(num_supernodes, -1);
+  Buffer<Int> original_to_relaxed(num_supernodes, -1);
   Int num_relaxed_supernodes = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     if (merge_parents[supernode] != -1) {
@@ -578,8 +573,8 @@ inline void RelaxSupernodes(
   // Fill in the parents for the relaxed supernodal elimination forest.
   // Simultaneously, fill in the degrees of the relaxed supernodes (which are
   // the same as the degrees of the parents of each merge tree).
-  relaxed_supernode_parents->resize(num_relaxed_supernodes);
-  relaxed_supernode_degrees->resize(num_relaxed_supernodes);
+  relaxed_supernode_parents->Resize(num_relaxed_supernodes);
+  relaxed_supernode_degrees->Resize(num_relaxed_supernodes);
   Int relaxed_offset = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     if (merge_parents[supernode] != -1) {
@@ -608,11 +603,11 @@ inline void RelaxSupernodes(
 
   // Fill the inverse permutation, the supernode sizes, and the supernode
   // offsets.
-  std::vector<Int> relaxation_inverse_permutation(num_rows);
+  Buffer<Int> relaxation_inverse_permutation(num_rows);
   {
-    relaxed_supernode_sizes->resize(num_relaxed_supernodes);
-    relaxed_supernode_starts->resize(num_relaxed_supernodes + 1);
-    relaxed_supernode_member_to_index->resize(num_rows);
+    relaxed_supernode_sizes->Resize(num_relaxed_supernodes);
+    relaxed_supernode_starts->Resize(num_relaxed_supernodes + 1);
+    relaxed_supernode_member_to_index->Resize(num_rows);
     Int pack_offset = 0;
     for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
       if (merge_parents[supernode] != -1) {
@@ -651,13 +646,13 @@ inline void RelaxSupernodes(
   }
 
   // Compute the relaxation permutation.
-  std::vector<Int> relaxation_permutation(num_rows);
+  Buffer<Int> relaxation_permutation(num_rows);
   for (Int row = 0; row < num_rows; ++row) {
     relaxation_permutation[relaxation_inverse_permutation[row]] = row;
   }
 
   // Permute the 'orig_parents' array to form the 'parents' array.
-  relaxed_parents->resize(num_rows);
+  relaxed_parents->Resize(num_rows);
   for (Int row = 0; row < num_rows; ++row) {
     const Int orig_parent = orig_parents[row];
     if (orig_parent == -1) {
@@ -669,12 +664,12 @@ inline void RelaxSupernodes(
   }
 
   // Compose the relaxation permutation with the original permutation.
-  if (relaxed_permutation->empty()) {
+  if (relaxed_permutation->Empty()) {
     *relaxed_permutation = relaxation_permutation;
     *relaxed_inverse_permutation = relaxation_inverse_permutation;
   } else {
     // Compuse the relaxation and original permutations.
-    std::vector<Int> perm_copy = *relaxed_permutation;
+    Buffer<Int> perm_copy = *relaxed_permutation;
     for (Int row = 0; row < num_rows; ++row) {
       (*relaxed_permutation)[row] = relaxation_permutation[perm_copy[row]];
     }
@@ -688,25 +683,24 @@ template <class Field>
 void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
                        const SymmetricOrdering& ordering,
                        const AssemblyForest& forest,
-                       const std::vector<Int>& member_to_index,
-                       std::vector<Int>* supernode_degrees) {
+                       const Buffer<Int>& member_to_index,
+                       Buffer<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
-  const Int num_supernodes = ordering.supernode_sizes.size();
-  const bool have_permutation = !ordering.permutation.empty();
+  const Int num_supernodes = ordering.supernode_sizes.Size();
+  const bool have_permutation = !ordering.permutation.Empty();
 
   // A data structure for marking whether or not an index is in the pattern
   // of the active row of the lower-triangular factor.
-  std::vector<Int> pattern_flags(num_rows);
+  Buffer<Int> pattern_flags(num_rows);
 
   // A data structure for marking whether or not a supernode is in the pattern
   // of the active row of the lower-triangular factor.
-  std::vector<Int> supernode_pattern_flags(num_supernodes);
+  Buffer<Int> supernode_pattern_flags(num_supernodes);
 
   // Initialize the number of entries that will be stored into each supernode
-  supernode_degrees->clear();
-  supernode_degrees->resize(num_supernodes, 0);
+  supernode_degrees->Resize(num_supernodes, 0);
 
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
     const Int main_supernode = member_to_index[row];
     pattern_flags[row] = row;
@@ -763,11 +757,9 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void MultithreadedSupernodalDegreesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest,
-    const std::vector<Int>& supernode_member_to_index, Int root,
-    std::vector<Int>* supernode_degrees,
-    std::vector<std::vector<Int>>* structures,
-    std::vector<std::vector<Int>>* private_pattern_flags) {
+    const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
+    Int root, Buffer<Int>* supernode_degrees, Buffer<Buffer<Int>>* structures,
+    Buffer<Buffer<Int>>* private_pattern_flags) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
@@ -782,7 +774,7 @@ void MultithreadedSupernodalDegreesRecursion(
   }
 
   const int thread = omp_get_thread_num();
-  std::vector<Int>& pattern_flags = (*private_pattern_flags)[thread];
+  Buffer<Int>& pattern_flags = (*private_pattern_flags)[thread];
 
   // Form this node's structure by unioning that of its direct children
   // (removing portions that intersect this supernode).
@@ -794,16 +786,17 @@ void MultithreadedSupernodalDegreesRecursion(
   const Int supernode_offset = ordering.supernode_offsets[root];
   const Int trivial_upper_bound =
       num_rows - (supernode_offset + supernode_size);
-  std::vector<Int>& structure = (*structures)[root];
-  structure.reserve(trivial_upper_bound);
+  Buffer<Int>& structure = (*structures)[root];
+  Int struct_size = 0;
+  structure.Resize(trivial_upper_bound);
   for (Int child_index = child_beg; child_index < child_end; ++child_index) {
     const Int child = ordering.assembly_forest.children[child_index];
-    std::vector<Int>& child_struct = (*structures)[child];
+    Buffer<Int>& child_struct = (*structures)[child];
     for (const Int row : child_struct) {
       CATAMARI_ASSERT(row >= 0 && row < num_rows, "Invalid row index.");
       const Int row_supernode = supernode_member_to_index[row];
       CATAMARI_ASSERT(row_supernode >= 0 &&
-                          row_supernode < static_cast<Int>(structures->size()),
+                          row_supernode < static_cast<Int>(structures->Size()),
                       "Invalid supernode index.");
       if (row_supernode == root) {
         continue;
@@ -812,17 +805,17 @@ void MultithreadedSupernodalDegreesRecursion(
       if (pattern_flags[row] != root) {
         CATAMARI_ASSERT(row_supernode > root, "row supernode was < root.");
         pattern_flags[row] = root;
-        structure.push_back(row);
+        structure[struct_size++] = row;
       }
     }
 
     // Free the memory of the child.
-    std::vector<Int>().swap(child_struct);
+    child_struct.Clear();
   }
 
   // Incorporate this supernode's structure.
-  const bool have_permutation = !ordering.permutation.empty();
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const bool have_permutation = !ordering.permutation.Empty();
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int column = supernode_offset;
        column < supernode_offset + supernode_size; ++column) {
     const Int orig_column =
@@ -836,7 +829,7 @@ void MultithreadedSupernodalDegreesRecursion(
       CATAMARI_ASSERT(row >= 0 && row < num_rows, "Invalid row index.");
       const Int row_supernode = supernode_member_to_index[row];
       CATAMARI_ASSERT(row_supernode >= 0 &&
-                          row_supernode < static_cast<Int>(structures->size()),
+                          row_supernode < static_cast<Int>(structures->Size()),
                       "Invalid supernode index.");
       if (row_supernode <= root) {
         continue;
@@ -844,38 +837,37 @@ void MultithreadedSupernodalDegreesRecursion(
 
       if (pattern_flags[row] != root) {
         pattern_flags[row] = root;
-        structure.push_back(row);
+        structure[struct_size++] = row;
       }
     }
   }
 
   // Store the degree of the supernode.
-  (*supernode_degrees)[root] = structure.size();
+  structure.Resize(struct_size);
+  (*supernode_degrees)[root] = struct_size;
 }
 
 template <class Field>
 void MultithreadedSupernodalDegrees(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest,
-    const std::vector<Int>& supernode_member_to_index,
-    std::vector<Int>* supernode_degrees) {
+    const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
+    Buffer<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
-  const Int num_supernodes = ordering.supernode_sizes.size();
+  const Int num_supernodes = ordering.supernode_sizes.Size();
 
-  supernode_degrees->clear();
-  supernode_degrees->resize(num_supernodes);
+  supernode_degrees->Resize(num_supernodes);
 
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor. Each thread potentially
   // needs its own since different subtrees can have intersecting structure.
   const int max_threads = omp_get_max_threads();
-  std::vector<std::vector<Int>> private_pattern_flags(max_threads);
+  Buffer<Buffer<Int>> private_pattern_flags(max_threads);
   for (int thread = 0; thread < max_threads; ++thread) {
-    private_pattern_flags[thread].resize(num_rows, -1);
+    private_pattern_flags[thread].Resize(num_rows, -1);
   }
 
   // Only the structures of the active fronts will be maintained.
-  std::vector<std::vector<Int>> structures(num_supernodes);
+  Buffer<Buffer<Int>> structures(num_supernodes);
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
@@ -893,29 +885,29 @@ template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const SymmetricOrdering& ordering,
                           const AssemblyForest& forest,
-                          const std::vector<Int>& supernode_member_to_index,
+                          const Buffer<Int>& supernode_member_to_index,
                           LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
-  const Int num_supernodes = ordering.supernode_sizes.size();
-  const bool have_permutation = !ordering.permutation.empty();
+  const Int num_supernodes = ordering.supernode_sizes.Size();
+  const bool have_permutation = !ordering.permutation.Empty();
 
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor.
-  std::vector<Int> pattern_flags(num_rows);
+  Buffer<Int> pattern_flags(num_rows);
 
   // A data structure for marking whether or not a supernode is in the pattern
   // of the active row of the lower-triangular factor.
-  std::vector<Int> supernode_pattern_flags(num_supernodes);
+  Buffer<Int> supernode_pattern_flags(num_supernodes);
 
   // A set of pointers for keeping track of where to insert supernode pattern
   // indices.
-  std::vector<Int*> supernode_ptrs(num_supernodes);
+  Buffer<Int*> supernode_ptrs(num_supernodes);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     supernode_ptrs[supernode] = lower_factor->Structure(supernode);
   }
 
   // Fill in the structure indices.
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
     const Int main_supernode = supernode_member_to_index[row];
     pattern_flags[row] = row;
@@ -1010,10 +1002,9 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void MultithreadedFillStructureIndicesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest,
-    const std::vector<Int>& supernode_member_to_index, Int root,
-    LowerFactor<Field>* lower_factor,
-    std::vector<std::vector<Int>>* private_pattern_flags) {
+    const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
+    Int root, LowerFactor<Field>* lower_factor,
+    Buffer<Buffer<Int>>* private_pattern_flags) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
@@ -1028,7 +1019,7 @@ void MultithreadedFillStructureIndicesRecursion(
   }
 
   const int thread = omp_get_thread_num();
-  std::vector<Int>& pattern_flags = (*private_pattern_flags)[thread];
+  Buffer<Int>& pattern_flags = (*private_pattern_flags)[thread];
 
   // Form this node's structure by unioning that of its direct children
   // (removing portions that intersect this supernode).
@@ -1059,8 +1050,8 @@ void MultithreadedFillStructureIndicesRecursion(
   // Incorporate this supernode's structure.
   const Int supernode_size = ordering.supernode_sizes[root];
   const Int supernode_offset = ordering.supernode_offsets[root];
-  const bool have_permutation = !ordering.permutation.empty();
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const bool have_permutation = !ordering.permutation.Empty();
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int column = supernode_offset;
        column < supernode_offset + supernode_size; ++column) {
     const Int orig_column =
@@ -1093,8 +1084,7 @@ void MultithreadedFillStructureIndicesRecursion(
 template <class Field>
 void MultithreadedFillStructureIndices(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest,
-    const std::vector<Int>& supernode_member_to_index,
+    const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
     LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
 
@@ -1102,9 +1092,9 @@ void MultithreadedFillStructureIndices(
   // the active row of the lower-triangular factor. Each thread potentially
   // needs its own since different subtrees can have intersecting structure.
   const int max_threads = omp_get_max_threads();
-  std::vector<std::vector<Int>> private_pattern_flags(max_threads);
+  Buffer<Buffer<Int>> private_pattern_flags(max_threads);
   for (int thread = 0; thread < max_threads; ++thread) {
-    private_pattern_flags[thread].resize(num_rows, -1);
+    private_pattern_flags[thread].Resize(num_rows, -1);
   }
 
   #pragma omp taskgroup
@@ -1118,7 +1108,7 @@ void MultithreadedFillStructureIndices(
   }
 
 #ifdef CATAMARI_DEBUG
-  const Int num_supernodes = ordering.supernode_sizes.size();
+  const Int num_supernodes = ordering.supernode_sizes.Size();
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int* index_beg = lower_factor->Structure(supernode);
     const Int* index_end = lower_factor->Structure(supernode + 1);
@@ -1149,7 +1139,7 @@ void MultithreadedFillStructureIndices(
 template <class Field>
 void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_forest,
                               const LowerFactor<Field>& lower_factor,
-                              std::vector<double>* work_estimates) {
+                              Buffer<double>* work_estimates) {
   const Int child_beg = supernode_forest.child_offsets[root];
   const Int child_end = supernode_forest.child_offsets[root + 1];
   const Int num_children = child_end - child_beg;
@@ -1172,13 +1162,13 @@ void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_forest,
 template <class Field>
 void FillNonzeros(const CoordinateMatrix<Field>& matrix,
                   const SymmetricOrdering& ordering,
-                  const std::vector<Int>& supernode_member_to_index,
+                  const Buffer<Int>& supernode_member_to_index,
                   LowerFactor<Field>* lower_factor,
                   DiagonalFactor<Field>* diagonal_factor) {
   const Int num_rows = matrix.NumRows();
-  const bool have_permutation = !ordering.permutation.empty();
+  const bool have_permutation = !ordering.permutation.Empty();
 
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
     const Int supernode = supernode_member_to_index[row];
     const Int supernode_start = ordering.supernode_offsets[supernode];
@@ -1231,7 +1221,7 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void MultithreadedFillNonzerosRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& supernode_member_to_index, Int root,
+    const Buffer<Int>& supernode_member_to_index, Int root,
     LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
@@ -1246,8 +1236,8 @@ void MultithreadedFillNonzerosRecursion(
                                        lower_factor, diagonal_factor);
   }
 
-  const bool have_permutation = !ordering.permutation.empty();
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const bool have_permutation = !ordering.permutation.Empty();
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
   const Int supernode_size = ordering.supernode_sizes[root];
   const Int supernode_offset = ordering.supernode_offsets[root];
   for (Int index = 0; index < supernode_size; ++index) {
@@ -1297,10 +1287,11 @@ void MultithreadedFillNonzerosRecursion(
 }
 
 template <class Field>
-void MultithreadedFillNonzeros(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const std::vector<Int>& supernode_member_to_index,
-    LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor) {
+void MultithreadedFillNonzeros(const CoordinateMatrix<Field>& matrix,
+                               const SymmetricOrdering& ordering,
+                               const Buffer<Int>& supernode_member_to_index,
+                               LowerFactor<Field>* lower_factor,
+                               DiagonalFactor<Field>* diagonal_factor) {
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
     #pragma omp task default(none) firstprivate(root) \
@@ -1315,17 +1306,16 @@ void MultithreadedFillNonzeros(
 
 template <class Field>
 Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
-                      const std::vector<Int>& permutation,
-                      const std::vector<Int>& inverse_permutation,
-                      const std::vector<Int>& supernode_sizes,
-                      const std::vector<Int>& supernode_starts,
-                      const std::vector<Int>& member_to_index,
-                      const std::vector<Int>& supernode_parents,
-                      Int main_supernode, Int* pattern_flags,
-                      Int* row_structure) {
+                      const Buffer<Int>& permutation,
+                      const Buffer<Int>& inverse_permutation,
+                      const Buffer<Int>& supernode_sizes,
+                      const Buffer<Int>& supernode_starts,
+                      const Buffer<Int>& member_to_index,
+                      const Buffer<Int>& supernode_parents, Int main_supernode,
+                      Int* pattern_flags, Int* row_structure) {
   Int num_packed = 0;
-  const bool have_permutation = !permutation.empty();
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const bool have_permutation = !permutation.Empty();
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
 
   // Take the union of the row patterns of each row in the supernode.
   const Int main_supernode_size = supernode_sizes[main_supernode];
@@ -1395,7 +1385,7 @@ void FormScaledTranspose(SymmetricFactorizationType factorization_type,
 
 template <class Field>
 void UpdateDiagonalBlock(SymmetricFactorizationType factorization_type,
-                         const std::vector<Int>& supernode_starts,
+                         const Buffer<Int>& supernode_starts,
                          const LowerFactor<Field>& lower_factor,
                          Int main_supernode, Int descendant_supernode,
                          Int descendant_main_rel_row,
@@ -1444,8 +1434,8 @@ template <class Field>
 void UpdateSubdiagonalBlock(
     Int main_supernode, Int descendant_supernode, Int main_active_rel_row,
     Int descendant_main_rel_row, Int descendant_active_rel_row,
-    const std::vector<Int>& supernode_starts,
-    const std::vector<Int>& supernode_member_to_index,
+    const Buffer<Int>& supernode_starts,
+    const Buffer<Int>& supernode_member_to_index,
     const ConstBlasMatrix<Field>& scaled_transpose,
     const ConstBlasMatrix<Field>& descendant_active_matrix,
     const LowerFactor<Field>& lower_factor,
@@ -1512,11 +1502,12 @@ void UpdateSubdiagonalBlock(
 }
 
 template <class Field>
-void SeekForMainActiveRelativeRow(
-    Int main_supernode, Int descendant_supernode, Int descendant_active_rel_row,
-    const std::vector<Int>& supernode_member_to_index,
-    const LowerFactor<Field>& lower_factor, Int* main_active_rel_row,
-    const Int** main_active_intersect_sizes) {
+void SeekForMainActiveRelativeRow(Int main_supernode, Int descendant_supernode,
+                                  Int descendant_active_rel_row,
+                                  const Buffer<Int>& supernode_member_to_index,
+                                  const LowerFactor<Field>& lower_factor,
+                                  Int* main_active_rel_row,
+                                  const Int** main_active_intersect_sizes) {
   const Int* main_indices = lower_factor.Structure(main_supernode);
   const Int* descendant_indices = lower_factor.Structure(descendant_supernode);
   const Int descendant_active_supernode_start =
@@ -1563,7 +1554,7 @@ Int FactorDiagonalBlock(SymmetricFactorizationType factorization_type,
 template <class Field>
 Int MultithreadedFactorDiagonalBlock(
     Int tile_size, SymmetricFactorizationType factorization_type,
-    BlasMatrix<Field>* diagonal_block, std::vector<Field>* buffer) {
+    BlasMatrix<Field>* diagonal_block, Buffer<Field>* buffer) {
   Int num_pivots;
   if (factorization_type == kCholeskyFactorization) {
     num_pivots =

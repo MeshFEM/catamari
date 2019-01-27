@@ -53,8 +53,8 @@ void UnitReachNestedDissection2DRecursion(Int num_x_elements,
 
     const Int supernode_size =
         (box.y_end - box.y_beg) * (box.x_end - box.x_beg);
-    ordering->supernode_sizes.push_back(supernode_size);
-    ordering->assembly_forest.parents.push_back(-1);
+    ordering->supernode_sizes[*supernode_index] = supernode_size;
+    ordering->assembly_forest.parents[*supernode_index] = -1;
     ++(*supernode_index);
 
     return;
@@ -69,9 +69,9 @@ void UnitReachNestedDissection2DRecursion(Int num_x_elements,
     const Int right_offset =
         left_offset +
         (left_box.x_end - left_box.x_beg) * (left_box.y_end - left_box.y_beg);
-    const Int cut_offset =
-        right_offset + (right_box.x_end - right_box.x_beg) *
-                           (right_box.y_end - right_box.y_beg);
+    const Int cut_offset = right_offset +
+                           (right_box.x_end - right_box.x_beg) *
+                               (right_box.y_end - right_box.y_beg);
 
     // Fill the left child.
     UnitReachNestedDissection2DRecursion(num_x_elements, num_y_elements,
@@ -93,10 +93,10 @@ void UnitReachNestedDissection2DRecursion(Int num_x_elements,
 
     const Int supernode = *supernode_index;
     const Int supernode_size = box.y_end - box.y_beg;
-    ordering->supernode_sizes.push_back(supernode_size);
+    ordering->supernode_sizes[*supernode_index] = supernode_size;
     ordering->assembly_forest.parents[left_child] = supernode;
     ordering->assembly_forest.parents[right_child] = supernode;
-    ordering->assembly_forest.parents.push_back(-1);
+    ordering->assembly_forest.parents[*supernode_index] = -1;
     ++(*supernode_index);
   } else {
     // Cut the y dimension.
@@ -107,9 +107,9 @@ void UnitReachNestedDissection2DRecursion(Int num_x_elements,
     const Int right_offset =
         left_offset +
         (left_box.x_end - left_box.x_beg) * (left_box.y_end - left_box.y_beg);
-    const Int cut_offset =
-        right_offset + (right_box.x_end - right_box.x_beg) *
-                           (right_box.y_end - right_box.y_beg);
+    const Int cut_offset = right_offset +
+                           (right_box.x_end - right_box.x_beg) *
+                               (right_box.y_end - right_box.y_beg);
 
     // Fill the left child.
     UnitReachNestedDissection2DRecursion(num_x_elements, num_y_elements,
@@ -131,10 +131,10 @@ void UnitReachNestedDissection2DRecursion(Int num_x_elements,
 
     const Int supernode = *supernode_index;
     const Int supernode_size = box.x_end - box.x_beg;
-    ordering->supernode_sizes.push_back(supernode_size);
+    ordering->supernode_sizes[*supernode_index] = supernode_size;
     ordering->assembly_forest.parents[left_child] = supernode;
     ordering->assembly_forest.parents[right_child] = supernode;
-    ordering->assembly_forest.parents.push_back(-1);
+    ordering->assembly_forest.parents[*supernode_index] = -1;
     ++(*supernode_index);
   }
 }
@@ -142,16 +142,18 @@ void UnitReachNestedDissection2DRecursion(Int num_x_elements,
 void UnitReachNestedDissection2D(Int num_x_elements, Int num_y_elements,
                                  SymmetricOrdering* ordering) {
   const Int num_rows = (num_x_elements + 1) * (num_y_elements + 1);
-  ordering->permutation.resize(num_rows);
-  ordering->inverse_permutation.resize(num_rows);
-  ordering->supernode_sizes.reserve(num_rows);
-  ordering->assembly_forest.parents.reserve(num_rows);
+  ordering->permutation.Resize(num_rows);
+  ordering->inverse_permutation.Resize(num_rows);
+  ordering->supernode_sizes.Resize(num_rows);
+  ordering->assembly_forest.parents.Resize(num_rows);
 
   Int offset = 0;
   Extent2D<Int> box{0, num_x_elements + 1, 0, num_y_elements + 1};
   Int supernode_index = 0;
   UnitReachNestedDissection2DRecursion(num_x_elements, num_y_elements, offset,
                                        box, &supernode_index, ordering);
+  ordering->supernode_sizes.Resize(supernode_index);
+  ordering->assembly_forest.parents.Resize(supernode_index);
 
   // Invert the inverse permutation.
   for (Int row = 0; row < num_rows; ++row) {
@@ -164,9 +166,9 @@ void UnitReachNestedDissection2D(Int num_x_elements, Int num_y_elements,
 
   OffsetScan(ordering->supernode_sizes, &ordering->supernode_offsets);
 
-  const Int num_supernodes = ordering->supernode_sizes.size();
-  ordering->assembly_forest.roots.clear();
-  ordering->assembly_forest.roots.push_back(num_supernodes - 1);
+  const Int num_supernodes = ordering->supernode_sizes.Size();
+  ordering->assembly_forest.roots.Resize(1);
+  ordering->assembly_forest.roots[0] = num_supernodes - 1;
 }
 
 void UnitReachNestedDissection3DRecursion(Int num_x_elements,
@@ -199,8 +201,8 @@ void UnitReachNestedDissection3DRecursion(Int num_x_elements,
     const Int supernode_size = (box.z_end - box.z_beg) *
                                (box.y_end - box.y_beg) *
                                (box.x_end - box.x_beg);
-    ordering->supernode_sizes.push_back(supernode_size);
-    ordering->assembly_forest.parents.push_back(-1);
+    ordering->supernode_sizes[*supernode_index] = supernode_size;
+    ordering->assembly_forest.parents[*supernode_index] = -1;
     ++(*supernode_index);
 
     return;
@@ -214,14 +216,14 @@ void UnitReachNestedDissection3DRecursion(Int num_x_elements,
     const Extent3D<Int> right_box{x_cut + 1, box.x_end, box.y_beg,
                                   box.y_end, box.z_beg, box.z_end};
     const Int left_offset = offset;
-    const Int right_offset =
-        left_offset + (left_box.x_end - left_box.x_beg) *
-                          (left_box.y_end - left_box.y_beg) *
-                          (left_box.z_end - left_box.z_beg);
-    const Int cut_offset =
-        right_offset + (right_box.x_end - right_box.x_beg) *
-                           (right_box.y_end - right_box.y_beg) *
-                           (right_box.z_end - right_box.z_beg);
+    const Int right_offset = left_offset +
+                             (left_box.x_end - left_box.x_beg) *
+                                 (left_box.y_end - left_box.y_beg) *
+                                 (left_box.z_end - left_box.z_beg);
+    const Int cut_offset = right_offset +
+                           (right_box.x_end - right_box.x_beg) *
+                               (right_box.y_end - right_box.y_beg) *
+                               (right_box.z_end - right_box.z_beg);
 
     // Fill the left child.
     UnitReachNestedDissection3DRecursion(num_x_elements, num_y_elements,
@@ -247,10 +249,10 @@ void UnitReachNestedDissection3DRecursion(Int num_x_elements,
     const Int supernode = *supernode_index;
     const Int supernode_size =
         (box.z_end - box.z_beg) * (box.y_end - box.y_beg);
-    ordering->supernode_sizes.push_back(supernode_size);
+    ordering->supernode_sizes[*supernode_index] = supernode_size;
     ordering->assembly_forest.parents[left_child] = supernode;
     ordering->assembly_forest.parents[right_child] = supernode;
-    ordering->assembly_forest.parents.push_back(-1);
+    ordering->assembly_forest.parents[*supernode_index] = -1;
     ++(*supernode_index);
   } else if (y_size == max_size) {
     // Cut the y dimension.
@@ -260,14 +262,14 @@ void UnitReachNestedDissection3DRecursion(Int num_x_elements,
     const Extent3D<Int> right_box{box.x_beg, box.x_end, y_cut + 1,
                                   box.y_end, box.z_beg, box.z_end};
     const Int left_offset = offset;
-    const Int right_offset =
-        left_offset + (left_box.x_end - left_box.x_beg) *
-                          (left_box.y_end - left_box.y_beg) *
-                          (left_box.z_end - left_box.z_beg);
-    const Int cut_offset =
-        right_offset + (right_box.x_end - right_box.x_beg) *
-                           (right_box.y_end - right_box.y_beg) *
-                           (right_box.z_end - right_box.z_beg);
+    const Int right_offset = left_offset +
+                             (left_box.x_end - left_box.x_beg) *
+                                 (left_box.y_end - left_box.y_beg) *
+                                 (left_box.z_end - left_box.z_beg);
+    const Int cut_offset = right_offset +
+                           (right_box.x_end - right_box.x_beg) *
+                               (right_box.y_end - right_box.y_beg) *
+                               (right_box.z_end - right_box.z_beg);
 
     // Fill the left child.
     UnitReachNestedDissection3DRecursion(num_x_elements, num_y_elements,
@@ -293,10 +295,10 @@ void UnitReachNestedDissection3DRecursion(Int num_x_elements,
     const Int supernode = *supernode_index;
     const Int supernode_size =
         (box.z_end - box.z_beg) * (box.x_end - box.x_beg);
-    ordering->supernode_sizes.push_back(supernode_size);
+    ordering->supernode_sizes[*supernode_index] = supernode_size;
     ordering->assembly_forest.parents[left_child] = supernode;
     ordering->assembly_forest.parents[right_child] = supernode;
-    ordering->assembly_forest.parents.push_back(-1);
+    ordering->assembly_forest.parents[*supernode_index] = -1;
     ++(*supernode_index);
   } else {
     // Cut the z dimension.
@@ -306,14 +308,14 @@ void UnitReachNestedDissection3DRecursion(Int num_x_elements,
     const Extent3D<Int> right_box{box.x_beg, box.x_end, box.y_beg,
                                   box.y_end, z_cut + 1, box.z_end};
     const Int left_offset = offset;
-    const Int right_offset =
-        left_offset + (left_box.x_end - left_box.x_beg) *
-                          (left_box.y_end - left_box.y_beg) *
-                          (left_box.z_end - left_box.z_beg);
-    const Int cut_offset =
-        right_offset + (right_box.x_end - right_box.x_beg) *
-                           (right_box.y_end - right_box.y_beg) *
-                           (right_box.z_end - right_box.z_beg);
+    const Int right_offset = left_offset +
+                             (left_box.x_end - left_box.x_beg) *
+                                 (left_box.y_end - left_box.y_beg) *
+                                 (left_box.z_end - left_box.z_beg);
+    const Int cut_offset = right_offset +
+                           (right_box.x_end - right_box.x_beg) *
+                               (right_box.y_end - right_box.y_beg) *
+                               (right_box.z_end - right_box.z_beg);
 
     // Fill the left child.
     UnitReachNestedDissection3DRecursion(num_x_elements, num_y_elements,
@@ -339,10 +341,10 @@ void UnitReachNestedDissection3DRecursion(Int num_x_elements,
     const Int supernode = *supernode_index;
     const Int supernode_size =
         (box.y_end - box.y_beg) * (box.x_end - box.x_beg);
-    ordering->supernode_sizes.push_back(supernode_size);
+    ordering->supernode_sizes[*supernode_index] = supernode_size;
     ordering->assembly_forest.parents[left_child] = supernode;
     ordering->assembly_forest.parents[right_child] = supernode;
-    ordering->assembly_forest.parents.push_back(-1);
+    ordering->assembly_forest.parents[*supernode_index] = -1;
     ++(*supernode_index);
   }
 }
@@ -352,10 +354,10 @@ void UnitReachNestedDissection3D(Int num_x_elements, Int num_y_elements,
                                  SymmetricOrdering* ordering) {
   const Int num_rows =
       (num_x_elements + 1) * (num_y_elements + 1) * (num_z_elements + 1);
-  ordering->permutation.resize(num_rows);
-  ordering->inverse_permutation.resize(num_rows);
-  ordering->supernode_sizes.reserve(num_rows);
-  ordering->assembly_forest.parents.reserve(num_rows);
+  ordering->permutation.Resize(num_rows);
+  ordering->inverse_permutation.Resize(num_rows);
+  ordering->supernode_sizes.Resize(num_rows);
+  ordering->assembly_forest.parents.Resize(num_rows);
 
   Int offset = 0;
   Extent3D<Int> box{0, num_x_elements + 1, 0, num_y_elements + 1,
@@ -364,6 +366,8 @@ void UnitReachNestedDissection3D(Int num_x_elements, Int num_y_elements,
   UnitReachNestedDissection3DRecursion(num_x_elements, num_y_elements,
                                        num_z_elements, offset, box,
                                        &supernode_index, ordering);
+  ordering->supernode_sizes.Resize(supernode_index);
+  ordering->assembly_forest.parents.Resize(supernode_index);
 
   // Invert the inverse permutation.
   for (Int row = 0; row < num_rows; ++row) {
@@ -376,9 +380,9 @@ void UnitReachNestedDissection3D(Int num_x_elements, Int num_y_elements,
 
   OffsetScan(ordering->supernode_sizes, &ordering->supernode_offsets);
 
-  const Int num_supernodes = ordering->supernode_sizes.size();
-  ordering->assembly_forest.roots.clear();
-  ordering->assembly_forest.roots.push_back(num_supernodes - 1);
+  const Int num_supernodes = ordering->supernode_sizes.Size();
+  ordering->assembly_forest.roots.Resize(1);
+  ordering->assembly_forest.roots[0] = num_supernodes - 1;
 }
 
 }  // namespace catamari

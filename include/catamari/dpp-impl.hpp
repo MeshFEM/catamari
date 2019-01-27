@@ -33,7 +33,7 @@ DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
   // Fill the list of supernodal ordering roots.
   // TODO(Jack Poulson): Encapsulate this into a utility function.
   {
-    const Int num_supernodes = ordering.supernode_sizes.size();
+    const Int num_supernodes = ordering.supernode_sizes.Size();
 
     Int num_roots = 0;
     for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
@@ -41,11 +41,11 @@ DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
         ++num_roots;
       }
     }
-    ordering.assembly_forest.roots.clear();
-    ordering.assembly_forest.roots.reserve(num_roots);
+    ordering.assembly_forest.roots.Resize(num_roots);
+    num_roots = 0;
     for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
       if (ordering.assembly_forest.parents[supernode] < 0) {
-        ordering.assembly_forest.roots.push_back(supernode);
+        ordering.assembly_forest.roots[num_roots++] = supernode;
       }
     }
   }

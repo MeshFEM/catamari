@@ -10,6 +10,7 @@
 
 #include <random>
 
+#include "catamari/buffer.hpp"
 #include "catamari/ldl.hpp"
 
 namespace catamari {
@@ -39,25 +40,25 @@ class SupernodalDPP {
   struct LeftLookingSampleState {
     // An integer workspace for storing the supernodes in the current row
     // pattern.
-    std::vector<Int> row_structure;
+    Buffer<Int> row_structure;
 
     // A data structure for marking whether or not a supernode is in the pattern
     // of the active row of the lower-triangular factor.
-    std::vector<Int> pattern_flags;
+    Buffer<Int> pattern_flags;
 
     // The relative index of the active supernode within each supernode's
     // structure.
-    std::vector<Int> rel_rows;
+    Buffer<Int> rel_rows;
 
     // Pointers to the active supernode intersection size within each
     // supernode's structure.
-    std::vector<const Int*> intersect_ptrs;
+    Buffer<const Int*> intersect_ptrs;
 
     // A buffer for storing (scaled) transposed descendant blocks.
-    std::vector<Field> scaled_transpose_buffer;
+    Buffer<Field> scaled_transpose_buffer;
 
     // A buffer for storing updates to the current supernode column.
-    std::vector<Field> workspace_buffer;
+    Buffer<Field> workspace_buffer;
   };
 
   // A copy of the input matrix.
@@ -72,10 +73,10 @@ class SupernodalDPP {
 
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.
-  std::vector<Int> supernode_member_to_index_;
+  Buffer<Int> supernode_member_to_index_;
 
   // The degrees of the supernodes.
-  std::vector<Int> supernode_degrees_;
+  Buffer<Int> supernode_degrees_;
 
   // The size of the largest supernode of the factorization.
   Int max_supernode_size_;

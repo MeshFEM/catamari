@@ -29,7 +29,7 @@ void ApplySparse(const Field& alpha,
                   "result was the incorrect width.");
 
   // vec1 += alpha matrix vec0 + beta vec1
-  const std::vector<MatrixEntry<Field>>& entries = sparse_matrix.Entries();
+  const Buffer<MatrixEntry<Field>>& entries = sparse_matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
     for (Int j = 0; j < num_rhs; ++j) {
       result->Entry(row, j) *= beta;

@@ -29,7 +29,7 @@ void Factorization<Field>::PrintLowerFactor(const std::string& label,
   };
 
   os << label << ":\n";
-  const Int num_columns = lower_structure.column_offsets.size() - 1;
+  const Int num_columns = lower_structure.column_offsets.Size() - 1;
   for (Int column = 0; column < num_columns; ++column) {
     if (factorization_type == kCholeskyFactorization) {
       print_entry(column, column, diagonal_factor.values[column]);
@@ -63,12 +63,12 @@ void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
   LowerStructure& lower_structure = lower_factor.structure;
   const Int num_rows = matrix.NumRows();
   const Int num_entries = lower_structure.indices.Size();
-  const bool have_permutation = !ordering.permutation.empty();
+  const bool have_permutation = !ordering.permutation.Empty();
 
-  lower_factor.values.resize(num_entries, Field{0});
-  diagonal_factor.values.resize(num_rows, Field{0});
+  lower_factor.values.Resize(num_entries, Field{0});
+  diagonal_factor.values.Resize(num_rows, Field{0});
 
-  const std::vector<MatrixEntry<Field>>& entries = matrix.Entries();
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
     const Int orig_row =
         have_permutation ? ordering.inverse_permutation[row] : row;
@@ -107,8 +107,8 @@ void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
 
 template <class Field>
 void Factorization<Field>::LeftLookingSetup(
-    const CoordinateMatrix<Field>& matrix, std::vector<Int>* parents) {
-  std::vector<Int> degrees;
+    const CoordinateMatrix<Field>& matrix, Buffer<Int>* parents) {
+  Buffer<Int> degrees;
   EliminationForestAndDegrees(matrix, ordering, parents, &degrees);
 
   AssemblyForest forest;
@@ -122,20 +122,20 @@ void Factorization<Field>::LeftLookingSetup(
 
 template <class Field>
 void Factorization<Field>::UpLookingSetup(const CoordinateMatrix<Field>& matrix,
-                                          std::vector<Int>* parents) {
+                                          Buffer<Int>* parents) {
   LowerStructure& lower_structure = lower_factor.structure;
 
-  std::vector<Int> degrees;
+  Buffer<Int> degrees;
   EliminationForestAndDegrees(matrix, ordering, parents, &degrees);
 
   const Int num_rows = matrix.NumRows();
-  diagonal_factor.values.resize(num_rows);
+  diagonal_factor.values.Resize(num_rows);
 
   OffsetScan(degrees, &lower_structure.column_offsets);
-  const Int num_entries = lower_structure.column_offsets.back();
+  const Int num_entries = lower_structure.column_offsets.Back();
 
   lower_structure.indices.Resize(num_entries);
-  lower_factor.values.resize(num_entries);
+  lower_factor.values.Resize(num_entries);
 }
 
 template <class Field>
@@ -198,14 +198,14 @@ LDLResult Factorization<Field>::LeftLooking(
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
 
-  std::vector<Int> parents;
+  Buffer<Int> parents;
   LeftLookingSetup(matrix, &parents);
   const LowerStructure& lower_structure = lower_factor.structure;
 
   LeftLookingState state;
-  state.column_update_ptrs.resize(num_rows);
-  state.row_structure.resize(num_rows);
-  state.pattern_flags.resize(num_rows);
+  state.column_update_ptrs.Resize(num_rows);
+  state.row_structure.Resize(num_rows);
+  state.pattern_flags.Resize(num_rows);
 
   LDLResult result;
   for (Int column = 0; column < num_rows; ++column) {
@@ -214,8 +214,8 @@ LDLResult Factorization<Field>::LeftLooking(
 
     // Compute the row pattern.
     const Int num_packed = ComputeRowPattern(matrix, ordering, parents, column,
-                                             state.pattern_flags.data(),
-                                             state.row_structure.data());
+                                             state.pattern_flags.Data(),
+                                             state.row_structure.Data());
 
     // for j = find(L(column, :))
     //   L(column:n, column) -= L(column:n, j) * (d(j) * conj(L(column, j)))
@@ -319,15 +319,15 @@ LDLResult Factorization<Field>::UpLooking(
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
 
-  std::vector<Int> parents;
+  Buffer<Int> parents;
   UpLookingSetup(matrix, &parents);
   const LowerStructure& lower_structure = lower_factor.structure;
 
   UpLookingState state;
-  state.column_update_ptrs.resize(num_rows);
-  state.pattern_flags.resize(num_rows);
-  state.row_structure.resize(num_rows);
-  state.row_workspace.resize(num_rows, Field{0});
+  state.column_update_ptrs.Resize(num_rows);
+  state.pattern_flags.Resize(num_rows);
+  state.row_structure.Resize(num_rows);
+  state.row_workspace.Resize(num_rows, Field{0});
 
   LDLResult result;
   for (Int row = 0; row < num_rows; ++row) {
@@ -337,8 +337,8 @@ LDLResult Factorization<Field>::UpLooking(
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
     const Int start = ComputeTopologicalRowPatternAndScatterNonzeros(
-        matrix, ordering, parents, row, state.pattern_flags.data(),
-        state.row_structure.data(), state.row_workspace.data());
+        matrix, ordering, parents, row, state.pattern_flags.Data(),
+        state.row_structure.Data(), state.row_workspace.Data());
 
     // Pull the diagonal entry out of the workspace.
     diagonal_factor.values[row] = state.row_workspace[row];
@@ -348,8 +348,8 @@ LDLResult Factorization<Field>::UpLooking(
     //   L(row, :) := matrix(row, :) / L(0 : row - 1, 0 : row - 1)'.
     for (Int index = start; index < num_rows; ++index) {
       const Int column = state.row_structure[index];
-      UpLookingRowUpdate(row, column, state.column_update_ptrs.data(),
-                         state.row_workspace.data());
+      UpLookingRowUpdate(row, column, state.column_update_ptrs.Data(),
+                         state.row_workspace.Data());
     }
 
     // Early exit if solving would involve division by zero.
@@ -383,7 +383,7 @@ LDLResult Factorization<Field>::UpLooking(
 
 template <class Field>
 void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
-  const bool have_permutation = !ordering.permutation.empty();
+  const bool have_permutation = !ordering.permutation.Empty();
 
   // Reorder the input into the relaxation permutation of the factorization.
   if (have_permutation) {
@@ -405,7 +405,7 @@ void Factorization<Field>::LowerTriangularSolve(
     BlasMatrix<Field>* matrix) const {
   const Int num_rhs = matrix->width;
   const LowerStructure& lower_structure = lower_factor.structure;
-  const Int num_rows = lower_structure.column_offsets.size() - 1;
+  const Int num_rows = lower_structure.column_offsets.Size() - 1;
   const bool is_cholesky = factorization_type == kCholeskyFactorization;
 
   CATAMARI_ASSERT(matrix->height == num_rows,
@@ -439,7 +439,7 @@ void Factorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
   }
 
   const Int num_rhs = matrix->width;
-  const Int num_rows = diagonal_factor.values.size();
+  const Int num_rows = diagonal_factor.values.Size();
 
   CATAMARI_ASSERT(matrix->height == num_rows,
                   "matrix was an incorrect height.");
@@ -456,7 +456,7 @@ void Factorization<Field>::LowerTransposeTriangularSolve(
     BlasMatrix<Field>* matrix) const {
   const Int num_rhs = matrix->width;
   const LowerStructure& lower_structure = lower_factor.structure;
-  const Int num_rows = lower_structure.column_offsets.size() - 1;
+  const Int num_rows = lower_structure.column_offsets.Size() - 1;
   const bool is_cholesky = factorization_type == kCholeskyFactorization;
   const bool is_selfadjoint = factorization_type != kLDLTransposeFactorization;
 

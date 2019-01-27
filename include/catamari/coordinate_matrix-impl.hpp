@@ -190,7 +190,7 @@ void CoordinateMatrix<Field>::ToMatrixMarket(
   }
 
   // Write out the entries.
-  const std::vector<MatrixEntry<Field>>& entries = Entries();
+  const Buffer<MatrixEntry<Field>>& entries = Entries();
   for (const MatrixEntry<Field>& entry : entries) {
     // We must convert from 0-based to 1-based indexing.
     std::ostringstream os;
@@ -219,26 +219,20 @@ Int CoordinateMatrix<Field>::NumColumns() const CATAMARI_NOEXCEPT {
 
 template <class Field>
 Int CoordinateMatrix<Field>::NumEntries() const CATAMARI_NOEXCEPT {
-  return entries_.size();
+  return entries_.Size();
 }
 
 template <class Field>
-void CoordinateMatrix<Field>::Empty(bool free_resources) {
-  if (free_resources) {
-    SwapClearVector(&entries_);
-    SwapClearVector(&row_entry_offsets_);
-    SwapClearVector(&entries_to_add_);
-    SwapClearVector(&entries_to_remove_);
-  } else {
-    entries_.clear();
-    entries_to_add_.clear();
-    entries_to_remove_.clear();
-  }
+void CoordinateMatrix<Field>::Empty() {
+  entries_.Clear();
+  row_entry_offsets_.Clear();
+  SwapClearVector(&entries_to_add_);
+  SwapClearVector(&entries_to_remove_);
 
   num_rows_ = num_columns_ = 0;
 
   // Create a trivial row offset vector.
-  row_entry_offsets_.resize(1);
+  row_entry_offsets_.Resize(1);
   row_entry_offsets_[0] = 0;
 }
 
@@ -251,11 +245,11 @@ void CoordinateMatrix<Field>::Resize(Int num_rows, Int num_columns) {
   num_rows_ = num_rows;
   num_columns_ = num_columns;
 
-  entries_.clear();
+  entries_.Clear();
   entries_to_add_.clear();
   entries_to_remove_.clear();
 
-  row_entry_offsets_.resize(num_rows + 1);
+  row_entry_offsets_.Resize(num_rows + 1);
   for (Int row = 0; row <= num_rows; ++row) {
     row_entry_offsets_[row] = 0;
   }
@@ -287,9 +281,8 @@ void CoordinateMatrix<Field>::FlushEntryAdditionQueue(
     CombineSortedEntries(&entries_to_add_);
 
     // Perform a merge sort and then combine entries with the same indices.
-    const std::vector<MatrixEntry<Field>> entries_copy(entries_);
-    entries_.resize(0);
-    entries_.resize(entries_copy.size() + entries_to_add_.size());
+    const Buffer<MatrixEntry<Field>> entries_copy(entries_);
+    entries_.Resize(entries_copy.Size() + entries_to_add_.size());
     std::merge(entries_copy.begin(), entries_copy.end(),
                entries_to_add_.begin(), entries_to_add_.end(),
                entries_.begin());
@@ -324,7 +317,7 @@ void CoordinateMatrix<Field>::FlushEntryRemovalQueue(
     std::sort(entries_to_remove_.begin(), entries_to_remove_.end());
     quotient::EraseDuplicatesInSortedVector(&entries_to_remove_);
 
-    const Int num_entries = entries_.size();
+    const Int num_entries = entries_.Size();
     Int num_packed = 0;
     for (Int index = 0; index < num_entries; ++index) {
       GraphEdge edge{entries_[index].row, entries_[index].column};
@@ -335,7 +328,7 @@ void CoordinateMatrix<Field>::FlushEntryRemovalQueue(
         entries_[num_packed++] = entries_[index];
       }
     }
-    entries_.resize(num_packed);
+    entries_.Resize(num_packed);
     SwapClearVector(&entries_to_remove_);
   }
 
@@ -377,21 +370,17 @@ void CoordinateMatrix<Field>::RemoveEntry(Int row, Int column) {
 template <class Field>
 const MatrixEntry<Field>& CoordinateMatrix<Field>::Entry(Int entry_index) const
     CATAMARI_NOEXCEPT {
-#ifdef CATAMARI_DEBUG
-  return entries_.at(entry_index);
-#else
   return entries_[entry_index];
-#endif
 }
 
 template <class Field>
-std::vector<MatrixEntry<Field>>& CoordinateMatrix<Field>::Entries()
+Buffer<MatrixEntry<Field>>& CoordinateMatrix<Field>::Entries()
     CATAMARI_NOEXCEPT {
   return entries_;
 }
 
 template <class Field>
-const std::vector<MatrixEntry<Field>>& CoordinateMatrix<Field>::Entries() const
+const Buffer<MatrixEntry<Field>>& CoordinateMatrix<Field>::Entries() const
     CATAMARI_NOEXCEPT {
   return entries_;
 }
@@ -401,11 +390,7 @@ Int CoordinateMatrix<Field>::RowEntryOffset(Int row) const CATAMARI_NOEXCEPT {
   CATAMARI_ASSERT(
       EntryQueuesAreEmpty(),
       "Tried to retrieve a row edge offset when entry queues weren't empty");
-#ifdef CATAMARI_DEBUG
-  return row_entry_offsets_.at(row);
-#else
   return row_entry_offsets_[row];
-#endif
 }
 
 template <class Field>
@@ -449,8 +434,8 @@ CoordinateMatrix<Field>::CoordinateGraph() const CATAMARI_NOEXCEPT {
 
 template <class Field>
 void CoordinateMatrix<Field>::UpdateRowEntryOffsets() {
-  const Int num_entries = entries_.size();
-  row_entry_offsets_.resize(num_rows_ + 1);
+  const Int num_entries = entries_.Size();
+  row_entry_offsets_.Resize(num_rows_ + 1);
   Int row_entry_offset = 0;
   Int prev_row = -1;
   for (Int entry_index = 0; entry_index < num_entries; ++entry_index) {
@@ -486,6 +471,25 @@ void CoordinateMatrix<Field>::CombineSortedEntries(
     }
   }
   entries->resize(num_packed);
+}
+
+template <typename Field>
+void CoordinateMatrix<Field>::CombineSortedEntries(
+    Buffer<MatrixEntry<Field>>* entries) {
+  Int last_row = -1, last_column = -1;
+  Int num_packed = 0;
+  for (Int index = 0; index < entries->Size(); ++index) {
+    const MatrixEntry<Field>& entry = (*entries)[index];
+
+    if (entry.row == last_row && entry.column == last_column) {
+      (*entries)[num_packed - 1].value += entry.value;
+    } else {
+      last_row = entry.row;
+      last_column = entry.column;
+      (*entries)[num_packed++] = entry;
+    }
+  }
+  entries->Resize(num_packed);
 }
 
 template <class Field>

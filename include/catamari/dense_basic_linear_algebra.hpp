@@ -9,6 +9,7 @@
 #define CATAMARI_DENSE_BASIC_LINEAR_ALGEBRA_H_
 
 #include "catamari/blas_matrix.hpp"
+#include "catamari/buffer.hpp"
 #include "catamari/integers.hpp"
 
 namespace catamari {
@@ -242,7 +243,7 @@ void MultithreadedLowerNormalHermitianOuterProduct(
 
 // Applies a row permutation to a dense matrix.
 template <class Field>
-void Permute(const std::vector<Int>& permutation, BlasMatrix<Field>* matrix);
+void Permute(const Buffer<Int>& permutation, BlasMatrix<Field>* matrix);
 
 }  // namespace catamari
 

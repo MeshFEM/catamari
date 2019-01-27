@@ -8,6 +8,7 @@
 #ifndef CATAMARI_COORDINATE_MATRIX_H_
 #define CATAMARI_COORDINATE_MATRIX_H_
 
+#include "catamari/buffer.hpp"
 #include "catamari/integers.hpp"
 #include "catamari/macros.hpp"
 #include "quotient/coordinate_graph.hpp"
@@ -50,11 +51,16 @@ struct MatrixEntry {
   bool operator==(const MatrixEntry<Field>& other) const {
     return row == other.row && column == other.column && value == other.value;
   }
+
+  // An inequality test that requires all members being equal.
+  bool operator!=(const MatrixEntry<Field>& other) const {
+    return !operator==(other);
+  }
 };
 
 // A coordinate-format sparse matrix data structure. The primary storage is a
-// lexicographically sorted std::vector<MatrixEntry<Field>> and an associated
-// std::vector<Int> of row offsets (which serve the same role as in Compressed
+// lexicographically sorted Buffer<MatrixEntry<Field>> and an associated
+// Buffer<Int> of row offsets (which serve the same role as in Compressed
 // Sparse Row (CSR) format). Thus, this storage scheme is a superset of the CSR
 // format that explicitly stores both row and column indices for each entry.
 //
@@ -73,12 +79,12 @@ struct MatrixEntry {
 //   matrix.QueueEntryAddition(4, 4, 3.);
 //   matrix.QueueEntryAddition(3, 2, 4.);
 //   matrix.FlushEntryQueues();
-//   const std::vector<catamari::MatrixEntry<double>>& entries =
+//   const catamari::Buffer<catamari::MatrixEntry<double>>& entries =
 //       matrix.Entries();
 //
 // would return a reference to the underlying
-// std::vector<catamari::MatrixEntry<double>> of 'matrix', which should contain
-// the entry sequence:
+// catamari::Buffer<catamari::MatrixEntry<double>> of 'matrix', which should
+// contain the entry sequence:
 //   (2, 0, -1.), (2, 3, 2.), (3, 2, 4.), (3, 4, 1.), (4, 2, -2.), (4, 4, 3.).
 //
 // Similarly, subsequently running the code block:
@@ -88,7 +94,7 @@ struct MatrixEntry {
 //   matrix.QueueEntryRemoval(0, 4);
 //   matrix.FlushEntryQueues();
 //
-// would modify the std::vector underlying the 'edges' reference to now
+// would modify the Buffer underlying the 'edges' reference to now
 // contain the entry sequence:
 //   (2, 0, -1.), (3, 2, 4.), (3, 4, 1.), (4, 2, -2.), (4, 4, 3.).
 //
@@ -127,7 +133,7 @@ class CoordinateMatrix {
   Int NumEntries() const CATAMARI_NOEXCEPT;
 
   // Removes all entries and changes the number of rows and columns to zero.
-  void Empty(bool free_resources);
+  void Empty();
 
   // Changes both the number of rows and columns.
   void Resize(Int num_rows, Int num_columns);
@@ -174,10 +180,10 @@ class CoordinateMatrix {
 
   // Returns a reference to the underlying vector of entries.
   // NOTE: Only the values are meant to be directly modified.
-  std::vector<MatrixEntry<Field>>& Entries() CATAMARI_NOEXCEPT;
+  Buffer<MatrixEntry<Field>>& Entries() CATAMARI_NOEXCEPT;
 
   // Returns a reference to the underlying vector of entries.
-  const std::vector<MatrixEntry<Field>>& Entries() const CATAMARI_NOEXCEPT;
+  const Buffer<MatrixEntry<Field>>& Entries() const CATAMARI_NOEXCEPT;
 
   // Returns the offset into the entry vector where entries from the given row
   // begin.
@@ -206,12 +212,12 @@ class CoordinateMatrix {
   Int num_columns_;
 
   // The (lexicographically sorted) list of entries in the sparse matrix.
-  std::vector<MatrixEntry<Field>> entries_;
+  Buffer<MatrixEntry<Field>> entries_;
 
   // A list of length 'num_rows_ + 1', where 'row_entry_offsets_[row]' indicates
   // the location in 'entries_' where an entry with indices (row, column) would
   // be inserted (ignoring any sorting based upon the value).
-  std::vector<Int> row_entry_offsets_;
+  Buffer<Int> row_entry_offsets_;
 
   // The list of entries currently queued for addition into the sparse matrix.
   std::vector<MatrixEntry<Field>> entries_to_add_;
@@ -233,6 +239,7 @@ class CoordinateMatrix {
   // Packs a sorted list of entries by summing the floating-point values of
   // entries with the same indices.
   static void CombineSortedEntries(std::vector<MatrixEntry<Field>>* entries);
+  static void CombineSortedEntries(Buffer<MatrixEntry<Field>>* entries);
 };
 
 // Pretty-prints the CoordinateMatrix.

@@ -357,9 +357,9 @@ Int LowerBlockedLDLAdjointFactorization(BlasMatrix<Field>* matrix,
                                         Int blocksize) {
   const Int height = matrix->height;
 
-  std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  Buffer<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
   BlasMatrix<Field> factor;
-  factor.data = buffer.data();
+  factor.data = buffer.Data();
 
   for (Int i = 0; i < height; i += blocksize) {
     const Int bsize = std::min(height - i, blocksize);
@@ -417,17 +417,17 @@ Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix, Int blocksize) {
 template <class Field>
 Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
                                               BlasMatrix<Field>* matrix,
-                                              std::vector<Field>* buffer) {
+                                              Buffer<Field>* buffer) {
   const Int height = matrix->height;
 
   CATAMARI_ASSERT(
-      Int(buffer->size()) >= height * height,
+      Int(buffer->Size()) >= height * height,
       "Buffer size was inadequate for the multithreaded factorization.");
 
   BlasMatrix<Field> factor;
   factor.height = height;
   factor.width = height;
-  factor.data = buffer->data();
+  factor.data = buffer->Data();
   factor.leading_dim = height;
 
   // For use in tracking dependencies.
@@ -561,9 +561,9 @@ Int LowerBlockedLDLTransposeFactorization(BlasMatrix<Field>* matrix,
                                           Int blocksize) {
   const Int height = matrix->height;
 
-  std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  Buffer<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
   BlasMatrix<Field> factor;
-  factor.data = buffer.data();
+  factor.data = buffer.Data();
 
   for (Int i = 0; i < height; i += blocksize) {
     const Int bsize = std::min(height - i, blocksize);
@@ -621,17 +621,17 @@ Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix, Int blocksize) {
 template <class Field>
 Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
                                                 BlasMatrix<Field>* matrix,
-                                                std::vector<Field>* buffer) {
+                                                Buffer<Field>* buffer) {
   const Int height = matrix->height;
 
   CATAMARI_ASSERT(
-      Int(buffer->size()) >= height * height,
+      Int(buffer->Size()) >= height * height,
       "Buffer size was inadequate for the multithreaded factorization.");
 
   BlasMatrix<Field> factor;
   factor.height = height;
   factor.width = height;
-  factor.data = buffer->data();
+  factor.data = buffer->Data();
   factor.leading_dim = height;
 
   // For use in tracking dependencies.
@@ -785,9 +785,9 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
   std::vector<Int> sample;
   sample.reserve(height);
 
-  std::vector<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  Buffer<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
   BlasMatrix<Field> factor;
-  factor.data = buffer.data();
+  factor.data = buffer.Data();
 
   for (Int i = 0; i < height; i += blocksize) {
     const Int bsize = std::min(height - i, blocksize);
@@ -851,20 +851,20 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
     Int tile_size, bool maximum_likelihood, BlasMatrix<Field>* matrix,
     std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
-    std::vector<Field>* buffer) {
+    Buffer<Field>* buffer) {
   const Int height = matrix->height;
 
   std::vector<Int> sample;
   sample.reserve(height);
 
   CATAMARI_ASSERT(
-      Int(buffer->size()) >= height * height,
+      Int(buffer->Size()) >= height * height,
       "Buffer size was inadequate for the multithreaded factorization.");
 
   BlasMatrix<Field> factor;
   factor.height = height;
   factor.width = height;
-  factor.data = buffer->data();
+  factor.data = buffer->Data();
   factor.leading_dim = height;
 
   // For use in tracking dependencies.

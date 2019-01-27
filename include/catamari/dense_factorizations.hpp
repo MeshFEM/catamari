@@ -10,6 +10,7 @@
 
 #include <random>
 
+#include "catamari/buffer.hpp"
 #include "catamari/integers.hpp"
 
 namespace catamari {
@@ -41,7 +42,7 @@ Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix, Int blocksize = 64);
 template <class Field>
 Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
                                               BlasMatrix<Field>* matrix,
-                                              std::vector<Field>* buffer);
+                                              Buffer<Field>* buffer);
 #endif  // ifdef _OPENMP
 
 // Attempts to overwrite the lower triangle of an (implicitly) symmetric
@@ -58,7 +59,7 @@ Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
 template <class Field>
 Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
                                                 BlasMatrix<Field>* matrix,
-                                                std::vector<Field>* buffer);
+                                                Buffer<Field>* buffer);
 #endif  // ifdef _OPENMP
 
 // Returns a sample from the Determinantal Point Process implied by the

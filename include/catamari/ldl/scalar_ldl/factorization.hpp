@@ -76,7 +76,7 @@ struct Control {
 struct LowerStructure {
   // A vector of length 'num_rows + 1'; each entry corresponds to the offset
   // in 'indices' and 'values' of the corresponding column of the matrix.
-  std::vector<Int> column_offsets;
+  Buffer<Int> column_offsets;
 
   // A vector of length 'num_entries'; each segment, column_offsets[j] to
   // column_offsets[j + 1] - 1, contains the row indices for the j'th column.
@@ -92,15 +92,13 @@ struct LowerFactor {
   // A vector of length 'num_entries'; each segment, column_offsets[j] to
   // column_offsets[j + 1] - 1, contains the (typically nonzero) entries for
   // the j'th column.
-  //
-  // TODO(Jack Poulson): Switch to 'Buffer'.
-  std::vector<Field> values;
+  Buffer<Field> values;
 };
 
 // A diagonal matrix representing the 'D' in an L D L' factorization.
 template <class Field>
 struct DiagonalFactor {
-  std::vector<Field> values;
+  Buffer<Field> values;
 };
 
 // A representation of a non-supernodal LDL' factorization.
@@ -148,32 +146,32 @@ class Factorization {
     // Since we will sequentially access each of the entries in each column of
     // L during the updates of the active column, we can avoid the need for
     // binary search by maintaining a separate counter for each column.
-    std::vector<Int> column_update_ptrs;
+    Buffer<Int> column_update_ptrs;
 
     // An integer workspace for storing the indices in the current row pattern.
-    std::vector<Int> row_structure;
+    Buffer<Int> row_structure;
 
     // A data structure for marking whether or not an index is in the pattern
     // of the active row of the lower-triangular factor.
-    std::vector<Int> pattern_flags;
+    Buffer<Int> pattern_flags;
   };
 
   // The temporary state used by the up-looking factorization.
   struct UpLookingState {
     // An array for holding the active index to insert the new entry of each
     // column into.
-    std::vector<Int> column_update_ptrs;
+    Buffer<Int> column_update_ptrs;
 
     // A data structure for marking whether or not an index is in the pattern
     // of the active row of the lower-triangular factor.
-    std::vector<Int> pattern_flags;
+    Buffer<Int> pattern_flags;
 
     // Set up an integer workspace that could hold any row nonzero pattern.
-    std::vector<Int> row_structure;
+    Buffer<Int> row_structure;
 
     // Set up a workspace for performing a triangular solve against a row of the
     // input matrix.
-    std::vector<Field> row_workspace;
+    Buffer<Field> row_workspace;
   };
 
   // Performs a non-supernodal left-looking LDL' factorization.
@@ -195,11 +193,11 @@ class Factorization {
 
   // Initializes for running a left-looking factorization.
   void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
-                        std::vector<Int>* parents);
+                        Buffer<Int>* parents);
 
   // Initializes for running an up-looking factorization.
   void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
-                      std::vector<Int>* parents);
+                      Buffer<Int>* parents);
 
   // For each index 'i' in the structure of column 'column' of L formed so far:
   //   L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).

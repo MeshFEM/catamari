@@ -14,14 +14,14 @@ namespace catamari {
 namespace supernodal_ldl {
 
 template <class Field>
-LowerFactor<Field>::LowerFactor(const std::vector<Int>& supernode_sizes,
-                                const std::vector<Int>& supernode_degrees) {
-  const Int num_supernodes = supernode_sizes.size();
+LowerFactor<Field>::LowerFactor(const Buffer<Int>& supernode_sizes,
+                                const Buffer<Int>& supernode_degrees) {
+  const Int num_supernodes = supernode_sizes.Size();
 
   Int degree_sum = 0;
   Int num_entries = 0;
-  structure_index_offsets_.resize(num_supernodes + 1);
-  std::vector<Int> lower_value_offsets(num_supernodes + 1);
+  structure_index_offsets_.Resize(num_supernodes + 1);
+  Buffer<Int> lower_value_offsets(num_supernodes + 1);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int degree = supernode_degrees[supernode];
     const Int supernode_size = supernode_sizes[supernode];
@@ -35,10 +35,10 @@ LowerFactor<Field>::LowerFactor(const std::vector<Int>& supernode_sizes,
   structure_index_offsets_[num_supernodes] = degree_sum;
   lower_value_offsets[num_supernodes] = num_entries;
 
-  structure_indices_.resize(degree_sum);
-  values_.resize(num_entries, Field{0});
+  structure_indices_.Resize(degree_sum);
+  values_.Resize(num_entries, Field{0});
 
-  blocks.resize(num_supernodes);
+  blocks.Resize(num_supernodes);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int degree = supernode_degrees[supernode];
     const Int supernode_size = supernode_sizes[supernode];
@@ -72,13 +72,13 @@ const Int* LowerFactor<Field>::IntersectionSizes(Int supernode) const {
 
 template <class Field>
 void LowerFactor<Field>::FillIntersectionSizes(
-    const std::vector<Int>& supernode_sizes,
-    const std::vector<Int>& supernode_member_to_index) {
-  const Int num_supernodes = blocks.size();
+    const Buffer<Int>& supernode_sizes,
+    const Buffer<Int>& supernode_member_to_index) {
+  const Int num_supernodes = blocks.Size();
 
   // Compute the supernode offsets.
   Int num_supernode_intersects = 0;
-  intersect_size_offsets_.resize(num_supernodes + 1);
+  intersect_size_offsets_.Resize(num_supernodes + 1);
   for (Int column_supernode = 0; column_supernode < num_supernodes;
        ++column_supernode) {
     intersect_size_offsets_[column_supernode] = num_supernode_intersects;
@@ -99,7 +99,7 @@ void LowerFactor<Field>::FillIntersectionSizes(
 
   // Fill the supernode intersection sizes (and simultaneously compute the
   // number of intersecting descendant entries for each supernode).
-  intersect_sizes_.resize(num_supernode_intersects);
+  intersect_sizes_.Resize(num_supernode_intersects);
   num_supernode_intersects = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     Int last_supernode = -1;
@@ -125,9 +125,8 @@ void LowerFactor<Field>::FillIntersectionSizes(
       intersect_sizes_[num_supernode_intersects++] = intersect_size;
     }
   }
-  CATAMARI_ASSERT(
-      num_supernode_intersects == static_cast<Int>(intersect_sizes_.size()),
-      "Incorrect number of supernode intersections");
+  CATAMARI_ASSERT(num_supernode_intersects == intersect_sizes_.Size(),
+                  "Incorrect number of supernode intersections");
 }
 
 }  // namespace supernodal_ldl

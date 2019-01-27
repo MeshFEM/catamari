@@ -8,6 +8,7 @@
 #ifndef CATAMARI_LDL_SUPERNODAL_LDL_FACTORIZATION_H_
 #define CATAMARI_LDL_SUPERNODAL_LDL_FACTORIZATION_H_
 
+#include "catamari/buffer.hpp"
 #include "catamari/ldl/supernodal_ldl/diagonal_factor.hpp"
 #include "catamari/ldl/supernodal_ldl/lower_factor.hpp"
 #include "catamari/ldl/supernodal_ldl/supernode_utils.hpp"
@@ -78,38 +79,38 @@ class Factorization {
   struct LeftLookingSharedState {
     // The relative index of the active supernode within each supernode's
     // structure.
-    std::vector<Int> rel_rows;
+    Buffer<Int> rel_rows;
 
     // Pointers to the active supernode intersection size within each
     // supernode's structure.
-    std::vector<const Int*> intersect_ptrs;
+    Buffer<const Int*> intersect_ptrs;
   };
 
   struct LeftLookingPrivateState {
     // An integer workspace for storing the supernodes in the current row
     // pattern.
-    std::vector<Int> row_structure;
+    Buffer<Int> row_structure;
 
     // A data structure for marking whether or not a supernode is in the pattern
     // of the active row of the lower-triangular factor.
-    std::vector<Int> pattern_flags;
+    Buffer<Int> pattern_flags;
 
     // A buffer for storing (scaled) transposed descendant blocks.
-    std::vector<Field> scaled_transpose_buffer;
+    Buffer<Field> scaled_transpose_buffer;
 
     // A buffer for storing updates to the current supernode column.
-    std::vector<Field> workspace_buffer;
+    Buffer<Field> workspace_buffer;
   };
 
   struct RightLookingSharedState {
     // The Schur complement matrices for each of the supernodes in the
     // multifrontal method. Each front should only be allocated while it is
     // actively in use.
-    std::vector<BlasMatrix<Field>> schur_complements;
+    Buffer<BlasMatrix<Field>> schur_complements;
 
     // The underlying buffers for the Schur complement portions of the fronts.
     // They are allocated and deallocated as the factorization progresses.
-    std::vector<std::vector<Field>> schur_complement_buffers;
+    Buffer<Buffer<Field>> schur_complement_buffers;
   };
 
   // The representation of the permutation matrix P so that P A P' should be
@@ -125,7 +126,7 @@ class Factorization {
 
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.
-  std::vector<Int> supernode_member_to_index_;
+  Buffer<Int> supernode_member_to_index_;
 
   // The largest supernode size in the factorization.
   Int max_supernode_size_;
@@ -150,22 +151,21 @@ class Factorization {
   // Form the (possibly relaxed) supernodes for the factorization.
   void FormSupernodes(const CoordinateMatrix<Field>& matrix,
                       const SupernodalRelaxationControl& control,
-                      AssemblyForest* forest,
-                      std::vector<Int>* supernode_degrees);
+                      AssemblyForest* forest, Buffer<Int>* supernode_degrees);
 #ifdef _OPENMP
   void MultithreadedFormSupernodes(const CoordinateMatrix<Field>& matrix,
                                    const SupernodalRelaxationControl& control,
                                    AssemblyForest* forest,
-                                   std::vector<Int>* supernode_degrees);
+                                   Buffer<Int>* supernode_degrees);
 #endif  // ifdef _OPENMP
 
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
                          const AssemblyForest& forest,
-                         const std::vector<Int>& supernode_degrees);
+                         const Buffer<Int>& supernode_degrees);
 #ifdef _OPENMP
-  void MultithreadedInitializeFactors(
-      const CoordinateMatrix<Field>& matrix, const AssemblyForest& forest,
-      const std::vector<Int>& supernode_degrees);
+  void MultithreadedInitializeFactors(const CoordinateMatrix<Field>& matrix,
+                                      const AssemblyForest& forest,
+                                      const Buffer<Int>& supernode_degrees);
 #endif  // ifdef _OPENMP
 
   LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
@@ -191,18 +191,19 @@ class Factorization {
       Int tile_size, Int level, Int max_parallel_levels, Int supernode,
       const CoordinateMatrix<Field>& matrix,
       LeftLookingSharedState* shared_state,
-      std::vector<LeftLookingPrivateState>* private_states, LDLResult* result);
+      Buffer<LeftLookingPrivateState>* private_states, LDLResult* result);
 #endif  // ifdef _OPENMP
 
   bool RightLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
                            RightLookingSharedState* shared_state,
                            LDLResult* result);
 #ifdef _OPENMP
-  bool MultithreadedRightLookingSubtree(
-      Int tile_size, Int level, Int max_parallel_levels, Int supernode,
-      const CoordinateMatrix<Field>& matrix,
-      const std::vector<double>& work_estimates,
-      RightLookingSharedState* shared_state, LDLResult* result);
+  bool MultithreadedRightLookingSubtree(Int tile_size, Int level,
+                                        Int max_parallel_levels, Int supernode,
+                                        const CoordinateMatrix<Field>& matrix,
+                                        const Buffer<double>& work_estimates,
+                                        RightLookingSharedState* shared_state,
+                                        LDLResult* result);
 #endif  // ifdef _OPENMP
 
   void LeftLookingSupernodeUpdate(Int main_supernode,
@@ -213,14 +214,14 @@ class Factorization {
   void MultithreadedLeftLookingSupernodeUpdate(
       Int main_supernode, const CoordinateMatrix<Field>& matrix,
       LeftLookingSharedState* shared_state,
-      std::vector<LeftLookingPrivateState>* private_states);
+      Buffer<LeftLookingPrivateState>* private_states);
 #endif  // ifdef _OPENMP
 
   bool LeftLookingSupernodeFinalize(Int main_supernode, LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedLeftLookingSupernodeFinalize(
       Int tile_size, Int supernode,
-      std::vector<LeftLookingPrivateState>* private_states, LDLResult* result);
+      Buffer<LeftLookingPrivateState>* private_states, LDLResult* result);
 #endif  // ifdef _OPENMP
 
   void MergeChildSchurComplements(Int supernode,

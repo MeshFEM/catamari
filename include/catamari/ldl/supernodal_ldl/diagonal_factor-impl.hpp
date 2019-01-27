@@ -14,10 +14,10 @@ namespace catamari {
 namespace supernodal_ldl {
 
 template <class Field>
-DiagonalFactor<Field>::DiagonalFactor(const std::vector<Int>& supernode_sizes) {
-  const Int num_supernodes = supernode_sizes.size();
+DiagonalFactor<Field>::DiagonalFactor(const Buffer<Int>& supernode_sizes) {
+  const Int num_supernodes = supernode_sizes.Size();
 
-  std::vector<Int> diag_value_offsets(num_supernodes + 1);
+  Buffer<Int> diag_value_offsets(num_supernodes + 1);
   Int num_diagonal_entries = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int supernode_size = supernode_sizes[supernode];
@@ -25,9 +25,9 @@ DiagonalFactor<Field>::DiagonalFactor(const std::vector<Int>& supernode_sizes) {
     num_diagonal_entries += supernode_size * supernode_size;
   }
   diag_value_offsets[num_supernodes] = num_diagonal_entries;
-  values_.resize(num_diagonal_entries, Field{0});
+  values_.Resize(num_diagonal_entries, Field{0});
 
-  blocks.resize(num_supernodes);
+  blocks.Resize(num_supernodes);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int supernode_size = supernode_sizes[supernode];
     blocks[supernode].height = supernode_size;

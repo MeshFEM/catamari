@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "catamari/blas_matrix.hpp"
+#include "catamari/buffer.hpp"
 
 namespace catamari {
 namespace supernodal_ldl {
@@ -20,14 +21,14 @@ template <class Field>
 class DiagonalFactor {
  public:
   // Representations of the diagonal blocks of the factorization.
-  std::vector<BlasMatrix<Field>> blocks;
+  Buffer<BlasMatrix<Field>> blocks;
 
-  DiagonalFactor(const std::vector<Int>& supernode_sizes);
+  DiagonalFactor(const Buffer<Int>& supernode_sizes);
 
  private:
   // The concatenation of the numerical values of the supernodal diagonal
   // blocks (stored in a column-major manner in each block).
-  std::vector<Field> values_;
+  Buffer<Field> values_;
 };
 
 }  // namespace supernodal_ldl

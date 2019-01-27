@@ -144,7 +144,7 @@ inline void ConjugateMatrixVectorProduct(
     const Complex<float>& alpha, const ConstBlasMatrix<Complex<float>>& matrix,
     const Complex<float>* input_vector, Complex<float>* result) {
   // Make a conjugated copy of the input vector.
-  std::vector<Complex<float>> conjugated_input(matrix.width);
+  Buffer<Complex<float>> conjugated_input(matrix.width);
   for (Int i = 0; i < matrix.width; ++i) {
     conjugated_input[i] = Conjugate(input_vector[i]);
   }
@@ -156,7 +156,7 @@ inline void ConjugateMatrixVectorProduct(
   result_matrix.data = result;
 
   ConjugateMatrix(&result_matrix);
-  MatrixVectorProduct(Conjugate(alpha), matrix, conjugated_input.data(),
+  MatrixVectorProduct(Conjugate(alpha), matrix, conjugated_input.Data(),
                       result);
   ConjugateMatrix(&result_matrix);
 }
@@ -167,7 +167,7 @@ inline void ConjugateMatrixVectorProduct(
     const ConstBlasMatrix<Complex<double>>& matrix,
     const Complex<double>* input_vector, Complex<double>* result) {
   // Make a conjugated copy of the input vector.
-  std::vector<Complex<double>> conjugated_input(matrix.width);
+  Buffer<Complex<double>> conjugated_input(matrix.width);
   for (Int i = 0; i < matrix.width; ++i) {
     conjugated_input[i] = Conjugate(input_vector[i]);
   }
@@ -179,7 +179,7 @@ inline void ConjugateMatrixVectorProduct(
   result_matrix.data = result;
 
   ConjugateMatrix(&result_matrix);
-  MatrixVectorProduct(Conjugate(alpha), matrix, conjugated_input.data(),
+  MatrixVectorProduct(Conjugate(alpha), matrix, conjugated_input.Data(),
                       result);
   ConjugateMatrix(&result_matrix);
 }
@@ -2829,10 +2829,10 @@ void MultithreadedLowerNormalHermitianOuterProduct(
 #endif  // ifdef _OPENMP
 
 template <class Field>
-void Permute(const std::vector<Int>& permutation, BlasMatrix<Field>* matrix) {
+void Permute(const Buffer<Int>& permutation, BlasMatrix<Field>* matrix) {
   for (Int j = 0; j < matrix->width; ++j) {
     // Make a copy of the current column.
-    std::vector<Field> column_copy(matrix->height);
+    Buffer<Field> column_copy(matrix->height);
     for (Int i = 0; i < matrix->height; ++i) {
       column_copy[i] = matrix->Entry(i, j);
     }
