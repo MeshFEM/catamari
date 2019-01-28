@@ -478,7 +478,7 @@ void CoordinateMatrix<Field>::CombineSortedEntries(
     Buffer<MatrixEntry<Field>>* entries) {
   Int last_row = -1, last_column = -1;
   Int num_packed = 0;
-  for (Int index = 0; index < entries->Size(); ++index) {
+  for (std::size_t index = 0; index < entries->Size(); ++index) {
     const MatrixEntry<Field>& entry = (*entries)[index];
 
     if (entry.row == last_row && entry.column == last_column) {

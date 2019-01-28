@@ -69,9 +69,9 @@ void UnitReachNestedDissection2DRecursion(Int num_x_elements,
     const Int right_offset =
         left_offset +
         (left_box.x_end - left_box.x_beg) * (left_box.y_end - left_box.y_beg);
-    const Int cut_offset = right_offset +
-                           (right_box.x_end - right_box.x_beg) *
-                               (right_box.y_end - right_box.y_beg);
+    const Int cut_offset =
+        right_offset + (right_box.x_end - right_box.x_beg) *
+                           (right_box.y_end - right_box.y_beg);
 
     // Fill the left child.
     UnitReachNestedDissection2DRecursion(num_x_elements, num_y_elements,
@@ -107,9 +107,9 @@ void UnitReachNestedDissection2DRecursion(Int num_x_elements,
     const Int right_offset =
         left_offset +
         (left_box.x_end - left_box.x_beg) * (left_box.y_end - left_box.y_beg);
-    const Int cut_offset = right_offset +
-                           (right_box.x_end - right_box.x_beg) *
-                               (right_box.y_end - right_box.y_beg);
+    const Int cut_offset =
+        right_offset + (right_box.x_end - right_box.x_beg) *
+                           (right_box.y_end - right_box.y_beg);
 
     // Fill the left child.
     UnitReachNestedDissection2DRecursion(num_x_elements, num_y_elements,
@@ -216,14 +216,14 @@ void UnitReachNestedDissection3DRecursion(Int num_x_elements,
     const Extent3D<Int> right_box{x_cut + 1, box.x_end, box.y_beg,
                                   box.y_end, box.z_beg, box.z_end};
     const Int left_offset = offset;
-    const Int right_offset = left_offset +
-                             (left_box.x_end - left_box.x_beg) *
-                                 (left_box.y_end - left_box.y_beg) *
-                                 (left_box.z_end - left_box.z_beg);
-    const Int cut_offset = right_offset +
-                           (right_box.x_end - right_box.x_beg) *
-                               (right_box.y_end - right_box.y_beg) *
-                               (right_box.z_end - right_box.z_beg);
+    const Int right_offset =
+        left_offset + (left_box.x_end - left_box.x_beg) *
+                          (left_box.y_end - left_box.y_beg) *
+                          (left_box.z_end - left_box.z_beg);
+    const Int cut_offset =
+        right_offset + (right_box.x_end - right_box.x_beg) *
+                           (right_box.y_end - right_box.y_beg) *
+                           (right_box.z_end - right_box.z_beg);
 
     // Fill the left child.
     UnitReachNestedDissection3DRecursion(num_x_elements, num_y_elements,
@@ -262,14 +262,14 @@ void UnitReachNestedDissection3DRecursion(Int num_x_elements,
     const Extent3D<Int> right_box{box.x_beg, box.x_end, y_cut + 1,
                                   box.y_end, box.z_beg, box.z_end};
     const Int left_offset = offset;
-    const Int right_offset = left_offset +
-                             (left_box.x_end - left_box.x_beg) *
-                                 (left_box.y_end - left_box.y_beg) *
-                                 (left_box.z_end - left_box.z_beg);
-    const Int cut_offset = right_offset +
-                           (right_box.x_end - right_box.x_beg) *
-                               (right_box.y_end - right_box.y_beg) *
-                               (right_box.z_end - right_box.z_beg);
+    const Int right_offset =
+        left_offset + (left_box.x_end - left_box.x_beg) *
+                          (left_box.y_end - left_box.y_beg) *
+                          (left_box.z_end - left_box.z_beg);
+    const Int cut_offset =
+        right_offset + (right_box.x_end - right_box.x_beg) *
+                           (right_box.y_end - right_box.y_beg) *
+                           (right_box.z_end - right_box.z_beg);
 
     // Fill the left child.
     UnitReachNestedDissection3DRecursion(num_x_elements, num_y_elements,
@@ -308,14 +308,14 @@ void UnitReachNestedDissection3DRecursion(Int num_x_elements,
     const Extent3D<Int> right_box{box.x_beg, box.x_end, box.y_beg,
                                   box.y_end, z_cut + 1, box.z_end};
     const Int left_offset = offset;
-    const Int right_offset = left_offset +
-                             (left_box.x_end - left_box.x_beg) *
-                                 (left_box.y_end - left_box.y_beg) *
-                                 (left_box.z_end - left_box.z_beg);
-    const Int cut_offset = right_offset +
-                           (right_box.x_end - right_box.x_beg) *
-                               (right_box.y_end - right_box.y_beg) *
-                               (right_box.z_end - right_box.z_beg);
+    const Int right_offset =
+        left_offset + (left_box.x_end - left_box.x_beg) *
+                          (left_box.y_end - left_box.y_beg) *
+                          (left_box.z_end - left_box.z_beg);
+    const Int cut_offset =
+        right_offset + (right_box.x_end - right_box.x_beg) *
+                           (right_box.y_end - right_box.y_beg) *
+                           (right_box.z_end - right_box.z_beg);
 
     // Fill the left child.
     UnitReachNestedDissection3DRecursion(num_x_elements, num_y_elements,

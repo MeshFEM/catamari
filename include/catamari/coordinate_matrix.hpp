@@ -32,15 +32,14 @@ struct MatrixEntry {
   Field value;
 
   // A trivial constructor (required for STL sorting).
-  MatrixEntry() {}
+  MatrixEntry() = default;
 
   // A standard constructor (required for emplacement).
   MatrixEntry(Int row_, Int column_, const Field& value_)
       : row(row_), column(column_), value(value_) {}
 
   // A copy constructor.
-  MatrixEntry(const MatrixEntry<Field>& other)
-      : row(other.row), column(other.column), value(other.value) {}
+  MatrixEntry(const MatrixEntry<Field>& other) = default;
 
   // A partial ordering that ignores the floating-point value in comparisons.
   bool operator<(const MatrixEntry<Field>& other) const {
@@ -212,6 +211,8 @@ class CoordinateMatrix {
   Int num_columns_;
 
   // The (lexicographically sorted) list of entries in the sparse matrix.
+  // TODO(Jack Poulson): Avoid unnecessary traversals of this array due to
+  // MatrixEntry not satisfying std::is_trivially_copy_constructible.
   Buffer<MatrixEntry<Field>> entries_;
 
   // A list of length 'num_rows_ + 1', where 'row_entry_offsets_[row]' indicates
