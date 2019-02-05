@@ -19,7 +19,7 @@ inline void MemberToIndex(Int num_rows, const Buffer<Int>& supernode_starts,
                           Buffer<Int>* member_to_index) {
   member_to_index->Resize(num_rows);
 
-  Int supernode = 0;
+  std::size_t supernode = 0;
   for (Int column = 0; column < num_rows; ++column) {
     if (column == supernode_starts[supernode + 1]) {
       ++supernode;
@@ -29,8 +29,9 @@ inline void MemberToIndex(Int num_rows, const Buffer<Int>& supernode_starts,
                     "Column was not in the marked supernode.");
     (*member_to_index)[column] = supernode;
   }
-  CATAMARI_ASSERT(supernode == static_cast<Int>(supernode_starts.Size()) - 2,
-                  "Did not end on the last supernode.");
+  CATAMARI_ASSERT(supernode == supernode_starts.Size() - 2,
+                  "Ended on supernode " + std::to_string(supernode) +
+                  " instead of " + std::to_string(supernode_starts.Size() - 2));
 }
 
 inline void ConvertFromScalarToSupernodalEliminationForest(
@@ -57,6 +58,20 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                 const SymmetricOrdering& ordering,
                                 const Buffer<Int>& supernode_sizes) {
   const Int num_rows = matrix.NumRows();
+  for (std::size_t index = 0; index < supernode_sizes.Size(); ++index) {
+    CATAMARI_ASSERT(supernode_sizes[index] > 0,
+                    "Supernode " + std::to_string(index) + " had length " +
+                    std::to_string(supernode_sizes[index]));
+  }
+  {
+    Int size_sum = 0;
+    for (const Int& supernode_size : supernode_sizes) {
+      size_sum += supernode_size;
+    }
+    CATAMARI_ASSERT(size_sum == num_rows, "Supernode sizes summed to " +
+                    std::to_string(size_sum) + " instead of " +
+                    std::to_string(num_rows));
+  }
 
   Buffer<Int> parents, degrees;
   scalar_ldl::EliminationForestAndDegrees(matrix, ordering, &parents, &degrees);
@@ -180,7 +195,7 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 
     // All tests passed, so we may extend the current supernode to incorporate
     // this column.
-    ++supernode_sizes->Back();
+    ++(*supernode_sizes)[num_supernodes - 1];
   }
   supernode_sizes->Resize(num_supernodes);
 
