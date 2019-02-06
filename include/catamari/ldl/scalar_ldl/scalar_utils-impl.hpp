@@ -510,6 +510,8 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
   const Int num_rows = matrix.NumRows();
 
   // TODO(Jack Poulson): Make this configurable.
+  // TODO(Jack Poulson): Add support for using the degrees computed from
+  // a MinimumDegree reordering to avoid the initial degree computation.
   const bool preallocate = true;
 
   // A data structure for marking whether or not a node is in the pattern of
