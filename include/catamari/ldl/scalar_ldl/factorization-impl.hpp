@@ -37,8 +37,8 @@ void Factorization<Field>::PrintLowerFactor(const std::string& label,
       print_entry(column, column, Field{1});
     }
 
-    const Int column_beg = lower_structure.column_offsets[column];
-    const Int column_end = lower_structure.column_offsets[column + 1];
+    const Int column_beg = lower_structure.ColumnOffset(column);
+    const Int column_end = lower_structure.ColumnOffset(column + 1);
     for (Int index = column_beg; index < column_end; ++index) {
       const Int row = lower_structure.indices[index];
       const Field& value = lower_factor.values[index];
@@ -90,12 +90,9 @@ void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
         }
       }
 
-      const Int column_beg = lower_structure.column_offsets[column];
-      const Int column_end = lower_structure.column_offsets[column + 1];
-      Int* iter =
-          std::lower_bound(lower_structure.indices.Data() + column_beg,
-                           lower_structure.indices.Data() + column_end, row);
-      CATAMARI_ASSERT(iter != lower_structure.indices.Data() + column_end,
+      Int* iter = std::lower_bound(lower_structure.ColumnBeg(column),
+                                   lower_structure.ColumnEnd(column), row);
+      CATAMARI_ASSERT(iter != lower_structure.ColumnEnd(column),
                       "Exceeded column indices.");
       CATAMARI_ASSERT(*iter == row, "Did not find index.");
       const Int structure_index =
@@ -164,7 +161,7 @@ void Factorization<Field>::UpLookingRowUpdate(Int row, Int column,
   //   "An Evaluation of Left-Looking, Right-Looking and Multifrontal
   //   Approaches to Sparse Cholesky Factorization on Hierarchical-Memory
   //   Machines".
-  const Int factor_column_beg = lower_structure.column_offsets[column];
+  const Int factor_column_beg = lower_structure.ColumnOffset(column);
   const Int factor_column_end = column_update_ptrs[column]++;
   for (Int index = factor_column_beg; index < factor_column_end; ++index) {
     // Update L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
@@ -210,7 +207,7 @@ LDLResult Factorization<Field>::LeftLooking(
   LDLResult result;
   for (Int column = 0; column < num_rows; ++column) {
     state.pattern_flags[column] = column;
-    state.column_update_ptrs[column] = lower_structure.column_offsets[column];
+    state.column_update_ptrs[column] = lower_structure.ColumnOffset(column);
 
     // Compute the row pattern.
     const Int num_packed = ComputeRowPattern(matrix, ordering, parents, column,
@@ -225,7 +222,7 @@ LDLResult Factorization<Field>::LeftLooking(
 
       // Find L(column, j) in the j'th column.
       Int j_ptr = state.column_update_ptrs[j]++;
-      const Int j_end = lower_structure.column_offsets[j + 1];
+      const Int j_end = lower_structure.ColumnOffset(j + 1);
       CATAMARI_ASSERT(j_ptr != j_end, "Left column looking for L(column, j)");
       CATAMARI_ASSERT(lower_structure.indices[j_ptr] == column,
                       "Did not find L(column, j)");
@@ -245,7 +242,7 @@ LDLResult Factorization<Field>::LeftLooking(
       ++j_ptr;
 
       // L(column+1:n, column) -= L(column+1:n, j) * eta.
-      const Int column_beg = lower_structure.column_offsets[column];
+      const Int column_beg = lower_structure.ColumnOffset(column);
       Int column_ptr = column_beg;
       for (; j_ptr != j_end; ++j_ptr) {
         const Int row = lower_structure.indices[j_ptr];
@@ -295,16 +292,15 @@ LDLResult Factorization<Field>::LeftLooking(
 
     // L(column+1:n, column) /= d(column).
     {
-      const Int column_beg = lower_structure.column_offsets[column];
-      const Int column_end = lower_structure.column_offsets[column + 1];
+      const Int column_beg = lower_structure.ColumnOffset(column);
+      const Int column_end = lower_structure.ColumnOffset(column + 1);
       for (Int index = column_beg; index < column_end; ++index) {
         lower_factor.values[index] /= pivot;
       }
     }
 
     // Update the result structure.
-    const Int degree = lower_structure.column_offsets[column + 1] -
-                       lower_structure.column_offsets[column];
+    const Int degree = lower_structure.Degree(column);
     result.num_factorization_entries += 1 + degree;
     result.num_factorization_flops += std::pow(1. * degree, 2.);
     ++result.num_successful_pivots;
@@ -332,7 +328,7 @@ LDLResult Factorization<Field>::UpLooking(
   LDLResult result;
   for (Int row = 0; row < num_rows; ++row) {
     state.pattern_flags[row] = row;
-    state.column_update_ptrs[row] = lower_structure.column_offsets[row];
+    state.column_update_ptrs[row] = lower_structure.ColumnOffset(row);
 
     // Compute the row pattern and scatter the row of the input matrix into
     // the workspace.
@@ -371,8 +367,7 @@ LDLResult Factorization<Field>::UpLooking(
     }
 
     // Update the result structure.
-    const Int degree = lower_structure.column_offsets[row + 1] -
-                       lower_structure.column_offsets[row];
+    const Int degree = lower_structure.Degree(row);
     result.num_factorization_entries += 1 + degree;
     result.num_factorization_flops += std::pow(1. * degree, 2.);
     ++result.num_successful_pivots;
@@ -419,8 +414,8 @@ void Factorization<Field>::LowerTriangularSolve(
       }
     }
 
-    const Int factor_column_beg = lower_structure.column_offsets[column];
-    const Int factor_column_end = lower_structure.column_offsets[column + 1];
+    const Int factor_column_beg = lower_structure.ColumnOffset(column);
+    const Int factor_column_end = lower_structure.ColumnOffset(column + 1);
     for (Int j = 0; j < num_rhs; ++j) {
       const Field eta = matrix->Entry(column, j);
       for (Int index = factor_column_beg; index < factor_column_end; ++index) {
@@ -464,8 +459,8 @@ void Factorization<Field>::LowerTransposeTriangularSolve(
                   "matrix was an incorrect height.");
 
   for (Int column = num_rows - 1; column >= 0; --column) {
-    const Int factor_column_beg = lower_structure.column_offsets[column];
-    const Int factor_column_end = lower_structure.column_offsets[column + 1];
+    const Int factor_column_beg = lower_structure.ColumnOffset(column);
+    const Int factor_column_end = lower_structure.ColumnOffset(column + 1);
     for (Int j = 0; j < num_rhs; ++j) {
       Field& eta = matrix->Entry(column, j);
       for (Int index = factor_column_beg; index < factor_column_end; ++index) {

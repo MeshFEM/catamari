@@ -70,16 +70,15 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                const SymmetricOrdering& ordering,
-                               const AssemblyForest& forest,
-                               const Buffer<Int>& degrees,
+                               AssemblyForest* scalar_forest,
                                Buffer<Int>* supernode_sizes,
                                scalar_ldl::LowerStructure* scalar_structure);
 #ifdef _OPENMP
 template <class Field>
 void MultithreadedFormFundamentalSupernodes(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest, const Buffer<Int>& degrees,
-    Buffer<Int>* supernode_sizes, scalar_ldl::LowerStructure* scalar_structure);
+    AssemblyForest* scalar_forest, Buffer<Int>* supernode_sizes,
+    scalar_ldl::LowerStructure* scalar_structure);
 #endif  // ifdef _OPENMP
 
 // Returns whether or not the child supernode can be merged into its parent by

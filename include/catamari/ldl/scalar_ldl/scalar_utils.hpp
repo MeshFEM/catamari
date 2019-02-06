@@ -64,8 +64,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
                                        const SymmetricOrdering& ordering,
-                                       const AssemblyForest& forest,
-                                       const Buffer<Int>& degrees,
+                                       AssemblyForest* forest,
                                        LowerStructure* lower_structure);
 #endif  // ifdef _OPENMP
 

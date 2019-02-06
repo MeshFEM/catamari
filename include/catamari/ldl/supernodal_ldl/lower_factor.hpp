@@ -27,13 +27,34 @@ class LowerFactor {
   LowerFactor(const Buffer<Int>& supernode_sizes,
               const Buffer<Int>& supernode_degrees);
 
-  Int* Structure(Int supernode);
+  // Returns a pointer to the beginning of the structure of a supernode.
+  Int* StructureBeg(Int supernode);
 
-  const Int* Structure(Int supernode) const;
+  // Returns an immutable pointer to the beginning of the structure of a
+  // supernode.
+  const Int* StructureBeg(Int supernode) const;
 
-  Int* IntersectionSizes(Int supernode);
+  // Returns a pointer to the end of the structure of a supernode.
+  Int* StructureEnd(Int supernode);
 
-  const Int* IntersectionSizes(Int supernode) const;
+  // Returns an immutable pointer to the end of the structure of a supernode.
+  const Int* StructureEnd(Int supernode) const;
+
+  // Returns a pointer to the beginning of the supernodal intersection sizes
+  // of a supernode.
+  Int* IntersectionSizesBeg(Int supernode);
+
+  // Returns an immutable pointer to the beginning of the supernodal
+  // intersection sizes of a supernode.
+  const Int* IntersectionSizesBeg(Int supernode) const;
+
+  // Returns a pointer to the end of the supernodal intersection sizes of a
+  // supernode.
+  Int* IntersectionSizesEnd(Int supernode);
+
+  // Returns an immutable pointer to the end of the supernodal intersection
+  // sizes of a supernode.
+  const Int* IntersectionSizesEnd(Int supernode) const;
 
   void FillIntersectionSizes(const Buffer<Int>& supernode_sizes,
                              const Buffer<Int>& supernode_member_to_index);

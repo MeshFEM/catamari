@@ -81,6 +81,30 @@ struct LowerStructure {
   // A vector of length 'num_entries'; each segment, column_offsets[j] to
   // column_offsets[j + 1] - 1, contains the row indices for the j'th column.
   Buffer<Int> indices;
+
+  // Returns the starting index of a column's structure in 'indices'.
+  Int ColumnOffset(Int column) const { return column_offsets[column]; }
+
+  // Returns the external degree of the given column vertex.
+  Int Degree(Int column) const {
+    return ColumnOffset(column + 1) - ColumnOffset(column);
+  }
+
+  // Returns a pointer to a column's structure.
+  Int* ColumnBeg(Int column) { return &indices[column_offsets[column]]; }
+
+  // Returns an immutable pointer to a column's structure.
+  const Int* ColumnBeg(Int column) const {
+    return &indices[column_offsets[column]];
+  }
+
+  // Returns a pointer to the end of a column's structure.
+  Int* ColumnEnd(Int column) { return &indices[column_offsets[column + 1]]; }
+
+  // Returns an immutable pointer to the end of a column's structure.
+  const Int* ColumnEnd(Int column) const {
+    return &indices[column_offsets[column + 1]];
+  }
 };
 
 // A column-major lower-triangular sparse matrix.

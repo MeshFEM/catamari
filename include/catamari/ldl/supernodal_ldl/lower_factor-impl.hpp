@@ -51,23 +51,43 @@ LowerFactor<Field>::LowerFactor(const Buffer<Int>& supernode_sizes,
 }
 
 template <class Field>
-Int* LowerFactor<Field>::Structure(Int supernode) {
+Int* LowerFactor<Field>::StructureBeg(Int supernode) {
   return &structure_indices_[structure_index_offsets_[supernode]];
 }
 
 template <class Field>
-const Int* LowerFactor<Field>::Structure(Int supernode) const {
+const Int* LowerFactor<Field>::StructureBeg(Int supernode) const {
   return &structure_indices_[structure_index_offsets_[supernode]];
 }
 
 template <class Field>
-Int* LowerFactor<Field>::IntersectionSizes(Int supernode) {
+Int* LowerFactor<Field>::StructureEnd(Int supernode) {
+  return &structure_indices_[structure_index_offsets_[supernode + 1]];
+}
+
+template <class Field>
+const Int* LowerFactor<Field>::StructureEnd(Int supernode) const {
+  return &structure_indices_[structure_index_offsets_[supernode + 1]];
+}
+
+template <class Field>
+Int* LowerFactor<Field>::IntersectionSizesBeg(Int supernode) {
   return &intersect_sizes_[intersect_size_offsets_[supernode]];
 }
 
 template <class Field>
-const Int* LowerFactor<Field>::IntersectionSizes(Int supernode) const {
+const Int* LowerFactor<Field>::IntersectionSizesBeg(Int supernode) const {
   return &intersect_sizes_[intersect_size_offsets_[supernode]];
+}
+
+template <class Field>
+Int* LowerFactor<Field>::IntersectionSizesEnd(Int supernode) {
+  return &intersect_sizes_[intersect_size_offsets_[supernode + 1]];
+}
+
+template <class Field>
+const Int* LowerFactor<Field>::IntersectionSizesEnd(Int supernode) const {
+  return &intersect_sizes_[intersect_size_offsets_[supernode + 1]];
 }
 
 template <class Field>
@@ -77,15 +97,15 @@ void LowerFactor<Field>::FillIntersectionSizes(
   const Int num_supernodes = blocks.Size();
 
   // Compute the supernode offsets.
-  Int num_supernode_intersects = 0;
+  std::size_t num_supernode_intersects = 0;
   intersect_size_offsets_.Resize(num_supernodes + 1);
   for (Int column_supernode = 0; column_supernode < num_supernodes;
        ++column_supernode) {
     intersect_size_offsets_[column_supernode] = num_supernode_intersects;
     Int last_supernode = -1;
 
-    const Int* index_beg = Structure(column_supernode);
-    const Int* index_end = Structure(column_supernode + 1);
+    const Int* index_beg = StructureBeg(column_supernode);
+    const Int* index_end = StructureEnd(column_supernode);
     for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
       const Int row = *row_ptr;
       const Int supernode = supernode_member_to_index[row];
@@ -105,8 +125,8 @@ void LowerFactor<Field>::FillIntersectionSizes(
     Int last_supernode = -1;
     Int intersect_size = 0;
 
-    const Int* index_beg = Structure(supernode);
-    const Int* index_end = Structure(supernode + 1);
+    const Int* index_beg = StructureBeg(supernode);
+    const Int* index_end = StructureEnd(supernode);
     for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
       const Int row = *row_ptr;
       const Int row_supernode = supernode_member_to_index[row];

@@ -6,6 +6,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
 
+option('disable-tcmalloc',
+    type : 'boolean',
+    value : true,
+    description : 'disable libtcmalloc allocation?')
+
 option('disable-blas',
     type : 'boolean',
     value : false,

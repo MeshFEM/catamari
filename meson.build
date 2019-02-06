@@ -15,11 +15,19 @@ project(
 include_dir = include_directories('include')
 cxx = meson.get_compiler('cpp')
 
+# A list of dependencies for building the library.
 deps = []
+
+# A list of dependencies for building the unit tests.
 test_deps = []
+
+# A list of dependencies for building the example drivers.
 example_deps = []
+
+# A list of C++ command-line arguments.
 cxx_args = []
 
+# Handle fast (Fortran-like) std::complex arithmetic.
 if cxx.get_id() == 'gcc'
   message('Using gcc')
   # Complex arithmetic is greatly accelerated by adopting the Fortran
@@ -27,8 +35,14 @@ if cxx.get_id() == 'gcc'
   cxx_args += '-fcx-fortran-rules'
 endif
 
-# Add Catch
-test_deps += subproject('catch2').get_variable('catch2_dep')
+if get_option('disable-tcmalloc')
+  have_tcmalloc = false
+else
+  tcmalloc_dep = cxx.find_library('tcmalloc_minimal')
+  have_tcmalloc = true
+  deps += tcmalloc_dep
+  cxx_args += '-DHAVE_TCMALLOC'
+endif
 
 # For controlling whether OpenMP support is enabled.
 if get_option('enable-openmp')
@@ -119,6 +133,9 @@ if not found_specify
   specify_dep = specify_proj.get_variable('specify_dep')
   example_deps += specify_dep
 endif
+
+# Add Catch for C++ unit tests.
+test_deps += subproject('catch2').get_variable('catch2_dep')
 
 # For controlling whether 32-bit or 64-bit integers are used. By default,
 # 64-bit integers are used.

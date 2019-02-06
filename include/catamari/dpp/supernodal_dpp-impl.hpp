@@ -30,22 +30,17 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
 
 template <class Field>
 void SupernodalDPP<Field>::FormSupernodes() {
-  AssemblyForest orig_scalar_forest;
-  Buffer<Int> orig_scalar_degrees;
-  scalar_ldl::EliminationForestAndDegrees(
-      matrix_, ordering_, &orig_scalar_forest.parents, &orig_scalar_degrees);
-  orig_scalar_forest.FillFromParents();
-
   // TODO(Jack Poulson): Decide if we can overwrite 'ordering_' instead.
   // It seems not (except for 'permutation' and 'inverse_permutation' since
   // RelaxSupernodes reads 'fund_ordering' and writes into 'ordering_'.
+  AssemblyForest orig_scalar_forest;
   SymmetricOrdering fund_ordering;
   fund_ordering.permutation = ordering_.permutation;
   fund_ordering.inverse_permutation = ordering_.inverse_permutation;
   scalar_ldl::LowerStructure scalar_structure;
   supernodal_ldl::FormFundamentalSupernodes(
-      matrix_, ordering_, orig_scalar_forest, orig_scalar_degrees,
-      &fund_ordering.supernode_sizes, &scalar_structure);
+      matrix_, ordering_, &orig_scalar_forest, &fund_ordering.supernode_sizes,
+      &scalar_structure);
   OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
 
   Buffer<Int> fund_member_to_index;
@@ -130,7 +125,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
 
   state->rel_rows[main_supernode] = 0;
   state->intersect_ptrs[main_supernode] =
-      lower_factor_->IntersectionSizes(main_supernode);
+      lower_factor_->IntersectionSizesBeg(main_supernode);
 
   // Compute the supernodal row pattern.
   const Int num_packed = supernodal_ldl::ComputeRowPattern(
@@ -191,7 +186,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
         state->intersect_ptrs[descendant_supernode];
     Int descendant_active_rel_row = state->rel_rows[descendant_supernode];
     const Int* main_active_intersect_sizes =
-        lower_factor_->IntersectionSizes(main_supernode);
+        lower_factor_->IntersectionSizesBeg(main_supernode);
     Int main_active_rel_row = 0;
     while (descendant_active_rel_row != descendant_degree) {
       const Int descendant_active_intersect_size =
