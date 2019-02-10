@@ -339,8 +339,8 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(Int main_supernode,
   const Int main_degree = main_lower_block.height;
   const Int main_supernode_size = main_lower_block.width;
 
-  const Int num_supernode_pivots =
-      FactorDiagonalBlock(factorization_type_, &main_diagonal_block);
+  const Int num_supernode_pivots = FactorDiagonalBlock(
+      block_size_, factorization_type_, &main_diagonal_block);
   result->num_successful_pivots += num_supernode_pivots;
   if (num_supernode_pivots < main_supernode_size) {
     return false;
@@ -587,7 +587,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   MergeChildSchurComplements(supernode, shared_state);
 
   const Int num_supernode_pivots =
-      FactorDiagonalBlock(factorization_type_, &diagonal_block);
+      FactorDiagonalBlock(block_size_, factorization_type_, &diagonal_block);
   result->num_successful_pivots += num_supernode_pivots;
   if (num_supernode_pivots < supernode_size) {
     return false;
@@ -657,7 +657,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     #pragma omp taskgroup
     {
       num_supernode_pivots = MultithreadedFactorDiagonalBlock(
-          tile_size, factorization_type_, &diagonal_block,
+          tile_size, block_size_, factorization_type_, &diagonal_block,
           &multithreaded_buffer);
       result->num_successful_pivots += num_supernode_pivots;
     }
@@ -1124,7 +1124,7 @@ bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
     const int thread = omp_get_thread_num();
     Buffer<Field>* buffer = &(*private_states)[thread].scaled_transpose_buffer;
     num_supernode_pivots = MultithreadedFactorDiagonalBlock(
-        tile_size, factorization_type_, &diagonal_block, buffer);
+        tile_size, block_size_, factorization_type_, &diagonal_block, buffer);
     result->num_successful_pivots += num_supernode_pivots;
   }
   if (num_supernode_pivots < supernode_size) {
@@ -1419,6 +1419,7 @@ LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
                                        const Control& control) {
   ordering_ = manual_ordering;
   factorization_type_ = control.factorization_type;
+  block_size_ = control.block_size;
   forward_solve_out_of_place_supernode_threshold_ =
       control.forward_solve_out_of_place_supernode_threshold;
   backward_solve_out_of_place_supernode_threshold_ =

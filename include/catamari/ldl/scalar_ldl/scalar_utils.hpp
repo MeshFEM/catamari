@@ -65,7 +65,9 @@ template <class Field>
 void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
                                        const SymmetricOrdering& ordering,
                                        AssemblyForest* forest,
-                                       LowerStructure* lower_structure);
+                                       LowerStructure* lower_structure,
+                                       bool preallocate = true,
+                                       int sort_grain_size = 500);
 #endif  // ifdef _OPENMP
 
 }  // namespace scalar_ldl

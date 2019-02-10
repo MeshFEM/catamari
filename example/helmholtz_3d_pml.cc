@@ -5,7 +5,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-// This drive is a simple implementation of a 3D Helmholtz equation in the
+// This driver is a simple implementation of a 3D Helmholtz equation in the
 // unit box, [0, 1]^3, with Perfectly Matched Layer absorbing boundary
 // conditions on all sides. The discretization is over boxes with trilinear,
 // Lagrangian basis functions based at the corner points. The bilinear form is
@@ -1070,6 +1070,12 @@ int main(int argc, char** argv) {
                                 "The LDL algorithm type.\n"
                                 "0:left-looking, 1:up-looking, 2:right-looking",
                                 2);
+  const Int block_size = parser.OptionalInput<Int>(
+      "block_size", "The dense algorithmic block size.", 64);
+#ifdef _OPENMP
+  const Int tile_size = parser.OptionalInput<Int>(
+      "tile_size", "The multithreaded tile size.", 128);
+#endif  // ifdef _OPENMP
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
   if (!parser.OK()) {
@@ -1096,6 +1102,10 @@ int main(int argc, char** argv) {
       catamari::kLDLTransposeFactorization;
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+  ldl_control.supernodal_control.block_size = block_size;
+#ifdef _OPENMP
+  ldl_control.supernodal_control.tile_size = tile_size;
+#endif
   ldl_control.supernodal_control.relaxation_control.relax_supernodes =
       relax_supernodes;
   ldl_control.supernodal_control.relaxation_control.allowable_supernode_zeros =

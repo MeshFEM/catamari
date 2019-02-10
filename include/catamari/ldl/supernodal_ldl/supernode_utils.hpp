@@ -269,14 +269,16 @@ void UpdateSubdiagonalBlock(
 
 // Perform an in-place LDL' factorization of the supernodal diagonal block.
 template <class Field>
-Int FactorDiagonalBlock(SymmetricFactorizationType factorization_type,
+Int FactorDiagonalBlock(Int block_size,
+                        SymmetricFactorizationType factorization_type,
                         BlasMatrix<Field>* diagonal_block);
 
 #ifdef _OPENMP
 // Perform an in-place LDL' factorization of the supernodal diagonal block.
 template <class Field>
 Int MultithreadedFactorDiagonalBlock(
-    Int tile_size, SymmetricFactorizationType factorization_type,
+    Int tile_size, Int block_size,
+    SymmetricFactorizationType factorization_type,
     BlasMatrix<Field>* diagonal_block, Buffer<Field>* buffer);
 #endif  // ifdef _OPENMP
 

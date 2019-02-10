@@ -16,6 +16,14 @@
 namespace catamari {
 
 struct SupernodalDPPControl {
+  // The algorithmic block size for the factorization.
+  Int block_size = 64;
+
+#ifdef _OPENMP
+  // The size of the matrix tiles for OpenMP tasks.
+  Int tile_size = 128;
+#endif  // ifdef _OPENMP
+
   SupernodalRelaxationControl relaxation_control;
 };
 

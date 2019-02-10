@@ -1561,15 +1561,16 @@ void SeekForMainActiveRelativeRow(Int main_supernode, Int descendant_supernode,
 }
 
 template <class Field>
-Int FactorDiagonalBlock(SymmetricFactorizationType factorization_type,
+Int FactorDiagonalBlock(Int block_size,
+                        SymmetricFactorizationType factorization_type,
                         BlasMatrix<Field>* diagonal_block) {
   Int num_pivots;
   if (factorization_type == kCholeskyFactorization) {
-    num_pivots = LowerCholeskyFactorization(diagonal_block);
+    num_pivots = LowerCholeskyFactorization(block_size, diagonal_block);
   } else if (factorization_type == kLDLAdjointFactorization) {
-    num_pivots = LowerLDLAdjointFactorization(diagonal_block);
+    num_pivots = LowerLDLAdjointFactorization(block_size, diagonal_block);
   } else {
-    num_pivots = LowerLDLTransposeFactorization(diagonal_block);
+    num_pivots = LowerLDLTransposeFactorization(block_size, diagonal_block);
   }
   return num_pivots;
 }
@@ -1577,18 +1578,19 @@ Int FactorDiagonalBlock(SymmetricFactorizationType factorization_type,
 #ifdef _OPENMP
 template <class Field>
 Int MultithreadedFactorDiagonalBlock(
-    Int tile_size, SymmetricFactorizationType factorization_type,
+    Int tile_size, Int block_size,
+    SymmetricFactorizationType factorization_type,
     BlasMatrix<Field>* diagonal_block, Buffer<Field>* buffer) {
   Int num_pivots;
   if (factorization_type == kCholeskyFactorization) {
-    num_pivots =
-        MultithreadedLowerCholeskyFactorization(tile_size, diagonal_block);
+    num_pivots = MultithreadedLowerCholeskyFactorization(tile_size, block_size,
+                                                         diagonal_block);
   } else if (factorization_type == kLDLAdjointFactorization) {
     num_pivots = MultithreadedLowerLDLAdjointFactorization(
-        tile_size, diagonal_block, buffer);
+        tile_size, block_size, diagonal_block, buffer);
   } else {
     num_pivots = MultithreadedLowerLDLTransposeFactorization(
-        tile_size, diagonal_block, buffer);
+        tile_size, block_size, diagonal_block, buffer);
   }
   return num_pivots;
 }

@@ -120,12 +120,12 @@ inline Int LowerUnblockedCholeskyFactorization(BlasMatrix<double>* matrix) {
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
-Int LowerBlockedCholeskyFactorization(BlasMatrix<Field>* matrix,
-                                      Int blocksize) {
+Int LowerBlockedCholeskyFactorization(Int block_size,
+                                      BlasMatrix<Field>* matrix) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
-  for (Int i = 0; i < height; i += blocksize) {
-    const Int bsize = std::min(height - i, blocksize);
+  for (Int i = 0; i < height; i += block_size) {
+    const Int bsize = std::min(height - i, block_size);
 
     // Overwrite the diagonal block with its Cholesky factor.
     BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
@@ -153,14 +153,14 @@ Int LowerBlockedCholeskyFactorization(BlasMatrix<Field>* matrix,
 }
 
 template <class Field>
-Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix, Int blocksize) {
-  return LowerBlockedCholeskyFactorization(matrix, blocksize);
+Int LowerCholeskyFactorization(Int block_size, BlasMatrix<Field>* matrix) {
+  return LowerBlockedCholeskyFactorization(block_size, matrix);
 }
 
 #ifdef CATAMARI_HAVE_LAPACK
 template <>
-inline Int LowerCholeskyFactorization(BlasMatrix<float>* matrix,
-                                      Int blocksize) {
+inline Int LowerCholeskyFactorization(Int block_size,
+                                      BlasMatrix<float>* matrix) {
   const char uplo = 'L';
   const BlasInt height_blas = matrix->height;
   const BlasInt leading_dim_blas = matrix->leading_dim;
@@ -178,8 +178,8 @@ inline Int LowerCholeskyFactorization(BlasMatrix<float>* matrix,
 }
 
 template <>
-inline Int LowerCholeskyFactorization(BlasMatrix<double>* matrix,
-                                      Int blocksize) {
+inline Int LowerCholeskyFactorization(Int block_size,
+                                      BlasMatrix<double>* matrix) {
   const char uplo = 'L';
   const BlasInt height_blas = matrix->height;
   const BlasInt leading_dim_blas = matrix->leading_dim;
@@ -197,8 +197,8 @@ inline Int LowerCholeskyFactorization(BlasMatrix<double>* matrix,
 }
 
 template <>
-inline Int LowerCholeskyFactorization(BlasMatrix<Complex<float>>* matrix,
-                                      Int blocksize) {
+inline Int LowerCholeskyFactorization(Int block_size,
+                                      BlasMatrix<Complex<float>>* matrix) {
   const char uplo = 'L';
   const BlasInt height_blas = matrix->height;
   const BlasInt leading_dim_blas = matrix->leading_dim;
@@ -216,8 +216,8 @@ inline Int LowerCholeskyFactorization(BlasMatrix<Complex<float>>* matrix,
 }
 
 template <>
-inline Int LowerCholeskyFactorization(BlasMatrix<Complex<double>>* matrix,
-                                      Int blocksize) {
+inline Int LowerCholeskyFactorization(Int block_size,
+                                      BlasMatrix<Complex<double>>* matrix) {
   const char uplo = 'L';
   const BlasInt height_blas = matrix->height;
   const BlasInt leading_dim_blas = matrix->leading_dim;
@@ -237,7 +237,7 @@ inline Int LowerCholeskyFactorization(BlasMatrix<Complex<double>>* matrix,
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerCholeskyFactorization(Int tile_size,
+Int MultithreadedLowerCholeskyFactorization(Int tile_size, Int block_size,
                                             BlasMatrix<Field>* matrix) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
@@ -254,11 +254,12 @@ Int MultithreadedLowerCholeskyFactorization(Int tile_size,
     BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, tsize, tsize);
     bool failed_pivot = false;
     #pragma omp taskgroup
-    #pragma omp task default(none)                                    \
-        firstprivate(diagonal_block) shared(num_pivots, failed_pivot) \
+    #pragma omp task default(none) firstprivate(block_size, diagonal_block) \
+        shared(num_pivots, failed_pivot)                                    \
         depend(in: matrix_data[i + i * leading_dim])
     {
-      const Int num_diag_pivots = LowerCholeskyFactorization(&diagonal_block);
+      const Int num_diag_pivots =
+          LowerCholeskyFactorization(block_size, &diagonal_block);
       num_pivots += num_diag_pivots;
       if (num_diag_pivots < diagonal_block.height) {
         failed_pivot = true;
@@ -353,16 +354,16 @@ Int LowerUnblockedLDLAdjointFactorization(BlasMatrix<Field>* matrix) {
 }
 
 template <class Field>
-Int LowerBlockedLDLAdjointFactorization(BlasMatrix<Field>* matrix,
-                                        Int blocksize) {
+Int LowerBlockedLDLAdjointFactorization(Int block_size,
+                                        BlasMatrix<Field>* matrix) {
   const Int height = matrix->height;
 
-  Buffer<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  Buffer<Field> buffer(std::max(height - block_size, Int(0)) * block_size);
   BlasMatrix<Field> factor;
   factor.data = buffer.Data();
 
-  for (Int i = 0; i < height; i += blocksize) {
-    const Int bsize = std::min(height - i, blocksize);
+  for (Int i = 0; i < height; i += block_size) {
+    const Int bsize = std::min(height - i, block_size);
 
     // Overwrite the diagonal block with its LDL' factorization.
     BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
@@ -409,13 +410,13 @@ Int LowerBlockedLDLAdjointFactorization(BlasMatrix<Field>* matrix,
 }
 
 template <class Field>
-Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix, Int blocksize) {
-  return LowerBlockedLDLAdjointFactorization(matrix, blocksize);
+Int LowerLDLAdjointFactorization(Int block_size, BlasMatrix<Field>* matrix) {
+  return LowerBlockedLDLAdjointFactorization(block_size, matrix);
 }
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
+Int MultithreadedLowerLDLAdjointFactorization(Int tile_size, Int block_size,
                                               BlasMatrix<Field>* matrix,
                                               Buffer<Field>* buffer) {
   const Int height = matrix->height;
@@ -427,8 +428,11 @@ Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
   BlasMatrix<Field> factor;
   factor.height = height;
   factor.width = height;
-  factor.data = buffer->Data();
   factor.leading_dim = height;
+  if (buffer->Size() < height * height) {
+    buffer->Resize(height * height);
+  }
+  factor.data = buffer->Data();
 
   // For use in tracking dependencies.
   const Int leading_dim CATAMARI_UNUSED = matrix->leading_dim;
@@ -442,11 +446,13 @@ Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
     BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, tsize, tsize);
     bool failed_pivot = false;
     #pragma omp taskgroup
-    #pragma omp task default(none) \
-        firstprivate(diagonal_block) shared(num_pivots, failed_pivot) \
+    #pragma omp task default(none)               \
+        firstprivate(block_size, diagonal_block) \
+        shared(num_pivots, failed_pivot) \
         depend(in: matrix_data[i + i * leading_dim])
     {
-      const Int num_diag_pivots = LowerLDLAdjointFactorization(&diagonal_block);
+      const Int num_diag_pivots =
+          LowerLDLAdjointFactorization(block_size, &diagonal_block);
       num_pivots += num_diag_pivots;
       if (num_diag_pivots < diagonal_block.height) {
         failed_pivot = true;
@@ -462,7 +468,7 @@ Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
     for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
       #pragma omp task default(none)                          \
           firstprivate(i, i_sub, const_diagonal_block, tsize) \
-	  shared(matrix, factor)                              \
+          shared(matrix, factor)                              \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
         // Solve agains the unit lower-triangle of the diagonal block.
@@ -489,7 +495,7 @@ Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
     for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
       #pragma omp task default(none)                       \
           firstprivate(i, j_sub, tsize)                    \
-	  shared(matrix, factor)                           \
+          shared(matrix, factor)                           \
           depend(in: matrix_data[j_sub + i * leading_dim]) \
           depend(inout: matrix_data[j_sub + j_sub * leading_dim])
       {
@@ -507,7 +513,7 @@ Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
       for (Int i_sub = j_sub + tsize; i_sub < height; i_sub += tile_size) {
         #pragma omp task default(none)                     \
           firstprivate(i, i_sub, j_sub, tsize)             \
-	  shared(matrix, factor)                           \
+          shared(matrix, factor)                           \
           depend(in: matrix_data[i_sub + i * leading_dim], \
               matrix_data[j_sub + i * leading_dim])        \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
@@ -557,16 +563,16 @@ Int LowerUnblockedLDLTransposeFactorization(BlasMatrix<Field>* matrix) {
 }
 
 template <class Field>
-Int LowerBlockedLDLTransposeFactorization(BlasMatrix<Field>* matrix,
-                                          Int blocksize) {
+Int LowerBlockedLDLTransposeFactorization(Int block_size,
+                                          BlasMatrix<Field>* matrix) {
   const Int height = matrix->height;
 
-  Buffer<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  Buffer<Field> buffer(std::max(height - block_size, Int(0)) * block_size);
   BlasMatrix<Field> factor;
   factor.data = buffer.Data();
 
-  for (Int i = 0; i < height; i += blocksize) {
-    const Int bsize = std::min(height - i, blocksize);
+  for (Int i = 0; i < height; i += block_size) {
+    const Int bsize = std::min(height - i, block_size);
 
     // Overwrite the diagonal block with its LDL' factorization.
     BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
@@ -613,13 +619,13 @@ Int LowerBlockedLDLTransposeFactorization(BlasMatrix<Field>* matrix,
 }
 
 template <class Field>
-Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix, Int blocksize) {
-  return LowerBlockedLDLTransposeFactorization(matrix, blocksize);
+Int LowerLDLTransposeFactorization(Int block_size, BlasMatrix<Field>* matrix) {
+  return LowerBlockedLDLTransposeFactorization(block_size, matrix);
 }
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
+Int MultithreadedLowerLDLTransposeFactorization(Int tile_size, Int block_size,
                                                 BlasMatrix<Field>* matrix,
                                                 Buffer<Field>* buffer) {
   const Int height = matrix->height;
@@ -631,8 +637,11 @@ Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
   BlasMatrix<Field> factor;
   factor.height = height;
   factor.width = height;
-  factor.data = buffer->Data();
   factor.leading_dim = height;
+  if (buffer->Size() < height * height) {
+    buffer->Resize(height * height);
+  }
+  factor.data = buffer->Data();
 
   // For use in tracking dependencies.
   const Int leading_dim CATAMARI_UNUSED = matrix->leading_dim;
@@ -646,12 +655,13 @@ Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
     BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, tsize, tsize);
     bool failed_pivot = false;
     #pragma omp taskgroup
-    #pragma omp task default(none)                                    \
-        firstprivate(diagonal_block) shared(num_pivots, failed_pivot) \
+    #pragma omp task default(none)               \
+        firstprivate(block_size, diagonal_block) \
+        shared(num_pivots, failed_pivot)         \
         depend(in: matrix_data[i + i * leading_dim])
     {
       const Int num_diag_pivots =
-          LowerLDLTransposeFactorization(&diagonal_block);
+          LowerLDLTransposeFactorization(block_size, &diagonal_block);
       num_pivots += num_diag_pivots;
       if (num_diag_pivots < diagonal_block.height) {
         failed_pivot = true;
@@ -667,7 +677,7 @@ Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
     for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
       #pragma omp task default(none)                          \
           firstprivate(i, i_sub, const_diagonal_block, tsize) \
-	  shared(matrix, factor)                              \
+          shared(matrix, factor)                              \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
         // Solve agains the unit lower-triangle of the diagonal block.
@@ -694,7 +704,7 @@ Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
     for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
       #pragma omp task default(none)                       \
           firstprivate(i, j_sub, tsize)                    \
-	  shared(matrix, factor)                           \
+          shared(matrix, factor)                           \
           depend(in: matrix_data[j_sub + i * leading_dim]) \
           depend(inout: matrix_data[j_sub + j_sub * leading_dim])
       {
@@ -712,7 +722,7 @@ Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
       for (Int i_sub = j_sub + tsize; i_sub < height; i_sub += tile_size) {
         #pragma omp task default(none)                     \
           firstprivate(i, i_sub, j_sub, tsize)             \
-	  shared(matrix, factor)                           \
+          shared(matrix, factor)                           \
           depend(in: matrix_data[i_sub + i * leading_dim], \
               matrix_data[j_sub + i * leading_dim])        \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
@@ -777,20 +787,20 @@ std::vector<Int> LowerUnblockedFactorAndSampleDPP(
 
 template <class Field>
 std::vector<Int> LowerBlockedFactorAndSampleDPP(
-    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
-    Int blocksize) {
+    Int block_size, bool maximum_likelihood, BlasMatrix<Field>* matrix,
+    std::mt19937* generator,
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
   const Int height = matrix->height;
 
   std::vector<Int> sample;
   sample.reserve(height);
 
-  Buffer<Field> buffer(std::max(height - blocksize, Int(0)) * blocksize);
+  Buffer<Field> buffer(std::max(height - block_size, Int(0)) * block_size);
   BlasMatrix<Field> factor;
   factor.data = buffer.Data();
 
-  for (Int i = 0; i < height; i += blocksize) {
-    const Int bsize = std::min(height - i, blocksize);
+  for (Int i = 0; i < height; i += block_size) {
+    const Int bsize = std::min(height - i, block_size);
 
     // Overwrite the diagonal block with its LDL' factorization.
     BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, bsize, bsize);
@@ -838,18 +848,18 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
 
 template <class Field>
 std::vector<Int> LowerFactorAndSampleDPP(
-    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
-    Int blocksize) {
-  return LowerBlockedFactorAndSampleDPP(maximum_likelihood, matrix, generator,
-                                        uniform_dist, blocksize);
+    Int block_size, bool maximum_likelihood, BlasMatrix<Field>* matrix,
+    std::mt19937* generator,
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
+  return LowerBlockedFactorAndSampleDPP(block_size, maximum_likelihood, matrix,
+                                        generator, uniform_dist);
 }
 
 #ifdef _OPENMP
 template <class Field>
 std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
-    Int tile_size, bool maximum_likelihood, BlasMatrix<Field>* matrix,
-    std::mt19937* generator,
+    Int tile_size, Int block_size, bool maximum_likelihood,
+    BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     Buffer<Field>* buffer) {
   const Int height = matrix->height;
@@ -864,8 +874,11 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
   BlasMatrix<Field> factor;
   factor.height = height;
   factor.width = height;
-  factor.data = buffer->Data();
   factor.leading_dim = height;
+  if (buffer->Size() < height * height) {
+    buffer->Resize(height * height);
+  }
+  factor.data = buffer->Data();
 
   // For use in tracking dependencies.
   const Int leading_dim CATAMARI_UNUSED = matrix->leading_dim;
@@ -879,13 +892,14 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
     BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, tsize, tsize);
     #pragma omp taskgroup
     #pragma omp task default(none)                                  \
-        firstprivate(i, diagonal_block)                             \
+        firstprivate(block_size, i, diagonal_block)                 \
         shared(sample, block_sample, maximum_likelihood, generator, \
             uniform_dist)                                           \
         depend(in: matrix_data[i + i * leading_dim])
     {
-      block_sample = LowerUnblockedFactorAndSampleDPP(
-          maximum_likelihood, &diagonal_block, generator, uniform_dist);
+      block_sample = LowerBlockedFactorAndSampleDPP(
+          block_size, maximum_likelihood, &diagonal_block, generator,
+          uniform_dist);
       for (const Int& index : block_sample) {
         sample.push_back(i + index);
       }
@@ -900,7 +914,7 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
     for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
       #pragma omp task default(none)                          \
           firstprivate(i, i_sub, const_diagonal_block, tsize) \
-	  shared(matrix, factor)                              \
+          shared(matrix, factor)                              \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
         // Solve agains the unit lower-triangle of the diagonal block.
@@ -927,7 +941,7 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
     for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
       #pragma omp task default(none)                       \
           firstprivate(i, j_sub, tsize)                    \
-	  shared(matrix, factor)                           \
+          shared(matrix, factor)                           \
           depend(in: matrix_data[j_sub + i * leading_dim]) \
           depend(inout: matrix_data[j_sub + j_sub * leading_dim])
       {
@@ -945,7 +959,7 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
       for (Int i_sub = j_sub + tsize; i_sub < height; i_sub += tile_size) {
         #pragma omp task default(none)                     \
           firstprivate(i, i_sub, j_sub, tsize)             \
-	  shared(matrix, factor)                           \
+          shared(matrix, factor)                           \
           depend(in: matrix_data[i_sub + i * leading_dim], \
               matrix_data[j_sub + i * leading_dim])        \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])

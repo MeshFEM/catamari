@@ -5,7 +5,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-// This drive is a simple implementation of a 2D Helmholtz equation in the
+// This driver is a simple implementation of a 2D Helmholtz equation in the
 // unit box, [0, 1]^2, with Perfectly Matched Layer absorbing boundary
 // conditions on all sides. The discretization is over rectangles with bilinear,
 // Lagrangian basis functions based at the corner points. The bilinear form is

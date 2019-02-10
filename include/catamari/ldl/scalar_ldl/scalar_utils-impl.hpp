@@ -10,6 +10,8 @@
 
 #include "catamari/ldl/scalar_ldl/scalar_utils.hpp"
 
+#include "quotient/timer.hpp"
+
 namespace catamari {
 namespace scalar_ldl {
 
@@ -82,8 +84,8 @@ template <class Field>
 void MultithreadedEliminationForestAndDegreesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     Int root, bool keep_structures, Buffer<Int>* parents, Buffer<Int>* degrees,
-    Buffer<std::vector<Int>>* children_list, Buffer<Buffer<Int>>* structures,
-    Buffer<Buffer<Int>>* private_pattern_flags,
+    Buffer<Buffer<std::vector<Int>>>* private_children_lists,
+    Buffer<Buffer<Int>>* structures, Buffer<Buffer<Int>>* private_pattern_flags,
     Buffer<Buffer<Int>>* private_tmp_structures) {
   const Int order_child_beg = ordering.assembly_forest.child_offsets[root];
   const Int order_child_end = ordering.assembly_forest.child_offsets[root + 1];
@@ -91,16 +93,17 @@ void MultithreadedEliminationForestAndDegreesRecursion(
   for (Int index = order_child_beg; index < order_child_end; ++index) {
     const Int child = ordering.assembly_forest.children[index];
 
-    #pragma omp task default(none) firstprivate(child, keep_structures)       \
-        shared(matrix, ordering, parents, degrees, children_list, structures, \
-        private_pattern_flags, private_tmp_structures)
+    #pragma omp task default(none) firstprivate(child, keep_structures)    \
+        shared(matrix, ordering, parents, degrees, private_children_lists, \
+        structures, private_pattern_flags, private_tmp_structures)
     MultithreadedEliminationForestAndDegreesRecursion(
         matrix, ordering, child, keep_structures, parents, degrees,
-        children_list, structures, private_pattern_flags,
+        private_children_lists, structures, private_pattern_flags,
         private_tmp_structures);
   }
 
   const int thread = omp_get_thread_num();
+  Buffer<std::vector<Int>>& children_list = (*private_children_lists)[thread];
   Buffer<Int>& pattern_flags = (*private_pattern_flags)[thread];
   Buffer<Int>& tmp_structure = (*private_tmp_structures)[thread];
 
@@ -116,7 +119,34 @@ void MultithreadedEliminationForestAndDegreesRecursion(
     const Int column_end = matrix.RowEntryOffset(orig_column + 1);
 
     Buffer<Int>& structure = (*structures)[column];
-    std::vector<Int>& children = (*children_list)[column];
+
+    // Merge all threads' children into this thread's list.
+    std::vector<Int>& children = children_list[column];
+    {
+      std::size_t num_total_children = 0;
+      for (std::size_t t = 0; t < private_children_lists->Size(); ++t) {
+        num_total_children += (*private_children_lists)[t][column].size();
+      }
+
+      const std::size_t num_local_children = children.size();
+      if (num_total_children > num_local_children) {
+        children.resize(num_total_children);
+        std::size_t offset = num_local_children;
+        for (std::size_t t = 0; t < private_children_lists->Size(); ++t) {
+          if (t == std::size_t(thread)) {
+            continue;
+          }
+          std::vector<Int>& other_children =
+              (*private_children_lists)[t][column];
+          std::copy(other_children.begin(), other_children.end(),
+                    children.begin() + offset);
+          offset += other_children.size();
+          other_children.clear();
+          other_children.shrink_to_fit();
+        }
+        CATAMARI_ASSERT(offset == num_total_children, "Invalid child offset");
+      }
+    }
     const Int num_children = children.size();
 
     Int degree = 0;
@@ -145,7 +175,7 @@ void MultithreadedEliminationForestAndDegreesRecursion(
         const Buffer<Int>& child_struct = (*structures)[child];
         for (const Int& row : child_struct) {
           if (row != column) {
-            CATAMARI_ASSERT(row > column, "row was < column.");
+            CATAMARI_ASSERT(row > column, "row was < column (EFaDR).");
             pattern_flags[row] = column;
             if (!degree || row < parent) {
               parent = row;
@@ -159,7 +189,7 @@ void MultithreadedEliminationForestAndDegreesRecursion(
         const Buffer<Int>& child_struct = (*structures)[child];
         for (const Int& row : child_struct) {
           if (row != column && pattern_flags[row] != column) {
-            CATAMARI_ASSERT(row > column, "row was < column.");
+            CATAMARI_ASSERT(row > column, "row was < column (EFaDR).");
             pattern_flags[row] = column;
             if (!degree || row < parent) {
               parent = row;
@@ -189,7 +219,7 @@ void MultithreadedEliminationForestAndDegreesRecursion(
     (*parents)[column] = parent;
     (*degrees)[column] = degree;
     if (parent >= 0) {
-      (*children_list)[parent].push_back(column);
+      children_list[parent].push_back(column);
     }
 
     // Free the resources of this subtree.
@@ -211,11 +241,11 @@ void MultithreadedEliminationForestAndDegrees(
   parents->Resize(num_rows);
   degrees->Resize(num_rows);
 
-  // TODO(Jack Poulson): Make the children reservation configurable.
-  const Int children_reservation = 4;
-  Buffer<std::vector<Int>> children_list(num_rows);
-  for (Int row = 0; row < num_rows; ++row) {
-    children_list[row].reserve(children_reservation);
+  const int max_threads = omp_get_max_threads();
+  Buffer<Buffer<std::vector<Int>>> private_children_lists(max_threads);
+  for (std::size_t t = 0; t < max_threads; ++t) {
+    Buffer<std::vector<Int>>& children_list = private_children_lists[t];
+    children_list.Resize(num_rows);
   }
 
   Buffer<Buffer<Int>> structures(num_rows);
@@ -223,27 +253,27 @@ void MultithreadedEliminationForestAndDegrees(
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor. Each thread potentially
   // needs its own since different subtrees can have intersecting structure.
-  const int max_threads = omp_get_max_threads();
+
   Buffer<Buffer<Int>> private_pattern_flags(max_threads);
-  for (int thread = 0; thread < max_threads; ++thread) {
-    private_pattern_flags[thread].Resize(num_rows, -1);
+  for (int t = 0; t < max_threads; ++t) {
+    private_pattern_flags[t].Resize(num_rows, -1);
   }
 
   Buffer<Buffer<Int>> private_tmp_structures(max_threads);
-  for (int thread = 0; thread < max_threads; ++thread) {
-    private_tmp_structures[thread].Resize(num_rows - 1);
+  for (int t = 0; t < max_threads; ++t) {
+    private_tmp_structures[t].Resize(num_rows - 1);
   }
 
-  const bool keep_structures = true;
+  const bool keep_structures = false;
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
-    #pragma omp task default(none) firstprivate(root, keep_structures)        \
-        shared(matrix, ordering, parents, degrees, children_list, structures, \
-            private_pattern_flags, private_tmp_structures)
+    #pragma omp task default(none) firstprivate(root, keep_structures)     \
+        shared(matrix, ordering, parents, degrees, private_children_lists, \
+            structures, private_pattern_flags, private_tmp_structures)
     MultithreadedEliminationForestAndDegreesRecursion(
         matrix, ordering, root, keep_structures, parents, degrees,
-        &children_list, &structures, &private_pattern_flags,
+        &private_children_lists, &structures, &private_pattern_flags,
         &private_tmp_structures);
   }
 }
@@ -452,6 +482,12 @@ void MultithreadedFillStructureIndicesRecursion(
           *(struct_ptr++) = row;
         }
       }
+      CATAMARI_ASSERT(
+          struct_ptr <= lower_structure->ColumnEnd(column),
+          "struct_ptr was past the end of the column (no children)");
+      CATAMARI_ASSERT(
+          struct_ptr >= lower_structure->ColumnEnd(column),
+          "struct_ptr was before the end of the column (no children)");
     } else {
       // Form this node's structure by unioning that of its direct children
       // (removing portions that intersect this column).
@@ -467,7 +503,7 @@ void MultithreadedFillStructureIndicesRecursion(
              child_struct_ptr != child_struct_end; ++child_struct_ptr) {
           const Int& row = *child_struct_ptr;
           if (row != column) {
-            CATAMARI_ASSERT(row > column, "row was < column.");
+            CATAMARI_ASSERT(row > column, "row was < column (FSIR first).");
             pattern_flags[row] = column;
             *(struct_ptr++) = row;
           }
@@ -482,7 +518,7 @@ void MultithreadedFillStructureIndicesRecursion(
              child_struct_ptr != child_struct_end; ++child_struct_ptr) {
           const Int& row = *child_struct_ptr;
           if (row != column && pattern_flags[row] != column) {
-            CATAMARI_ASSERT(row > column, "row was < column.");
+            CATAMARI_ASSERT(row > column, "row was < column (FSIR later).");
             pattern_flags[row] = column;
             *(struct_ptr++) = row;
           }
@@ -498,6 +534,13 @@ void MultithreadedFillStructureIndicesRecursion(
           *(struct_ptr++) = row;
         }
       }
+
+      CATAMARI_ASSERT(
+          struct_ptr <= lower_structure->ColumnEnd(column),
+          "struct_ptr was past the end of the column (multi children)");
+      CATAMARI_ASSERT(
+          struct_ptr >= lower_structure->ColumnEnd(column),
+          "struct_ptr was before the end of the column (multi children)");
     }
   }
 }
@@ -506,21 +549,20 @@ template <class Field>
 void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
                                        const SymmetricOrdering& ordering,
                                        AssemblyForest* forest,
-                                       LowerStructure* lower_structure) {
+                                       LowerStructure* lower_structure,
+                                       bool preallocate, int sort_grain_size) {
   const Int num_rows = matrix.NumRows();
 
-  // TODO(Jack Poulson): Make this configurable.
   // TODO(Jack Poulson): Add support for using the degrees computed from
   // a MinimumDegree reordering to avoid the initial degree computation.
-  const bool preallocate = true;
 
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor. Each thread potentially
   // needs its own since different subtrees can have intersecting structure.
   const int max_threads = omp_get_max_threads();
   Buffer<Buffer<Int>> private_pattern_flags(max_threads);
-  for (int thread = 0; thread < max_threads; ++thread) {
-    private_pattern_flags[thread].Resize(num_rows, -1);
+  for (int t = 0; t < max_threads; ++t) {
+    private_pattern_flags[t].Resize(num_rows, -1);
   }
 
   Buffer<Int> degrees;
@@ -530,28 +572,27 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
     parents->Resize(num_rows);
     degrees.Resize(num_rows);
 
-    // TODO(Jack Poulson): Make the children reservation configurable.
-    const Int children_reservation = 4;
-    Buffer<std::vector<Int>> children_list(num_rows);
-    for (Int row = 0; row < num_rows; ++row) {
-      children_list[row].reserve(children_reservation);
+    Buffer<Buffer<std::vector<Int>>> private_children_lists(max_threads);
+    for (int t = 0; t < max_threads; ++t) {
+      Buffer<std::vector<Int>>& children_list = private_children_lists[t];
+      children_list.Resize(num_rows);
     }
 
     Buffer<Buffer<Int>> private_tmp_structures(max_threads);
-    for (int thread = 0; thread < max_threads; ++thread) {
-      private_tmp_structures[thread].Resize(num_rows - 1);
+    for (int t = 0; t < max_threads; ++t) {
+      private_tmp_structures[t].Resize(num_rows - 1);
     }
 
     const bool keep_structures = !preallocate;
 
     #pragma omp taskgroup
     for (const Int root : ordering.assembly_forest.roots) {
-      #pragma omp task default(none) firstprivate(root, keep_structures) \
-          shared(matrix, ordering, parents, degrees, children_list,      \
+      #pragma omp task default(none) firstprivate(root, keep_structures)     \
+          shared(matrix, ordering, parents, degrees, private_children_lists, \
               structures, private_pattern_flags, private_tmp_structures)
       MultithreadedEliminationForestAndDegreesRecursion(
           matrix, ordering, root, keep_structures, parents, &degrees,
-          &children_list, &structures, &private_pattern_flags,
+          &private_children_lists, &structures, &private_pattern_flags,
           &private_tmp_structures);
     }
   }
@@ -564,8 +605,8 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
   if (preallocate) {
     // Reset the private pattern flags.
-    for (int thread = 0; thread < max_threads; ++thread) {
-      private_pattern_flags[thread].Resize(num_rows, -1);
+    for (int t = 0; t < max_threads; ++t) {
+      private_pattern_flags[t].Resize(num_rows, -1);
     }
 
     #pragma omp taskgroup
@@ -579,13 +620,12 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
     }
 
     // Sort the structures.
-    const Int grain_size = 500;  // TODO(Jack Poulson): Make this configurable.
     #pragma omp taskgroup
-    for (Int j = 0; j < num_rows; j += grain_size) {
-      #pragma omp task default(none) firstprivate(j, grain_size) \
+    for (Int j = 0; j < num_rows; j += sort_grain_size) {
+      #pragma omp task default(none) firstprivate(j, sort_grain_size) \
           shared(lower_structure)
       {
-        const Int column_end = std::min(num_rows, j + grain_size);
+        const Int column_end = std::min(num_rows, j + sort_grain_size);
         for (Int column = j; column < column_end; ++column) {
           std::sort(lower_structure->ColumnBeg(column),
                     lower_structure->ColumnEnd(column));
@@ -594,13 +634,12 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
     }
   } else {
     // Fill and sort the structures.
-    const Int grain_size = 500;  // TODO(Jack Poulson): Make this configurable.
     #pragma omp taskgroup
-    for (Int j = 0; j < num_rows; j += grain_size) {
-      #pragma omp task default(none) firstprivate(j, grain_size) \
+    for (Int j = 0; j < num_rows; j += sort_grain_size) {
+      #pragma omp task default(none) firstprivate(j, sort_grain_size) \
           shared(structures, lower_structure)
       {
-        const Int column_end = std::min(num_rows, j + grain_size);
+        const Int column_end = std::min(num_rows, j + sort_grain_size);
         for (Int column = j; column < column_end; ++column) {
           std::copy(structures[column].begin(), structures[column].end(),
                     lower_structure->ColumnBeg(column));

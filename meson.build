@@ -179,6 +179,14 @@ coordinate_matrix_test_exe = executable(
     dependencies : deps + test_deps,
     cpp_args : cxx_args)
 
+# An example of factoring a dense matrix.
+dense_factorization_exe = executable(
+    'dense_factorization',
+    ['example/dense_factorization.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps + example_deps,
+    cpp_args : cxx_args)
+
 # A utility for factoring a Matrix Market input.
 factor_matrix_market_exe = executable(
     'factor_matrix_market',

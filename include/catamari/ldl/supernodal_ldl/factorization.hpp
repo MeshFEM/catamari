@@ -36,6 +36,9 @@ struct Control {
   // used.
   Int backward_solve_out_of_place_supernode_threshold = 10;
 
+  // The algorithmic block size for the factorization.
+  Int block_size = 64;
+
 #ifdef _OPENMP
   // The size of the matrix tiles for OpenMP tasks.
   Int tile_size = 128;
@@ -133,6 +136,9 @@ class Factorization {
 
   // The largest degree of a supernode in the factorization.
   Int max_degree_;
+
+  // The algorithmic block size for diagonal block factorizations.
+  Int block_size_;
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.

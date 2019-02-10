@@ -10,7 +10,9 @@
 
 #include <random>
 
+#include "catamari/blas_matrix.hpp"
 #include "catamari/buffer.hpp"
+#include "catamari/complex.hpp"
 #include "catamari/integers.hpp"
 
 namespace catamari {
@@ -21,11 +23,11 @@ namespace catamari {
 // successful if and only if the return value is the height of the input
 // matrix.
 template <class Field>
-Int LowerCholeskyFactorization(BlasMatrix<Field>* matrix, Int blocksize = 64);
+Int LowerCholeskyFactorization(Int block_size, BlasMatrix<Field>* matrix);
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerCholeskyFactorization(Int tile_size,
+Int MultithreadedLowerCholeskyFactorization(Int tile_size, Int block_size,
                                             BlasMatrix<Field>* matrix);
 #endif  // ifdef _OPENMP
 
@@ -36,11 +38,11 @@ Int MultithreadedLowerCholeskyFactorization(Int tile_size,
 // factorization was successful if and only if the return value is the height
 // of the input matrix.
 template <class Field>
-Int LowerLDLAdjointFactorization(BlasMatrix<Field>* matrix, Int blocksize = 64);
+Int LowerLDLAdjointFactorization(Int block_size, BlasMatrix<Field>* matrix);
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
+Int MultithreadedLowerLDLAdjointFactorization(Int tile_size, Int block_size,
                                               BlasMatrix<Field>* matrix,
                                               Buffer<Field>* buffer);
 #endif  // ifdef _OPENMP
@@ -52,12 +54,11 @@ Int MultithreadedLowerLDLAdjointFactorization(Int tile_size,
 // factorization was successful if and only if the return value is the height
 // of the input matrix.
 template <class Field>
-Int LowerLDLTransposeFactorization(BlasMatrix<Field>* matrix,
-                                   Int blocksize = 64);
+Int LowerLDLTransposeFactorization(Int block_size, BlasMatrix<Field>* matrix);
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
+Int MultithreadedLowerLDLTransposeFactorization(Int tile_size, Int block_size,
                                                 BlasMatrix<Field>* matrix,
                                                 Buffer<Field>* buffer);
 #endif  // ifdef _OPENMP
@@ -69,15 +70,15 @@ Int MultithreadedLowerLDLTransposeFactorization(Int tile_size,
 // failed coin-flip is decremented by one).
 template <class Field>
 std::vector<Int> LowerFactorAndSampleDPP(
-    bool maximum_likelihood, BlasMatrix<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
-    Int blocksize = 64);
+    Int block_size, bool maximum_likelihood, BlasMatrix<Field>* matrix,
+    std::mt19937* generator,
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist);
 
 #ifdef _OPENMP
 template <class Field>
 std::vector<Int> MultithreadedLowerFactorAndSampleDPP(
-    Int tile_size, bool maximum_likelihood, BlasMatrix<Field>* matrix,
-    std::mt19937* generator,
+    Int tile_size, Int block_size, bool maximum_likelihood,
+    BlasMatrix<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     std::vector<Field>* buffer);
 #endif  // ifdef _OPENMP

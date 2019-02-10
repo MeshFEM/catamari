@@ -238,7 +238,8 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
   // Sample and factor the diagonal block.
   const Int main_supernode_start = ordering_.supernode_offsets[main_supernode];
   const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
-      maximum_likelihood, &main_diagonal_block, &generator_, &unit_uniform_);
+      control_.block_size, maximum_likelihood, &main_diagonal_block,
+      &generator_, &unit_uniform_);
   for (const Int& index : supernode_sample) {
     const Int orig_row = main_supernode_start + index;
     if (ordering_.inverse_permutation.Empty()) {
