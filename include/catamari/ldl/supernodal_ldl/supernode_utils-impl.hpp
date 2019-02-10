@@ -779,7 +779,8 @@ void MultithreadedSupernodalDegreesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
     Int root, Buffer<Int>* supernode_degrees, Buffer<Buffer<Int>>* structures,
-    Buffer<Buffer<Int>>* private_pattern_flags) {
+    Buffer<Buffer<Int>>* private_pattern_flags,
+    Buffer<Buffer<Int>>* private_tmp_structures) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
@@ -787,33 +788,28 @@ void MultithreadedSupernodalDegreesRecursion(
     const Int child = ordering.assembly_forest.children[child_index];
     #pragma omp task default(none) firstprivate(child)              \
         shared(matrix, ordering, forest, supernode_member_to_index, \
-            supernode_degrees, structures, private_pattern_flags)
+            supernode_degrees, structures, private_pattern_flags,   \
+            private_tmp_structures)
     MultithreadedSupernodalDegreesRecursion(
         matrix, ordering, forest, supernode_member_to_index, child,
-        supernode_degrees, structures, private_pattern_flags);
+        supernode_degrees, structures, private_pattern_flags,
+        private_tmp_structures);
   }
 
   const int thread = omp_get_thread_num();
   Buffer<Int>& pattern_flags = (*private_pattern_flags)[thread];
+  Buffer<Int>& tmp_structure = (*private_tmp_structures)[thread];
 
   // Form this node's structure by unioning that of its direct children
   // (removing portions that intersect this supernode).
-  //
-  // TODO(Jack Poulson): Decide if it would be better to do two passes to
-  // allocate a tighter upper bound.
-  const Int num_rows = matrix.NumRows();
   const Int supernode_size = ordering.supernode_sizes[root];
   const Int supernode_offset = ordering.supernode_offsets[root];
-  const Int trivial_upper_bound =
-      num_rows - (supernode_offset + supernode_size);
-  Buffer<Int>& structure = (*structures)[root];
-  Int struct_size = 0;
-  structure.Resize(trivial_upper_bound);
+  Int degree = 0;
   for (Int child_index = child_beg; child_index < child_end; ++child_index) {
     const Int child = ordering.assembly_forest.children[child_index];
     Buffer<Int>& child_struct = (*structures)[child];
     for (const Int row : child_struct) {
-      CATAMARI_ASSERT(row >= 0 && row < num_rows, "Invalid row index.");
+      CATAMARI_ASSERT(row >= 0 && row < matrix.NumRows(), "Invalid row index.");
       const Int row_supernode = supernode_member_to_index[row];
       CATAMARI_ASSERT(row_supernode >= 0 &&
                           row_supernode < static_cast<Int>(structures->Size()),
@@ -825,7 +821,7 @@ void MultithreadedSupernodalDegreesRecursion(
       if (pattern_flags[row] != root) {
         CATAMARI_ASSERT(row_supernode > root, "row supernode was < root.");
         pattern_flags[row] = root;
-        structure[struct_size++] = row;
+        tmp_structure[degree++] = row;
       }
     }
 
@@ -846,7 +842,7 @@ void MultithreadedSupernodalDegreesRecursion(
       const MatrixEntry<Field>& entry = entries[index];
       const Int row =
           have_permutation ? ordering.permutation[entry.column] : entry.column;
-      CATAMARI_ASSERT(row >= 0 && row < num_rows, "Invalid row index.");
+      CATAMARI_ASSERT(row >= 0 && row < matrix.NumRows(), "Invalid row index.");
       const Int row_supernode = supernode_member_to_index[row];
       CATAMARI_ASSERT(row_supernode >= 0 &&
                           row_supernode < static_cast<Int>(structures->Size()),
@@ -857,14 +853,17 @@ void MultithreadedSupernodalDegreesRecursion(
 
       if (pattern_flags[row] != root) {
         pattern_flags[row] = root;
-        structure[struct_size++] = row;
+        tmp_structure[degree++] = row;
       }
     }
   }
 
   // Store the degree of the supernode.
-  structure.Resize(struct_size);
-  (*supernode_degrees)[root] = struct_size;
+  Buffer<Int>& structure = (*structures)[root];
+  structure.Resize(degree);
+  std::copy(tmp_structure.begin(), tmp_structure.begin() + degree,
+            structure.begin());
+  (*supernode_degrees)[root] = degree;
 }
 
 template <class Field>
@@ -882,8 +881,13 @@ void MultithreadedSupernodalDegrees(
   // needs its own since different subtrees can have intersecting structure.
   const int max_threads = omp_get_max_threads();
   Buffer<Buffer<Int>> private_pattern_flags(max_threads);
-  for (int thread = 0; thread < max_threads; ++thread) {
-    private_pattern_flags[thread].Resize(num_rows, -1);
+  for (int t = 0; t < max_threads; ++t) {
+    private_pattern_flags[t].Resize(num_rows, -1);
+  }
+
+  Buffer<Buffer<Int>> private_tmp_structures(max_threads);
+  for (int t = 0; t < max_threads; ++t) {
+    private_tmp_structures[t].Resize(num_rows - 1);
   }
 
   // Only the structures of the active fronts will be maintained.
@@ -893,10 +897,12 @@ void MultithreadedSupernodalDegrees(
   for (const Int root : ordering.assembly_forest.roots) {
     #pragma omp task default(none) firstprivate(root)               \
         shared(matrix, ordering, forest, supernode_member_to_index, \
-            supernode_degrees, structures, private_pattern_flags)
+            supernode_degrees, structures, private_pattern_flags,   \
+            private_tmp_structures)
     MultithreadedSupernodalDegreesRecursion(
         matrix, ordering, forest, supernode_member_to_index, root,
-        supernode_degrees, &structures, &private_pattern_flags);
+        supernode_degrees, &structures, &private_pattern_flags,
+        &private_tmp_structures);
   }
 }
 #endif  // ifdef _OPENMP
@@ -1043,9 +1049,7 @@ void MultithreadedFillStructureIndicesRecursion(
 
   // Form this node's structure by unioning that of its direct children
   // (removing portions that intersect this supernode).
-  Int* struct_beg = lower_factor->StructureBeg(root);
-  Int* struct_end = lower_factor->StructureEnd(root);
-  Int* struct_ptr = struct_beg;
+  Int* struct_ptr = lower_factor->StructureBeg(root);
   for (Int child_index = child_beg; child_index < child_end; ++child_index) {
     const Int child = ordering.assembly_forest.children[child_index];
     const Int* child_struct_beg = lower_factor->StructureBeg(child);
@@ -1096,16 +1100,13 @@ void MultithreadedFillStructureIndicesRecursion(
   }
   CATAMARI_ASSERT(struct_ptr <= struct_end, "Stored too many indices.");
   CATAMARI_ASSERT(struct_ptr >= struct_end, "Stored too few indices.");
-
-  // TODO(Jack Poulson): Use a parallel sort?
-  std::sort(struct_beg, struct_end);
 }
 
 template <class Field>
 void MultithreadedFillStructureIndices(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
-    LowerFactor<Field>* lower_factor) {
+    LowerFactor<Field>* lower_factor, Int sort_grain_size) {
   const Int num_rows = matrix.NumRows();
 
   // A data structure for marking whether or not a node is in the pattern of
@@ -1127,32 +1128,20 @@ void MultithreadedFillStructureIndices(
         &private_pattern_flags);
   }
 
-#ifdef CATAMARI_DEBUG
+  // Sort the structures.
   const Int num_supernodes = ordering.supernode_sizes.Size();
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int* index_beg = lower_factor->StructureBeg(supernode);
-    const Int* index_end = lower_factor->StructureEnd(supernode);
-    bool sorted = true;
-    Int last_row = -1;
-    for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
-      const Int row = *row_ptr;
-      if (row <= last_row) {
-        sorted = false;
-        break;
+  #pragma omp taskgroup
+  for (Int s = 0; s < num_supernodes; s += sort_grain_size) {
+    #pragma omp task default(none) \
+        firstprivate(sort_grain_size, s, num_supernodes) shared(lower_factor)
+    {
+      const Int supernode_end = std::min(num_supernodes, s + sort_grain_size);
+      for (Int supernode = s; supernode < supernode_end; ++supernode) {
+        std::sort(lower_factor->StructureBeg(supernode),
+                  lower_factor->StructureEnd(supernode));
       }
-      last_row = row;
-    }
-
-    if (!sorted) {
-      std::cerr << "Supernode " << supernode << " did not have sorted indices."
-                << std::endl;
-      for (const Int* row_ptr = index_beg; row_ptr != index_end; ++row_ptr) {
-        std::cout << *row_ptr << " ";
-      }
-      std::cout << std::endl;
     }
   }
-#endif  // ifdef CATAMARI_DEBUG
 }
 #endif  // ifdef _OPENMP
 
