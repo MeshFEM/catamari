@@ -10,6 +10,7 @@
 
 #include "catamari/blas_matrix.hpp"
 #include "catamari/buffer.hpp"
+#include "catamari/complex.hpp"
 #include "catamari/integers.hpp"
 
 namespace catamari {

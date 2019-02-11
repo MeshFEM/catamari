@@ -220,6 +220,14 @@ void FormScaledTranspose(SymmetricFactorizationType factorization_type,
                          const ConstBlasMatrix<Field>& matrix,
                          BlasMatrix<Field>* scaled_transpose);
 
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedFormScaledTranspose(
+    Int tile_size, SymmetricFactorizationType factorization_type,
+    const ConstBlasMatrix<Field>& diagonal_block,
+    const ConstBlasMatrix<Field>& matrix, BlasMatrix<Field>* scaled_transpose);
+#endif  // ifdef _OPENMP
+
 // Moves the pointers for the main supernode down to the active supernode of
 // the descendant column block.
 template <class Field>

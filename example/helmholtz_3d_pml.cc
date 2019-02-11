@@ -1073,8 +1073,10 @@ int main(int argc, char** argv) {
   const Int block_size = parser.OptionalInput<Int>(
       "block_size", "The dense algorithmic block size.", 64);
 #ifdef _OPENMP
-  const Int tile_size = parser.OptionalInput<Int>(
-      "tile_size", "The multithreaded tile size.", 128);
+  const Int factor_tile_size = parser.OptionalInput<Int>(
+      "tile_size", "The multithreaded factorization tile size.", 128);
+  const Int outer_product_tile_size = parser.OptionalInput<Int>(
+      "tile_size", "The multithreaded outer-product tile size.", 240);
 #endif  // ifdef _OPENMP
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
@@ -1104,7 +1106,9 @@ int main(int argc, char** argv) {
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
   ldl_control.supernodal_control.block_size = block_size;
 #ifdef _OPENMP
-  ldl_control.supernodal_control.tile_size = tile_size;
+  ldl_control.supernodal_control.factor_tile_size = factor_tile_size;
+  ldl_control.supernodal_control.outer_product_tile_size =
+      outer_product_tile_size;
 #endif
   ldl_control.supernodal_control.relaxation_control.relax_supernodes =
       relax_supernodes;

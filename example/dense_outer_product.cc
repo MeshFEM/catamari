@@ -41,7 +41,34 @@ void InitializeMatrix(Int height, Int width, BlasMatrix<Field>* matrix,
 }
 
 template <typename Field>
-void RunMatrixMultiplyLowerNormalNormal(Int tile_size, Int height, Int rank) {
+void RunMatrixMultiplyLowerNormalNormal(Int height, Int rank) {
+  const bool is_complex = catamari::IsComplex<Field>::value;
+  quotient::Timer timer;
+
+  Buffer<Field> left_buffer, right_buffer, output_buffer;
+  BlasMatrix<Field> left_matrix, right_matrix, output_matrix;
+
+  InitializeMatrix(height, rank, &left_matrix, &left_buffer);
+  InitializeMatrix(rank, height, &right_matrix, &right_buffer);
+  InitializeMatrix(height, height, &output_matrix, &output_buffer);
+
+  timer.Start();
+
+  MatrixMultiplyLowerNormalNormal(Field{-1}, left_matrix.ToConst(),
+                                  right_matrix.ToConst(), Field{1},
+                                  &output_matrix);
+
+  const double runtime = timer.Stop();
+  const double flops =
+      (is_complex ? 4. : 1.) * std::pow(1. * height, 2.) * rank;
+  const double gflops_per_sec = flops / (1.e9 * runtime);
+
+  std::cout << "Sequential GFlops/sec: " << gflops_per_sec << std::endl;
+}
+
+template <typename Field>
+void RunMultithreadedMatrixMultiplyLowerNormalNormal(Int tile_size, Int height,
+                                                     Int rank) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   quotient::Timer timer;
 
@@ -65,7 +92,7 @@ void RunMatrixMultiplyLowerNormalNormal(Int tile_size, Int height, Int rank) {
       (is_complex ? 4. : 1.) * std::pow(1. * height, 2.) * rank;
   const double gflops_per_sec = flops / (1.e9 * runtime);
 
-  std::cout << "GFlops/sec: " << gflops_per_sec << std::endl;
+  std::cout << "Multithreaded GFlops/sec: " << gflops_per_sec << std::endl;
 }
 
 }  // anonymous namespace
@@ -79,14 +106,15 @@ int main(int argc, char** argv) {
   const Int tile_size = parser.OptionalInput<Int>(
       "tile_size", "The tile size for multithreaded factorization.", 128);
   const Int num_rounds = parser.OptionalInput<Int>(
-      "num_rounds", "The number of rounds of factorizations.", 2);
+      "num_rounds", "The number of rounds of factorizations.", 3);
   if (!parser.OK()) {
     return 0;
   }
 
   for (Int round = 0; round < num_rounds; ++round) {
-    RunMatrixMultiplyLowerNormalNormal<Complex<double>>(tile_size, height,
-                                                        rank);
+    RunMultithreadedMatrixMultiplyLowerNormalNormal<Complex<double>>(
+        tile_size, height, rank);
+    RunMatrixMultiplyLowerNormalNormal<Complex<double>>(height, rank);
   }
 
   return 0;

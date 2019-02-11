@@ -40,8 +40,11 @@ struct Control {
   Int block_size = 64;
 
 #ifdef _OPENMP
-  // The size of the matrix tiles for OpenMP tasks.
-  Int tile_size = 128;
+  // The size of the matrix tiles for factorization OpenMP tasks.
+  Int factor_tile_size = 128;
+
+  // The size of the matrix tiles for dense outer product OpenMP tasks.
+  Int outer_product_tile_size = 240;
 #endif  // ifdef _OPENMP
 };
 
@@ -140,6 +143,14 @@ class Factorization {
   // The algorithmic block size for diagonal block factorizations.
   Int block_size_;
 
+#ifdef _OPENMP
+  // The size of the matrix tiles for factorization OpenMP tasks.
+  Int factor_tile_size_;
+
+  // The size of the matrix tiles for dense outer product OpenMP tasks.
+  Int outer_product_tile_size_;
+#endif  // ifdef _OPENMP
+
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.
   Int forward_solve_out_of_place_supernode_threshold_;
@@ -194,7 +205,7 @@ class Factorization {
                           LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedLeftLookingSubtree(
-      Int tile_size, Int level, Int max_parallel_levels, Int supernode,
+      Int level, Int max_parallel_levels, Int supernode,
       const CoordinateMatrix<Field>& matrix,
       LeftLookingSharedState* shared_state,
       Buffer<LeftLookingPrivateState>* private_states, LDLResult* result);
@@ -204,8 +215,8 @@ class Factorization {
                            RightLookingSharedState* shared_state,
                            LDLResult* result);
 #ifdef _OPENMP
-  bool MultithreadedRightLookingSubtree(Int tile_size, Int level,
-                                        Int max_parallel_levels, Int supernode,
+  bool MultithreadedRightLookingSubtree(Int level, Int max_parallel_levels,
+                                        Int supernode,
                                         const CoordinateMatrix<Field>& matrix,
                                         const Buffer<double>& work_estimates,
                                         RightLookingSharedState* shared_state,
@@ -226,8 +237,8 @@ class Factorization {
   bool LeftLookingSupernodeFinalize(Int main_supernode, LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedLeftLookingSupernodeFinalize(
-      Int tile_size, Int supernode,
-      Buffer<LeftLookingPrivateState>* private_states, LDLResult* result);
+      Int supernode, Buffer<LeftLookingPrivateState>* private_states,
+      LDLResult* result);
 #endif  // ifdef _OPENMP
 
   void MergeChildSchurComplements(Int supernode,
@@ -242,8 +253,7 @@ class Factorization {
                                      LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedRightLookingSupernodeFinalize(
-      Int tile_size, Int supernode, RightLookingSharedState* shared_state,
-      LDLResult* result);
+      Int supernode, RightLookingSharedState* shared_state, LDLResult* result);
 #endif  // ifdef _OPENMP
 };
 

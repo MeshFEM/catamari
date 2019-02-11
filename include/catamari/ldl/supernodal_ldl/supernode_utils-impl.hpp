@@ -1394,6 +1394,62 @@ void FormScaledTranspose(SymmetricFactorizationType factorization_type,
   }
 }
 
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedFormScaledTranspose(
+    Int tile_size, SymmetricFactorizationType factorization_type,
+    const ConstBlasMatrix<Field>& diagonal_block,
+    const ConstBlasMatrix<Field>& matrix, BlasMatrix<Field>* scaled_transpose) {
+  const ConstBlasMatrix<Field> diagonal_block_copy = diagonal_block;
+  const ConstBlasMatrix<Field> matrix_copy = matrix;
+
+  if (factorization_type == kCholeskyFactorization) {
+    for (Int i_beg = 0; i_beg < matrix.height; i_beg += tile_size) {
+      #pragma omp task default(none) \
+          firstprivate(i_beg, matrix_copy, tile_size, scaled_transpose)
+      {
+        const Int i_end = std::min(matrix_copy.height, i_beg + tile_size);
+        for (Int i = i_beg; i < i_end; ++i) {
+          for (Int j = 0; j < matrix_copy.width; ++j) {
+            scaled_transpose->Entry(j, i) = Conjugate(matrix_copy(i, j));
+          }
+        }
+      }
+    }
+  } else if (factorization_type == kLDLAdjointFactorization) {
+    for (Int i_beg = 0; i_beg < matrix.height; i_beg += tile_size) {
+      #pragma omp task default(none) \
+          firstprivate(i_beg, matrix_copy, diagonal_block_copy, tile_size, \
+              scaled_transpose)
+      {
+        const Int i_end = std::min(matrix_copy.height, i_beg + tile_size);
+        for (Int i = i_beg; i < i_end; ++i) {
+          for (Int j = 0; j < matrix_copy.width; ++j) {
+            scaled_transpose->Entry(j, i) =
+                diagonal_block_copy(j, j) * Conjugate(matrix_copy(i, j));
+          }
+        }
+      }
+    }
+  } else {
+    for (Int i_beg = 0; i_beg < matrix.height; i_beg += tile_size) {
+      #pragma omp task default(none) \
+          firstprivate(i_beg, matrix_copy, diagonal_block_copy, tile_size, \
+              scaled_transpose)
+      {
+        const Int i_end = std::min(matrix_copy.height, i_beg + tile_size);
+        for (Int i = i_beg; i < i_end; ++i) {
+          for (Int j = 0; j < matrix_copy.width; ++j) {
+            scaled_transpose->Entry(j, i) =
+                diagonal_block_copy(j, j) * matrix_copy(i, j);
+          }
+        }
+      }
+    }
+  }
+}
+#endif  // ifdef _OPENMP
+
 template <class Field>
 void UpdateDiagonalBlock(SymmetricFactorizationType factorization_type,
                          const Buffer<Int>& supernode_starts,
