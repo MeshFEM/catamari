@@ -179,7 +179,15 @@ coordinate_matrix_test_exe = executable(
     dependencies : deps + test_deps,
     cpp_args : cxx_args)
 
-# An example of factoring a dense matrix.
+# A performance test for multithreaded dense outer products.
+dense_outer_product_exe = executable(
+    'dense_outer_product',
+    ['example/dense_outer_product.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps + example_deps,
+    cpp_args : cxx_args)
+
+# A performance test for factoring a dense matrix.
 dense_factorization_exe = executable(
     'dense_factorization',
     ['example/dense_factorization.cc', 'include/catamari.hpp'],
