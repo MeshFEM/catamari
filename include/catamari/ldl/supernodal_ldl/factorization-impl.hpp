@@ -216,8 +216,7 @@ void Factorization<Field>::MultithreadedInitializeFactors(
 template <class Field>
 void Factorization<Field>::LeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
-    LeftLookingSharedState* shared_state,
-    LeftLookingPrivateState* private_state) {
+    LeftLookingSharedState* shared_state, PrivateState* private_state) {
   BlasMatrix<Field>& main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
   BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
@@ -380,7 +379,7 @@ LDLResult Factorization<Field>::LeftLooking(
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
 
-  LeftLookingPrivateState private_state;
+  PrivateState private_state;
   private_state.row_structure.Resize(num_supernodes);
   private_state.pattern_flags.Resize(num_supernodes);
   private_state.scaled_transpose_buffer.Resize(
@@ -904,8 +903,8 @@ LDLResult Factorization<Field>::RightLooking(
 template <class Field>
 bool Factorization<Field>::LeftLookingSubtree(
     Int supernode, const CoordinateMatrix<Field>& matrix,
-    LeftLookingSharedState* shared_state,
-    LeftLookingPrivateState* private_state, LDLResult* result) {
+    LeftLookingSharedState* shared_state, PrivateState* private_state,
+    LDLResult* result) {
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
@@ -953,7 +952,7 @@ template <class Field>
 void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
     LeftLookingSharedState* shared_state,
-    Buffer<LeftLookingPrivateState>* private_states) {
+    Buffer<PrivateState>* private_states) {
   BlasMatrix<Field> main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
   BlasMatrix<Field> main_lower_block = lower_factor_->blocks[main_supernode];
@@ -1013,7 +1012,7 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
         depend(out: main_diagonal_block_data)
     {
       const int thread = omp_get_thread_num();
-      LeftLookingPrivateState& private_state = (*private_states)[thread];
+      PrivateState& private_state = (*private_states)[thread];
 
       const ConstBlasMatrix<Field> descendant_main_matrix =
           descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
@@ -1076,7 +1075,7 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
           depend(out: main_lower_block_data[main_active_rel_row])
       {
         const int thread = omp_get_thread_num();
-        LeftLookingPrivateState& private_state = (*private_states)[thread];
+        PrivateState& private_state = (*private_states)[thread];
 
         const ConstBlasMatrix<Field> descendant_active_matrix =
             descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
@@ -1122,8 +1121,7 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
 
 template <class Field>
 bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
-    Int supernode, Buffer<LeftLookingPrivateState>* private_states,
-    LDLResult* result) {
+    Int supernode, Buffer<PrivateState>* private_states, LDLResult* result) {
   BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
   BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
@@ -1160,7 +1158,7 @@ template <class Field>
 bool Factorization<Field>::MultithreadedLeftLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode,
     const CoordinateMatrix<Field>& matrix, LeftLookingSharedState* shared_state,
-    Buffer<LeftLookingPrivateState>* private_states, LDLResult* result) {
+    Buffer<PrivateState>* private_states, LDLResult* result) {
   if (level >= max_parallel_levels) {
     const int thread = omp_get_thread_num();
     return LeftLookingSubtree(supernode, matrix, shared_state,
@@ -1248,9 +1246,9 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
 
-  Buffer<LeftLookingPrivateState> private_states(max_threads);
+  Buffer<PrivateState> private_states(max_threads);
   for (int thread = 0; thread < max_threads; ++thread) {
-    LeftLookingPrivateState& private_state = private_states[thread];
+    PrivateState& private_state = private_states[thread];
     private_state.pattern_flags.Resize(num_supernodes, -1);
     private_state.row_structure.Resize(num_supernodes);
 

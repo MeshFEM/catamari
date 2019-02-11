@@ -55,7 +55,18 @@ class SupernodalDPP {
     Buffer<const Int*> intersect_ptrs;
   };
 
-  struct LeftLookingPrivateState {
+  struct RightLookingSharedState {
+    // The Schur complement matrices for each of the supernodes in the
+    // multifrontal method. Each front should only be allocated while it is
+    // actively in use.
+    Buffer<BlasMatrix<Field>> schur_complements;
+
+    // The underlying buffers for the Schur complement portions of the fronts.
+    // They are allocated and deallocated as the factorization progresses.
+    Buffer<Buffer<Field>> schur_complement_buffers;
+  };
+
+  struct PrivateState {
     // An integer workspace for storing the supernodes in the current row
     // pattern.
     Buffer<Int> row_structure;
@@ -117,7 +128,7 @@ class SupernodalDPP {
   // Updates a supernode using its descendants.
   void LeftLookingSupernodeUpdate(Int main_supernode,
                                   LeftLookingSharedState* shared_state,
-                                  LeftLookingPrivateState* private_state) const;
+                                  PrivateState* private_state) const;
 
   // Appends a supernode's contribution to the current sample.
   void LeftLookingSupernodeSample(Int main_supernode, bool maximum_likelihood,

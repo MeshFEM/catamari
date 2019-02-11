@@ -113,7 +113,7 @@ std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
 template <class Field>
 void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
     Int main_supernode, LeftLookingSharedState* shared_state,
-    LeftLookingPrivateState* private_state) const {
+    PrivateState* private_state) const {
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
 
@@ -289,7 +289,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
 
-  LeftLookingPrivateState private_state;
+  PrivateState private_state;
   private_state.row_structure.Resize(num_supernodes);
   private_state.pattern_flags.Resize(num_supernodes);
   private_state.scaled_transpose_buffer.Resize(

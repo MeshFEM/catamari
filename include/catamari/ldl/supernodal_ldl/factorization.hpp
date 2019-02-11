@@ -100,7 +100,18 @@ class Factorization {
     Buffer<const Int*> intersect_ptrs;
   };
 
-  struct LeftLookingPrivateState {
+  struct RightLookingSharedState {
+    // The Schur complement matrices for each of the supernodes in the
+    // multifrontal method. Each front should only be allocated while it is
+    // actively in use.
+    Buffer<BlasMatrix<Field>> schur_complements;
+
+    // The underlying buffers for the Schur complement portions of the fronts.
+    // They are allocated and deallocated as the factorization progresses.
+    Buffer<Buffer<Field>> schur_complement_buffers;
+  };
+
+  struct PrivateState {
     // An integer workspace for storing the supernodes in the current row
     // pattern.
     Buffer<Int> row_structure;
@@ -114,17 +125,6 @@ class Factorization {
 
     // A buffer for storing updates to the current supernode column.
     Buffer<Field> workspace_buffer;
-  };
-
-  struct RightLookingSharedState {
-    // The Schur complement matrices for each of the supernodes in the
-    // multifrontal method. Each front should only be allocated while it is
-    // actively in use.
-    Buffer<BlasMatrix<Field>> schur_complements;
-
-    // The underlying buffers for the Schur complement portions of the fronts.
-    // They are allocated and deallocated as the factorization progresses.
-    Buffer<Buffer<Field>> schur_complement_buffers;
   };
 
   // The representation of the permutation matrix P so that P A P' should be
@@ -217,14 +217,14 @@ class Factorization {
 
   bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
                           LeftLookingSharedState* shared_state,
-                          LeftLookingPrivateState* private_state,
-                          LDLResult* result);
+                          PrivateState* private_state, LDLResult* result);
 #ifdef _OPENMP
-  bool MultithreadedLeftLookingSubtree(
-      Int level, Int max_parallel_levels, Int supernode,
-      const CoordinateMatrix<Field>& matrix,
-      LeftLookingSharedState* shared_state,
-      Buffer<LeftLookingPrivateState>* private_states, LDLResult* result);
+  bool MultithreadedLeftLookingSubtree(Int level, Int max_parallel_levels,
+                                       Int supernode,
+                                       const CoordinateMatrix<Field>& matrix,
+                                       LeftLookingSharedState* shared_state,
+                                       Buffer<PrivateState>* private_states,
+                                       LDLResult* result);
 #endif  // ifdef _OPENMP
 
   bool RightLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
@@ -242,19 +242,18 @@ class Factorization {
   void LeftLookingSupernodeUpdate(Int main_supernode,
                                   const CoordinateMatrix<Field>& matrix,
                                   LeftLookingSharedState* shared_state,
-                                  LeftLookingPrivateState* private_state);
+                                  PrivateState* private_state);
 #ifdef _OPENMP
   void MultithreadedLeftLookingSupernodeUpdate(
       Int main_supernode, const CoordinateMatrix<Field>& matrix,
       LeftLookingSharedState* shared_state,
-      Buffer<LeftLookingPrivateState>* private_states);
+      Buffer<PrivateState>* private_states);
 #endif  // ifdef _OPENMP
 
   bool LeftLookingSupernodeFinalize(Int main_supernode, LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedLeftLookingSupernodeFinalize(
-      Int supernode, Buffer<LeftLookingPrivateState>* private_states,
-      LDLResult* result);
+      Int supernode, Buffer<PrivateState>* private_states, LDLResult* result);
 #endif  // ifdef _OPENMP
 
   void MergeChildSchurComplements(Int supernode,

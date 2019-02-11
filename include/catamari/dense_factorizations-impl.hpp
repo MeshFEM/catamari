@@ -420,18 +420,14 @@ Int MultithreadedLowerLDLAdjointFactorization(Int tile_size, Int block_size,
                                               BlasMatrix<Field>* matrix,
                                               Buffer<Field>* buffer) {
   const Int height = matrix->height;
-
-  CATAMARI_ASSERT(
-      Int(buffer->Size()) >= height * height,
-      "Buffer size was inadequate for the multithreaded factorization.");
+  if (buffer->Size() < height * height) {
+    buffer->Resize(height * height);
+  }
 
   BlasMatrix<Field> factor;
   factor.height = height;
   factor.width = height;
   factor.leading_dim = height;
-  if (buffer->Size() < height * height) {
-    buffer->Resize(height * height);
-  }
   factor.data = buffer->Data();
 
   // For use in tracking dependencies.
@@ -629,18 +625,14 @@ Int MultithreadedLowerLDLTransposeFactorization(Int tile_size, Int block_size,
                                                 BlasMatrix<Field>* matrix,
                                                 Buffer<Field>* buffer) {
   const Int height = matrix->height;
-
-  CATAMARI_ASSERT(
-      Int(buffer->Size()) >= height * height,
-      "Buffer size was inadequate for the multithreaded factorization.");
+  if (buffer->Size() < height * height) {
+    buffer->Resize(height * height);
+  }
 
   BlasMatrix<Field> factor;
   factor.height = height;
   factor.width = height;
   factor.leading_dim = height;
-  if (buffer->Size() < height * height) {
-    buffer->Resize(height * height);
-  }
   factor.data = buffer->Data();
 
   // For use in tracking dependencies.
@@ -863,21 +855,17 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     Buffer<Field>* buffer) {
   const Int height = matrix->height;
+  if (buffer->Size() < height * height) {
+    buffer->Resize(height * height);
+  }
 
   std::vector<Int> sample;
   sample.reserve(height);
-
-  CATAMARI_ASSERT(
-      Int(buffer->Size()) >= height * height,
-      "Buffer size was inadequate for the multithreaded factorization.");
 
   BlasMatrix<Field> factor;
   factor.height = height;
   factor.width = height;
   factor.leading_dim = height;
-  if (buffer->Size() < height * height) {
-    buffer->Resize(height * height);
-  }
   factor.data = buffer->Data();
 
   // For use in tracking dependencies.
