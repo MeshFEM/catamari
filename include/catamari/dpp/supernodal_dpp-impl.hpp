@@ -24,15 +24,20 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
       control_(control),
       generator_(random_seed),
       unit_uniform_(ComplexBase<Field>{0}, ComplexBase<Field>{1}) {
+#ifdef _OPENMP
+  if (omp_get_max_threads() > 1) {
+    MultithreadedFormSupernodes();
+    MultithreadedFormStructure();
+    return;
+  }
+#endif  // ifdef _OPENMP
   FormSupernodes();
   FormStructure();
 }
 
 template <class Field>
 void SupernodalDPP<Field>::FormSupernodes() {
-  // TODO(Jack Poulson): Decide if we can overwrite 'ordering_' instead.
-  // It seems not (except for 'permutation' and 'inverse_permutation' since
-  // RelaxSupernodes reads 'fund_ordering' and writes into 'ordering_'.
+  // Greedily compute a supernodal partition using the original ordering.
   AssemblyForest orig_scalar_forest;
   SymmetricOrdering fund_ordering;
   fund_ordering.permutation = ordering_.permutation;
@@ -82,6 +87,68 @@ void SupernodalDPP<Field>::FormSupernodes() {
   }
 }
 
+#ifdef _OPENMP
+template <class Field>
+void SupernodalDPP<Field>::MultithreadedFormSupernodes() {
+  // Greedily compute a supernodal partition using the original ordering.
+  AssemblyForest orig_scalar_forest;
+  SymmetricOrdering fund_ordering;
+  fund_ordering.permutation = ordering_.permutation;
+  fund_ordering.inverse_permutation = ordering_.inverse_permutation;
+  scalar_ldl::LowerStructure scalar_structure;
+  supernodal_ldl::MultithreadedFormFundamentalSupernodes(
+      matrix_, ordering_, &orig_scalar_forest, &fund_ordering.supernode_sizes,
+      &scalar_structure);
+  OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
+  CATAMARI_ASSERT(fund_ordering.supernode_offsets.Back() == matrix_.NumRows(),
+                  "Supernodes did not sum to the matrix size.");
+
+  Buffer<Int> fund_member_to_index;
+  supernodal_ldl::MemberToIndex(matrix_.NumRows(),
+                                fund_ordering.supernode_offsets,
+                                &fund_member_to_index);
+
+  // TODO(Jack Poulson): Parallelize
+  //     ConvertFromScalarToSupernodalEliminationForest.
+  const Int num_fund_supernodes = fund_ordering.supernode_sizes.Size();
+  Buffer<Int> fund_supernode_parents;
+  supernodal_ldl::ConvertFromScalarToSupernodalEliminationForest(
+      num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
+      &fund_ordering.assembly_forest.parents);
+  fund_ordering.assembly_forest.FillFromParents();
+
+  Buffer<Int> fund_supernode_degrees;
+  supernodal_ldl::MultithreadedSupernodalDegrees(
+      matrix_, fund_ordering, orig_scalar_forest, fund_member_to_index,
+      &fund_supernode_degrees);
+
+  if (control_.relaxation_control.relax_supernodes) {
+    // TODO(Jack Poulson): Parallelize RelaxSupernodes.
+    supernodal_ldl::RelaxSupernodes(
+        orig_scalar_forest.parents, fund_ordering.supernode_sizes,
+        fund_ordering.supernode_offsets, fund_ordering.assembly_forest.parents,
+        fund_supernode_degrees, fund_member_to_index, scalar_structure,
+        control_.relaxation_control, &ordering_.permutation,
+        &ordering_.inverse_permutation, &forest_.parents,
+        &ordering_.assembly_forest.parents, &supernode_degrees_,
+        &ordering_.supernode_sizes, &ordering_.supernode_offsets,
+        &supernode_member_to_index_);
+    forest_.FillFromParents();
+    ordering_.assembly_forest.FillFromParents();
+  } else {
+    forest_ = orig_scalar_forest;
+
+    ordering_.supernode_sizes = fund_ordering.supernode_sizes;
+    ordering_.supernode_offsets = fund_ordering.supernode_offsets;
+    ordering_.assembly_forest.parents = fund_ordering.assembly_forest.parents;
+    ordering_.assembly_forest.FillFromParents();
+
+    supernode_member_to_index_ = fund_member_to_index;
+    supernode_degrees_ = fund_supernode_degrees;
+  }
+}
+#endif  // ifdef _OPENMP
+
 template <class Field>
 void SupernodalDPP<Field>::FormStructure() {
   CATAMARI_ASSERT(supernode_degrees_.Size() == ordering_.supernode_sizes.Size(),
@@ -92,6 +159,9 @@ void SupernodalDPP<Field>::FormStructure() {
   diagonal_factor_.reset(
       new supernodal_ldl::DiagonalFactor<Field>(ordering_.supernode_sizes));
 
+  max_supernode_size_ = *std::max_element(ordering_.supernode_sizes.begin(),
+                                          ordering_.supernode_sizes.end());
+
   supernodal_ldl::FillStructureIndices(matrix_, ordering_, forest_,
                                        supernode_member_to_index_,
                                        lower_factor_.get());
@@ -100,13 +170,42 @@ void SupernodalDPP<Field>::FormStructure() {
   // (once support is added).
   lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                        supernode_member_to_index_);
+}
+
+#ifdef _OPENMP
+template <class Field>
+void SupernodalDPP<Field>::MultithreadedFormStructure() {
+  CATAMARI_ASSERT(supernode_degrees_.Size() == ordering_.supernode_sizes.Size(),
+                  "Invalid supernode degrees size.");
+
+  lower_factor_.reset(new supernodal_ldl::LowerFactor<Field>(
+      ordering_.supernode_sizes, supernode_degrees_));
+  diagonal_factor_.reset(
+      new supernodal_ldl::DiagonalFactor<Field>(ordering_.supernode_sizes));
 
   max_supernode_size_ = *std::max_element(ordering_.supernode_sizes.begin(),
                                           ordering_.supernode_sizes.end());
+
+  supernodal_ldl::MultithreadedFillStructureIndices(
+      control_.sort_grain_size, matrix_, ordering_, forest_,
+      supernode_member_to_index_, lower_factor_.get());
+
+  // TODO(Jack Poulson): Do not compute this for right-looking factorizations
+  // (once support is added).
+  // TODO(Jack Poulson): Switch to a multithreaded equivalent.
+  lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
+                                       supernode_member_to_index_);
 }
+#endif  // ifdef _OPENMP
 
 template <class Field>
 std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
+#ifdef _OPENMP
+  if (omp_get_max_threads() > 1) {
+    return MultithreadedLeftLookingSample(maximum_likelihood);
+  }
+#endif  // ifdef _OPENMP
+
   return LeftLookingSample(maximum_likelihood);
 }
 
@@ -307,6 +406,59 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
 
   return sample;
 }
+
+#ifdef _OPENMP
+// TODO(Jack Poulson): Parallelize this in a manner similar to LDL.
+template <class Field>
+std::vector<Int> SupernodalDPP<Field>::MultithreadedLeftLookingSample(
+    bool maximum_likelihood) const {
+  const Int num_rows = ordering_.supernode_offsets.Back();
+  const Int num_supernodes = ordering_.supernode_sizes.Size();
+
+  // Reset the lower factor to all zeros.
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    BlasMatrix<Field>& matrix = lower_factor_->blocks[supernode];
+    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
+              Field{0});
+  }
+
+  // Reset the diagonal factor to all zeros.
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    BlasMatrix<Field>& matrix = diagonal_factor_->blocks[supernode];
+    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
+              Field{0});
+  }
+
+  // Initialize the factors with the input matrix.
+  supernodal_ldl::FillNonzeros(matrix_, ordering_, supernode_member_to_index_,
+                               lower_factor_.get(), diagonal_factor_.get());
+
+  std::vector<Int> sample;
+  sample.reserve(num_rows);
+
+  LeftLookingSharedState shared_state;
+  shared_state.rel_rows.Resize(num_supernodes);
+  shared_state.intersect_ptrs.Resize(num_supernodes);
+
+  PrivateState private_state;
+  private_state.row_structure.Resize(num_supernodes);
+  private_state.pattern_flags.Resize(num_supernodes);
+  private_state.scaled_transpose_buffer.Resize(
+      max_supernode_size_ * max_supernode_size_, Field{0});
+  private_state.workspace_buffer.Resize(
+      max_supernode_size_ * (max_supernode_size_ - 1), Field{0});
+
+  // Note that any postordering of the supernodal elimination forest suffices.
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    LeftLookingSupernodeUpdate(supernode, &shared_state, &private_state);
+    LeftLookingSupernodeSample(supernode, maximum_likelihood, &sample);
+  }
+
+  std::sort(sample.begin(), sample.end());
+
+  return sample;
+}
+#endif  // ifdef _OPENMP
 
 }  // namespace catamari
 

@@ -16,15 +16,27 @@
 namespace catamari {
 
 struct SupernodalDPPControl {
+  // Configuration for the supernodal relaxation.
+  SupernodalRelaxationControl relaxation_control;
+
   // The algorithmic block size for the factorization.
   Int block_size = 64;
 
 #ifdef _OPENMP
-  // The size of the matrix tiles for OpenMP tasks.
-  Int tile_size = 128;
-#endif  // ifdef _OPENMP
+  // The size of the matrix tiles for factorization OpenMP tasks.
+  Int factor_tile_size = 128;
 
-  SupernodalRelaxationControl relaxation_control;
+  // The size of the matrix tiles for dense outer product OpenMP tasks.
+  Int outer_product_tile_size = 240;
+
+  // The number of columns to group into a single task when multithreading
+  // the addition of child Schur complement updates onto the parent.
+  Int merge_grain_size = 500;
+
+  // The number of columns to group into a single task when multithreading
+  // the scalar structure formation.
+  Int sort_grain_size = 200;
+#endif  // ifdef _OPENMP
 };
 
 // The user-facing data structure for storing a supernodal LDL'-based DPP
@@ -120,10 +132,23 @@ class SupernodalDPP {
 
   void FormSupernodes();
 
+#ifdef _OPENMP
+  void MultithreadedFormSupernodes();
+#endif  // ifdef _OPENMP
+
   void FormStructure();
+
+#ifdef _OPENMP
+  void MultithreadedFormStructure();
+#endif  // ifdef _OPENMP
 
   // Return a sample from the DPP.
   std::vector<Int> LeftLookingSample(bool maximum_likelihood) const;
+
+#ifdef _OPENMP
+  std::vector<Int> MultithreadedLeftLookingSample(
+      bool maximum_likelihood) const;
+#endif  // ifdef _OPENMP
 
   // Updates a supernode using its descendants.
   void LeftLookingSupernodeUpdate(Int main_supernode,
