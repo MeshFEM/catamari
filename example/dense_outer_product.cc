@@ -66,6 +66,7 @@ void RunMatrixMultiplyLowerNormalNormal(Int height, Int rank) {
   std::cout << "Sequential GFlops/sec: " << gflops_per_sec << std::endl;
 }
 
+#ifdef _OPENMP
 template <typename Field>
 void RunMultithreadedMatrixMultiplyLowerNormalNormal(Int tile_size, Int height,
                                                      Int rank) {
@@ -94,6 +95,7 @@ void RunMultithreadedMatrixMultiplyLowerNormalNormal(Int tile_size, Int height,
 
   std::cout << "Multithreaded GFlops/sec: " << gflops_per_sec << std::endl;
 }
+#endif  // ifdef _OPENMP
 
 }  // anonymous namespace
 
@@ -103,8 +105,10 @@ int main(int argc, char** argv) {
       parser.OptionalInput<Int>("height", "The height of the matrix.", 2000);
   const Int rank =
       parser.OptionalInput<Int>("rank", "The rank of the update.", 128);
+#ifdef _OPENMP
   const Int tile_size = parser.OptionalInput<Int>(
       "tile_size", "The tile size for multithreaded factorization.", 128);
+#endif  // ifdef _OPENMP
   const Int num_rounds = parser.OptionalInput<Int>(
       "num_rounds", "The number of rounds of factorizations.", 3);
   if (!parser.OK()) {
@@ -112,8 +116,10 @@ int main(int argc, char** argv) {
   }
 
   for (Int round = 0; round < num_rounds; ++round) {
+#ifdef _OPENMP
     RunMultithreadedMatrixMultiplyLowerNormalNormal<Complex<double>>(
         tile_size, height, rank);
+#endif  // ifdef _OPENMP
     RunMatrixMultiplyLowerNormalNormal<Complex<double>>(height, rank);
   }
 

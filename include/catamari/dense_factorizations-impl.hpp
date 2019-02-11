@@ -980,6 +980,17 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
   }
   return sample;
 }
+
+template <class Field>
+std::vector<Int> MultithreadedLowerFactorAndSampleDPP(
+    Int tile_size, Int block_size, bool maximum_likelihood,
+    BlasMatrix<Field>* matrix, std::mt19937* generator,
+    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
+    Buffer<Field>* buffer) {
+  return MultithreadedLowerBlockedFactorAndSampleDPP(
+      tile_size, block_size, maximum_likelihood, matrix, generator,
+      uniform_dist, buffer);
+}
 #endif  // ifdef _OPENMP
 
 }  // namespace catamari

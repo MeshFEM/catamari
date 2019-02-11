@@ -187,6 +187,14 @@ dense_outer_product_exe = executable(
     dependencies : deps + example_deps,
     cpp_args : cxx_args)
 
+# A performance test for dense DPP sampling.
+dense_dpp_exe = executable(
+    'dense_dpp',
+    ['example/dense_dpp.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps + example_deps,
+    cpp_args : cxx_args)
+
 # A performance test for factoring a dense matrix.
 dense_factorization_exe = executable(
     'dense_factorization',
