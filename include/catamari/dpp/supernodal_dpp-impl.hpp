@@ -112,7 +112,8 @@ std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
 
 template <class Field>
 void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
-    Int main_supernode, LeftLookingSampleState* state) const {
+    Int main_supernode, LeftLookingSharedState* shared_state,
+    LeftLookingPrivateState* private_state) const {
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
 
@@ -121,10 +122,10 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
   BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
   const Int main_supernode_size = ordering_.supernode_sizes[main_supernode];
 
-  state->pattern_flags[main_supernode] = main_supernode;
+  private_state->pattern_flags[main_supernode] = main_supernode;
 
-  state->rel_rows[main_supernode] = 0;
-  state->intersect_ptrs[main_supernode] =
+  shared_state->rel_rows[main_supernode] = 0;
+  shared_state->intersect_ptrs[main_supernode] =
       lower_factor_->IntersectionSizesBeg(main_supernode);
 
   // Compute the supernodal row pattern.
@@ -132,12 +133,13 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
       matrix_, ordering_.permutation, ordering_.inverse_permutation,
       ordering_.supernode_sizes, ordering_.supernode_offsets,
       supernode_member_to_index_, ordering_.assembly_forest.parents,
-      main_supernode, state->pattern_flags.Data(), state->row_structure.Data());
+      main_supernode, private_state->pattern_flags.Data(),
+      private_state->row_structure.Data());
 
   // for J = find(L(K, :))
   //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
   for (Int index = 0; index < num_packed; ++index) {
-    const Int descendant_supernode = state->row_structure[index];
+    const Int descendant_supernode = private_state->row_structure[index];
     CATAMARI_ASSERT(descendant_supernode < main_supernode,
                     "Looking into upper triangle.");
     const ConstBlasMatrix<Field>& descendant_lower_block =
@@ -146,9 +148,10 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
     const Int descendant_supernode_size = descendant_lower_block.width;
 
     const Int descendant_main_intersect_size =
-        *state->intersect_ptrs[descendant_supernode];
+        *shared_state->intersect_ptrs[descendant_supernode];
 
-    const Int descendant_main_rel_row = state->rel_rows[descendant_supernode];
+    const Int descendant_main_rel_row =
+        shared_state->rel_rows[descendant_supernode];
     ConstBlasMatrix<Field> descendant_main_matrix =
         descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
                                          descendant_main_intersect_size,
@@ -158,7 +161,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
     scaled_transpose.height = descendant_supernode_size;
     scaled_transpose.width = descendant_main_intersect_size;
     scaled_transpose.leading_dim = descendant_supernode_size;
-    scaled_transpose.data = state->scaled_transpose_buffer.Data();
+    scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
 
     supernodal_ldl::FormScaledTranspose(
         factorization_type,
@@ -169,7 +172,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
     workspace_matrix.height = descendant_main_intersect_size;
     workspace_matrix.width = descendant_main_intersect_size;
     workspace_matrix.leading_dim = descendant_main_intersect_size;
-    workspace_matrix.data = state->workspace_buffer.Data();
+    workspace_matrix.data = private_state->workspace_buffer.Data();
 
     supernodal_ldl::UpdateDiagonalBlock(
         factorization_type, ordering_.supernode_offsets, *lower_factor_,
@@ -177,14 +180,16 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
         descendant_main_matrix, scaled_transpose.ToConst(),
         &main_diagonal_block, &workspace_matrix);
 
-    state->intersect_ptrs[descendant_supernode]++;
-    state->rel_rows[descendant_supernode] += descendant_main_intersect_size;
+    shared_state->intersect_ptrs[descendant_supernode]++;
+    shared_state->rel_rows[descendant_supernode] +=
+        descendant_main_intersect_size;
 
     // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
     //                = L(KNext:n, J) * Z(J, K).
     const Int* descendant_active_intersect_size_beg =
-        state->intersect_ptrs[descendant_supernode];
-    Int descendant_active_rel_row = state->rel_rows[descendant_supernode];
+        shared_state->intersect_ptrs[descendant_supernode];
+    Int descendant_active_rel_row =
+        shared_state->rel_rows[descendant_supernode];
     const Int* main_active_intersect_sizes =
         lower_factor_->IntersectionSizesBeg(main_supernode);
     Int main_active_rel_row = 0;
@@ -280,19 +285,21 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   std::vector<Int> sample;
   sample.reserve(num_rows);
 
-  LeftLookingSampleState state;
-  state.row_structure.Resize(num_supernodes);
-  state.pattern_flags.Resize(num_supernodes);
-  state.rel_rows.Resize(num_supernodes);
-  state.intersect_ptrs.Resize(num_supernodes);
-  state.scaled_transpose_buffer.Resize(
+  LeftLookingSharedState shared_state;
+  shared_state.rel_rows.Resize(num_supernodes);
+  shared_state.intersect_ptrs.Resize(num_supernodes);
+
+  LeftLookingPrivateState private_state;
+  private_state.row_structure.Resize(num_supernodes);
+  private_state.pattern_flags.Resize(num_supernodes);
+  private_state.scaled_transpose_buffer.Resize(
       max_supernode_size_ * max_supernode_size_, Field{0});
-  state.workspace_buffer.Resize(max_supernode_size_ * (max_supernode_size_ - 1),
-                                Field{0});
+  private_state.workspace_buffer.Resize(
+      max_supernode_size_ * (max_supernode_size_ - 1), Field{0});
 
   // Note that any postordering of the supernodal elimination forest suffices.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    LeftLookingSupernodeUpdate(supernode, &state);
+    LeftLookingSupernodeUpdate(supernode, &shared_state, &private_state);
     LeftLookingSupernodeSample(supernode, maximum_likelihood, &sample);
   }
 
