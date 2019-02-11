@@ -179,9 +179,10 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 #ifdef _OPENMP
 template <class Field>
 void MultithreadedFillStructureIndices(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
-    LowerFactor<Field>* lower_factor, Int sort_grain_size = 200);
+    Int sort_grain_size, const CoordinateMatrix<Field>& matrix,
+    const SymmetricOrdering& ordering, const AssemblyForest& forest,
+    const Buffer<Int>& supernode_member_to_index,
+    LowerFactor<Field>* lower_factor);
 #endif  // ifdef _OPENMP
 
 // Fill in the nonzeros from the original sparse matrix.

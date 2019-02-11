@@ -45,6 +45,14 @@ struct Control {
 
   // The size of the matrix tiles for dense outer product OpenMP tasks.
   Int outer_product_tile_size = 240;
+
+  // The number of columns to group into a single task when multithreading
+  // the addition of child Schur complement updates onto the parent.
+  Int merge_grain_size = 500;
+
+  // The number of columns to group into a single task when multithreading
+  // the scalar structure formation.
+  Int sort_grain_size = 200;
 #endif  // ifdef _OPENMP
 };
 
@@ -149,6 +157,14 @@ class Factorization {
 
   // The size of the matrix tiles for dense outer product OpenMP tasks.
   Int outer_product_tile_size_;
+
+  // The number of columns to group into a single task when multithreading
+  // the addition of child Schur complement updates onto the parent.
+  Int merge_grain_size_;
+
+  // The number of columns to group into a single task when multithreading
+  // the scalar structure formation.
+  Int sort_grain_size_;
 #endif  // ifdef _OPENMP
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be

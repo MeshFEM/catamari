@@ -1074,9 +1074,14 @@ int main(int argc, char** argv) {
       "block_size", "The dense algorithmic block size.", 64);
 #ifdef _OPENMP
   const Int factor_tile_size = parser.OptionalInput<Int>(
-      "tile_size", "The multithreaded factorization tile size.", 128);
+      "factor_tile_size", "The multithreaded factorization tile size.", 128);
   const Int outer_product_tile_size = parser.OptionalInput<Int>(
-      "tile_size", "The multithreaded outer-product tile size.", 240);
+      "outer_product_tile_size", "The multithreaded outer-product tile size.",
+      240);
+  const Int merge_grain_size = parser.OptionalInput<Int>(
+      "merge_grain_size", "The number of columns to merge at once.", 500);
+  const Int sort_grain_size = parser.OptionalInput<Int>(
+      "sort_grain_size", "The number of columns to sort at once.", 200);
 #endif  // ifdef _OPENMP
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
@@ -1109,7 +1114,9 @@ int main(int argc, char** argv) {
   ldl_control.supernodal_control.factor_tile_size = factor_tile_size;
   ldl_control.supernodal_control.outer_product_tile_size =
       outer_product_tile_size;
-#endif
+  ldl_control.supernodal_control.merge_grain_size = merge_grain_size;
+  ldl_control.supernodal_control.sort_grain_size = sort_grain_size;
+#endif  // ifdef _OPENMP
   ldl_control.supernodal_control.relaxation_control.relax_supernodes =
       relax_supernodes;
   ldl_control.supernodal_control.relaxation_control.allowable_supernode_zeros =

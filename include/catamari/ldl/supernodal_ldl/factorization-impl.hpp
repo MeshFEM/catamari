@@ -199,7 +199,7 @@ void Factorization<Field>::MultithreadedInitializeFactors(
   max_degree_ =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
 
-  MultithreadedFillStructureIndices(matrix, ordering_, forest,
+  MultithreadedFillStructureIndices(sort_grain_size_, matrix, ordering_, forest,
                                     supernode_member_to_index_,
                                     lower_factor_.get());
   if (algorithm_ == kLeftLookingLDL) {
@@ -529,15 +529,14 @@ void Factorization<Field>::MultithreadedMergeChildSchurComplements(
     const Int* child_rel_indices_ptr = child_rel_indices.Data();
 
     // Add the child Schur complement into this supernode's front.
-    const Int merge_grain_size = 500;
     #pragma omp taskgroup
-    for (Int j_beg = 0; j_beg < child_degree; j_beg += merge_grain_size) {
-      #pragma omp task default(none)                                          \
-          firstprivate(j_beg, merge_grain_size, child_degree, diagonal_block, \
-              lower_block, child_schur_complement, schur_complement,          \
-              child_rel_indices_ptr, num_child_diag_indices, supernode_size)
+    for (Int j_beg = 0; j_beg < child_degree; j_beg += merge_grain_size_) {
+      #pragma omp task default(none)                                           \
+          firstprivate(j_beg, child_degree, diagonal_block, lower_block,       \
+              child_schur_complement, schur_complement, child_rel_indices_ptr, \
+              num_child_diag_indices, supernode_size)
       {
-        const Int j_end = std::min(child_degree, j_beg + merge_grain_size);
+        const Int j_end = std::min(child_degree, j_beg + merge_grain_size_);
         for (Int j = j_beg; j < j_end; ++j) {
           const Int j_rel = child_rel_indices_ptr[j];
           if (j < num_child_diag_indices) {
@@ -1433,16 +1432,20 @@ LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   ordering_ = manual_ordering;
   factorization_type_ = control.factorization_type;
   block_size_ = control.block_size;
+
 #ifdef _OPENMP
   factor_tile_size_ = control.factor_tile_size;
   outer_product_tile_size_ = control.outer_product_tile_size;
+  merge_grain_size_ = control.merge_grain_size;
+  sort_grain_size_ = control.sort_grain_size;
 #endif  // ifdef _OPENMP
+
   forward_solve_out_of_place_supernode_threshold_ =
       control.forward_solve_out_of_place_supernode_threshold;
   backward_solve_out_of_place_supernode_threshold_ =
       control.backward_solve_out_of_place_supernode_threshold;
-  const bool use_leftlooking = control.algorithm == kLeftLookingLDL;
 
+  const bool use_leftlooking = control.algorithm == kLeftLookingLDL;
   if (use_leftlooking) {
     return LeftLooking(matrix, control);
   } else {

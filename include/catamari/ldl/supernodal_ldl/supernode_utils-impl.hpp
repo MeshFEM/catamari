@@ -1104,9 +1104,10 @@ void MultithreadedFillStructureIndicesRecursion(
 
 template <class Field>
 void MultithreadedFillStructureIndices(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
-    LowerFactor<Field>* lower_factor, Int sort_grain_size) {
+    Int sort_grain_size, const CoordinateMatrix<Field>& matrix,
+    const SymmetricOrdering& ordering, const AssemblyForest& forest,
+    const Buffer<Int>& supernode_member_to_index,
+    LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
 
   // A data structure for marking whether or not a node is in the pattern of
