@@ -31,9 +31,9 @@ void InitializeMatrix(Int matrix_size, BlasMatrix<Field>* matrix,
   matrix->data = buffer->Data();
 
   for (Int j = 0; j < matrix_size; ++j) {
-    matrix->Entry(j, j) = 2 * matrix_size;
+    matrix->Entry(j, j) = 1.;
     for (Int i = j + 1; i < matrix_size; ++i) {
-      matrix->Entry(i, j) = Field{-1};
+      matrix->Entry(i, j) = -1. / (2 * matrix_size);
     }
   }
 }

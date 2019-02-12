@@ -222,26 +222,9 @@ int main(int argc, char** argv) {
       parser.OptionalInput<Int>("num_samples", "The number of DPP samples.", 1);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
-#ifdef _OPENMP
-  const int num_omp_threads = parser.OptionalInput<int>(
-      "num_omp_threads",
-      "The desired number of OpenMP threads. Uses default if <= 0.", 1);
-#endif
   if (!parser.OK()) {
     return 0;
   }
-
-#ifdef _OPENMP
-  if (num_omp_threads > 0) {
-    const int max_omp_threads = omp_get_max_threads();
-    omp_set_num_threads(num_omp_threads);
-    std::cout << "Will use " << num_omp_threads << " of " << max_omp_threads
-              << " OpenMP threads." << std::endl;
-  } else {
-    std::cout << "Will use all " << omp_get_max_threads() << " OpenMP threads."
-              << std::endl;
-  }
-#endif
 
   catamari::DPPControl dpp_control;
   dpp_control.random_seed = random_seed;

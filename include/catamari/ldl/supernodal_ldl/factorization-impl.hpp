@@ -1132,6 +1132,7 @@ bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
   {
     const int thread = omp_get_thread_num();
     Buffer<Field>* buffer = &(*private_states)[thread].scaled_transpose_buffer;
+
     num_supernode_pivots = MultithreadedFactorDiagonalBlock(
         factor_tile_size_, block_size_, factorization_type_, &diagonal_block,
         buffer);
@@ -1240,7 +1241,7 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
   }
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
-  const Int max_threads = omp_get_max_threads();
+  const int max_threads = omp_get_max_threads();
 
   LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
@@ -1263,13 +1264,12 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
         max_supernode_size_ * (max_supernode_size_ - 1), Field{0});
   }
 
-  LDLResult result;
-
-  Buffer<int> successes(num_roots);
-  Buffer<LDLResult> result_contributions(num_roots);
-
   // TODO(Jack Poulson): Make this value configurable.
   const Int max_parallel_levels = std::ceil(std::log2(max_threads)) + 3;
+
+  LDLResult result;
+  Buffer<int> successes(num_roots);
+  Buffer<LDLResult> result_contributions(num_roots);
 
   const Int level = 0;
   if (max_parallel_levels == 0) {

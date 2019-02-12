@@ -150,14 +150,39 @@ class SupernodalDPP {
       bool maximum_likelihood) const;
 #endif  // ifdef _OPENMP
 
+#ifdef _OPENMP
+  void LeftLookingSubtree(Int supernode, bool maximum_likelihood,
+                          LeftLookingSharedState* shared_state,
+                          PrivateState* private_state,
+                          std::vector<Int>* sample) const;
+
+  void MultithreadedLeftLookingSubtree(Int level, Int max_parallel_levels,
+                                       Int supernode, bool maximum_likelihood,
+                                       LeftLookingSharedState* shared_state,
+                                       Buffer<PrivateState>* private_states,
+                                       std::vector<Int>* subsample) const;
+#endif  // ifdef _OPENMP
+
   // Updates a supernode using its descendants.
   void LeftLookingSupernodeUpdate(Int main_supernode,
                                   LeftLookingSharedState* shared_state,
                                   PrivateState* private_state) const;
 
+#ifdef _OPENMP
+  void MultithreadedLeftLookingSupernodeUpdate(
+      Int main_supernode, LeftLookingSharedState* shared_state,
+      Buffer<PrivateState>* private_states) const;
+#endif  // ifdef _OPENMP
+
   // Appends a supernode's contribution to the current sample.
   void LeftLookingSupernodeSample(Int main_supernode, bool maximum_likelihood,
                                   std::vector<Int>* sample) const;
+
+#ifdef _OPENMP
+  void MultithreadedLeftLookingSupernodeSample(
+      Int main_supernode, bool maximum_likelihood,
+      Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;
+#endif  // ifdef _OPENMP
 };
 
 }  // namespace catamari

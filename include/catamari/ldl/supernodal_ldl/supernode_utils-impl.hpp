@@ -1098,8 +1098,10 @@ void MultithreadedFillStructureIndicesRecursion(
       }
     }
   }
-  CATAMARI_ASSERT(struct_ptr <= struct_end, "Stored too many indices.");
-  CATAMARI_ASSERT(struct_ptr >= struct_end, "Stored too few indices.");
+  CATAMARI_ASSERT(struct_ptr <= lower_factor->StructureEnd(root),
+                  "Stored too many indices.");
+  CATAMARI_ASSERT(struct_ptr >= lower_factor->StructureEnd(root),
+                  "Stored too few indices.");
 }
 
 template <class Field>
@@ -1701,8 +1703,8 @@ void MultithreadedSolveAgainstDiagonalBlock(
         const Int tsize = std::min(height - i, tile_size);
         BlasMatrix<Field> lower_block =
             lower_matrix_copy.Submatrix(i, 0, tsize, width);
-        RightLowerAdjointUnitTriangularSolves(triangular_matrix_copy,
-                                              &lower_block);
+        RightDiagonalTimesLowerAdjointUnitTriangularSolves(
+            triangular_matrix_copy, &lower_block);
       }
     }
   } else {
