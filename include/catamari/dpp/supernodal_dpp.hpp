@@ -19,6 +19,10 @@ struct SupernodalDPPControl {
   // Configuration for the supernodal relaxation.
   SupernodalRelaxationControl relaxation_control;
 
+  // The choice of either left-looking or right-looking DPP sampling.
+  // There is currently only support for left-looking and right-looking.
+  LDLAlgorithm algorithm = kRightLookingLDL;
+
   // The algorithmic block size for the factorization.
   Int block_size = 64;
 
@@ -142,7 +146,7 @@ class SupernodalDPP {
   void MultithreadedFormStructure();
 #endif  // ifdef _OPENMP
 
-  // Return a sample from the DPP.
+  // Return a sample from the DPP using a left-looking algorithm.
   std::vector<Int> LeftLookingSample(bool maximum_likelihood) const;
 
 #ifdef _OPENMP
@@ -183,6 +187,21 @@ class SupernodalDPP {
       Int main_supernode, bool maximum_likelihood,
       Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;
 #endif  // ifdef _OPENMP
+
+  // Return a sample from the DPP using a right-looking algorithm.
+  std::vector<Int> RightLookingSample(bool maximum_likelihood) const;
+
+  // TODO(Jack Poulson): Avoid duplication with LDL.
+  void MergeChildSchurComplements(Int supernode,
+                                  RightLookingSharedState* shared_state) const;
+
+  void RightLookingSubtree(Int supernode, bool maximum_likelihood,
+                           RightLookingSharedState* shared_state,
+                           std::vector<Int>* sample) const;
+
+  void RightLookingSupernodeSample(Int supernode, bool maximum_likelihood,
+                                   RightLookingSharedState* shared_state,
+                                   std::vector<Int>* sample) const;
 };
 
 }  // namespace catamari

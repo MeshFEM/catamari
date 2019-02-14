@@ -133,7 +133,7 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
       while (sample_ptr < num_samples && sample[sample_ptr] < index) {
         ++sample_ptr;
       }
-      if (sample[sample_ptr] == index) {
+      if (sample_ptr < num_samples && sample[sample_ptr] == index) {
         std::cout << sampled_char;
       } else {
         std::cout << missing_char;

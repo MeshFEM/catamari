@@ -166,10 +166,10 @@ void SupernodalDPP<Field>::FormStructure() {
                                        supernode_member_to_index_,
                                        lower_factor_.get());
 
-  // TODO(Jack Poulson): Do not compute this for right-looking factorizations
-  // (once support is added).
-  lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
-                                       supernode_member_to_index_);
+  if (control_.algorithm == kLeftLookingLDL) {
+    lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
+                                         supernode_member_to_index_);
+  }
 }
 
 #ifdef _OPENMP
@@ -190,23 +190,26 @@ void SupernodalDPP<Field>::MultithreadedFormStructure() {
       control_.sort_grain_size, matrix_, ordering_, forest_,
       supernode_member_to_index_, lower_factor_.get());
 
-  // TODO(Jack Poulson): Do not compute this for right-looking factorizations
-  // (once support is added).
-  // TODO(Jack Poulson): Switch to a multithreaded equivalent.
-  lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
-                                       supernode_member_to_index_);
+  if (control_.algorithm == kLeftLookingLDL) {
+    // TODO(Jack Poulson): Switch to a multithreaded equivalent.
+    lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
+                                         supernode_member_to_index_);
+  }
 }
 #endif  // ifdef _OPENMP
 
 template <class Field>
 std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
+  if (control_.algorithm == kLeftLookingLDL) {
 #ifdef _OPENMP
-  if (omp_get_max_threads() > 1) {
-    return MultithreadedLeftLookingSample(maximum_likelihood);
-  }
+    if (omp_get_max_threads() > 1) {
+      return MultithreadedLeftLookingSample(maximum_likelihood);
+    }
 #endif  // ifdef _OPENMP
-
-  return LeftLookingSample(maximum_likelihood);
+    return LeftLookingSample(maximum_likelihood);
+  } else {
+    return RightLookingSample(maximum_likelihood);
+  }
 }
 
 template <class Field>
@@ -802,6 +805,222 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedLeftLookingSample(
   return sample;
 }
 #endif  // ifdef _OPENMP
+
+// TODO(Jack Poulson): Avoid duplication with LDL.
+template <class Field>
+void SupernodalDPP<Field>::MergeChildSchurComplements(
+    Int supernode, RightLookingSharedState* shared_state) const {
+  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+  BlasMatrix<Field> lower_block = lower_factor_->blocks[supernode];
+  BlasMatrix<Field> diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrix<Field> schur_complement =
+      shared_state->schur_complements[supernode];
+
+  const Int supernode_size = ordering_.supernode_sizes[supernode];
+  const Int supernode_start = ordering_.supernode_offsets[supernode];
+  const Int* main_indices = lower_factor_->StructureBeg(supernode);
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering_.assembly_forest.children[child_beg + child_index];
+    const Int* child_indices = lower_factor_->StructureBeg(child);
+    Buffer<Field>& child_schur_complement_buffer =
+        shared_state->schur_complement_buffers[child];
+    BlasMatrix<Field>& child_schur_complement =
+        shared_state->schur_complements[child];
+    const Int child_degree = child_schur_complement.height;
+
+    // Fill the mapping from the child structure into the parent front.
+    Int num_child_diag_indices = 0;
+    Buffer<Int> child_rel_indices(child_degree);
+    {
+      Int i_rel = supernode_size;
+      for (Int i = 0; i < child_degree; ++i) {
+        const Int row = child_indices[i];
+        if (row < supernode_start + supernode_size) {
+          child_rel_indices[i] = row - supernode_start;
+          ++num_child_diag_indices;
+        } else {
+          while (main_indices[i_rel - supernode_size] != row) {
+            ++i_rel;
+            CATAMARI_ASSERT(i_rel < supernode_size + schur_complement.height,
+                            "Relative index is out-of-bounds.");
+          }
+          child_rel_indices[i] = i_rel;
+        }
+      }
+    }
+
+    // Add the child Schur complement into this supernode's front.
+    for (Int j = 0; j < child_degree; ++j) {
+      const Int j_rel = child_rel_indices[j];
+      if (j < num_child_diag_indices) {
+        // Contribute into the upper-left diagonal block of the front.
+        for (Int i = j; i < num_child_diag_indices; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          diagonal_block(i_rel, j_rel) += child_schur_complement(i, j);
+        }
+
+        // Contribute into the lower-left block of the front.
+        for (Int i = num_child_diag_indices; i < child_degree; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          lower_block(i_rel - supernode_size, j_rel) +=
+              child_schur_complement(i, j);
+        }
+      } else {
+        // Contribute into the bottom-right block of the front.
+        for (Int i = j; i < child_degree; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          schur_complement(i_rel - supernode_size, j_rel - supernode_size) +=
+              child_schur_complement(i, j);
+        }
+      }
+    }
+
+    child_schur_complement.height = 0;
+    child_schur_complement.width = 0;
+    child_schur_complement.data = nullptr;
+    child_schur_complement_buffer.Clear();
+  }
+}
+
+template <class Field>
+void SupernodalDPP<Field>::RightLookingSupernodeSample(
+    Int supernode, bool maximum_likelihood,
+    RightLookingSharedState* shared_state, std::vector<Int>* sample) const {
+  BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
+  const Int degree = lower_block.height;
+  const Int supernode_size = lower_block.width;
+
+  // Initialize this supernode's Schur complement as the zero matrix.
+  Buffer<Field>& schur_complement_buffer =
+      shared_state->schur_complement_buffers[supernode];
+  BlasMatrix<Field>& schur_complement =
+      shared_state->schur_complements[supernode];
+  schur_complement_buffer.Resize(degree * degree, Field{0});
+  schur_complement.height = degree;
+  schur_complement.width = degree;
+  schur_complement.leading_dim = degree;
+  schur_complement.data = schur_complement_buffer.Data();
+
+  MergeChildSchurComplements(supernode, shared_state);
+
+  // Sample and factor the diagonal block.
+  const std::vector<Int> supernode_sample =
+      LowerFactorAndSampleDPP(control_.block_size, maximum_likelihood,
+                              &diagonal_block, &generator_, &unit_uniform_);
+  const Int supernode_start = ordering_.supernode_offsets[supernode];
+  for (const Int& index : supernode_sample) {
+    const Int orig_row = supernode_start + index;
+    if (ordering_.inverse_permutation.Empty()) {
+      sample->push_back(orig_row);
+    } else {
+      sample->push_back(ordering_.inverse_permutation[orig_row]);
+    }
+  }
+
+  if (!degree) {
+    // We can early exit.
+    return;
+  }
+
+  CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
+  const SymmetricFactorizationType factorization_type =
+      kLDLAdjointFactorization;
+  supernodal_ldl::SolveAgainstDiagonalBlock(
+      factorization_type, diagonal_block.ToConst(), &lower_block);
+
+  Buffer<Field> scaled_transpose_buffer(degree * supernode_size);
+  BlasMatrix<Field> scaled_transpose;
+  scaled_transpose.height = supernode_size;
+  scaled_transpose.width = degree;
+  scaled_transpose.leading_dim = supernode_size;
+  scaled_transpose.data = scaled_transpose_buffer.Data();
+  supernodal_ldl::FormScaledTranspose(factorization_type,
+                                      diagonal_block.ToConst(),
+                                      lower_block.ToConst(), &scaled_transpose);
+  MatrixMultiplyLowerNormalNormal(Field{-1}, lower_block.ToConst(),
+                                  scaled_transpose.ToConst(), Field{1},
+                                  &schur_complement);
+}
+
+template <class Field>
+void SupernodalDPP<Field>::RightLookingSubtree(
+    Int supernode, bool maximum_likelihood,
+    RightLookingSharedState* shared_state, std::vector<Int>* sample) const {
+  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering_.assembly_forest.children[child_beg + child_index];
+    CATAMARI_ASSERT(ordering_.assembly_forest.parents[child] == supernode,
+                    "Incorrect child index");
+    RightLookingSubtree(child, maximum_likelihood, shared_state, sample);
+  }
+
+  std::vector<Int> subsample;
+  RightLookingSupernodeSample(supernode, maximum_likelihood, shared_state,
+                              &subsample);
+  sample->insert(sample->end(), subsample.begin(), subsample.end());
+}
+
+template <class Field>
+std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
+    bool maximum_likelihood) const {
+  // DO_NOT_SUBMIT
+  /*
+#ifdef _OPENMP
+  if (omp_get_max_threads() > 1) {
+    return MultithreadedRightLooking(maximum_likelihood);
+  }
+#endif
+  */
+
+  const Int num_rows = matrix_.NumRows();
+  const Int num_supernodes = ordering_.supernode_sizes.Size();
+  const Int num_roots = ordering_.assembly_forest.roots.Size();
+
+  // Reset the lower factor to all zeros.
+  // TODO(Jack Poulson): Parallelize this.
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    BlasMatrix<Field>& matrix = lower_factor_->blocks[supernode];
+    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
+              Field{0});
+  }
+
+  // Reset the diagonal factor to all zeros.
+  // TODO(Jack Poulson): Parallelize this.
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    BlasMatrix<Field>& matrix = diagonal_factor_->blocks[supernode];
+    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
+              Field{0});
+  }
+
+  // Initialize the factors with the input matrix.
+  supernodal_ldl::MultithreadedFillNonzeros(
+      matrix_, ordering_, supernode_member_to_index_, lower_factor_.get(),
+      diagonal_factor_.get());
+
+  std::vector<Int> sample;
+  sample.reserve(num_rows);
+
+  RightLookingSharedState shared_state;
+  shared_state.schur_complement_buffers.Resize(num_supernodes);
+  shared_state.schur_complements.Resize(num_supernodes);
+
+  for (Int root_index = 0; root_index < num_roots; ++root_index) {
+    const Int root = ordering_.assembly_forest.roots[root_index];
+    RightLookingSubtree(root, maximum_likelihood, &shared_state, &sample);
+  }
+
+  std::sort(sample.begin(), sample.end());
+
+  return sample;
+}
 
 }  // namespace catamari
 
