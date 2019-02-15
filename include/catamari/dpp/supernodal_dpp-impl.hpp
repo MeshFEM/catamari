@@ -17,13 +17,8 @@ namespace catamari {
 template <class Field>
 SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
                                     const SymmetricOrdering& ordering,
-                                    const SupernodalDPPControl& control,
-                                    unsigned int random_seed)
-    : matrix_(matrix),
-      ordering_(ordering),
-      control_(control),
-      generator_(random_seed),
-      unit_uniform_(ComplexBase<Field>{0}, ComplexBase<Field>{1}) {
+                                    const SupernodalDPPControl& control)
+    : matrix_(matrix), ordering_(ordering), control_(control) {
 #ifdef _OPENMP
   if (omp_get_max_threads() > 1) {
     MultithreadedFormSupernodes();
@@ -74,6 +69,8 @@ void SupernodalDPP<Field>::FormSupernodes() {
         &ordering_.assembly_forest.parents, &supernode_degrees_,
         &ordering_.supernode_sizes, &ordering_.supernode_offsets,
         &supernode_member_to_index_);
+    forest_.FillFromParents();
+    ordering_.assembly_forest.FillFromParents();
   } else {
     forest_ = orig_scalar_forest;
 
@@ -518,7 +515,7 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
 
 template <class Field>
 void SupernodalDPP<Field>::LeftLookingSupernodeSample(
-    Int main_supernode, bool maximum_likelihood,
+    Int main_supernode, bool maximum_likelihood, PrivateState* private_state,
     std::vector<Int>* sample) const {
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
@@ -530,7 +527,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
   // Sample and factor the diagonal block.
   const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
       control_.block_size, maximum_likelihood, &main_diagonal_block,
-      &generator_, &unit_uniform_);
+      &private_state->generator, &private_state->unit_uniform);
   const Int main_supernode_start = ordering_.supernode_offsets[main_supernode];
   for (const Int& index : supernode_sample) {
     const Int orig_row = main_supernode_start + index;
@@ -562,10 +559,12 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeSample(
   #pragma omp taskgroup
   {
     const int thread = omp_get_thread_num();
-    Buffer<Field>* buffer = &(*private_states)[thread].scaled_transpose_buffer;
+    PrivateState& private_state = (*private_states)[thread];
+    Buffer<Field>* buffer = &private_state.scaled_transpose_buffer;
     supernode_sample = MultithreadedLowerFactorAndSampleDPP(
         control_.factor_tile_size, control_.block_size, maximum_likelihood,
-        &main_diagonal_block, &generator_, &unit_uniform_, buffer);
+        &main_diagonal_block, &private_state.generator,
+        &private_state.unit_uniform, buffer);
   }
 
   const Int main_supernode_start = ordering_.supernode_offsets[main_supernode];
@@ -591,19 +590,8 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   const Int num_rows = ordering_.supernode_offsets.Back();
   const Int num_supernodes = ordering_.supernode_sizes.Size();
 
-  // Reset the lower factor to all zeros.
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    BlasMatrix<Field>& matrix = lower_factor_->blocks[supernode];
-    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
-              Field{0});
-  }
-
-  // Reset the diagonal factor to all zeros.
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    BlasMatrix<Field>& matrix = diagonal_factor_->blocks[supernode];
-    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
-              Field{0});
-  }
+  supernodal_ldl::FillZeros(ordering_, lower_factor_.get(),
+                            diagonal_factor_.get());
 
   // Initialize the factors with the input matrix.
   supernodal_ldl::FillNonzeros(matrix_, ordering_, supernode_member_to_index_,
@@ -616,6 +604,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
 
+  std::random_device random_device;
   PrivateState private_state;
   private_state.row_structure.Resize(num_supernodes);
   private_state.pattern_flags.Resize(num_supernodes);
@@ -623,11 +612,13 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
       max_supernode_size_ * max_supernode_size_, Field{0});
   private_state.workspace_buffer.Resize(
       max_supernode_size_ * (max_supernode_size_ - 1), Field{0});
+  private_state.generator.seed(random_device());
 
   // Note that any postordering of the supernodal elimination forest suffices.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     LeftLookingSupernodeUpdate(supernode, &shared_state, &private_state);
-    LeftLookingSupernodeSample(supernode, maximum_likelihood, &sample);
+    LeftLookingSupernodeSample(supernode, maximum_likelihood, &private_state,
+                               &sample);
   }
 
   std::sort(sample.begin(), sample.end());
@@ -657,7 +648,8 @@ void SupernodalDPP<Field>::LeftLookingSubtree(
   LeftLookingSupernodeUpdate(supernode, shared_state, private_state);
 
   std::vector<Int> subsample;
-  LeftLookingSupernodeSample(supernode, maximum_likelihood, &subsample);
+  LeftLookingSupernodeSample(supernode, maximum_likelihood, private_state,
+                             &subsample);
   sample->insert(sample->end(), subsample.begin(), subsample.end());
 }
 
@@ -721,21 +713,8 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedLeftLookingSample(
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   const int max_threads = omp_get_max_threads();
 
-  // Reset the lower factor to all zeros.
-  // TODO(Jack Poulson): Parallelize this.
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    BlasMatrix<Field>& matrix = lower_factor_->blocks[supernode];
-    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
-              Field{0});
-  }
-
-  // Reset the diagonal factor to all zeros.
-  // TODO(Jack Poulson): Parallelize this.
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    BlasMatrix<Field>& matrix = diagonal_factor_->blocks[supernode];
-    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
-              Field{0});
-  }
+  supernodal_ldl::MultithreadedFillZeros(ordering_, lower_factor_.get(),
+                                         diagonal_factor_.get());
 
   // Initialize the factors with the input matrix.
   supernodal_ldl::MultithreadedFillNonzeros(
@@ -749,6 +728,7 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedLeftLookingSample(
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
 
+  std::random_device random_device;
   Buffer<PrivateState> private_states(max_threads);
   for (PrivateState& private_state : private_states) {
     private_state.row_structure.Resize(num_supernodes);
@@ -757,6 +737,7 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedLeftLookingSample(
         max_supernode_size_ * max_supernode_size_, Field{0});
     private_state.workspace_buffer.Resize(
         max_supernode_size_ * (max_supernode_size_ - 1), Field{0});
+    private_state.generator.seed(random_device());
   }
 
   // TODO(Jack Poulson): Make this value configurable.
@@ -786,7 +767,7 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedLeftLookingSample(
       const Int root = ordering_.assembly_forest.roots[root_index];
       std::vector<Int>* subsample = &subsamples[root_index];
       #pragma omp task default(none) firstprivate(level, max_parallel_levels, \
-              maximum_likelihood, root_index, root, subsample)                \
+              maximum_likelihood, root, subsample)                            \
           shared(shared_state, private_states)
       {
         MultithreadedLeftLookingSubtree(level + 1, max_parallel_levels, root,
@@ -891,7 +872,8 @@ void SupernodalDPP<Field>::MergeChildSchurComplements(
 template <class Field>
 void SupernodalDPP<Field>::RightLookingSupernodeSample(
     Int supernode, bool maximum_likelihood,
-    RightLookingSharedState* shared_state, std::vector<Int>* sample) const {
+    RightLookingSharedState* shared_state, PrivateState* private_state,
+    std::vector<Int>* sample) const {
   BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
   BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
@@ -911,9 +893,9 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
   MergeChildSchurComplements(supernode, shared_state);
 
   // Sample and factor the diagonal block.
-  const std::vector<Int> supernode_sample =
-      LowerFactorAndSampleDPP(control_.block_size, maximum_likelihood,
-                              &diagonal_block, &generator_, &unit_uniform_);
+  const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
+      control_.block_size, maximum_likelihood, &diagonal_block,
+      &private_state->generator, &private_state->unit_uniform);
   const Int supernode_start = ordering_.supernode_offsets[supernode];
   for (const Int& index : supernode_sample) {
     const Int orig_row = supernode_start + index;
@@ -981,10 +963,12 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
   #pragma omp taskgroup
   {
     const int thread = omp_get_thread_num();
-    Buffer<Field>* buffer = &(*private_states)[thread].scaled_transpose_buffer;
+    PrivateState& private_state = (*private_states)[thread];
+    Buffer<Field>* buffer = &private_state.scaled_transpose_buffer;
     supernode_sample = MultithreadedLowerFactorAndSampleDPP(
         control_.factor_tile_size, control_.block_size, maximum_likelihood,
-        &diagonal_block, &generator_, &unit_uniform_, buffer);
+        &diagonal_block, &private_state.generator, &private_state.unit_uniform,
+        buffer);
   }
 
   const Int supernode_start = ordering_.supernode_offsets[supernode];
@@ -1010,28 +994,31 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
       control_.outer_product_tile_size, factorization_type,
       diagonal_block.ToConst(), &lower_block);
 
-  // TODO(Jack Poulson): Parallelize remainder of this routine.
-
+  // TODO(Jack Poulson): See if this can be pre-allocated.
   Buffer<Field> scaled_transpose_buffer(degree * supernode_size);
   BlasMatrix<Field> scaled_transpose;
   scaled_transpose.height = supernode_size;
   scaled_transpose.width = degree;
   scaled_transpose.leading_dim = supernode_size;
   scaled_transpose.data = scaled_transpose_buffer.Data();
-  supernodal_ldl::FormScaledTranspose(factorization_type,
-                                      diagonal_block.ToConst(),
-                                      lower_block.ToConst(), &scaled_transpose);
 
-  MatrixMultiplyLowerNormalNormal(Field{-1}, lower_block.ToConst(),
-                                  scaled_transpose.ToConst(), Field{1},
-                                  &schur_complement);
+  #pragma omp taskgroup
+  supernodal_ldl::MultithreadedFormScaledTranspose(
+      control_.outer_product_tile_size, factorization_type,
+      diagonal_block.ToConst(), lower_block.ToConst(), &scaled_transpose);
+
+  #pragma omp taskgroup
+  MultithreadedMatrixMultiplyLowerNormalNormal(
+      control_.outer_product_tile_size, Field{-1}, lower_block.ToConst(),
+      scaled_transpose.ToConst(), Field{1}, &schur_complement);
 }
 #endif  // ifdef _OPENMP
 
 template <class Field>
 void SupernodalDPP<Field>::RightLookingSubtree(
     Int supernode, bool maximum_likelihood,
-    RightLookingSharedState* shared_state, std::vector<Int>* sample) const {
+    RightLookingSharedState* shared_state, PrivateState* private_state,
+    std::vector<Int>* sample) const {
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
@@ -1041,12 +1028,13 @@ void SupernodalDPP<Field>::RightLookingSubtree(
         ordering_.assembly_forest.children[child_beg + child_index];
     CATAMARI_ASSERT(ordering_.assembly_forest.parents[child] == supernode,
                     "Incorrect child index");
-    RightLookingSubtree(child, maximum_likelihood, shared_state, sample);
+    RightLookingSubtree(child, maximum_likelihood, shared_state, private_state,
+                        sample);
   }
 
   std::vector<Int> subsample;
   RightLookingSupernodeSample(supernode, maximum_likelihood, shared_state,
-                              &subsample);
+                              private_state, &subsample);
   sample->insert(sample->end(), subsample.begin(), subsample.end());
 }
 
@@ -1057,7 +1045,10 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSubtree(
     RightLookingSharedState* shared_state, Buffer<PrivateState>* private_states,
     std::vector<Int>* sample) const {
   if (level >= max_parallel_levels) {
-    RightLookingSubtree(supernode, maximum_likelihood, shared_state, sample);
+    const int thread = omp_get_thread_num();
+    PrivateState& private_state = (*private_states)[thread];
+    RightLookingSubtree(supernode, maximum_likelihood, shared_state,
+                        &private_state, sample);
     return;
   }
 
@@ -1079,8 +1070,8 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSubtree(
     std::vector<Int>* subsample = &subsamples[child_index];
 
     #pragma omp task default(none) firstprivate(child, level, \
-        max_parallel_levels, maximum_likelihood)              \
-        shared(shared_state, private_states, subsample)
+        max_parallel_levels, maximum_likelihood, subsample)   \
+        shared(shared_state, private_states)
     MultithreadedRightLookingSubtree(level + 1, max_parallel_levels, child,
                                      maximum_likelihood, shared_state,
                                      private_states, subsample);
@@ -1106,19 +1097,8 @@ std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
 
-  // Reset the lower factor to all zeros.
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    BlasMatrix<Field>& matrix = lower_factor_->blocks[supernode];
-    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
-              Field{0});
-  }
-
-  // Reset the diagonal factor to all zeros.
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    BlasMatrix<Field>& matrix = diagonal_factor_->blocks[supernode];
-    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
-              Field{0});
-  }
+  supernodal_ldl::FillZeros(ordering_, lower_factor_.get(),
+                            diagonal_factor_.get());
 
   // Initialize the factors with the input matrix.
   supernodal_ldl::FillNonzeros(matrix_, ordering_, supernode_member_to_index_,
@@ -1131,9 +1111,15 @@ std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
   shared_state.schur_complement_buffers.Resize(num_supernodes);
   shared_state.schur_complements.Resize(num_supernodes);
 
+  // We only need the random number generator.
+  std::random_device random_device;
+  PrivateState private_state;
+  private_state.generator.seed(random_device());
+
   for (Int root_index = 0; root_index < num_roots; ++root_index) {
     const Int root = ordering_.assembly_forest.roots[root_index];
-    RightLookingSubtree(root, maximum_likelihood, &shared_state, &sample);
+    RightLookingSubtree(root, maximum_likelihood, &shared_state, &private_state,
+                        &sample);
   }
 
   std::sort(sample.begin(), sample.end());
@@ -1149,21 +1135,8 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedRightLookingSample(
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
 
-  // Reset the lower factor to all zeros.
-  // TODO(Jack Poulson): Parallelize this.
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    BlasMatrix<Field>& matrix = lower_factor_->blocks[supernode];
-    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
-              Field{0});
-  }
-
-  // Reset the diagonal factor to all zeros.
-  // TODO(Jack Poulson): Parallelize this.
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    BlasMatrix<Field>& matrix = diagonal_factor_->blocks[supernode];
-    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
-              Field{0});
-  }
+  supernodal_ldl::MultithreadedFillZeros(ordering_, lower_factor_.get(),
+                                         diagonal_factor_.get());
 
   // Initialize the factors with the input matrix.
   supernodal_ldl::MultithreadedFillNonzeros(
@@ -1184,16 +1157,27 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedRightLookingSample(
 
   const Int level = 0;
   if (max_parallel_levels == 0) {
+    // We only need the random number generator.
+    std::random_device random_device;
+    PrivateState private_state;
+    // TODO(Jack Poulson): Use RUNNING_ON_VALGRIND to change seeding
+    // mechanism.
+    private_state.generator.seed(random_device());
+
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
-      RightLookingSubtree(root, maximum_likelihood, &shared_state, &sample);
+      RightLookingSubtree(root, maximum_likelihood, &shared_state,
+                          &private_state, &sample);
     }
   } else {
+    std::random_device random_device;
     Buffer<PrivateState> private_states(max_threads);
-    for (int t = 0; t < max_threads; ++t) {
-      // HERE
-      private_states[t].scaled_transpose_buffer.Resize(
+    for (PrivateState& private_state : private_states) {
+      private_state.scaled_transpose_buffer.Resize(
           max_supernode_size_ * max_supernode_size_, Field{0});
+      // TODO(Jack Poulson): Use RUNNING_ON_VALGRIND to change seeding
+      // mechanism.
+      private_state.generator.seed(random_device());
     }
 
     const int old_max_threads = GetMaxBlasThreads();
@@ -1212,8 +1196,8 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedRightLookingSample(
       std::vector<Int>* subsample = &subsamples[root_index];
 
       #pragma omp task default(none) firstprivate(root, level, \
-          max_parallel_levels, maximum_likelihood)             \
-          shared(shared_state, private_states, subsample)
+          max_parallel_levels, maximum_likelihood, subsample)  \
+          shared(shared_state, private_states)
       MultithreadedRightLookingSubtree(level + 1, max_parallel_levels, root,
                                        maximum_likelihood, &shared_state,
                                        &private_states, subsample);

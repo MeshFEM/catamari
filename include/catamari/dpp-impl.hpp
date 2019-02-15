@@ -50,8 +50,8 @@ DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
     }
   }
 
-  supernodal_dpp_.reset(new SupernodalDPP<Field>(
-      matrix, ordering, control.supernodal_control, control.random_seed));
+  supernodal_dpp_.reset(
+      new SupernodalDPP<Field>(matrix, ordering, control.supernodal_control));
 }
 
 template <class Field>

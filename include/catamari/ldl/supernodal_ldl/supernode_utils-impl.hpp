@@ -1319,6 +1319,67 @@ void MultithreadedFillNonzeros(const CoordinateMatrix<Field>& matrix,
 #endif  // ifdef _OPENMP
 
 template <class Field>
+void FillZeros(const SymmetricOrdering& ordering,
+               LowerFactor<Field>* lower_factor,
+               DiagonalFactor<Field>* diagonal_factor) {
+  const Int num_supernodes = diagonal_factor->blocks.Size();
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    BlasMatrix<Field>& diagonal_block = diagonal_factor->blocks[supernode];
+    std::fill(
+        diagonal_block.data,
+        diagonal_block.data + diagonal_block.leading_dim * diagonal_block.width,
+        Field{0});
+
+    BlasMatrix<Field>& lower_block = lower_factor->blocks[supernode];
+    std::fill(lower_block.data,
+              lower_block.data + lower_block.leading_dim * lower_block.width,
+              Field{0});
+  }
+}
+
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedFillZerosRecursion(const SymmetricOrdering& ordering,
+                                     Int root, LowerFactor<Field>* lower_factor,
+                                     DiagonalFactor<Field>* diagonal_factor) {
+  const Int child_beg = ordering.assembly_forest.child_offsets[root];
+  const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
+  #pragma omp taskgroup
+  for (Int child_index = child_beg; child_index < child_end; ++child_index) {
+    const Int child = ordering.assembly_forest.children[child_index];
+    #pragma omp task default(none) firstprivate(child) \
+        shared(ordering, lower_factor, diagonal_factor)
+    MultithreadedFillZerosRecursion(ordering, child, lower_factor,
+                                    diagonal_factor);
+  }
+
+  BlasMatrix<Field>& diagonal_block = diagonal_factor->blocks[root];
+  std::fill(
+      diagonal_block.data,
+      diagonal_block.data + diagonal_block.leading_dim * diagonal_block.width,
+      Field{0});
+
+  BlasMatrix<Field>& lower_block = lower_factor->blocks[root];
+  std::fill(lower_block.data,
+            lower_block.data + lower_block.leading_dim * lower_block.width,
+            Field{0});
+}
+
+template <class Field>
+void MultithreadedFillZeros(const SymmetricOrdering& ordering,
+                            LowerFactor<Field>* lower_factor,
+                            DiagonalFactor<Field>* diagonal_factor) {
+  #pragma omp taskgroup
+  for (const Int root : ordering.assembly_forest.roots) {
+    #pragma omp task default(none) firstprivate(root) \
+        shared(ordering, lower_factor, diagonal_factor)
+    MultithreadedFillZerosRecursion(ordering, root, lower_factor,
+                                    diagonal_factor);
+  }
+}
+#endif  // ifdef _OPENMP
+
+template <class Field>
 Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
                       const Buffer<Int>& permutation,
                       const Buffer<Int>& inverse_permutation,

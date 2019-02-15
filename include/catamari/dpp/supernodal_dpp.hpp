@@ -52,7 +52,7 @@ class SupernodalDPP {
  public:
   SupernodalDPP(const CoordinateMatrix<Field>& matrix,
                 const SymmetricOrdering& ordering,
-                const SupernodalDPPControl& control, unsigned int random_seed);
+                const SupernodalDPPControl& control);
 
   // Return a sample from the DPP. If 'maximum_likelihood' is true, then each
   // pivot is kept based upon which choice is most likely.
@@ -96,6 +96,12 @@ class SupernodalDPP {
 
     // A buffer for storing updates to the current supernode column.
     Buffer<Field> workspace_buffer;
+
+    // A random number generator.
+    std::mt19937 generator;
+
+    // A random number generator over
+    std::uniform_real_distribution<Real> unit_uniform{Real{0}, Real{1}};
   };
 
   // A copy of the input matrix.
@@ -127,12 +133,6 @@ class SupernodalDPP {
 
   // The controls tructure for the DPP sampler.
   const SupernodalDPPControl control_;
-
-  // A random number generator.
-  mutable std::mt19937 generator_;
-
-  // A uniform distribution over [0, 1].
-  mutable std::uniform_real_distribution<Real> unit_uniform_;
 
   void FormSupernodes();
 
@@ -180,6 +180,7 @@ class SupernodalDPP {
 
   // Appends a supernode's contribution to the current sample.
   void LeftLookingSupernodeSample(Int main_supernode, bool maximum_likelihood,
+                                  PrivateState* private_state,
                                   std::vector<Int>* sample) const;
 
 #ifdef _OPENMP
@@ -207,6 +208,7 @@ class SupernodalDPP {
 
   void RightLookingSubtree(Int supernode, bool maximum_likelihood,
                            RightLookingSharedState* shared_state,
+                           PrivateState* private_state,
                            std::vector<Int>* sample) const;
 
 #ifdef _OPENMP
@@ -219,6 +221,7 @@ class SupernodalDPP {
 
   void RightLookingSupernodeSample(Int supernode, bool maximum_likelihood,
                                    RightLookingSharedState* shared_state,
+                                   PrivateState* private_state,
                                    std::vector<Int>* sample) const;
 
 #ifdef _OPENMP

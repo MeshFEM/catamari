@@ -256,7 +256,7 @@ Int MultithreadedLowerCholeskyFactorization(Int tile_size, Int block_size,
     #pragma omp taskgroup
     #pragma omp task default(none) firstprivate(block_size, diagonal_block) \
         shared(num_pivots, failed_pivot)                                    \
-        depend(in: matrix_data[i + i * leading_dim])
+        depend(inout: matrix_data[i + i * leading_dim])
     {
       const Int num_diag_pivots =
           LowerCholeskyFactorization(block_size, &diagonal_block);
@@ -445,7 +445,7 @@ Int MultithreadedLowerLDLAdjointFactorization(Int tile_size, Int block_size,
     #pragma omp task default(none)               \
         firstprivate(block_size, diagonal_block) \
         shared(num_pivots, failed_pivot) \
-        depend(in: matrix_data[i + i * leading_dim])
+        depend(inout: matrix_data[i + i * leading_dim])
     {
       const Int num_diag_pivots =
           LowerLDLAdjointFactorization(block_size, &diagonal_block);
@@ -650,7 +650,7 @@ Int MultithreadedLowerLDLTransposeFactorization(Int tile_size, Int block_size,
     #pragma omp task default(none)               \
         firstprivate(block_size, diagonal_block) \
         shared(num_pivots, failed_pivot)         \
-        depend(in: matrix_data[i + i * leading_dim])
+        depend(inout: matrix_data[i + i * leading_dim])
     {
       const Int num_diag_pivots =
           LowerLDLTransposeFactorization(block_size, &diagonal_block);
@@ -873,23 +873,26 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
   Field* const matrix_data CATAMARI_UNUSED = matrix->data;
 
   std::vector<Int> block_sample;
+
+  std::vector<Int>* sample_ptr = &sample;
+  std::vector<Int>* block_sample_ptr = &block_sample;
+
   for (Int i = 0; i < height; i += tile_size) {
     const Int tsize = std::min(height - i, tile_size);
 
     // Overwrite the diagonal block with its LDL' factorization.
     BlasMatrix<Field> diagonal_block = matrix->Submatrix(i, i, tsize, tsize);
     #pragma omp taskgroup
-    #pragma omp task default(none)                                  \
-        firstprivate(block_size, i, diagonal_block)                 \
-        shared(sample, block_sample, maximum_likelihood, generator, \
-            uniform_dist)                                           \
-        depend(in: matrix_data[i + i * leading_dim])
+    #pragma omp task default(none)                                      \
+        firstprivate(block_size, i, diagonal_block, maximum_likelihood, \
+            generator, uniform_dist, sample_ptr, block_sample_ptr)      \
+        depend(inout: matrix_data[i + i * leading_dim])
     {
-      block_sample = LowerBlockedFactorAndSampleDPP(
+      *block_sample_ptr = LowerBlockedFactorAndSampleDPP(
           block_size, maximum_likelihood, &diagonal_block, generator,
           uniform_dist);
-      for (const Int& index : block_sample) {
-        sample.push_back(i + index);
+      for (const Int& index : *block_sample_ptr) {
+        sample_ptr->push_back(i + index);
       }
     }
     if (height == i + tsize) {

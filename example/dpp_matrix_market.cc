@@ -264,8 +264,6 @@ int main(int argc, char** argv) {
       "determining if a row is dense. The actual threshold will be: "
       "max(min_dense_threshold, dense_sqrt_multiple * sqrt(n))",
       10.f);
-  const unsigned int random_seed = parser.OptionalInput<unsigned int>(
-      "random_seed", "Seed for random number generator.", 17);
   const bool force_symmetry = parser.OptionalInput<bool>(
       "force_symmetry", "Use the nonzero pattern of A + A'?", true);
   const bool relax_supernodes = parser.OptionalInput<bool>(
@@ -320,7 +318,6 @@ int main(int argc, char** argv) {
 #endif
 
   catamari::DPPControl dpp_control;
-  dpp_control.random_seed = random_seed;
   dpp_control.md_control.degree_type =
       static_cast<quotient::DegreeType>(degree_type_int);
   dpp_control.md_control.aggressive_absorption = aggressive_absorption;

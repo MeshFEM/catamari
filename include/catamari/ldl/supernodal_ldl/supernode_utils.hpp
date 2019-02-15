@@ -201,6 +201,19 @@ void MultithreadedFillNonzeros(const CoordinateMatrix<Field>& matrix,
                                DiagonalFactor<Field>* diagonal_factor);
 #endif  // ifdef _OPENMP
 
+// Explicitly fill the factorization blocks with zeros.
+template <class Field>
+void FillZeros(const SymmetricOrdering& ordering,
+               LowerFactor<Field>* lower_factor,
+               DiagonalFactor<Field>* diagonal_factor);
+
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedFillZeros(const SymmetricOrdering& ordering,
+                            LowerFactor<Field>* lower_factor,
+                            DiagonalFactor<Field>* diagonal_factor);
+#endif  // ifdef _OPENMP
+
 // Computes the supernodal nonzero pattern of L(row, :) in
 // row_structure[0 : num_packed - 1].
 template <class Field>

@@ -615,6 +615,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
     LowerNormalHermitianOuterProduct(Real{-1}, lower_block.ToConst(), Real{1},
                                      &schur_complement);
   } else {
+    // TODO(Jack Poulson): See if this can be preallocated.
     Buffer<Field> scaled_transpose_buffer(degree * supernode_size);
     BlasMatrix<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;
@@ -691,6 +692,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
         outer_product_tile_size_, Real{-1}, lower_block.ToConst(), Real{1},
         &schur_complement);
   } else {
+    // TODO(Jack Poulson): See if this can be preallocated.
     Buffer<Field> scaled_transpose_buffer(degree * supernode_size);
     BlasMatrix<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;

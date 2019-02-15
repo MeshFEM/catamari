@@ -208,8 +208,6 @@ int main(int argc, char** argv) {
       "missing_char", "ASCII display for missing index.", ' ');
   const char sampled_char = parser.OptionalInput<char>(
       "sampled_char", "ASCII display for sampled index.", 'x');
-  const unsigned int random_seed = parser.OptionalInput<unsigned int>(
-      "random_seed", "Seed for random number generator.", 17);
   const bool relax_supernodes = parser.OptionalInput<bool>(
       "relax_supernodes", "Relax the supernodes?", true);
   const Int allowable_supernode_zeros =
@@ -227,7 +225,6 @@ int main(int argc, char** argv) {
   }
 
   catamari::DPPControl dpp_control;
-  dpp_control.random_seed = random_seed;
   dpp_control.supernodal_control.relaxation_control.relax_supernodes =
       relax_supernodes;
   dpp_control.supernodal_control.relaxation_control.allowable_supernode_zeros =

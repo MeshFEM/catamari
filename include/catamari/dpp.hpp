@@ -8,15 +8,12 @@
 #ifndef CATAMARI_DPP_H_
 #define CATAMARI_DPP_H_
 
-#include <random>
-
 #include "catamari/dpp/supernodal_dpp.hpp"
 #include "quotient/minimum_degree.hpp"
 
 namespace catamari {
 
 struct DPPControl {
-  unsigned int random_seed = 17;
   quotient::MinimumDegreeControl md_control;
   SupernodalDPPControl supernodal_control;
 };
