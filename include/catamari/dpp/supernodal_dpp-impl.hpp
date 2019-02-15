@@ -208,6 +208,11 @@ std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
 #endif  // ifdef _OPENMP
     return LeftLookingSample(maximum_likelihood);
   } else {
+#ifdef _OPENMP
+    if (omp_get_max_threads() > 1) {
+      return MultithreadedRightLookingSample(maximum_likelihood);
+    }
+#endif
     return RightLookingSample(maximum_likelihood);
   }
 }
@@ -686,11 +691,9 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSubtree(
         firstprivate(level, max_parallel_levels, supernode,       \
             maximum_likelihood, child_index, child, shared_state, \
             private_states, subsample)
-    {
-      MultithreadedLeftLookingSubtree(level + 1, max_parallel_levels, child,
-                                      maximum_likelihood, shared_state,
-                                      private_states, subsample);
-    }
+    MultithreadedLeftLookingSubtree(level + 1, max_parallel_levels, child,
+                                    maximum_likelihood, shared_state,
+                                    private_states, subsample);
   }
 
   // Merge the subsamples into the current sample.
@@ -941,10 +944,89 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
   supernodal_ldl::FormScaledTranspose(factorization_type,
                                       diagonal_block.ToConst(),
                                       lower_block.ToConst(), &scaled_transpose);
+
   MatrixMultiplyLowerNormalNormal(Field{-1}, lower_block.ToConst(),
                                   scaled_transpose.ToConst(), Field{1},
                                   &schur_complement);
 }
+
+#ifdef _OPENMP
+template <class Field>
+void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
+    Int supernode, bool maximum_likelihood,
+    RightLookingSharedState* shared_state, Buffer<PrivateState>* private_states,
+    std::vector<Int>* sample) const {
+  BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
+  const Int degree = lower_block.height;
+  const Int supernode_size = lower_block.width;
+
+  // Initialize this supernode's Schur complement as the zero matrix.
+  Buffer<Field>& schur_complement_buffer =
+      shared_state->schur_complement_buffers[supernode];
+  BlasMatrix<Field>& schur_complement =
+      shared_state->schur_complements[supernode];
+  schur_complement_buffer.Resize(degree * degree, Field{0});
+  schur_complement.height = degree;
+  schur_complement.width = degree;
+  schur_complement.leading_dim = degree;
+  schur_complement.data = schur_complement_buffer.Data();
+
+  // MultithreadedMergeChildSchurComplements(supernode, shared_state);
+  // TODO(Jack Poulson): Use a parallel merge.
+  MergeChildSchurComplements(supernode, shared_state);
+
+  // Sample and factor the diagonal block.
+  std::vector<Int> supernode_sample;
+  #pragma omp taskgroup
+  {
+    const int thread = omp_get_thread_num();
+    Buffer<Field>* buffer = &(*private_states)[thread].scaled_transpose_buffer;
+    supernode_sample = MultithreadedLowerFactorAndSampleDPP(
+        control_.factor_tile_size, control_.block_size, maximum_likelihood,
+        &diagonal_block, &generator_, &unit_uniform_, buffer);
+  }
+
+  const Int supernode_start = ordering_.supernode_offsets[supernode];
+  for (const Int& index : supernode_sample) {
+    const Int orig_row = supernode_start + index;
+    if (ordering_.inverse_permutation.Empty()) {
+      sample->push_back(orig_row);
+    } else {
+      sample->push_back(ordering_.inverse_permutation[orig_row]);
+    }
+  }
+
+  if (!degree) {
+    // We can early exit.
+    return;
+  }
+
+  CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
+  const SymmetricFactorizationType factorization_type =
+      kLDLAdjointFactorization;
+  #pragma omp taskgroup
+  supernodal_ldl::MultithreadedSolveAgainstDiagonalBlock(
+      control_.outer_product_tile_size, factorization_type,
+      diagonal_block.ToConst(), &lower_block);
+
+  // TODO(Jack Poulson): Parallelize remainder of this routine.
+
+  Buffer<Field> scaled_transpose_buffer(degree * supernode_size);
+  BlasMatrix<Field> scaled_transpose;
+  scaled_transpose.height = supernode_size;
+  scaled_transpose.width = degree;
+  scaled_transpose.leading_dim = supernode_size;
+  scaled_transpose.data = scaled_transpose_buffer.Data();
+  supernodal_ldl::FormScaledTranspose(factorization_type,
+                                      diagonal_block.ToConst(),
+                                      lower_block.ToConst(), &scaled_transpose);
+
+  MatrixMultiplyLowerNormalNormal(Field{-1}, lower_block.ToConst(),
+                                  scaled_transpose.ToConst(), Field{1},
+                                  &schur_complement);
+}
+#endif  // ifdef _OPENMP
 
 template <class Field>
 void SupernodalDPP<Field>::RightLookingSubtree(
@@ -968,18 +1050,101 @@ void SupernodalDPP<Field>::RightLookingSubtree(
   sample->insert(sample->end(), subsample.begin(), subsample.end());
 }
 
+#ifdef _OPENMP
+template <class Field>
+void SupernodalDPP<Field>::MultithreadedRightLookingSubtree(
+    Int level, Int max_parallel_levels, Int supernode, bool maximum_likelihood,
+    RightLookingSharedState* shared_state, Buffer<PrivateState>* private_states,
+    std::vector<Int>* sample) const {
+  if (level >= max_parallel_levels) {
+    RightLookingSubtree(supernode, maximum_likelihood, shared_state, sample);
+    return;
+  }
+
+  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+
+  // NOTE: We could alternatively avoid switch to maintaining a single, shared
+  // boolean list of length 'num_rows' which flags each entry as 'in' or
+  // 'out' of the sample.
+  Buffer<std::vector<Int>> subsamples(num_children);
+
+  #pragma omp taskgroup
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering_.assembly_forest.children[child_beg + child_index];
+    CATAMARI_ASSERT(ordering_.assembly_forest.parents[child] == supernode,
+                    "Incorrect child index");
+    std::vector<Int>* subsample = &subsamples[child_index];
+
+    #pragma omp task default(none) firstprivate(child, level, \
+        max_parallel_levels, maximum_likelihood)              \
+        shared(shared_state, private_states, subsample)
+    MultithreadedRightLookingSubtree(level + 1, max_parallel_levels, child,
+                                     maximum_likelihood, shared_state,
+                                     private_states, subsample);
+  }
+
+  // Merge the subsamples into the current sample.
+  for (const std::vector<Int>& subsample : subsamples) {
+    sample->insert(sample->end(), subsample.begin(), subsample.end());
+  }
+
+  std::vector<Int> subsample;
+  #pragma omp taskgroup
+  MultithreadedRightLookingSupernodeSample(
+      supernode, maximum_likelihood, shared_state, private_states, &subsample);
+  sample->insert(sample->end(), subsample.begin(), subsample.end());
+}
+#endif  // ifdef _OPENMP
+
 template <class Field>
 std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
     bool maximum_likelihood) const {
-  // DO_NOT_SUBMIT
-  /*
-#ifdef _OPENMP
-  if (omp_get_max_threads() > 1) {
-    return MultithreadedRightLooking(maximum_likelihood);
-  }
-#endif
-  */
+  const Int num_rows = matrix_.NumRows();
+  const Int num_supernodes = ordering_.supernode_sizes.Size();
+  const Int num_roots = ordering_.assembly_forest.roots.Size();
 
+  // Reset the lower factor to all zeros.
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    BlasMatrix<Field>& matrix = lower_factor_->blocks[supernode];
+    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
+              Field{0});
+  }
+
+  // Reset the diagonal factor to all zeros.
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    BlasMatrix<Field>& matrix = diagonal_factor_->blocks[supernode];
+    std::fill(matrix.data, matrix.data + matrix.leading_dim * matrix.width,
+              Field{0});
+  }
+
+  // Initialize the factors with the input matrix.
+  supernodal_ldl::FillNonzeros(matrix_, ordering_, supernode_member_to_index_,
+                               lower_factor_.get(), diagonal_factor_.get());
+
+  std::vector<Int> sample;
+  sample.reserve(num_rows);
+
+  RightLookingSharedState shared_state;
+  shared_state.schur_complement_buffers.Resize(num_supernodes);
+  shared_state.schur_complements.Resize(num_supernodes);
+
+  for (Int root_index = 0; root_index < num_roots; ++root_index) {
+    const Int root = ordering_.assembly_forest.roots[root_index];
+    RightLookingSubtree(root, maximum_likelihood, &shared_state, &sample);
+  }
+
+  std::sort(sample.begin(), sample.end());
+
+  return sample;
+}
+
+#ifdef _OPENMP
+template <class Field>
+std::vector<Int> SupernodalDPP<Field>::MultithreadedRightLookingSample(
+    bool maximum_likelihood) const {
   const Int num_rows = matrix_.NumRows();
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
@@ -1012,15 +1177,61 @@ std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
   shared_state.schur_complement_buffers.Resize(num_supernodes);
   shared_state.schur_complements.Resize(num_supernodes);
 
-  for (Int root_index = 0; root_index < num_roots; ++root_index) {
-    const Int root = ordering_.assembly_forest.roots[root_index];
-    RightLookingSubtree(root, maximum_likelihood, &shared_state, &sample);
+  const int max_threads = omp_get_max_threads();
+
+  // TODO(Jack Poulson): Make this valuable configurable.
+  const int max_parallel_levels = std::ceil(std::log2(max_threads)) + 3;
+
+  const Int level = 0;
+  if (max_parallel_levels == 0) {
+    for (Int root_index = 0; root_index < num_roots; ++root_index) {
+      const Int root = ordering_.assembly_forest.roots[root_index];
+      RightLookingSubtree(root, maximum_likelihood, &shared_state, &sample);
+    }
+  } else {
+    Buffer<PrivateState> private_states(max_threads);
+    for (int t = 0; t < max_threads; ++t) {
+      // HERE
+      private_states[t].scaled_transpose_buffer.Resize(
+          max_supernode_size_ * max_supernode_size_, Field{0});
+    }
+
+    const int old_max_threads = GetMaxBlasThreads();
+    SetNumBlasThreads(1);
+
+    // NOTE: We could alternatively avoid switch to maintaining a single, shared
+    // boolean list of length 'num_rows' which flags each entry as 'in' or
+    // 'out' of the sample.
+    Buffer<std::vector<Int>> subsamples(num_roots);
+
+    #pragma omp parallel
+    #pragma omp single
+    #pragma omp taskgroup
+    for (Int root_index = 0; root_index < num_roots; ++root_index) {
+      const Int root = ordering_.assembly_forest.roots[root_index];
+      std::vector<Int>* subsample = &subsamples[root_index];
+
+      #pragma omp task default(none) firstprivate(root, level, \
+          max_parallel_levels, maximum_likelihood)             \
+          shared(shared_state, private_states, subsample)
+      MultithreadedRightLookingSubtree(level + 1, max_parallel_levels, root,
+                                       maximum_likelihood, &shared_state,
+                                       &private_states, subsample);
+    }
+
+    // Merge the subsamples into the current sample.
+    for (const std::vector<Int>& subsample : subsamples) {
+      sample.insert(sample.end(), subsample.begin(), subsample.end());
+    }
+
+    SetNumBlasThreads(old_max_threads);
   }
 
   std::sort(sample.begin(), sample.end());
 
   return sample;
 }
+#endif  // ifdef _OPENMP
 
 }  // namespace catamari
 

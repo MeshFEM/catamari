@@ -793,8 +793,7 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
-    #pragma omp task                                                          \
-      default(none)                                                           \
+    #pragma omp task default(none)                                            \
       firstprivate(level, max_parallel_levels, supernode, child, child_index, \
           shared_state)                                                       \
       shared(successes, matrix, result_contributions, work_estimates)
@@ -1289,8 +1288,8 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
     #pragma omp taskgroup
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
-      #pragma omp task default(none) firstprivate(root_index, root)     \
-          shared(successes, matrix, result_contributions, shared_state, \
+      #pragma omp task default(none) firstprivate(root_index, root, level) \
+          shared(successes, matrix, result_contributions, shared_state,    \
               private_states)
       {
         LDLResult& result_contribution = result_contributions[root_index];
@@ -1389,9 +1388,8 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
       //
       //   const Int task_priority = std::pow(work_estimates[child], 0.25);
       //
-      #pragma omp task                                                  \
-          default(none) firstprivate(root, root_index)                  \
-          shared(successes, matrix, result_contributions, shared_state, \
+      #pragma omp task default(none) firstprivate(root, root_index, level) \
+          shared(successes, matrix, result_contributions, shared_state,    \
               work_estimates)
       {
         LDLResult& result_contribution = result_contributions[root_index];

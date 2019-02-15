@@ -191,17 +191,42 @@ class SupernodalDPP {
   // Return a sample from the DPP using a right-looking algorithm.
   std::vector<Int> RightLookingSample(bool maximum_likelihood) const;
 
+#ifdef _OPENMP
+  std::vector<Int> MultithreadedRightLookingSample(
+      bool maximum_likelihood) const;
+#endif  // ifdef _OPENMP
+
   // TODO(Jack Poulson): Avoid duplication with LDL.
   void MergeChildSchurComplements(Int supernode,
                                   RightLookingSharedState* shared_state) const;
+
+#ifdef _OPENMP
+  void MultithreadedMergeChildSchurComplements(
+      Int supernode, RightLookingSharedState* shared_state) const;
+#endif  // ifdef _OPENMP
 
   void RightLookingSubtree(Int supernode, bool maximum_likelihood,
                            RightLookingSharedState* shared_state,
                            std::vector<Int>* sample) const;
 
+#ifdef _OPENMP
+  void MultithreadedRightLookingSubtree(Int level, Int max_parallel_levels,
+                                        Int supernode, bool maximum_likelihood,
+                                        RightLookingSharedState* shared_state,
+                                        Buffer<PrivateState>* private_states,
+                                        std::vector<Int>* sample) const;
+#endif  // ifdef _OPENMP
+
   void RightLookingSupernodeSample(Int supernode, bool maximum_likelihood,
                                    RightLookingSharedState* shared_state,
                                    std::vector<Int>* sample) const;
+
+#ifdef _OPENMP
+  void MultithreadedRightLookingSupernodeSample(
+      Int supernode, bool maximum_likelihood,
+      RightLookingSharedState* shared_state,
+      Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;
+#endif  // ifdef _OPENMP
 };
 
 }  // namespace catamari
