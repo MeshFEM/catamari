@@ -61,41 +61,8 @@ class SupernodalDPP {
  private:
   typedef ComplexBase<Field> Real;
 
-  struct LeftLookingSharedState {
-    // The relative index of the active supernode within each supernode's
-    // structure.
-    Buffer<Int> rel_rows;
-
-    // Pointers to the active supernode intersection size within each
-    // supernode's structure.
-    Buffer<const Int*> intersect_ptrs;
-  };
-
-  struct RightLookingSharedState {
-    // The Schur complement matrices for each of the supernodes in the
-    // multifrontal method. Each front should only be allocated while it is
-    // actively in use.
-    Buffer<BlasMatrix<Field>> schur_complements;
-
-    // The underlying buffers for the Schur complement portions of the fronts.
-    // They are allocated and deallocated as the factorization progresses.
-    Buffer<Buffer<Field>> schur_complement_buffers;
-  };
-
   struct PrivateState {
-    // An integer workspace for storing the supernodes in the current row
-    // pattern.
-    Buffer<Int> row_structure;
-
-    // A data structure for marking whether or not a supernode is in the pattern
-    // of the active row of the lower-triangular factor.
-    Buffer<Int> pattern_flags;
-
-    // A buffer for storing (scaled) transposed descendant blocks.
-    Buffer<Field> scaled_transpose_buffer;
-
-    // A buffer for storing updates to the current supernode column.
-    Buffer<Field> workspace_buffer;
+    supernodal_ldl::PrivateState<Field> ldl_state;
 
     // A random number generator.
     std::mt19937 generator;
@@ -156,25 +123,25 @@ class SupernodalDPP {
 
 #ifdef _OPENMP
   void LeftLookingSubtree(Int supernode, bool maximum_likelihood,
-                          LeftLookingSharedState* shared_state,
+                          supernodal_ldl::LeftLookingSharedState* shared_state,
                           PrivateState* private_state,
                           std::vector<Int>* sample) const;
 
-  void MultithreadedLeftLookingSubtree(Int level, Int max_parallel_levels,
-                                       Int supernode, bool maximum_likelihood,
-                                       LeftLookingSharedState* shared_state,
-                                       Buffer<PrivateState>* private_states,
-                                       std::vector<Int>* subsample) const;
+  void MultithreadedLeftLookingSubtree(
+      Int level, Int max_parallel_levels, Int supernode,
+      bool maximum_likelihood,
+      supernodal_ldl::LeftLookingSharedState* shared_state,
+      Buffer<PrivateState>* private_states, std::vector<Int>* subsample) const;
 #endif  // ifdef _OPENMP
 
   // Updates a supernode using its descendants.
-  void LeftLookingSupernodeUpdate(Int main_supernode,
-                                  LeftLookingSharedState* shared_state,
-                                  PrivateState* private_state) const;
+  void LeftLookingSupernodeUpdate(
+      Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
+      PrivateState* private_state) const;
 
 #ifdef _OPENMP
   void MultithreadedLeftLookingSupernodeUpdate(
-      Int main_supernode, LeftLookingSharedState* shared_state,
+      Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
       Buffer<PrivateState>* private_states) const;
 #endif  // ifdef _OPENMP
 
@@ -197,37 +164,28 @@ class SupernodalDPP {
       bool maximum_likelihood) const;
 #endif  // ifdef _OPENMP
 
-  // TODO(Jack Poulson): Avoid duplication with LDL.
-  void MergeChildSchurComplements(Int supernode,
-                                  RightLookingSharedState* shared_state) const;
+  void RightLookingSubtree(
+      Int supernode, bool maximum_likelihood,
+      supernodal_ldl::RightLookingSharedState<Field>* shared_state,
+      PrivateState* private_state, std::vector<Int>* sample) const;
 
 #ifdef _OPENMP
-  void MultithreadedMergeChildSchurComplements(
-      Int supernode, RightLookingSharedState* shared_state) const;
+  void MultithreadedRightLookingSubtree(
+      Int level, Int max_parallel_levels, Int supernode,
+      bool maximum_likelihood,
+      supernodal_ldl::RightLookingSharedState<Field>* shared_state,
+      Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;
 #endif  // ifdef _OPENMP
 
-  void RightLookingSubtree(Int supernode, bool maximum_likelihood,
-                           RightLookingSharedState* shared_state,
-                           PrivateState* private_state,
-                           std::vector<Int>* sample) const;
-
-#ifdef _OPENMP
-  void MultithreadedRightLookingSubtree(Int level, Int max_parallel_levels,
-                                        Int supernode, bool maximum_likelihood,
-                                        RightLookingSharedState* shared_state,
-                                        Buffer<PrivateState>* private_states,
-                                        std::vector<Int>* sample) const;
-#endif  // ifdef _OPENMP
-
-  void RightLookingSupernodeSample(Int supernode, bool maximum_likelihood,
-                                   RightLookingSharedState* shared_state,
-                                   PrivateState* private_state,
-                                   std::vector<Int>* sample) const;
+  void RightLookingSupernodeSample(
+      Int supernode, bool maximum_likelihood,
+      supernodal_ldl::RightLookingSharedState<Field>* shared_state,
+      PrivateState* private_state, std::vector<Int>* sample) const;
 
 #ifdef _OPENMP
   void MultithreadedRightLookingSupernodeSample(
       Int supernode, bool maximum_likelihood,
-      RightLookingSharedState* shared_state,
+      supernodal_ldl::RightLookingSharedState<Field>* shared_state,
       Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;
 #endif  // ifdef _OPENMP
 };

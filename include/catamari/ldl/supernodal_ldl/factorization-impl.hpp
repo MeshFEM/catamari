@@ -226,7 +226,7 @@ void Factorization<Field>::MultithreadedInitializeFactors(
 template <class Field>
 void Factorization<Field>::LeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
-    LeftLookingSharedState* shared_state, PrivateState* private_state) {
+    LeftLookingSharedState* shared_state, PrivateState<Field>* private_state) {
   BlasMatrix<Field>& main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
   BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
@@ -389,7 +389,7 @@ LDLResult Factorization<Field>::LeftLooking(
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
 
-  PrivateState private_state;
+  PrivateState<Field> private_state;
   private_state.row_structure.Resize(num_supernodes);
   private_state.pattern_flags.Resize(num_supernodes);
   private_state.scaled_transpose_buffer.Resize(
@@ -413,178 +413,9 @@ LDLResult Factorization<Field>::LeftLooking(
 }
 
 template <class Field>
-void Factorization<Field>::MergeChildSchurComplements(
-    Int supernode, RightLookingSharedState* shared_state) {
-  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
-  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
-  const Int num_children = child_end - child_beg;
-  BlasMatrix<Field> lower_block = lower_factor_->blocks[supernode];
-  BlasMatrix<Field> diagonal_block = diagonal_factor_->blocks[supernode];
-  BlasMatrix<Field> schur_complement =
-      shared_state->schur_complements[supernode];
-
-  const Int supernode_size = ordering_.supernode_sizes[supernode];
-  const Int supernode_start = ordering_.supernode_offsets[supernode];
-  const Int* main_indices = lower_factor_->StructureBeg(supernode);
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child =
-        ordering_.assembly_forest.children[child_beg + child_index];
-    const Int* child_indices = lower_factor_->StructureBeg(child);
-    Buffer<Field>& child_schur_complement_buffer =
-        shared_state->schur_complement_buffers[child];
-    BlasMatrix<Field>& child_schur_complement =
-        shared_state->schur_complements[child];
-    const Int child_degree = child_schur_complement.height;
-
-    // Fill the mapping from the child structure into the parent front.
-    Int num_child_diag_indices = 0;
-    Buffer<Int> child_rel_indices(child_degree);
-    {
-      Int i_rel = supernode_size;
-      for (Int i = 0; i < child_degree; ++i) {
-        const Int row = child_indices[i];
-        if (row < supernode_start + supernode_size) {
-          child_rel_indices[i] = row - supernode_start;
-          ++num_child_diag_indices;
-        } else {
-          while (main_indices[i_rel - supernode_size] != row) {
-            ++i_rel;
-            CATAMARI_ASSERT(i_rel < supernode_size + schur_complement.height,
-                            "Relative index is out-of-bounds.");
-          }
-          child_rel_indices[i] = i_rel;
-        }
-      }
-    }
-
-    // Add the child Schur complement into this supernode's front.
-    for (Int j = 0; j < child_degree; ++j) {
-      const Int j_rel = child_rel_indices[j];
-      if (j < num_child_diag_indices) {
-        // Contribute into the upper-left diagonal block of the front.
-        for (Int i = j; i < num_child_diag_indices; ++i) {
-          const Int i_rel = child_rel_indices[i];
-          diagonal_block(i_rel, j_rel) += child_schur_complement(i, j);
-        }
-
-        // Contribute into the lower-left block of the front.
-        for (Int i = num_child_diag_indices; i < child_degree; ++i) {
-          const Int i_rel = child_rel_indices[i];
-          lower_block(i_rel - supernode_size, j_rel) +=
-              child_schur_complement(i, j);
-        }
-      } else {
-        // Contribute into the bottom-right block of the front.
-        for (Int i = j; i < child_degree; ++i) {
-          const Int i_rel = child_rel_indices[i];
-          schur_complement(i_rel - supernode_size, j_rel - supernode_size) +=
-              child_schur_complement(i, j);
-        }
-      }
-    }
-
-    child_schur_complement.height = 0;
-    child_schur_complement.width = 0;
-    child_schur_complement.data = nullptr;
-    child_schur_complement_buffer.Clear();
-  }
-}
-
-#ifdef _OPENMP
-template <class Field>
-void Factorization<Field>::MultithreadedMergeChildSchurComplements(
-    Int supernode, RightLookingSharedState* shared_state) {
-  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
-  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
-  const Int num_children = child_end - child_beg;
-  BlasMatrix<Field> lower_block = lower_factor_->blocks[supernode];
-  BlasMatrix<Field> diagonal_block = diagonal_factor_->blocks[supernode];
-  BlasMatrix<Field> schur_complement =
-      shared_state->schur_complements[supernode];
-
-  const Int supernode_size = ordering_.supernode_sizes[supernode];
-  const Int supernode_start = ordering_.supernode_offsets[supernode];
-  const Int* main_indices = lower_factor_->StructureBeg(supernode);
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child =
-        ordering_.assembly_forest.children[child_beg + child_index];
-    const Int* child_indices = lower_factor_->StructureBeg(child);
-    Buffer<Field>& child_schur_complement_buffer =
-        shared_state->schur_complement_buffers[child];
-    BlasMatrix<Field> child_schur_complement =
-        shared_state->schur_complements[child];
-    const Int child_degree = child_schur_complement.height;
-
-    // Fill the mapping from the child structure into the parent front.
-    Int num_child_diag_indices = 0;
-    Buffer<Int> child_rel_indices(child_degree);
-    {
-      Int i_rel = supernode_size;
-      for (Int i = 0; i < child_degree; ++i) {
-        const Int row = child_indices[i];
-        if (row < supernode_start + supernode_size) {
-          child_rel_indices[i] = row - supernode_start;
-          ++num_child_diag_indices;
-        } else {
-          while (main_indices[i_rel - supernode_size] != row) {
-            ++i_rel;
-            CATAMARI_ASSERT(i_rel < supernode_size + schur_complement.height,
-                            "Relative index is out-of-bounds.");
-          }
-          child_rel_indices[i] = i_rel;
-        }
-      }
-    }
-    const Int* child_rel_indices_ptr = child_rel_indices.Data();
-
-    // Add the child Schur complement into this supernode's front.
-    #pragma omp taskgroup
-    for (Int j_beg = 0; j_beg < child_degree; j_beg += merge_grain_size_) {
-      #pragma omp task default(none)                                           \
-          firstprivate(j_beg, child_degree, diagonal_block, lower_block,       \
-              child_schur_complement, schur_complement, child_rel_indices_ptr, \
-              num_child_diag_indices, supernode_size)
-      {
-        const Int j_end = std::min(child_degree, j_beg + merge_grain_size_);
-        for (Int j = j_beg; j < j_end; ++j) {
-          const Int j_rel = child_rel_indices_ptr[j];
-          if (j < num_child_diag_indices) {
-            // Contribute into the upper-left diagonal block of the front.
-            for (Int i = j; i < num_child_diag_indices; ++i) {
-              const Int i_rel = child_rel_indices_ptr[i];
-              diagonal_block(i_rel, j_rel) += child_schur_complement(i, j);
-            }
-
-            // Contribute into the lower-left block of the front.
-            for (Int i = num_child_diag_indices; i < child_degree; ++i) {
-              const Int i_rel = child_rel_indices_ptr[i];
-              lower_block(i_rel - supernode_size, j_rel) +=
-                  child_schur_complement(i, j);
-            }
-          } else {
-            // Contribute into the bottom-right block of the front.
-            for (Int i = j; i < child_degree; ++i) {
-              const Int i_rel = child_rel_indices_ptr[i];
-              schur_complement(i_rel - supernode_size,
-                               j_rel - supernode_size) +=
-                  child_schur_complement(i, j);
-            }
-          }
-        }
-      }
-    }
-
-    shared_state->schur_complements[child].height = 0;
-    shared_state->schur_complements[child].width = 0;
-    shared_state->schur_complements[child].data = nullptr;
-    child_schur_complement_buffer.Clear();
-  }
-}
-#endif  // ifdef _OPENMP
-
-template <class Field>
 bool Factorization<Field>::RightLookingSupernodeFinalize(
-    Int supernode, RightLookingSharedState* shared_state, LDLResult* result) {
+    Int supernode, RightLookingSharedState<Field>* shared_state,
+    LDLResult* result) {
   typedef ComplexBase<Field> Real;
   BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
   BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
@@ -602,7 +433,8 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   schur_complement.leading_dim = degree;
   schur_complement.data = schur_complement_buffer.Data();
 
-  MergeChildSchurComplements(supernode, shared_state);
+  MergeChildSchurComplements(supernode, ordering_, lower_factor_.get(),
+                             diagonal_factor_.get(), shared_state);
 
   const Int num_supernode_pivots =
       FactorDiagonalBlock(block_size_, factorization_type_, &diagonal_block);
@@ -645,7 +477,8 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
 #ifdef _OPENMP
 template <class Field>
 bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
-    Int supernode, RightLookingSharedState* shared_state, LDLResult* result) {
+    Int supernode, RightLookingSharedState<Field>* shared_state,
+    LDLResult* result) {
   typedef ComplexBase<Field> Real;
   BlasMatrix<Field> diagonal_block = diagonal_factor_->blocks[supernode];
   BlasMatrix<Field> lower_block = lower_factor_->blocks[supernode];
@@ -667,7 +500,9 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
   BlasMatrix<Field> schur_complement =
       shared_state->schur_complements[supernode];
 
-  MultithreadedMergeChildSchurComplements(supernode, shared_state);
+  MultithreadedMergeChildSchurComplements(merge_grain_size_, supernode,
+                                          ordering_, lower_factor_.get(),
+                                          diagonal_factor_.get(), shared_state);
 
   Int num_supernode_pivots;
   {
@@ -729,7 +564,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
 template <class Field>
 bool Factorization<Field>::RightLookingSubtree(
     Int supernode, const CoordinateMatrix<Field>& matrix,
-    RightLookingSharedState* shared_state, LDLResult* result) {
+    RightLookingSharedState<Field>* shared_state, LDLResult* result) {
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
@@ -782,7 +617,7 @@ template <class Field>
 bool Factorization<Field>::MultithreadedRightLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode,
     const CoordinateMatrix<Field>& matrix, const Buffer<double>& work_estimates,
-    RightLookingSharedState* shared_state, LDLResult* result) {
+    RightLookingSharedState<Field>* shared_state, LDLResult* result) {
   if (level >= max_parallel_levels) {
     return RightLookingSubtree(supernode, matrix, shared_state, result);
   }
@@ -863,7 +698,7 @@ LDLResult Factorization<Field>::RightLooking(
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
 
-  RightLookingSharedState shared_state;
+  RightLookingSharedState<Field> shared_state;
   shared_state.schur_complement_buffers.Resize(num_supernodes);
   shared_state.schur_complements.Resize(num_supernodes);
 
@@ -892,7 +727,7 @@ LDLResult Factorization<Field>::RightLooking(
 template <class Field>
 bool Factorization<Field>::LeftLookingSubtree(
     Int supernode, const CoordinateMatrix<Field>& matrix,
-    LeftLookingSharedState* shared_state, PrivateState* private_state,
+    LeftLookingSharedState* shared_state, PrivateState<Field>* private_state,
     LDLResult* result) {
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
@@ -934,7 +769,7 @@ template <class Field>
 void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
     LeftLookingSharedState* shared_state,
-    Buffer<PrivateState>* private_states) {
+    Buffer<PrivateState<Field>>* private_states) {
   BlasMatrix<Field> main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
   BlasMatrix<Field> main_lower_block = lower_factor_->blocks[main_supernode];
@@ -994,7 +829,7 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
         depend(out: main_diagonal_block_data)
     {
       const int thread = omp_get_thread_num();
-      PrivateState& private_state = (*private_states)[thread];
+      PrivateState<Field>& private_state = (*private_states)[thread];
 
       const ConstBlasMatrix<Field> descendant_main_matrix =
           descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
@@ -1057,7 +892,7 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
           depend(out: main_lower_block_data[main_active_rel_row])
       {
         const int thread = omp_get_thread_num();
-        PrivateState& private_state = (*private_states)[thread];
+        PrivateState<Field>& private_state = (*private_states)[thread];
 
         const ConstBlasMatrix<Field> descendant_active_matrix =
             descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
@@ -1103,7 +938,8 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
 
 template <class Field>
 bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
-    Int supernode, Buffer<PrivateState>* private_states, LDLResult* result) {
+    Int supernode, Buffer<PrivateState<Field>>* private_states,
+    LDLResult* result) {
   BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
   BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
@@ -1141,7 +977,7 @@ template <class Field>
 bool Factorization<Field>::MultithreadedLeftLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode,
     const CoordinateMatrix<Field>& matrix, LeftLookingSharedState* shared_state,
-    Buffer<PrivateState>* private_states, LDLResult* result) {
+    Buffer<PrivateState<Field>>* private_states, LDLResult* result) {
   if (level >= max_parallel_levels) {
     const int thread = omp_get_thread_num();
     return LeftLookingSubtree(supernode, matrix, shared_state,
@@ -1222,9 +1058,9 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
 
-  Buffer<PrivateState> private_states(max_threads);
+  Buffer<PrivateState<Field>> private_states(max_threads);
   for (int thread = 0; thread < max_threads; ++thread) {
-    PrivateState& private_state = private_states[thread];
+    PrivateState<Field>& private_state = private_states[thread];
     private_state.pattern_flags.Resize(num_supernodes, -1);
     private_state.row_structure.Resize(num_supernodes);
 
@@ -1313,7 +1149,7 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   const Int max_threads = omp_get_max_threads();
 
-  RightLookingSharedState shared_state;
+  RightLookingSharedState<Field> shared_state;
   shared_state.schur_complement_buffers.Resize(num_supernodes);
   shared_state.schur_complements.Resize(num_supernodes);
 

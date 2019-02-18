@@ -94,43 +94,6 @@ class Factorization {
                                 LDLResult* result);
 
  private:
-  struct LeftLookingSharedState {
-    // The relative index of the active supernode within each supernode's
-    // structure.
-    Buffer<Int> rel_rows;
-
-    // Pointers to the active supernode intersection size within each
-    // supernode's structure.
-    Buffer<const Int*> intersect_ptrs;
-  };
-
-  struct RightLookingSharedState {
-    // The Schur complement matrices for each of the supernodes in the
-    // multifrontal method. Each front should only be allocated while it is
-    // actively in use.
-    Buffer<BlasMatrix<Field>> schur_complements;
-
-    // The underlying buffers for the Schur complement portions of the fronts.
-    // They are allocated and deallocated as the factorization progresses.
-    Buffer<Buffer<Field>> schur_complement_buffers;
-  };
-
-  struct PrivateState {
-    // An integer workspace for storing the supernodes in the current row
-    // pattern.
-    Buffer<Int> row_structure;
-
-    // A data structure for marking whether or not a supernode is in the pattern
-    // of the active row of the lower-triangular factor.
-    Buffer<Int> pattern_flags;
-
-    // A buffer for storing (scaled) transposed descendant blocks.
-    Buffer<Field> scaled_transpose_buffer;
-
-    // A buffer for storing updates to the current supernode column.
-    Buffer<Field> workspace_buffer;
-  };
-
   // The representation of the permutation matrix P so that P A P' should be
   // factored. Typically, this permutation is the composition of a
   // fill-reducing ordering and a supernodal relaxation permutation.
@@ -221,58 +184,52 @@ class Factorization {
 
   bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
                           LeftLookingSharedState* shared_state,
-                          PrivateState* private_state, LDLResult* result);
+                          PrivateState<Field>* private_state,
+                          LDLResult* result);
 #ifdef _OPENMP
-  bool MultithreadedLeftLookingSubtree(Int level, Int max_parallel_levels,
-                                       Int supernode,
-                                       const CoordinateMatrix<Field>& matrix,
-                                       LeftLookingSharedState* shared_state,
-                                       Buffer<PrivateState>* private_states,
-                                       LDLResult* result);
+  bool MultithreadedLeftLookingSubtree(
+      Int level, Int max_parallel_levels, Int supernode,
+      const CoordinateMatrix<Field>& matrix,
+      LeftLookingSharedState* shared_state,
+      Buffer<PrivateState<Field>>* private_states, LDLResult* result);
 #endif  // ifdef _OPENMP
 
   bool RightLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
-                           RightLookingSharedState* shared_state,
+                           RightLookingSharedState<Field>* shared_state,
                            LDLResult* result);
 #ifdef _OPENMP
-  bool MultithreadedRightLookingSubtree(Int level, Int max_parallel_levels,
-                                        Int supernode,
-                                        const CoordinateMatrix<Field>& matrix,
-                                        const Buffer<double>& work_estimates,
-                                        RightLookingSharedState* shared_state,
-                                        LDLResult* result);
+  bool MultithreadedRightLookingSubtree(
+      Int level, Int max_parallel_levels, Int supernode,
+      const CoordinateMatrix<Field>& matrix,
+      const Buffer<double>& work_estimates,
+      RightLookingSharedState<Field>* shared_state, LDLResult* result);
 #endif  // ifdef _OPENMP
 
   void LeftLookingSupernodeUpdate(Int main_supernode,
                                   const CoordinateMatrix<Field>& matrix,
                                   LeftLookingSharedState* shared_state,
-                                  PrivateState* private_state);
+                                  PrivateState<Field>* private_state);
 #ifdef _OPENMP
   void MultithreadedLeftLookingSupernodeUpdate(
       Int main_supernode, const CoordinateMatrix<Field>& matrix,
       LeftLookingSharedState* shared_state,
-      Buffer<PrivateState>* private_states);
+      Buffer<PrivateState<Field>>* private_states);
 #endif  // ifdef _OPENMP
 
   bool LeftLookingSupernodeFinalize(Int main_supernode, LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedLeftLookingSupernodeFinalize(
-      Int supernode, Buffer<PrivateState>* private_states, LDLResult* result);
+      Int supernode, Buffer<PrivateState<Field>>* private_states,
+      LDLResult* result);
 #endif  // ifdef _OPENMP
 
-  void MergeChildSchurComplements(Int supernode,
-                                  RightLookingSharedState* shared_state);
-#ifdef _OPENMP
-  void MultithreadedMergeChildSchurComplements(
-      Int supernode, RightLookingSharedState* shared_state);
-#endif  // ifdef _OPENMP
-
-  bool RightLookingSupernodeFinalize(Int supernode,
-                                     RightLookingSharedState* shared_state,
-                                     LDLResult* result);
+  bool RightLookingSupernodeFinalize(
+      Int supernode, RightLookingSharedState<Field>* shared_state,
+      LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedRightLookingSupernodeFinalize(
-      Int supernode, RightLookingSharedState* shared_state, LDLResult* result);
+      Int supernode, RightLookingSharedState<Field>* shared_state,
+      LDLResult* result);
 #endif  // ifdef _OPENMP
 };
 

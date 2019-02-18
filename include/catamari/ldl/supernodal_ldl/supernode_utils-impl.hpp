@@ -1670,6 +1670,181 @@ void SeekForMainActiveRelativeRow(Int main_supernode, Int descendant_supernode,
 }
 
 template <class Field>
+void MergeChildSchurComplements(Int supernode,
+                                const SymmetricOrdering& ordering,
+                                LowerFactor<Field>* lower_factor,
+                                DiagonalFactor<Field>* diagonal_factor,
+                                RightLookingSharedState<Field>* shared_state) {
+  const Int child_beg = ordering.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+  BlasMatrix<Field> lower_block = lower_factor->blocks[supernode];
+  BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
+  BlasMatrix<Field> schur_complement =
+      shared_state->schur_complements[supernode];
+
+  const Int supernode_size = ordering.supernode_sizes[supernode];
+  const Int supernode_start = ordering.supernode_offsets[supernode];
+  const Int* main_indices = lower_factor->StructureBeg(supernode);
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering.assembly_forest.children[child_beg + child_index];
+    const Int* child_indices = lower_factor->StructureBeg(child);
+    Buffer<Field>& child_schur_complement_buffer =
+        shared_state->schur_complement_buffers[child];
+    BlasMatrix<Field>& child_schur_complement =
+        shared_state->schur_complements[child];
+    const Int child_degree = child_schur_complement.height;
+
+    // Fill the mapping from the child structure into the parent front.
+    Int num_child_diag_indices = 0;
+    Buffer<Int> child_rel_indices(child_degree);
+    {
+      Int i_rel = supernode_size;
+      for (Int i = 0; i < child_degree; ++i) {
+        const Int row = child_indices[i];
+        if (row < supernode_start + supernode_size) {
+          child_rel_indices[i] = row - supernode_start;
+          ++num_child_diag_indices;
+        } else {
+          while (main_indices[i_rel - supernode_size] != row) {
+            ++i_rel;
+            CATAMARI_ASSERT(i_rel < supernode_size + schur_complement.height,
+                            "Relative index is out-of-bounds.");
+          }
+          child_rel_indices[i] = i_rel;
+        }
+      }
+    }
+
+    // Add the child Schur complement into this supernode's front.
+    for (Int j = 0; j < child_degree; ++j) {
+      const Int j_rel = child_rel_indices[j];
+      if (j < num_child_diag_indices) {
+        // Contribute into the upper-left diagonal block of the front.
+        for (Int i = j; i < num_child_diag_indices; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          diagonal_block(i_rel, j_rel) += child_schur_complement(i, j);
+        }
+
+        // Contribute into the lower-left block of the front.
+        for (Int i = num_child_diag_indices; i < child_degree; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          lower_block(i_rel - supernode_size, j_rel) +=
+              child_schur_complement(i, j);
+        }
+      } else {
+        // Contribute into the bottom-right block of the front.
+        for (Int i = j; i < child_degree; ++i) {
+          const Int i_rel = child_rel_indices[i];
+          schur_complement(i_rel - supernode_size, j_rel - supernode_size) +=
+              child_schur_complement(i, j);
+        }
+      }
+    }
+
+    child_schur_complement.height = 0;
+    child_schur_complement.width = 0;
+    child_schur_complement.data = nullptr;
+    child_schur_complement_buffer.Clear();
+  }
+}
+
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedMergeChildSchurComplements(
+    Int merge_grain_size, Int supernode, const SymmetricOrdering& ordering,
+    LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor,
+    RightLookingSharedState<Field>* shared_state) {
+  const Int child_beg = ordering.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+  BlasMatrix<Field> lower_block = lower_factor->blocks[supernode];
+  BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
+  BlasMatrix<Field> schur_complement =
+      shared_state->schur_complements[supernode];
+
+  const Int supernode_size = ordering.supernode_sizes[supernode];
+  const Int supernode_start = ordering.supernode_offsets[supernode];
+  const Int* main_indices = lower_factor->StructureBeg(supernode);
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering.assembly_forest.children[child_beg + child_index];
+    const Int* child_indices = lower_factor->StructureBeg(child);
+    Buffer<Field>& child_schur_complement_buffer =
+        shared_state->schur_complement_buffers[child];
+    BlasMatrix<Field> child_schur_complement =
+        shared_state->schur_complements[child];
+    const Int child_degree = child_schur_complement.height;
+
+    // Fill the mapping from the child structure into the parent front.
+    Int num_child_diag_indices = 0;
+    Buffer<Int> child_rel_indices(child_degree);
+    {
+      Int i_rel = supernode_size;
+      for (Int i = 0; i < child_degree; ++i) {
+        const Int row = child_indices[i];
+        if (row < supernode_start + supernode_size) {
+          child_rel_indices[i] = row - supernode_start;
+          ++num_child_diag_indices;
+        } else {
+          while (main_indices[i_rel - supernode_size] != row) {
+            ++i_rel;
+            CATAMARI_ASSERT(i_rel < supernode_size + schur_complement.height,
+                            "Relative index is out-of-bounds.");
+          }
+          child_rel_indices[i] = i_rel;
+        }
+      }
+    }
+    const Int* child_rel_indices_ptr = child_rel_indices.Data();
+
+    // Add the child Schur complement into this supernode's front.
+    #pragma omp taskgroup
+    for (Int j_beg = 0; j_beg < child_degree; j_beg += merge_grain_size) {
+      #pragma omp task default(none)                                           \
+          firstprivate(j_beg, child_degree, diagonal_block, lower_block,       \
+              child_schur_complement, schur_complement, child_rel_indices_ptr, \
+              num_child_diag_indices, supernode_size, merge_grain_size)
+      {
+        const Int j_end = std::min(child_degree, j_beg + merge_grain_size);
+        for (Int j = j_beg; j < j_end; ++j) {
+          const Int j_rel = child_rel_indices_ptr[j];
+          if (j < num_child_diag_indices) {
+            // Contribute into the upper-left diagonal block of the front.
+            for (Int i = j; i < num_child_diag_indices; ++i) {
+              const Int i_rel = child_rel_indices_ptr[i];
+              diagonal_block(i_rel, j_rel) += child_schur_complement(i, j);
+            }
+
+            // Contribute into the lower-left block of the front.
+            for (Int i = num_child_diag_indices; i < child_degree; ++i) {
+              const Int i_rel = child_rel_indices_ptr[i];
+              lower_block(i_rel - supernode_size, j_rel) +=
+                  child_schur_complement(i, j);
+            }
+          } else {
+            // Contribute into the bottom-right block of the front.
+            for (Int i = j; i < child_degree; ++i) {
+              const Int i_rel = child_rel_indices_ptr[i];
+              schur_complement(i_rel - supernode_size,
+                               j_rel - supernode_size) +=
+                  child_schur_complement(i, j);
+            }
+          }
+        }
+      }
+    }
+
+    shared_state->schur_complements[child].height = 0;
+    shared_state->schur_complements[child].width = 0;
+    shared_state->schur_complements[child].data = nullptr;
+    child_schur_complement_buffer.Clear();
+  }
+}
+#endif  // ifdef _OPENMP
+
+template <class Field>
 Int FactorDiagonalBlock(Int block_size,
                         SymmetricFactorizationType factorization_type,
                         BlasMatrix<Field>* diagonal_block) {

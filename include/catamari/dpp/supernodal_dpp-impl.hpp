@@ -216,7 +216,7 @@ std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
 
 template <class Field>
 void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
-    Int main_supernode, LeftLookingSharedState* shared_state,
+    Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
     PrivateState* private_state) const {
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
@@ -231,18 +231,19 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
       lower_factor_->IntersectionSizesBeg(main_supernode);
 
   // Compute the supernodal row pattern.
-  private_state->pattern_flags[main_supernode] = main_supernode;
+  private_state->ldl_state.pattern_flags[main_supernode] = main_supernode;
   const Int num_packed = supernodal_ldl::ComputeRowPattern(
       matrix_, ordering_.permutation, ordering_.inverse_permutation,
       ordering_.supernode_sizes, ordering_.supernode_offsets,
       supernode_member_to_index_, ordering_.assembly_forest.parents,
-      main_supernode, private_state->pattern_flags.Data(),
-      private_state->row_structure.Data());
+      main_supernode, private_state->ldl_state.pattern_flags.Data(),
+      private_state->ldl_state.row_structure.Data());
 
   // for J = find(L(K, :))
   //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
   for (Int index = 0; index < num_packed; ++index) {
-    const Int descendant_supernode = private_state->row_structure[index];
+    const Int descendant_supernode =
+        private_state->ldl_state.row_structure[index];
     CATAMARI_ASSERT(descendant_supernode < main_supernode,
                     "Looking into upper triangle.");
     const ConstBlasMatrix<Field>& descendant_lower_block =
@@ -267,7 +268,8 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
     scaled_transpose.height = descendant_supernode_size;
     scaled_transpose.width = descendant_main_intersect_size;
     scaled_transpose.leading_dim = descendant_supernode_size;
-    scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
+    scaled_transpose.data =
+        private_state->ldl_state.scaled_transpose_buffer.Data();
 
     supernodal_ldl::FormScaledTranspose(
         factorization_type, descendant_diag_block, descendant_main_matrix,
@@ -277,7 +279,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
     workspace_matrix.height = descendant_main_intersect_size;
     workspace_matrix.width = descendant_main_intersect_size;
     workspace_matrix.leading_dim = descendant_main_intersect_size;
-    workspace_matrix.data = private_state->workspace_buffer.Data();
+    workspace_matrix.data = private_state->ldl_state.workspace_buffer.Data();
 
     supernodal_ldl::UpdateDiagonalBlock(
         factorization_type, ordering_.supernode_offsets, *lower_factor_,
@@ -337,7 +339,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
 #ifdef _OPENMP
 template <class Field>
 void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
-    Int main_supernode, LeftLookingSharedState* shared_state,
+    Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
     Buffer<PrivateState>* private_states) const {
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
@@ -352,8 +354,10 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
       lower_factor_->IntersectionSizesBeg(main_supernode);
 
   const int main_thread = omp_get_thread_num();
-  Buffer<Int>& pattern_flags = (*private_states)[main_thread].pattern_flags;
-  Buffer<Int>& row_structure = (*private_states)[main_thread].row_structure;
+  Buffer<Int>& pattern_flags =
+      (*private_states)[main_thread].ldl_state.pattern_flags;
+  Buffer<Int>& row_structure =
+      (*private_states)[main_thread].ldl_state.row_structure;
 
   // Compute the supernodal row pattern.
   pattern_flags[main_supernode] = main_supernode;
@@ -412,7 +416,8 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
       scaled_transpose.height = descendant_supernode_size;
       scaled_transpose.width = descendant_main_intersect_size;
       scaled_transpose.leading_dim = descendant_supernode_size;
-      scaled_transpose.data = private_state.scaled_transpose_buffer.Data();
+      scaled_transpose.data =
+          private_state.ldl_state.scaled_transpose_buffer.Data();
 
       supernodal_ldl::FormScaledTranspose(
           factorization_type, descendant_diag_block, descendant_main_matrix,
@@ -422,7 +427,7 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
       workspace_matrix.height = descendant_main_intersect_size;
       workspace_matrix.width = descendant_main_intersect_size;
       workspace_matrix.leading_dim = descendant_main_intersect_size;
-      workspace_matrix.data = private_state.workspace_buffer.Data();
+      workspace_matrix.data = private_state.ldl_state.workspace_buffer.Data();
 
       supernodal_ldl::UpdateDiagonalBlock(
           factorization_type, supernode_offsets_ref, *lower_factor_ptr,
@@ -482,7 +487,8 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
         scaled_transpose.height = descendant_supernode_size;
         scaled_transpose.width = descendant_main_intersect_size;
         scaled_transpose.leading_dim = descendant_supernode_size;
-        scaled_transpose.data = private_state.scaled_transpose_buffer.Data();
+        scaled_transpose.data =
+            private_state.ldl_state.scaled_transpose_buffer.Data();
 
         supernodal_ldl::FormScaledTranspose(
             factorization_type, descendant_diag_block, descendant_main_matrix,
@@ -496,7 +502,7 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
         workspace_matrix.height = descendant_active_intersect_size;
         workspace_matrix.width = descendant_main_intersect_size;
         workspace_matrix.leading_dim = descendant_active_intersect_size;
-        workspace_matrix.data = private_state.workspace_buffer.Data();
+        workspace_matrix.data = private_state.ldl_state.workspace_buffer.Data();
 
         supernodal_ldl::UpdateSubdiagonalBlock(
             main_supernode, descendant_supernode, main_active_rel_row,
@@ -560,7 +566,7 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeSample(
   {
     const int thread = omp_get_thread_num();
     PrivateState& private_state = (*private_states)[thread];
-    Buffer<Field>* buffer = &private_state.scaled_transpose_buffer;
+    Buffer<Field>* buffer = &private_state.ldl_state.scaled_transpose_buffer;
     supernode_sample = MultithreadedLowerFactorAndSampleDPP(
         control_.factor_tile_size, control_.block_size, maximum_likelihood,
         &main_diagonal_block, &private_state.generator,
@@ -600,17 +606,17 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   std::vector<Int> sample;
   sample.reserve(num_rows);
 
-  LeftLookingSharedState shared_state;
+  supernodal_ldl::LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
 
   std::random_device random_device;
   PrivateState private_state;
-  private_state.row_structure.Resize(num_supernodes);
-  private_state.pattern_flags.Resize(num_supernodes);
-  private_state.scaled_transpose_buffer.Resize(
+  private_state.ldl_state.row_structure.Resize(num_supernodes);
+  private_state.ldl_state.pattern_flags.Resize(num_supernodes);
+  private_state.ldl_state.scaled_transpose_buffer.Resize(
       max_supernode_size_ * max_supernode_size_, Field{0});
-  private_state.workspace_buffer.Resize(
+  private_state.ldl_state.workspace_buffer.Resize(
       max_supernode_size_ * (max_supernode_size_ - 1), Field{0});
   private_state.generator.seed(random_device());
 
@@ -630,8 +636,8 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
 template <class Field>
 void SupernodalDPP<Field>::LeftLookingSubtree(
     Int supernode, bool maximum_likelihood,
-    LeftLookingSharedState* shared_state, PrivateState* private_state,
-    std::vector<Int>* sample) const {
+    supernodal_ldl::LeftLookingSharedState* shared_state,
+    PrivateState* private_state, std::vector<Int>* sample) const {
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
@@ -656,8 +662,8 @@ void SupernodalDPP<Field>::LeftLookingSubtree(
 template <class Field>
 void SupernodalDPP<Field>::MultithreadedLeftLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode, bool maximum_likelihood,
-    LeftLookingSharedState* shared_state, Buffer<PrivateState>* private_states,
-    std::vector<Int>* sample) const {
+    supernodal_ldl::LeftLookingSharedState* shared_state,
+    Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
   if (level >= max_parallel_levels) {
     const int thread = omp_get_thread_num();
     LeftLookingSubtree(supernode, maximum_likelihood, shared_state,
@@ -724,18 +730,18 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedLeftLookingSample(
   std::vector<Int> sample;
   sample.reserve(num_rows);
 
-  LeftLookingSharedState shared_state;
+  supernodal_ldl::LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
 
   std::random_device random_device;
   Buffer<PrivateState> private_states(max_threads);
   for (PrivateState& private_state : private_states) {
-    private_state.row_structure.Resize(num_supernodes);
-    private_state.pattern_flags.Resize(num_supernodes, -1);
-    private_state.scaled_transpose_buffer.Resize(
+    private_state.ldl_state.row_structure.Resize(num_supernodes);
+    private_state.ldl_state.pattern_flags.Resize(num_supernodes, -1);
+    private_state.ldl_state.scaled_transpose_buffer.Resize(
         max_supernode_size_ * max_supernode_size_, Field{0});
-    private_state.workspace_buffer.Resize(
+    private_state.ldl_state.workspace_buffer.Resize(
         max_supernode_size_ * (max_supernode_size_ - 1), Field{0});
     private_state.generator.seed(random_device());
   }
@@ -790,90 +796,11 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedLeftLookingSample(
 }
 #endif  // ifdef _OPENMP
 
-// TODO(Jack Poulson): Avoid duplication with LDL.
-template <class Field>
-void SupernodalDPP<Field>::MergeChildSchurComplements(
-    Int supernode, RightLookingSharedState* shared_state) const {
-  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
-  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
-  const Int num_children = child_end - child_beg;
-  BlasMatrix<Field> lower_block = lower_factor_->blocks[supernode];
-  BlasMatrix<Field> diagonal_block = diagonal_factor_->blocks[supernode];
-  BlasMatrix<Field> schur_complement =
-      shared_state->schur_complements[supernode];
-
-  const Int supernode_size = ordering_.supernode_sizes[supernode];
-  const Int supernode_start = ordering_.supernode_offsets[supernode];
-  const Int* main_indices = lower_factor_->StructureBeg(supernode);
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child =
-        ordering_.assembly_forest.children[child_beg + child_index];
-    const Int* child_indices = lower_factor_->StructureBeg(child);
-    Buffer<Field>& child_schur_complement_buffer =
-        shared_state->schur_complement_buffers[child];
-    BlasMatrix<Field>& child_schur_complement =
-        shared_state->schur_complements[child];
-    const Int child_degree = child_schur_complement.height;
-
-    // Fill the mapping from the child structure into the parent front.
-    Int num_child_diag_indices = 0;
-    Buffer<Int> child_rel_indices(child_degree);
-    {
-      Int i_rel = supernode_size;
-      for (Int i = 0; i < child_degree; ++i) {
-        const Int row = child_indices[i];
-        if (row < supernode_start + supernode_size) {
-          child_rel_indices[i] = row - supernode_start;
-          ++num_child_diag_indices;
-        } else {
-          while (main_indices[i_rel - supernode_size] != row) {
-            ++i_rel;
-            CATAMARI_ASSERT(i_rel < supernode_size + schur_complement.height,
-                            "Relative index is out-of-bounds.");
-          }
-          child_rel_indices[i] = i_rel;
-        }
-      }
-    }
-
-    // Add the child Schur complement into this supernode's front.
-    for (Int j = 0; j < child_degree; ++j) {
-      const Int j_rel = child_rel_indices[j];
-      if (j < num_child_diag_indices) {
-        // Contribute into the upper-left diagonal block of the front.
-        for (Int i = j; i < num_child_diag_indices; ++i) {
-          const Int i_rel = child_rel_indices[i];
-          diagonal_block(i_rel, j_rel) += child_schur_complement(i, j);
-        }
-
-        // Contribute into the lower-left block of the front.
-        for (Int i = num_child_diag_indices; i < child_degree; ++i) {
-          const Int i_rel = child_rel_indices[i];
-          lower_block(i_rel - supernode_size, j_rel) +=
-              child_schur_complement(i, j);
-        }
-      } else {
-        // Contribute into the bottom-right block of the front.
-        for (Int i = j; i < child_degree; ++i) {
-          const Int i_rel = child_rel_indices[i];
-          schur_complement(i_rel - supernode_size, j_rel - supernode_size) +=
-              child_schur_complement(i, j);
-        }
-      }
-    }
-
-    child_schur_complement.height = 0;
-    child_schur_complement.width = 0;
-    child_schur_complement.data = nullptr;
-    child_schur_complement_buffer.Clear();
-  }
-}
-
 template <class Field>
 void SupernodalDPP<Field>::RightLookingSupernodeSample(
     Int supernode, bool maximum_likelihood,
-    RightLookingSharedState* shared_state, PrivateState* private_state,
-    std::vector<Int>* sample) const {
+    supernodal_ldl::RightLookingSharedState<Field>* shared_state,
+    PrivateState* private_state, std::vector<Int>* sample) const {
   BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
   BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
@@ -890,7 +817,9 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
   schur_complement.leading_dim = degree;
   schur_complement.data = schur_complement_buffer.Data();
 
-  MergeChildSchurComplements(supernode, shared_state);
+  supernodal_ldl::MergeChildSchurComplements(
+      supernode, ordering_, lower_factor_.get(), diagonal_factor_.get(),
+      shared_state);
 
   // Sample and factor the diagonal block.
   const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
@@ -936,8 +865,8 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
 template <class Field>
 void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
     Int supernode, bool maximum_likelihood,
-    RightLookingSharedState* shared_state, Buffer<PrivateState>* private_states,
-    std::vector<Int>* sample) const {
+    supernodal_ldl::RightLookingSharedState<Field>* shared_state,
+    Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
   BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
   BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
@@ -954,9 +883,9 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
   schur_complement.leading_dim = degree;
   schur_complement.data = schur_complement_buffer.Data();
 
-  // MultithreadedMergeChildSchurComplements(supernode, shared_state);
-  // TODO(Jack Poulson): Use a parallel merge.
-  MergeChildSchurComplements(supernode, shared_state);
+  supernodal_ldl::MultithreadedMergeChildSchurComplements(
+      control_.merge_grain_size, supernode, ordering_, lower_factor_.get(),
+      diagonal_factor_.get(), shared_state);
 
   // Sample and factor the diagonal block.
   std::vector<Int> supernode_sample;
@@ -964,7 +893,7 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
   {
     const int thread = omp_get_thread_num();
     PrivateState& private_state = (*private_states)[thread];
-    Buffer<Field>* buffer = &private_state.scaled_transpose_buffer;
+    Buffer<Field>* buffer = &private_state.ldl_state.scaled_transpose_buffer;
     supernode_sample = MultithreadedLowerFactorAndSampleDPP(
         control_.factor_tile_size, control_.block_size, maximum_likelihood,
         &diagonal_block, &private_state.generator, &private_state.unit_uniform,
@@ -1017,8 +946,8 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
 template <class Field>
 void SupernodalDPP<Field>::RightLookingSubtree(
     Int supernode, bool maximum_likelihood,
-    RightLookingSharedState* shared_state, PrivateState* private_state,
-    std::vector<Int>* sample) const {
+    supernodal_ldl::RightLookingSharedState<Field>* shared_state,
+    PrivateState* private_state, std::vector<Int>* sample) const {
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
@@ -1042,8 +971,8 @@ void SupernodalDPP<Field>::RightLookingSubtree(
 template <class Field>
 void SupernodalDPP<Field>::MultithreadedRightLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode, bool maximum_likelihood,
-    RightLookingSharedState* shared_state, Buffer<PrivateState>* private_states,
-    std::vector<Int>* sample) const {
+    supernodal_ldl::RightLookingSharedState<Field>* shared_state,
+    Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
   if (level >= max_parallel_levels) {
     const int thread = omp_get_thread_num();
     PrivateState& private_state = (*private_states)[thread];
@@ -1107,7 +1036,7 @@ std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
   std::vector<Int> sample;
   sample.reserve(num_rows);
 
-  RightLookingSharedState shared_state;
+  supernodal_ldl::RightLookingSharedState<Field> shared_state;
   shared_state.schur_complement_buffers.Resize(num_supernodes);
   shared_state.schur_complements.Resize(num_supernodes);
 
@@ -1146,7 +1075,7 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedRightLookingSample(
   std::vector<Int> sample;
   sample.reserve(num_rows);
 
-  RightLookingSharedState shared_state;
+  supernodal_ldl::RightLookingSharedState<Field> shared_state;
   shared_state.schur_complement_buffers.Resize(num_supernodes);
   shared_state.schur_complements.Resize(num_supernodes);
 
@@ -1173,7 +1102,7 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedRightLookingSample(
     std::random_device random_device;
     Buffer<PrivateState> private_states(max_threads);
     for (PrivateState& private_state : private_states) {
-      private_state.scaled_transpose_buffer.Resize(
+      private_state.ldl_state.scaled_transpose_buffer.Resize(
           max_supernode_size_ * max_supernode_size_, Field{0});
       // TODO(Jack Poulson): Use RUNNING_ON_VALGRIND to change seeding
       // mechanism.

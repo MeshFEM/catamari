@@ -45,6 +45,45 @@ struct MergableStatus {
   Int num_merged_zeros;
 };
 
+struct LeftLookingSharedState {
+  // The relative index of the active supernode within each supernode's
+  // structure.
+  Buffer<Int> rel_rows;
+
+  // Pointers to the active supernode intersection size within each
+  // supernode's structure.
+  Buffer<const Int*> intersect_ptrs;
+};
+
+template <typename Field>
+struct RightLookingSharedState {
+  // The Schur complement matrices for each of the supernodes in the
+  // multifrontal method. Each front should only be allocated while it is
+  // actively in use.
+  Buffer<BlasMatrix<Field>> schur_complements;
+
+  // The underlying buffers for the Schur complement portions of the fronts.
+  // They are allocated and deallocated as the factorization progresses.
+  Buffer<Buffer<Field>> schur_complement_buffers;
+};
+
+template <typename Field>
+struct PrivateState {
+  // An integer workspace for storing the supernodes in the current row
+  // pattern.
+  Buffer<Int> row_structure;
+
+  // A data structure for marking whether or not a supernode is in the pattern
+  // of the active row of the lower-triangular factor.
+  Buffer<Int> pattern_flags;
+
+  // A buffer for storing (scaled) transposed descendant blocks.
+  Buffer<Field> scaled_transpose_buffer;
+
+  // A buffer for storing updates to the current supernode column.
+  Buffer<Field> workspace_buffer;
+};
+
 // Fills 'member_to_index' with a length 'num_rows' array whose i'th index
 // is the index of the supernode containing column 'i'.
 void MemberToIndex(Int num_rows, const Buffer<Int>& supernode_starts,
@@ -251,6 +290,22 @@ void SeekForMainActiveRelativeRow(Int main_supernode, Int descendant_supernode,
                                   const LowerFactor<Field>& lower_factor,
                                   Int* main_active_rel_row,
                                   const Int** main_active_intersect_sizes);
+
+// Adds the schur complements of a given supernode's children onto its front.
+template <class Field>
+void MergeChildSchurComplements(Int supernode,
+                                const SymmetricOrdering& ordering,
+                                LowerFactor<Field>* lower_factor,
+                                DiagonalFactor<Field>* diagonal_factor,
+                                RightLookingSharedState<Field>* shared_state);
+
+#ifdef _OPENMP
+template <class Field>
+void MultithreadedMergeChildSchurComplements(
+    Int merge_grain_size, Int supernode, const SymmetricOrdering& ordering,
+    LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor,
+    RightLookingSharedState<Field>* shared_state);
+#endif  // ifdef _OPENMP
 
 // L(m, m) -= L(m, d) * (D(d, d) * L(m, d)')
 //          = L(m, d) * Z(:, m).
