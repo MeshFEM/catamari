@@ -33,6 +33,16 @@ void Factorization<Field>::IncorporateSupernodeIntoLDLResult(
 }
 
 template <class Field>
+void Factorization<Field>::MergeContribution(const LDLResult& contribution,
+                                             LDLResult* result) {
+  result->num_successful_pivots += contribution.num_successful_pivots;
+  result->largest_supernode =
+      std::max(result->largest_supernode, contribution.largest_supernode);
+  result->num_factorization_entries += contribution.num_factorization_entries;
+  result->num_factorization_flops += contribution.num_factorization_flops;
+}
+
+template <class Field>
 void Factorization<Field>::FormSupernodes(
     const CoordinateMatrix<Field>& matrix,
     const SupernodalRelaxationControl& control, AssemblyForest* forest,
@@ -743,14 +753,7 @@ bool Factorization<Field>::RightLookingSubtree(
       succeeded = false;
       break;
     }
-    const LDLResult& contribution = result_contributions[child_index];
-
-    // TODO(Jack Poulson): Switch to calling a reduction routine.
-    result->num_successful_pivots += contribution.num_successful_pivots;
-    result->largest_supernode =
-        std::max(result->largest_supernode, contribution.largest_supernode);
-    result->num_factorization_entries += contribution.num_factorization_entries;
-    result->num_factorization_flops += contribution.num_factorization_flops;
+    MergeContribution(result_contributions[child_index], result);
   }
 
   if (succeeded) {
@@ -813,14 +816,7 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
       succeeded = false;
       break;
     }
-    const LDLResult& contribution = result_contributions[child_index];
-
-    // TODO(Jack Poulson): Switch to calling a reduction routine.
-    result->num_successful_pivots += contribution.num_successful_pivots;
-    result->largest_supernode =
-        std::max(result->largest_supernode, contribution.largest_supernode);
-    result->num_factorization_entries += contribution.num_factorization_entries;
-    result->num_factorization_flops += contribution.num_factorization_flops;
+    MergeContribution(result_contributions[child_index], result);
   }
 
   if (succeeded) {
@@ -887,15 +883,7 @@ LDLResult Factorization<Field>::RightLooking(
     if (!successes[index]) {
       break;
     }
-
-    const LDLResult& contribution = result_contributions[index];
-
-    // TODO(Jack Poulson): Switch to calling a reduction routine.
-    result.num_successful_pivots += contribution.num_successful_pivots;
-    result.largest_supernode =
-        std::max(result.largest_supernode, contribution.largest_supernode);
-    result.num_factorization_entries += contribution.num_factorization_entries;
-    result.num_factorization_flops += contribution.num_factorization_flops;
+    MergeContribution(result_contributions[index], &result);
   }
 
   return result;
@@ -930,14 +918,7 @@ bool Factorization<Field>::LeftLookingSubtree(
       succeeded = false;
       break;
     }
-    const LDLResult& contribution = result_contributions[child_index];
-
-    // TODO(Jack Poulson): Switch to calling a reduction routine.
-    result->num_successful_pivots += contribution.num_successful_pivots;
-    result->largest_supernode =
-        std::max(result->largest_supernode, contribution.largest_supernode);
-    result->num_factorization_entries += contribution.num_factorization_entries;
-    result->num_factorization_flops += contribution.num_factorization_flops;
+    MergeContribution(result_contributions[child_index], result);
   }
 
   if (succeeded) {
@@ -1196,14 +1177,7 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
       succeeded = false;
       break;
     }
-    const LDLResult& contribution = result_contributions[child_index];
-
-    // TODO(Jack Poulson): Switch to calling a reduction routine.
-    result->num_successful_pivots += contribution.num_successful_pivots;
-    result->largest_supernode =
-        std::max(result->largest_supernode, contribution.largest_supernode);
-    result->num_factorization_entries += contribution.num_factorization_entries;
-    result->num_factorization_flops += contribution.num_factorization_flops;
+    MergeContribution(result_contributions[child_index], result);
   }
 
   if (succeeded) {
@@ -1308,15 +1282,7 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
     if (!successes[index]) {
       break;
     }
-
-    const LDLResult& contribution = result_contributions[index];
-
-    // TODO(Jack Poulson): Switch to calling a reduction routine.
-    result.num_successful_pivots += contribution.num_successful_pivots;
-    result.largest_supernode =
-        std::max(result.largest_supernode, contribution.largest_supernode);
-    result.num_factorization_entries += contribution.num_factorization_entries;
-    result.num_factorization_flops += contribution.num_factorization_flops;
+    MergeContribution(result_contributions[index], &result);
   }
 
   return result;
@@ -1408,15 +1374,7 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
     if (!successes[index]) {
       break;
     }
-
-    const LDLResult& contribution = result_contributions[index];
-
-    // TODO(Jack Poulson): Switch to calling a reduction routine.
-    result.num_successful_pivots += contribution.num_successful_pivots;
-    result.largest_supernode =
-        std::max(result.largest_supernode, contribution.largest_supernode);
-    result.num_factorization_entries += contribution.num_factorization_entries;
-    result.num_factorization_flops += contribution.num_factorization_flops;
+    MergeContribution(result_contributions[index], &result);
   }
 
   return result;

@@ -89,6 +89,10 @@ class Factorization {
   static void IncorporateSupernodeIntoLDLResult(Int supernode_size, Int degree,
                                                 LDLResult* result);
 
+  // Adds in the contribution of a subtree into an overall result.
+  static void MergeContribution(const LDLResult& contribution,
+                                LDLResult* result);
+
  private:
   struct LeftLookingSharedState {
     // The relative index of the active supernode within each supernode's
