@@ -519,33 +519,39 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
 }
 #endif  // ifdef _OPENMP
 
-template <class Field>
-void SupernodalDPP<Field>::LeftLookingSupernodeSample(
-    Int main_supernode, bool maximum_likelihood, PrivateState* private_state,
+template <typename Field>
+void SupernodalDPP<Field>::AppendSupernodeSample(
+    Int supernode, const std::vector<Int>& supernode_sample,
     std::vector<Int>* sample) const {
-  const SymmetricFactorizationType factorization_type =
-      kLDLAdjointFactorization;
-
-  BlasMatrix<Field>& main_diagonal_block =
-      diagonal_factor_->blocks[main_supernode];
-  BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
-
-  // Sample and factor the diagonal block.
-  const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
-      control_.block_size, maximum_likelihood, &main_diagonal_block,
-      &private_state->generator, &private_state->unit_uniform);
-  const Int main_supernode_start = ordering_.supernode_offsets[main_supernode];
+  const Int supernode_start = ordering_.supernode_offsets[supernode];
   for (const Int& index : supernode_sample) {
-    const Int orig_row = main_supernode_start + index;
+    const Int orig_row = supernode_start + index;
     if (ordering_.inverse_permutation.Empty()) {
       sample->push_back(orig_row);
     } else {
       sample->push_back(ordering_.inverse_permutation[orig_row]);
     }
   }
+}
+
+template <class Field>
+void SupernodalDPP<Field>::LeftLookingSupernodeSample(
+    Int supernode, bool maximum_likelihood, PrivateState* private_state,
+    std::vector<Int>* sample) const {
+  const SymmetricFactorizationType factorization_type =
+      kLDLAdjointFactorization;
+
+  BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
+
+  // Sample and factor the diagonal block.
+  const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
+      control_.block_size, maximum_likelihood, &diagonal_block,
+      &private_state->generator, &private_state->unit_uniform);
+  AppendSupernodeSample(supernode, supernode_sample, sample);
 
   supernodal_ldl::SolveAgainstDiagonalBlock(
-      factorization_type, main_diagonal_block.ToConst(), &main_lower_block);
+      factorization_type, diagonal_block.ToConst(), &lower_block);
 }
 
 #ifdef _OPENMP
@@ -572,16 +578,7 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeSample(
         &main_diagonal_block, &private_state.generator,
         &private_state.unit_uniform, buffer);
   }
-
-  const Int main_supernode_start = ordering_.supernode_offsets[main_supernode];
-  for (const Int& index : supernode_sample) {
-    const Int orig_row = main_supernode_start + index;
-    if (ordering_.inverse_permutation.Empty()) {
-      sample->push_back(orig_row);
-    } else {
-      sample->push_back(ordering_.inverse_permutation[orig_row]);
-    }
-  }
+  AppendSupernodeSample(main_supernode, supernode_sample, sample);
 
   #pragma omp taskgroup
   supernodal_ldl::MultithreadedSolveAgainstDiagonalBlock(
@@ -825,15 +822,7 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
   const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
       control_.block_size, maximum_likelihood, &diagonal_block,
       &private_state->generator, &private_state->unit_uniform);
-  const Int supernode_start = ordering_.supernode_offsets[supernode];
-  for (const Int& index : supernode_sample) {
-    const Int orig_row = supernode_start + index;
-    if (ordering_.inverse_permutation.Empty()) {
-      sample->push_back(orig_row);
-    } else {
-      sample->push_back(ordering_.inverse_permutation[orig_row]);
-    }
-  }
+  AppendSupernodeSample(supernode, supernode_sample, sample);
 
   if (!degree) {
     // We can early exit.
@@ -899,16 +888,7 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
         &diagonal_block, &private_state.generator, &private_state.unit_uniform,
         buffer);
   }
-
-  const Int supernode_start = ordering_.supernode_offsets[supernode];
-  for (const Int& index : supernode_sample) {
-    const Int orig_row = supernode_start + index;
-    if (ordering_.inverse_permutation.Empty()) {
-      sample->push_back(orig_row);
-    } else {
-      sample->push_back(ordering_.inverse_permutation[orig_row]);
-    }
-  }
+  AppendSupernodeSample(supernode, supernode_sample, sample);
 
   if (!degree) {
     // We can early exit.

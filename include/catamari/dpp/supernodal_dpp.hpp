@@ -146,7 +146,7 @@ class SupernodalDPP {
 #endif  // ifdef _OPENMP
 
   // Appends a supernode's contribution to the current sample.
-  void LeftLookingSupernodeSample(Int main_supernode, bool maximum_likelihood,
+  void LeftLookingSupernodeSample(Int supernode, bool maximum_likelihood,
                                   PrivateState* private_state,
                                   std::vector<Int>* sample) const;
 
@@ -188,6 +188,12 @@ class SupernodalDPP {
       supernodal_ldl::RightLookingSharedState<Field>* shared_state,
       Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;
 #endif  // ifdef _OPENMP
+
+  // Appends a supernode sample into an unsorted sample vector in the
+  // original ordering.
+  void AppendSupernodeSample(Int supernode,
+                             const std::vector<Int>& supernode_sample,
+                             std::vector<Int>* sample) const;
 };
 
 }  // namespace catamari
