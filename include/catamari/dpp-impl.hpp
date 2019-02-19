@@ -55,6 +55,13 @@ DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
+DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
+                const SymmetricOrdering& ordering, const DPPControl& control) {
+  supernodal_dpp_.reset(
+      new SupernodalDPP<Field>(matrix, ordering, control.supernodal_control));
+}
+
+template <class Field>
 std::vector<Int> DPP<Field>::Sample(bool maximum_likelihood) const {
   return supernodal_dpp_->Sample(maximum_likelihood);
 }

@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "catamari/dpp.hpp"
+#include "catamari/unit_reach_nested_dissection.hpp"
 #include "quotient/io_utils.hpp"
 #include "specify.hpp"
 
@@ -149,9 +150,9 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 Experiment RunShifted2DNegativeLaplacianTest(
     Int x_size, Int y_size, double diagonal_shift, double scale,
-    bool maximum_likelihood, bool ascii_display, char missing_char,
-    char sampled_char, Int num_samples, const catamari::DPPControl& dpp_control,
-    bool print_progress) {
+    bool maximum_likelihood, bool analytical_ordering, bool print_sample,
+    bool ascii_display, char missing_char, char sampled_char, Int num_samples,
+    const catamari::DPPControl& dpp_control, bool print_progress) {
   Experiment experiment;
 
   // Read the matrix from file.
@@ -165,7 +166,14 @@ Experiment RunShifted2DNegativeLaplacianTest(
   }
   quotient::Timer init_timer;
   init_timer.Start();
-  catamari::DPP<double> dpp(*matrix, dpp_control);
+  std::unique_ptr<catamari::DPP<double>> dpp;
+  if (analytical_ordering) {
+    catamari::SymmetricOrdering ordering;
+    catamari::UnitReachNestedDissection2D(x_size - 1, y_size - 1, &ordering);
+    dpp.reset(new catamari::DPP<double>(*matrix, ordering, dpp_control));
+  } else {
+    dpp.reset(new catamari::DPP<double>(*matrix, dpp_control));
+  }
   experiment.init_seconds = init_timer.Stop();
 
   // Sample the matrix.
@@ -176,10 +184,12 @@ Experiment RunShifted2DNegativeLaplacianTest(
   std::vector<Int> sample;
   for (Int run = 0; run < num_samples; ++run) {
     sample_timer.Start();
-    sample = dpp.Sample(maximum_likelihood);
+    sample = dpp->Sample(maximum_likelihood);
     const double sample_seconds = sample_timer.Stop();
     std::cout << "  sample took " << sample_seconds << " seconds." << std::endl;
-    quotient::PrintVector(sample, "sample", std::cout);
+    if (print_sample) {
+      quotient::PrintVector(sample, "sample", std::cout);
+    }
     if (ascii_display) {
       AsciiDisplaySample(x_size, y_size, sample, missing_char, sampled_char);
     }
@@ -202,6 +212,10 @@ int main(int argc, char** argv) {
       0.75);
   const bool maximum_likelihood = parser.OptionalInput<bool>(
       "maximum_likelihood", "Make the maximum-likelihood decisions?", true);
+  const bool analytical_ordering = parser.OptionalInput<bool>(
+      "analytical_ordering", "Use analytical nested dissection?", true);
+  const bool print_sample = parser.OptionalInput<bool>(
+      "print_sample", "Print each DPP sample?", false);
   const bool ascii_display = parser.OptionalInput<bool>(
       "ascii_display", "Display sample in ASCII?", true);
   const char missing_char = parser.OptionalInput<char>(
@@ -233,8 +247,9 @@ int main(int argc, char** argv) {
       .allowable_supernode_zero_ratio = allowable_supernode_zero_ratio;
 
   const Experiment experiment = RunShifted2DNegativeLaplacianTest(
-      x_size, y_size, diagonal_shift, scale, maximum_likelihood, ascii_display,
-      missing_char, sampled_char, num_samples, dpp_control, print_progress);
+      x_size, y_size, diagonal_shift, scale, maximum_likelihood,
+      analytical_ordering, print_sample, ascii_display, missing_char,
+      sampled_char, num_samples, dpp_control, print_progress);
   PrintExperiment(experiment);
 
   return 0;

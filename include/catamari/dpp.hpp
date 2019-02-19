@@ -22,7 +22,13 @@ struct DPPControl {
 template <class Field>
 class DPP {
  public:
+  // Constructs a DPP using an automatically-determined (Minimum Degree)
+  // reordering.
   DPP(const CoordinateMatrix<Field>& matrix, const DPPControl& control);
+
+  // Constructs a DPP using a user-specified ordering.
+  DPP(const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+      const DPPControl& control);
 
   // Return a sample from the DPP. If 'maximum_likelihood' is true, then each
   // pivot is kept based upon which choice is most likely.
