@@ -236,33 +236,33 @@ void MultithreadedEliminationForestAndDegrees(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     Buffer<Int>* parents, Buffer<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
+  const int max_threads = omp_get_max_threads();
   parents->Resize(num_rows);
   degrees->Resize(num_rows);
 
-  const int max_threads = omp_get_max_threads();
   Buffer<Buffer<std::vector<Int>>> private_children_lists(max_threads);
-  for (std::size_t t = 0; t < max_threads; ++t) {
-    Buffer<std::vector<Int>>& children_list = private_children_lists[t];
-    children_list.Resize(num_rows);
-  }
-
-  Buffer<Buffer<Int>> structures(num_rows);
 
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor. Each thread potentially
   // needs its own since different subtrees can have intersecting structure.
-
   Buffer<Buffer<Int>> private_pattern_flags(max_threads);
-  for (int t = 0; t < max_threads; ++t) {
-    private_pattern_flags[t].Resize(num_rows, -1);
-  }
 
   Buffer<Buffer<Int>> private_tmp_structures(max_threads);
+
+  #pragma omp taskgroup
   for (int t = 0; t < max_threads; ++t) {
-    private_tmp_structures[t].Resize(num_rows - 1);
+    #pragma omp task default(none) firstprivate(t, num_rows)  \
+        shared(private_children_lists, private_pattern_flags, \
+            private_tmp_structures)
+    {
+      private_children_lists[t].Resize(num_rows);
+      private_pattern_flags[t].Resize(num_rows, -1);
+      private_tmp_structures[t].Resize(num_rows - 1);
+    }
   }
 
   const bool keep_structures = false;
+  Buffer<Buffer<Int>> structures(num_rows);
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
@@ -550,6 +550,7 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
                                        LowerStructure* lower_structure,
                                        bool preallocate, int sort_grain_size) {
   const Int num_rows = matrix.NumRows();
+  const int max_threads = omp_get_max_threads();
 
   // TODO(Jack Poulson): Add support for using the degrees computed from
   // a MinimumDegree reordering to avoid the initial degree computation.
@@ -557,16 +558,9 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor. Each thread potentially
   // needs its own since different subtrees can have intersecting structure.
-  //
-  // NOTE: The time required for these allocations can be substantial on large
-  // numbers of cores. It could be worth investigating how to reduce the
-  // required number of pattern vectors.
-  const int max_threads = omp_get_max_threads();
   Buffer<Buffer<Int>> private_pattern_flags(max_threads);
-  for (int t = 0; t < max_threads; ++t) {
-    private_pattern_flags[t].Resize(num_rows, -1);
-  }
 
+  // Build the elimination forest and degrees.
   Buffer<Int> degrees;
   Buffer<Buffer<Int>> structures(num_rows);
   {
@@ -574,32 +568,36 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
     parents->Resize(num_rows);
     degrees.Resize(num_rows);
 
-    // NOTE: The time required for these allocations can be substantial on large
-    // numbers of cores. It could be worth investigating how to reduce the
-    // required number of children lists and pattern vectors.
-
     Buffer<Buffer<std::vector<Int>>> private_children_lists(max_threads);
-    for (int t = 0; t < max_threads; ++t) {
-      Buffer<std::vector<Int>>& children_list = private_children_lists[t];
-      children_list.Resize(num_rows);
-    }
-
     Buffer<Buffer<Int>> private_tmp_structures(max_threads);
-    for (int t = 0; t < max_threads; ++t) {
-      private_tmp_structures[t].Resize(num_rows - 1);
-    }
 
     const bool keep_structures = !preallocate;
 
+    // Allocate/initialize the needed buffers in parallel.
+    #pragma omp taskgroup
+    for (int t = 0; t < max_threads; ++t) {
+      #pragma omp task default(none) firstprivate(t, num_rows)  \
+          shared(private_pattern_flags, private_children_lists, \
+              private_tmp_structures)
+      {
+        private_pattern_flags[t].Resize(num_rows, -1);
+        private_children_lists[t].Resize(num_rows);
+        private_tmp_structures[t].Resize(num_rows - 1);
+      }
+    }
+
+    // Build the up-links and degrees of the elimination forest.
     #pragma omp taskgroup
     for (const Int root : ordering.assembly_forest.roots) {
       #pragma omp task default(none) firstprivate(root, keep_structures)     \
           shared(matrix, ordering, parents, degrees, private_children_lists, \
               structures, private_pattern_flags, private_tmp_structures)
-      MultithreadedEliminationForestAndDegreesRecursion(
-          matrix, ordering, root, keep_structures, parents, &degrees,
-          &private_children_lists, &structures, &private_pattern_flags,
-          &private_tmp_structures);
+      {
+        MultithreadedEliminationForestAndDegreesRecursion(
+            matrix, ordering, root, keep_structures, parents, &degrees,
+            &private_children_lists, &structures, &private_pattern_flags,
+            &private_tmp_structures);
+      }
     }
   }
   forest->FillFromParents();
@@ -610,22 +608,25 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
   lower_structure->indices.Resize(lower_structure->column_offsets.Back());
 
   if (preallocate) {
-    // Reset the private pattern flags.
-    //
-    // NOTE: As above, the time required for these reinitializations can be
-    // substantial on large numbers of cores.
+    // Re-initialize each thread's pattern flags.
+    #pragma omp taskgroup
     for (int t = 0; t < max_threads; ++t) {
+      #pragma omp task default(none) firstprivate(t, num_rows) \
+          shared(private_pattern_flags)
       private_pattern_flags[t].Resize(num_rows, -1);
     }
 
+    // Fill in the (unsorted) structure indices.
     #pragma omp taskgroup
     for (const Int root : ordering.assembly_forest.roots) {
       #pragma omp task default(none) firstprivate(root)     \
           shared(matrix, ordering, forest, lower_structure, \
               private_pattern_flags)
-      MultithreadedFillStructureIndicesRecursion(matrix, ordering, *forest,
-                                                 root, lower_structure,
-                                                 &private_pattern_flags);
+      {
+        MultithreadedFillStructureIndicesRecursion(matrix, ordering, *forest,
+                                                   root, lower_structure,
+                                                   &private_pattern_flags);
+      }
     }
 
     // Sort the structures.

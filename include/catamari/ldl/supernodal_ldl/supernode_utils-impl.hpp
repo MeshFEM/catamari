@@ -873,21 +873,25 @@ void MultithreadedSupernodalDegrees(
     Buffer<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = ordering.supernode_sizes.Size();
+  const int max_threads = omp_get_max_threads();
 
   supernode_degrees->Resize(num_supernodes);
 
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor. Each thread potentially
   // needs its own since different subtrees can have intersecting structure.
-  const int max_threads = omp_get_max_threads();
   Buffer<Buffer<Int>> private_pattern_flags(max_threads);
-  for (int t = 0; t < max_threads; ++t) {
-    private_pattern_flags[t].Resize(num_rows, -1);
-  }
 
   Buffer<Buffer<Int>> private_tmp_structures(max_threads);
+
+  #pragma omp taskgroup
   for (int t = 0; t < max_threads; ++t) {
-    private_tmp_structures[t].Resize(num_rows - 1);
+    #pragma omp task default(none) firstprivate(t, num_rows) \
+        shared(private_pattern_flags, private_tmp_structures)
+    {
+      private_pattern_flags[t].Resize(num_rows, -1);
+      private_tmp_structures[t].Resize(num_rows - 1);
+    }
   }
 
   // Only the structures of the active fronts will be maintained.
@@ -1111,14 +1115,18 @@ void MultithreadedFillStructureIndices(
     const Buffer<Int>& supernode_member_to_index,
     LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
+  const int max_threads = omp_get_max_threads();
 
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor. Each thread potentially
   // needs its own since different subtrees can have intersecting structure.
-  const int max_threads = omp_get_max_threads();
   Buffer<Buffer<Int>> private_pattern_flags(max_threads);
-  for (int thread = 0; thread < max_threads; ++thread) {
-    private_pattern_flags[thread].Resize(num_rows, -1);
+
+  #pragma omp taskgroup
+  for (int t = 0; t < max_threads; ++t) {
+    #pragma omp task default(none) firstprivate(t, num_rows) \
+        shared(private_pattern_flags)
+    private_pattern_flags[t].Resize(num_rows, -1);
   }
 
   #pragma omp taskgroup

@@ -1059,20 +1059,28 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
   shared_state.intersect_ptrs.Resize(num_supernodes);
 
   Buffer<PrivateState<Field>> private_states(max_threads);
-  for (int thread = 0; thread < max_threads; ++thread) {
-    PrivateState<Field>& private_state = private_states[thread];
-    private_state.pattern_flags.Resize(num_supernodes, -1);
-    private_state.row_structure.Resize(num_supernodes);
 
-    // TODO(Jack Poulson): Switch to a reasonably-tight upper bound for each
-    // thread.
-    private_state.scaled_transpose_buffer.Resize(
-        max_supernode_size_ * max_supernode_size_, Field{0});
+  const int max_supernode_size = max_supernode_size_;
+  #pragma omp taskgroup
+  for (int t = 0; t < max_threads; ++t) {
+    #pragma omp task default(none)                          \
+        firstprivate(t, num_supernodes, max_supernode_size) \
+        shared(private_states)
+    {
+      PrivateState<Field>& private_state = private_states[t];
+      private_state.pattern_flags.Resize(num_supernodes, -1);
+      private_state.row_structure.Resize(num_supernodes);
 
-    // TODO(Jack Poulson): Switch to a reasonably-tight upper bound for each
-    // thread.
-    private_state.workspace_buffer.Resize(
-        max_supernode_size_ * (max_supernode_size_ - 1), Field{0});
+      // TODO(Jack Poulson): Switch to a reasonably-tight upper bound for each
+      // thread.
+      private_state.scaled_transpose_buffer.Resize(
+          max_supernode_size * max_supernode_size, Field{0});
+
+      // TODO(Jack Poulson): Switch to a reasonably-tight upper bound for each
+      // thread.
+      private_state.workspace_buffer.Resize(
+          max_supernode_size * (max_supernode_size - 1), Field{0});
+    }
   }
 
   // TODO(Jack Poulson): Make this value configurable.
