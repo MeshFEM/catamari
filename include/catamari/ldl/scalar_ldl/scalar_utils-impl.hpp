@@ -10,8 +10,6 @@
 
 #include "catamari/ldl/scalar_ldl/scalar_utils.hpp"
 
-#include "quotient/timer.hpp"
-
 namespace catamari {
 namespace scalar_ldl {
 
@@ -559,6 +557,10 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
   // A data structure for marking whether or not a node is in the pattern of
   // the active row of the lower-triangular factor. Each thread potentially
   // needs its own since different subtrees can have intersecting structure.
+  //
+  // NOTE: The time required for these allocations can be substantial on large
+  // numbers of cores. It could be worth investigating how to reduce the
+  // required number of pattern vectors.
   const int max_threads = omp_get_max_threads();
   Buffer<Buffer<Int>> private_pattern_flags(max_threads);
   for (int t = 0; t < max_threads; ++t) {
@@ -571,6 +573,10 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
     Buffer<Int>* parents = &forest->parents;
     parents->Resize(num_rows);
     degrees.Resize(num_rows);
+
+    // NOTE: The time required for these allocations can be substantial on large
+    // numbers of cores. It could be worth investigating how to reduce the
+    // required number of children lists and pattern vectors.
 
     Buffer<Buffer<std::vector<Int>>> private_children_lists(max_threads);
     for (int t = 0; t < max_threads; ++t) {
@@ -605,6 +611,9 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
   if (preallocate) {
     // Reset the private pattern flags.
+    //
+    // NOTE: As above, the time required for these reinitializations can be
+    // substantial on large numbers of cores.
     for (int t = 0; t < max_threads; ++t) {
       private_pattern_flags[t].Resize(num_rows, -1);
     }

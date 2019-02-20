@@ -21,8 +21,12 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
     : matrix_(matrix), ordering_(ordering), control_(control) {
 #ifdef _OPENMP
   if (omp_get_max_threads() > 1) {
-    MultithreadedFormSupernodes();
-    MultithreadedFormStructure();
+    #pragma omp parallel
+    #pragma omp single
+    {
+      MultithreadedFormSupernodes();
+      MultithreadedFormStructure();
+    }
     return;
   }
 #endif  // ifdef _OPENMP
