@@ -1275,68 +1275,86 @@ void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
 }
 
 template <class Field>
+void Factorization<Field>::LowerTriangularSolveRecursion(
+    Int supernode, BlasMatrix<Field>* matrix, Buffer<Field>* workspace) const {
+  // Recurse on this supernode's children.
+  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering_.assembly_forest.children[child_beg + child_index];
+    LowerTriangularSolveRecursion(child, matrix, workspace);
+  }
+
+  // Eliminate this supernode.
+  const Int num_rhs = matrix->width;
+  const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
+  const ConstBlasMatrix<Field> triangular_matrix =
+      diagonal_factor_->blocks[supernode];
+
+  const Int supernode_size = ordering_.supernode_sizes[supernode];
+  const Int supernode_start = ordering_.supernode_offsets[supernode];
+  BlasMatrix<Field> matrix_supernode =
+      matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
+
+  // Solve against the diagonal block of the supernode.
+  if (is_cholesky) {
+    LeftLowerTriangularSolves(triangular_matrix, &matrix_supernode);
+  } else {
+    LeftLowerUnitTriangularSolves(triangular_matrix, &matrix_supernode);
+  }
+
+  const ConstBlasMatrix<Field> subdiagonal = lower_factor_->blocks[supernode];
+  if (!subdiagonal.height) {
+    return;
+  }
+
+  // Handle the external updates for this supernode.
+  const Int* indices = lower_factor_->StructureBeg(supernode);
+  if (supernode_size >= forward_solve_out_of_place_supernode_threshold_) {
+    // Perform an out-of-place GEMM.
+    BlasMatrix<Field> work_matrix;
+    work_matrix.height = subdiagonal.height;
+    work_matrix.width = num_rhs;
+    work_matrix.leading_dim = subdiagonal.height;
+    work_matrix.data = workspace->Data();
+
+    // Store the updates in the workspace.
+    MatrixMultiplyNormalNormal(Field{-1}, subdiagonal,
+                               matrix_supernode.ToConst(), Field{0},
+                               &work_matrix);
+
+    // Accumulate the workspace into the solution matrix.
+    for (Int j = 0; j < num_rhs; ++j) {
+      for (Int i = 0; i < subdiagonal.height; ++i) {
+        const Int row = indices[i];
+        matrix->Entry(row, j) += work_matrix(i, j);
+      }
+    }
+  } else {
+    for (Int j = 0; j < num_rhs; ++j) {
+      for (Int k = 0; k < supernode_size; ++k) {
+        const Field& eta = matrix_supernode(k, j);
+        for (Int i = 0; i < subdiagonal.height; ++i) {
+          const Int row = indices[i];
+          matrix->Entry(row, j) -= subdiagonal(i, k) * eta;
+        }
+      }
+    }
+  }
+}
+
+template <class Field>
 void Factorization<Field>::LowerTriangularSolve(
     BlasMatrix<Field>* matrix) const {
   const Int num_rhs = matrix->width;
-  const Int num_supernodes = ordering_.supernode_sizes.Size();
-  const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
-
   Buffer<Field> workspace(max_degree_ * num_rhs, Field{0});
 
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const ConstBlasMatrix<Field> triangular_matrix =
-        diagonal_factor_->blocks[supernode];
-
-    const Int supernode_size = ordering_.supernode_sizes[supernode];
-    const Int supernode_start = ordering_.supernode_offsets[supernode];
-    BlasMatrix<Field> matrix_supernode =
-        matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
-
-    // Solve against the diagonal block of the supernode.
-    if (is_cholesky) {
-      LeftLowerTriangularSolves(triangular_matrix, &matrix_supernode);
-    } else {
-      LeftLowerUnitTriangularSolves(triangular_matrix, &matrix_supernode);
-    }
-
-    const ConstBlasMatrix<Field> subdiagonal = lower_factor_->blocks[supernode];
-    if (!subdiagonal.height) {
-      continue;
-    }
-
-    // Handle the external updates for this supernode.
-    const Int* indices = lower_factor_->StructureBeg(supernode);
-    if (supernode_size >= forward_solve_out_of_place_supernode_threshold_) {
-      // Perform an out-of-place GEMM.
-      BlasMatrix<Field> work_matrix;
-      work_matrix.height = subdiagonal.height;
-      work_matrix.width = num_rhs;
-      work_matrix.leading_dim = subdiagonal.height;
-      work_matrix.data = workspace.Data();
-
-      // Store the updates in the workspace.
-      MatrixMultiplyNormalNormal(Field{-1}, subdiagonal,
-                                 matrix_supernode.ToConst(), Field{0},
-                                 &work_matrix);
-
-      // Accumulate the workspace into the solution matrix.
-      for (Int j = 0; j < num_rhs; ++j) {
-        for (Int i = 0; i < subdiagonal.height; ++i) {
-          const Int row = indices[i];
-          matrix->Entry(row, j) += work_matrix(i, j);
-        }
-      }
-    } else {
-      for (Int j = 0; j < num_rhs; ++j) {
-        for (Int k = 0; k < supernode_size; ++k) {
-          const Field& eta = matrix_supernode(k, j);
-          for (Int i = 0; i < subdiagonal.height; ++i) {
-            const Int row = indices[i];
-            matrix->Entry(row, j) -= subdiagonal(i, k) * eta;
-          }
-        }
-      }
-    }
+  const Int num_roots = ordering_.assembly_forest.roots.Size();
+  for (Int root_index = 0; root_index < num_roots; ++root_index) {
+    const Int root = ordering_.assembly_forest.roots[root_index];
+    LowerTriangularSolveRecursion(root, matrix, &workspace);
   }
 }
 
@@ -1369,78 +1387,96 @@ void Factorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
 }
 
 template <class Field>
-void Factorization<Field>::LowerTransposeTriangularSolve(
-    BlasMatrix<Field>* matrix) const {
+void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
+    Int supernode, BlasMatrix<Field>* matrix,
+    Buffer<Field>* packed_input_buf) const {
   const Int num_rhs = matrix->width;
-  const Int num_supernodes = ordering_.supernode_sizes.Size();
   const bool is_selfadjoint = factorization_type_ != kLDLTransposeFactorization;
 
-  Buffer<Field> packed_input_buf(max_degree_ * num_rhs);
+  const Int supernode_size = ordering_.supernode_sizes[supernode];
+  const Int supernode_start = ordering_.supernode_offsets[supernode];
+  const Int* indices = lower_factor_->StructureBeg(supernode);
 
-  for (Int supernode = num_supernodes - 1; supernode >= 0; --supernode) {
-    const Int supernode_size = ordering_.supernode_sizes[supernode];
-    const Int supernode_start = ordering_.supernode_offsets[supernode];
-    const Int* indices = lower_factor_->StructureBeg(supernode);
+  BlasMatrix<Field> matrix_supernode =
+      matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
-    BlasMatrix<Field> matrix_supernode =
-        matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
-
-    const ConstBlasMatrix<Field> subdiagonal = lower_factor_->blocks[supernode];
-    if (subdiagonal.height) {
-      // Handle the external updates for this supernode.
-      if (supernode_size >= backward_solve_out_of_place_supernode_threshold_) {
-        // Fill the work matrix.
-        BlasMatrix<Field> work_matrix;
-        work_matrix.height = subdiagonal.height;
-        work_matrix.width = num_rhs;
-        work_matrix.leading_dim = subdiagonal.height;
-        work_matrix.data = packed_input_buf.Data();
-        for (Int j = 0; j < num_rhs; ++j) {
-          for (Int i = 0; i < subdiagonal.height; ++i) {
-            const Int row = indices[i];
-            work_matrix(i, j) = matrix->Entry(row, j);
-          }
+  const ConstBlasMatrix<Field> subdiagonal = lower_factor_->blocks[supernode];
+  if (subdiagonal.height) {
+    // Handle the external updates for this supernode.
+    if (supernode_size >= backward_solve_out_of_place_supernode_threshold_) {
+      // Fill the work matrix.
+      BlasMatrix<Field> work_matrix;
+      work_matrix.height = subdiagonal.height;
+      work_matrix.width = num_rhs;
+      work_matrix.leading_dim = subdiagonal.height;
+      work_matrix.data = packed_input_buf->Data();
+      for (Int j = 0; j < num_rhs; ++j) {
+        for (Int i = 0; i < subdiagonal.height; ++i) {
+          const Int row = indices[i];
+          work_matrix(i, j) = matrix->Entry(row, j);
         }
+      }
 
-        if (is_selfadjoint) {
-          MatrixMultiplyAdjointNormal(Field{-1}, subdiagonal,
+      if (is_selfadjoint) {
+        MatrixMultiplyAdjointNormal(Field{-1}, subdiagonal,
+                                    work_matrix.ToConst(), Field{1},
+                                    &matrix_supernode);
+      } else {
+        MatrixMultiplyTransposeNormal(Field{-1}, subdiagonal,
                                       work_matrix.ToConst(), Field{1},
                                       &matrix_supernode);
-        } else {
-          MatrixMultiplyTransposeNormal(Field{-1}, subdiagonal,
-                                        work_matrix.ToConst(), Field{1},
-                                        &matrix_supernode);
-        }
-      } else {
-        for (Int k = 0; k < supernode_size; ++k) {
-          for (Int i = 0; i < subdiagonal.height; ++i) {
-            const Int row = indices[i];
-            for (Int j = 0; j < num_rhs; ++j) {
-              if (is_selfadjoint) {
-                matrix_supernode(k, j) -=
-                    Conjugate(subdiagonal(i, k)) * matrix->Entry(row, j);
-              } else {
-                matrix_supernode(k, j) -=
-                    subdiagonal(i, k) * matrix->Entry(row, j);
-              }
+      }
+    } else {
+      for (Int k = 0; k < supernode_size; ++k) {
+        for (Int i = 0; i < subdiagonal.height; ++i) {
+          const Int row = indices[i];
+          for (Int j = 0; j < num_rhs; ++j) {
+            if (is_selfadjoint) {
+              matrix_supernode(k, j) -=
+                  Conjugate(subdiagonal(i, k)) * matrix->Entry(row, j);
+            } else {
+              matrix_supernode(k, j) -=
+                  subdiagonal(i, k) * matrix->Entry(row, j);
             }
           }
         }
       }
     }
+  }
 
-    // Solve against the diagonal block of this supernode.
-    const ConstBlasMatrix<Field> triangular_matrix =
-        diagonal_factor_->blocks[supernode];
-    if (factorization_type_ == kCholeskyFactorization) {
-      LeftLowerAdjointTriangularSolves(triangular_matrix, &matrix_supernode);
-    } else if (factorization_type_ == kLDLAdjointFactorization) {
-      LeftLowerAdjointUnitTriangularSolves(triangular_matrix,
+  // Solve against the diagonal block of this supernode.
+  const ConstBlasMatrix<Field> triangular_matrix =
+      diagonal_factor_->blocks[supernode];
+  if (factorization_type_ == kCholeskyFactorization) {
+    LeftLowerAdjointTriangularSolves(triangular_matrix, &matrix_supernode);
+  } else if (factorization_type_ == kLDLAdjointFactorization) {
+    LeftLowerAdjointUnitTriangularSolves(triangular_matrix, &matrix_supernode);
+  } else {
+    LeftLowerTransposeUnitTriangularSolves(triangular_matrix,
                                            &matrix_supernode);
-    } else {
-      LeftLowerTransposeUnitTriangularSolves(triangular_matrix,
-                                             &matrix_supernode);
-    }
+  }
+
+  // Recurse on this supernode's children.
+  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering_.assembly_forest.children[child_beg + child_index];
+    LowerTransposeTriangularSolveRecursion(child, matrix, packed_input_buf);
+  }
+}
+
+template <class Field>
+void Factorization<Field>::LowerTransposeTriangularSolve(
+    BlasMatrix<Field>* matrix) const {
+  const Int num_rhs = matrix->width;
+  Buffer<Field> packed_input_buf(max_degree_ * num_rhs);
+
+  const Int num_roots = ordering_.assembly_forest.roots.Size();
+  for (Int root_index = 0; root_index < num_roots; ++root_index) {
+    const Int root = ordering_.assembly_forest.roots[root_index];
+    LowerTransposeTriangularSolveRecursion(root, matrix, &packed_input_buf);
   }
 }
 

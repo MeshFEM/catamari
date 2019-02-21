@@ -231,6 +231,17 @@ class Factorization {
       Int supernode, RightLookingSharedState<Field>* shared_state,
       LDLResult* result);
 #endif  // ifdef _OPENMP
+
+  // Performs the portion of the lower-triangular solve corresponding to the
+  // subtree with the given root supernode.
+  void LowerTriangularSolveRecursion(Int supernode, BlasMatrix<Field>* matrix,
+                                     Buffer<Field>* workspace) const;
+
+  // Performs the portion of the transposed lower-triangular solve
+  // corresponding to the subtree with the given root supernode.
+  void LowerTransposeTriangularSolveRecursion(
+      Int supernode, BlasMatrix<Field>* matrix,
+      Buffer<Field>* packed_input_buf) const;
 };
 
 }  // namespace supernodal_ldl
