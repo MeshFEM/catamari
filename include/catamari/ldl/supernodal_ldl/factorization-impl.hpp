@@ -1256,17 +1256,30 @@ LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
   const bool have_permutation = !ordering_.permutation.Empty();
-
-  // TODO(Jack Poulson): Add multithreaded tree parallelism.
-
   // Reorder the input into the permutation of the factorization.
   if (have_permutation) {
     Permute(ordering_.permutation, matrix);
   }
 
+#ifdef _OPENMP
+  if (omp_get_max_threads() > 1) {
+    #pragma omp parallel
+    #pragma omp single
+    {
+      MultithreadedLowerTriangularSolve(matrix);
+      MultithreadedDiagonalSolve(matrix);
+      MultithreadedLowerTransposeTriangularSolve(matrix);
+    }
+  } else {
+    LowerTriangularSolve(matrix);
+    DiagonalSolve(matrix);
+    LowerTransposeTriangularSolve(matrix);
+  }
+#else
   LowerTriangularSolve(matrix);
   DiagonalSolve(matrix);
   LowerTransposeTriangularSolve(matrix);
+#endif  // ifdef _OPENMP
 
   // Reverse the factorization permutation.
   if (have_permutation) {
@@ -1275,18 +1288,8 @@ void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
 }
 
 template <class Field>
-void Factorization<Field>::LowerTriangularSolveRecursion(
+void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
     Int supernode, BlasMatrix<Field>* matrix, Buffer<Field>* workspace) const {
-  // Recurse on this supernode's children.
-  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
-  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
-  const Int num_children = child_end - child_beg;
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child =
-        ordering_.assembly_forest.children[child_beg + child_index];
-    LowerTriangularSolveRecursion(child, matrix, workspace);
-  }
-
   // Eliminate this supernode.
   const Int num_rhs = matrix->width;
   const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
@@ -1346,17 +1349,90 @@ void Factorization<Field>::LowerTriangularSolveRecursion(
 }
 
 template <class Field>
+void Factorization<Field>::LowerTriangularSolveRecursion(
+    Int supernode, BlasMatrix<Field>* matrix, Buffer<Field>* workspace) const {
+  // Recurse on this supernode's children.
+  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering_.assembly_forest.children[child_beg + child_index];
+    LowerTriangularSolveRecursion(child, matrix, workspace);
+  }
+
+  // Perform this supernode's trapezoidal solve.
+  LowerSupernodalTrapezoidalSolve(supernode, matrix, workspace);
+}
+
+#ifdef _OPENMP
+template <class Field>
+void Factorization<Field>::MultithreadedLowerTriangularSolveRecursion(
+    Int supernode, BlasMatrix<Field>* matrix,
+    Buffer<Buffer<Field>>* private_workspaces) const {
+  // Recurse on this supernode's children.
+  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+  #pragma omp taskgroup
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering_.assembly_forest.children[child_beg + child_index];
+    #pragma omp task default(none) firstprivate(child) \
+        shared(matrix, private_workspaces)
+    MultithreadedLowerTriangularSolveRecursion(child, matrix,
+                                               private_workspaces);
+  }
+
+  // Perform this supernode's trapezoidal solve.
+  const int thread = omp_get_thread_num();
+  Buffer<Field>* workspace = &(*private_workspaces)[thread];
+  LowerSupernodalTrapezoidalSolve(supernode, matrix, workspace);
+}
+#endif  // ifdef _OPENMP
+
+template <class Field>
 void Factorization<Field>::LowerTriangularSolve(
     BlasMatrix<Field>* matrix) const {
-  const Int num_rhs = matrix->width;
-  Buffer<Field> workspace(max_degree_ * num_rhs, Field{0});
+  // Allocate the workspace.
+  const Int workspace_size = max_degree_ * matrix->width;
+  Buffer<Field> workspace(workspace_size, Field{0});
 
+  // Recurse on each tree in the elimination forest.
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   for (Int root_index = 0; root_index < num_roots; ++root_index) {
     const Int root = ordering_.assembly_forest.roots[root_index];
     LowerTriangularSolveRecursion(root, matrix, &workspace);
   }
 }
+
+#ifdef _OPENMP
+template <class Field>
+void Factorization<Field>::MultithreadedLowerTriangularSolve(
+    BlasMatrix<Field>* matrix) const {
+  // Allocate workspaces for each thread.
+  const int max_threads = omp_get_max_threads();
+  const Int workspace_size = max_degree_ * matrix->width;
+  Buffer<Buffer<Field>> private_workspaces(max_threads);
+  #pragma omp taskgroup
+  for (int t = 0; t < max_threads; ++t) {
+    #pragma omp task default(none) firstprivate(t, workspace_size) \
+        shared(private_workspaces)
+    private_workspaces[t].Resize(workspace_size, Field{0});
+  }
+
+  // Recurse on each tree in the elimination forest.
+  const Int num_roots = ordering_.assembly_forest.roots.Size();
+  #pragma omp taskgroup
+  for (Int root_index = 0; root_index < num_roots; ++root_index) {
+    const Int root = ordering_.assembly_forest.roots[root_index];
+    #pragma omp task default(none) firstprivate(root) \
+        shared(matrix, private_workspaces)
+    MultithreadedLowerTriangularSolveRecursion(root, matrix,
+                                               &private_workspaces);
+  }
+}
+#endif  // ifdef _OPENMP
 
 template <class Field>
 void Factorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
@@ -1386,13 +1462,50 @@ void Factorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
   }
 }
 
+#ifdef _OPENMP
 template <class Field>
-void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
+void Factorization<Field>::MultithreadedDiagonalSolve(
+    BlasMatrix<Field>* matrix) const {
+  if (factorization_type_ == kCholeskyFactorization) {
+    // D is the identity.
+    return;
+  }
+
+  const SymmetricOrdering* ordering_ptr = &ordering_;
+  const DiagonalFactor<Field>* diagonal_factor_ptr = diagonal_factor_.get();
+
+  const Int num_supernodes = ordering_.supernode_sizes.Size();
+  #pragma omp taskgroup
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    #pragma omp task default(none) firstprivate(supernode) \
+        shared(matrix, ordering_ptr, diagonal_factor_ptr)
+    {
+      const ConstBlasMatrix<Field> diagonal_matrix =
+          diagonal_factor_ptr->blocks[supernode];
+
+      const Int num_rhs = matrix->width;
+      const Int supernode_size = ordering_ptr->supernode_sizes[supernode];
+      const Int supernode_start = ordering_ptr->supernode_offsets[supernode];
+      BlasMatrix<Field> matrix_supernode =
+          matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
+
+      // Handle the diagonal-block portion of the supernode.
+      for (Int j = 0; j < num_rhs; ++j) {
+        for (Int i = 0; i < supernode_size; ++i) {
+          matrix_supernode(i, j) /= diagonal_matrix(i, i);
+        }
+      }
+    }
+  }
+}
+#endif  // ifdef _OPENMP
+
+template <class Field>
+void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
     Int supernode, BlasMatrix<Field>* matrix,
     Buffer<Field>* packed_input_buf) const {
   const Int num_rhs = matrix->width;
   const bool is_selfadjoint = factorization_type_ != kLDLTransposeFactorization;
-
   const Int supernode_size = ordering_.supernode_sizes[supernode];
   const Int supernode_start = ordering_.supernode_offsets[supernode];
   const Int* indices = lower_factor_->StructureBeg(supernode);
@@ -1455,6 +1568,14 @@ void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
     LeftLowerTransposeUnitTriangularSolves(triangular_matrix,
                                            &matrix_supernode);
   }
+}
+
+template <class Field>
+void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
+    Int supernode, BlasMatrix<Field>* matrix,
+    Buffer<Field>* packed_input_buf) const {
+  // Perform this supernode's trapezoidal solve.
+  LowerTransposeSupernodalTrapezoidalSolve(supernode, matrix, packed_input_buf);
 
   // Recurse on this supernode's children.
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
@@ -1467,12 +1588,40 @@ void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
   }
 }
 
+#ifdef _OPENMP
+template <class Field>
+void Factorization<Field>::MultithreadedLowerTransposeTriangularSolveRecursion(
+    Int supernode, BlasMatrix<Field>* matrix,
+    Buffer<Buffer<Field>>* private_packed_input_bufs) const {
+  // Perform this supernode's trapezoidal solve.
+  const int thread = omp_get_thread_num();
+  Buffer<Field>* packed_input_buf = &(*private_packed_input_bufs)[thread];
+  LowerTransposeSupernodalTrapezoidalSolve(supernode, matrix, packed_input_buf);
+
+  // Recurse on this supernode's children.
+  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+  #pragma omp taskgroup
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering_.assembly_forest.children[child_beg + child_index];
+    #pragma omp task default(none) firstprivate(child) \
+        shared(matrix, private_packed_input_bufs)
+    MultithreadedLowerTransposeTriangularSolveRecursion(
+        child, matrix, private_packed_input_bufs);
+  }
+}
+#endif  // ifdef _OPENMP
+
 template <class Field>
 void Factorization<Field>::LowerTransposeTriangularSolve(
     BlasMatrix<Field>* matrix) const {
-  const Int num_rhs = matrix->width;
-  Buffer<Field> packed_input_buf(max_degree_ * num_rhs);
+  // Allocate the workspace.
+  const Int workspace_size = max_degree_ * matrix->width;
+  Buffer<Field> packed_input_buf(workspace_size);
 
+  // Recurse from each root of the elimination forest.
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   for (Int root_index = 0; root_index < num_roots; ++root_index) {
     const Int root = ordering_.assembly_forest.roots[root_index];
@@ -1480,21 +1629,50 @@ void Factorization<Field>::LowerTransposeTriangularSolve(
   }
 }
 
+#ifdef _OPENMP
+template <class Field>
+void Factorization<Field>::MultithreadedLowerTransposeTriangularSolve(
+    BlasMatrix<Field>* matrix) const {
+  // Allocate each thread's workspace.
+  const int max_threads = omp_get_max_threads();
+  const Int workspace_size = max_degree_ * matrix->width;
+  Buffer<Buffer<Field>> private_packed_input_bufs(max_threads);
+  #pragma omp taskgroup
+  for (int t = 0; t < max_threads; ++t) {
+    #pragma omp task default(none) firstprivate(t, workspace_size) \
+        shared(private_packed_input_bufs)
+    private_packed_input_bufs[t].Resize(workspace_size);
+  }
+
+  // Recurse from each root of the elimination forest.
+  const Int num_roots = ordering_.assembly_forest.roots.Size();
+  #pragma omp taskgroup
+  for (Int root_index = 0; root_index < num_roots; ++root_index) {
+    const Int root = ordering_.assembly_forest.roots[root_index];
+    #pragma omp task default(none) firstprivate(root) \
+        shared(matrix, private_packed_input_bufs)
+    MultithreadedLowerTransposeTriangularSolveRecursion(
+        root, matrix, &private_packed_input_bufs);
+  }
+}
+#endif  // ifdef _OPENMP
+
 template <class Field>
 void Factorization<Field>::PrintDiagonalFactor(const std::string& label,
                                                std::ostream& os) const {
-  if (factorization_type_ == kCholeskyFactorization) {
-    // TODO(Jack Poulson): Print the identity.
-    return;
-  }
-
   os << label << ": \n";
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const ConstBlasMatrix<Field>& diag_matrix =
         diagonal_factor_->blocks[supernode];
-    for (Int j = 0; j < diag_matrix.height; ++j) {
-      os << diag_matrix(j, j) << " ";
+    if (factorization_type_ == kCholeskyFactorization) {
+      for (Int j = 0; j < diag_matrix.height; ++j) {
+        os << "1 ";
+      }
+    } else {
+      for (Int j = 0; j < diag_matrix.height; ++j) {
+        os << diag_matrix(j, j) << " ";
+      }
     }
   }
   os << std::endl;

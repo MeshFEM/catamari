@@ -71,12 +71,25 @@ class Factorization {
   // Solves a set of linear systems using the lower-triangular factor.
   void LowerTriangularSolve(BlasMatrix<Field>* matrix) const;
 
+#ifdef _OPENMP
+  void MultithreadedLowerTriangularSolve(BlasMatrix<Field>* matrix) const;
+#endif  // ifdef _OPENMP
+
   // Solves a set of linear systems using the diagonal factor.
   void DiagonalSolve(BlasMatrix<Field>* matrix) const;
+
+#ifdef _OPENMP
+  void MultithreadedDiagonalSolve(BlasMatrix<Field>* matrix) const;
+#endif  // ifdef _OPENMP
 
   // Solves a set of linear systems using the trasnpose (or adjoint) of the
   // lower-triangular factor.
   void LowerTransposeTriangularSolve(BlasMatrix<Field>* matrix) const;
+
+#ifdef _OPENMP
+  void MultithreadedLowerTransposeTriangularSolve(
+      BlasMatrix<Field>* matrix) const;
+#endif  // ifdef _OPENMP
 
   // Prints the diagonal of the factorization.
   void PrintDiagonalFactor(const std::string& label, std::ostream& os) const;
@@ -237,11 +250,32 @@ class Factorization {
   void LowerTriangularSolveRecursion(Int supernode, BlasMatrix<Field>* matrix,
                                      Buffer<Field>* workspace) const;
 
+#ifdef _OPENMP
+  void MultithreadedLowerTriangularSolveRecursion(
+      Int supernode, BlasMatrix<Field>* matrix,
+      Buffer<Buffer<Field>>* private_workspaces) const;
+#endif  // ifdef _OPENMP
+
+  // Performs the trapezoidal solve associated with a particular supernode.
+  void LowerSupernodalTrapezoidalSolve(Int supernode, BlasMatrix<Field>* matrix,
+                                       Buffer<Field>* workspace) const;
+
   // Performs the portion of the transposed lower-triangular solve
   // corresponding to the subtree with the given root supernode.
   void LowerTransposeTriangularSolveRecursion(
       Int supernode, BlasMatrix<Field>* matrix,
       Buffer<Field>* packed_input_buf) const;
+
+#ifdef _OPENMP
+  void MultithreadedLowerTransposeTriangularSolveRecursion(
+      Int supernode, BlasMatrix<Field>* matrix,
+      Buffer<Buffer<Field>>* private_packed_input_bufs) const;
+#endif  // ifdef _OPENMP
+
+  // Performs the trapezoidal solve associated with a particular supernode.
+  void LowerTransposeSupernodalTrapezoidalSolve(Int supernode,
+                                                BlasMatrix<Field>* matrix,
+                                                Buffer<Field>* workspace) const;
 };
 
 }  // namespace supernodal_ldl
