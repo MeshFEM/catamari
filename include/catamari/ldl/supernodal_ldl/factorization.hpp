@@ -128,6 +128,9 @@ class Factorization {
   // The largest degree of a supernode in the factorization.
   Int max_degree_;
 
+  // The largest number of entries in any supernode's lower block.
+  Int max_lower_block_size_;
+
   // The algorithmic block size for diagonal block factorizations.
   Int block_size_;
 
@@ -209,13 +212,15 @@ class Factorization {
 
   bool RightLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
                            RightLookingSharedState<Field>* shared_state,
+                           PrivateState<Field>* private_state,
                            LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedRightLookingSubtree(
       Int level, Int max_parallel_levels, Int supernode,
       const CoordinateMatrix<Field>& matrix,
       const Buffer<double>& work_estimates,
-      RightLookingSharedState<Field>* shared_state, LDLResult* result);
+      RightLookingSharedState<Field>* shared_state,
+      Buffer<PrivateState<Field>>* private_states, LDLResult* result);
 #endif  // ifdef _OPENMP
 
   void LeftLookingSupernodeUpdate(Int main_supernode,
@@ -238,11 +243,11 @@ class Factorization {
 
   bool RightLookingSupernodeFinalize(
       Int supernode, RightLookingSharedState<Field>* shared_state,
-      LDLResult* result);
+      PrivateState<Field>* private_state, LDLResult* result);
 #ifdef _OPENMP
   bool MultithreadedRightLookingSupernodeFinalize(
       Int supernode, RightLookingSharedState<Field>* shared_state,
-      LDLResult* result);
+      Buffer<PrivateState<Field>>* private_state, LDLResult* result);
 #endif  // ifdef _OPENMP
 
   // Performs the portion of the lower-triangular solve corresponding to the

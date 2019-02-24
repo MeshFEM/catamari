@@ -178,6 +178,16 @@ void Factorization<Field>::InitializeFactors(
   max_degree_ =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
 
+  // Compute the maximum number of entries below the diagonal block of a
+  // supernode.
+  max_lower_block_size_ = 0;
+  const Int num_supernodes = supernode_degrees.Size();
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int lower_block_size =
+        supernode_degrees[supernode] * ordering_.supernode_sizes[supernode];
+    max_lower_block_size_ = std::max(max_lower_block_size_, lower_block_size);
+  }
+
   FillStructureIndices(matrix, ordering_, forest, supernode_member_to_index_,
                        lower_factor_.get());
   if (algorithm_ == kLeftLookingLDL) {
@@ -208,6 +218,16 @@ void Factorization<Field>::MultithreadedInitializeFactors(
   // Store the largest degree of the factorization for use in the solve phase.
   max_degree_ =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
+
+  // Compute the maximum number of entries below the diagonal block of a
+  // supernode.
+  max_lower_block_size_ = 0;
+  const Int num_supernodes = supernode_degrees.Size();
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int lower_block_size =
+        supernode_degrees[supernode] * ordering_.supernode_sizes[supernode];
+    max_lower_block_size_ = std::max(max_lower_block_size_, lower_block_size);
+  }
 
   MultithreadedFillStructureIndices(sort_grain_size_, matrix, ordering_, forest,
                                     supernode_member_to_index_,
@@ -415,7 +435,7 @@ LDLResult Factorization<Field>::LeftLooking(
 template <class Field>
 bool Factorization<Field>::RightLookingSupernodeFinalize(
     Int supernode, RightLookingSharedState<Field>* shared_state,
-    LDLResult* result) {
+    PrivateState<Field>* private_state, LDLResult* result) {
   typedef ComplexBase<Field> Real;
   BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
   BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
@@ -457,13 +477,11 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
     LowerNormalHermitianOuterProduct(Real{-1}, lower_block.ToConst(), Real{1},
                                      &schur_complement);
   } else {
-    // TODO(Jack Poulson): See if this can be preallocated.
-    Buffer<Field> scaled_transpose_buffer(degree * supernode_size);
     BlasMatrix<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;
     scaled_transpose.width = degree;
     scaled_transpose.leading_dim = supernode_size;
-    scaled_transpose.data = scaled_transpose_buffer.Data();
+    scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
     FormScaledTranspose(factorization_type_, diagonal_block.ToConst(),
                         lower_block.ToConst(), &scaled_transpose);
     MatrixMultiplyLowerNormalNormal(Field{-1}, lower_block.ToConst(),
@@ -478,12 +496,15 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
 template <class Field>
 bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     Int supernode, RightLookingSharedState<Field>* shared_state,
-    LDLResult* result) {
+    Buffer<PrivateState<Field>>* private_states, LDLResult* result) {
   typedef ComplexBase<Field> Real;
   BlasMatrix<Field> diagonal_block = diagonal_factor_->blocks[supernode];
   BlasMatrix<Field> lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
+
+  const int thread = omp_get_thread_num();
+  PrivateState<Field>* private_state = &(*private_states)[thread];
 
   // Initialize this supernode's Schur complement as the zero matrix.
   Buffer<Field>& schur_complement_buffer =
@@ -506,6 +527,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
 
   Int num_supernode_pivots;
   {
+    // TODO(Jack Poulson): Preallocate this buffer.
     Buffer<Field> multithreaded_buffer(supernode_size * supernode_size);
     #pragma omp taskgroup
     {
@@ -537,13 +559,11 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
         outer_product_tile_size_, Real{-1}, lower_block.ToConst(), Real{1},
         &schur_complement);
   } else {
-    // TODO(Jack Poulson): See if this can be preallocated.
-    Buffer<Field> scaled_transpose_buffer(degree * supernode_size);
     BlasMatrix<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;
     scaled_transpose.width = degree;
     scaled_transpose.leading_dim = supernode_size;
-    scaled_transpose.data = scaled_transpose_buffer.Data();
+    scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
 
     #pragma omp taskgroup
     MultithreadedFormScaledTranspose(
@@ -564,7 +584,8 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
 template <class Field>
 bool Factorization<Field>::RightLookingSubtree(
     Int supernode, const CoordinateMatrix<Field>& matrix,
-    RightLookingSharedState<Field>* shared_state, LDLResult* result) {
+    RightLookingSharedState<Field>* shared_state,
+    PrivateState<Field>* private_state, LDLResult* result) {
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
@@ -572,16 +593,18 @@ bool Factorization<Field>::RightLookingSubtree(
   Buffer<int> successes(num_children);
   Buffer<LDLResult> result_contributions(num_children);
 
+  // Recurse on the children.
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
     CATAMARI_ASSERT(ordering_.assembly_forest.parents[child] == supernode,
                     "Incorrect child index");
     LDLResult& result_contribution = result_contributions[child_index];
-    successes[child_index] =
-        RightLookingSubtree(child, matrix, shared_state, &result_contribution);
+    successes[child_index] = RightLookingSubtree(
+        child, matrix, shared_state, private_state, &result_contribution);
   }
 
+  // Merge the children's results (stopping if a failure is detected).
   bool succeeded = true;
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     if (!successes[child_index]) {
@@ -592,7 +615,8 @@ bool Factorization<Field>::RightLookingSubtree(
   }
 
   if (succeeded) {
-    succeeded = RightLookingSupernodeFinalize(supernode, shared_state, result);
+    succeeded = RightLookingSupernodeFinalize(supernode, shared_state,
+                                              private_state, result);
   } else {
     // Clear the child fronts.
     for (Int child_index = 0; child_index < num_children; ++child_index) {
@@ -617,9 +641,12 @@ template <class Field>
 bool Factorization<Field>::MultithreadedRightLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode,
     const CoordinateMatrix<Field>& matrix, const Buffer<double>& work_estimates,
-    RightLookingSharedState<Field>* shared_state, LDLResult* result) {
+    RightLookingSharedState<Field>* shared_state,
+    Buffer<PrivateState<Field>>* private_states, LDLResult* result) {
   if (level >= max_parallel_levels) {
-    return RightLookingSubtree(supernode, matrix, shared_state, result);
+    const int thread = omp_get_thread_num();
+    return RightLookingSubtree(supernode, matrix, shared_state,
+                               &(*private_states)[thread], result);
   }
 
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
@@ -629,22 +656,24 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
   Buffer<int> successes(num_children);
   Buffer<LDLResult> result_contributions(num_children);
 
+  // Recurse on the children.
   #pragma omp taskgroup
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
     #pragma omp task default(none)                                            \
       firstprivate(level, max_parallel_levels, supernode, child, child_index, \
-          shared_state)                                                       \
+          shared_state, private_states)                                       \
       shared(successes, matrix, result_contributions, work_estimates)
     {
       LDLResult& result_contribution = result_contributions[child_index];
       successes[child_index] = MultithreadedRightLookingSubtree(
           level + 1, max_parallel_levels, child, matrix, work_estimates,
-          shared_state, &result_contribution);
+          shared_state, private_states, &result_contribution);
     }
   }
 
+  // Merge the child results (stopping if a failure is detected).
   bool succeeded = true;
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     if (!successes[child_index]) {
@@ -657,7 +686,7 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
   if (succeeded) {
     #pragma omp taskgroup
     succeeded = MultithreadedRightLookingSupernodeFinalize(
-        supernode, shared_state, result);
+        supernode, shared_state, private_states, result);
   } else {
     // Clear the child fronts.
     for (Int child_index = 0; child_index < num_children; ++child_index) {
@@ -702,18 +731,25 @@ LDLResult Factorization<Field>::RightLooking(
   shared_state.schur_complement_buffers.Resize(num_supernodes);
   shared_state.schur_complements.Resize(num_supernodes);
 
+  PrivateState<Field> private_state;
+  if (factorization_type_ != kCholeskyFactorization) {
+    private_state.scaled_transpose_buffer.Resize(max_lower_block_size_);
+  }
+
   LDLResult result;
 
   Buffer<int> successes(num_roots);
   Buffer<LDLResult> result_contributions(num_roots);
 
+  // Merge the child results (stopping if a failure is detected).
   for (Int root_index = 0; root_index < num_roots; ++root_index) {
     const Int root = ordering_.assembly_forest.roots[root_index];
     LDLResult& result_contribution = result_contributions[root_index];
-    successes[root_index] =
-        RightLookingSubtree(root, matrix, &shared_state, &result_contribution);
+    successes[root_index] = RightLookingSubtree(
+        root, matrix, &shared_state, &private_state, &result_contribution);
   }
 
+  // Merge the child results (stopping if a failure is detected).
   for (Int index = 0; index < num_roots; ++index) {
     if (!successes[index]) {
       break;
@@ -736,6 +772,7 @@ bool Factorization<Field>::LeftLookingSubtree(
   Buffer<int> successes(num_children);
   Buffer<LDLResult> result_contributions(num_children);
 
+  // Recurse on the children.
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
@@ -747,6 +784,7 @@ bool Factorization<Field>::LeftLookingSubtree(
         child, matrix, shared_state, private_state, &result_contribution);
   }
 
+  // Merge the child results (stopping if a failure is detected).
   bool succeeded = true;
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     if (!successes[child_index]) {
@@ -1161,6 +1199,17 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
   shared_state.schur_complement_buffers.Resize(num_supernodes);
   shared_state.schur_complements.Resize(num_supernodes);
 
+  Buffer<PrivateState<Field>> private_states(max_threads);
+  if (factorization_type_ != kCholeskyFactorization) {
+    const Int workspace_size = max_lower_block_size_;
+    #pragma omp taskgroup
+    for (int t = 0; t < max_threads; ++t) {
+      #pragma omp task default(none) firstprivate(t, workspace_size) \
+          shared(private_states)
+      private_states[t].scaled_transpose_buffer.Resize(workspace_size);
+    }
+  }
+
   // Compute flop-count estimates so that we may prioritize the expensive
   // tasks before the cheaper ones.
   Buffer<double> work_estimates(num_supernodes);
@@ -1177,13 +1226,16 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
   // TODO(Jack Poulson): Make this value configurable.
   const Int max_parallel_levels = std::ceil(std::log2(max_threads)) + 3;
 
+  // Recurse on each tree in the elimination forest.
   const Int level = 0;
   if (max_parallel_levels == 0) {
+    const int thread = omp_get_thread_num();
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
       LDLResult& result_contribution = result_contributions[root_index];
-      successes[root_index] = RightLookingSubtree(root, matrix, &shared_state,
-                                                  &result_contribution);
+      successes[root_index] =
+          RightLookingSubtree(root, matrix, &shared_state,
+                              &private_states[thread], &result_contribution);
     }
   } else {
     const int old_max_threads = GetMaxBlasThreads();
@@ -1202,12 +1254,12 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
       //
       #pragma omp task default(none) firstprivate(root, root_index, level) \
           shared(successes, matrix, result_contributions, shared_state,    \
-              work_estimates)
+              private_states, work_estimates)
       {
         LDLResult& result_contribution = result_contributions[root_index];
         successes[root_index] = MultithreadedRightLookingSubtree(
             level + 1, max_parallel_levels, root, matrix, work_estimates,
-            &shared_state, &result_contribution);
+            &shared_state, &private_states, &result_contribution);
       }
     }
 
@@ -1263,6 +1315,9 @@ void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
 
 #ifdef _OPENMP
   if (omp_get_max_threads() > 1) {
+    const int old_max_threads = GetMaxBlasThreads();
+    SetNumBlasThreads(1);
+
     #pragma omp parallel
     #pragma omp single
     {
@@ -1270,6 +1325,8 @@ void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
       MultithreadedDiagonalSolve(matrix);
       MultithreadedLowerTransposeTriangularSolve(matrix);
     }
+
+    SetNumBlasThreads(old_max_threads);
   } else {
     LowerTriangularSolve(matrix);
     DiagonalSolve(matrix);
@@ -1374,12 +1431,16 @@ void Factorization<Field>::MultithreadedLowerTriangularSolveRecursion(
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
-  #pragma omp taskgroup
+  // NOTE: Multithreaded parallelism is currently disabled for this routine
+  // because the updates to the right-hand side can overlap. We must therefore
+  // buffer the updates.
+  //
+  //#pragma omp taskgroup
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
-    #pragma omp task default(none) firstprivate(child) \
-        shared(matrix, private_workspaces)
+    //#pragma omp task default(none) firstprivate(child)
+    //    shared(matrix, private_workspaces)
     MultithreadedLowerTriangularSolveRecursion(child, matrix,
                                                private_workspaces);
   }
