@@ -53,5 +53,5 @@ option('enable-openmp',
 
 option('disable-openmp',
     type : 'boolean',
-    value : true,
+    value : false,
     description : 'disable OpenMP support?')
