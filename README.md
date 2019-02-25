@@ -1,4 +1,5 @@
 ![](./images/rainbow_lhr34.png)
+
 **catamari** is a C++14, header-only implementations of sequential and
 DAG-scheduled, real and complex, supernodal sparse-direct Cholesky, LDL^T, and
 LDL^H factorizations. It similarly contains sequential and DAG-scheduled,
