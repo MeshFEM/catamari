@@ -1405,6 +1405,41 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
   }
 }
 
+#ifdef _OPENMP
+template <class Field>
+void Factorization<Field>::MultithreadedLowerSupernodalTrapezoidalSolve(
+    Int supernode, BlasMatrix<Field>* matrix,
+    RightLookingSharedState<Field>* shared_state) const {
+  // Eliminate this supernode.
+  const Int num_rhs = matrix->width;
+  const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
+  const ConstBlasMatrix<Field> triangular_matrix =
+      diagonal_factor_->blocks[supernode];
+
+  const Int supernode_size = ordering_.supernode_sizes[supernode];
+  const Int supernode_start = ordering_.supernode_offsets[supernode];
+  BlasMatrix<Field> matrix_supernode =
+      matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
+
+  // Solve against the diagonal block of the supernode.
+  if (is_cholesky) {
+    LeftLowerTriangularSolves(triangular_matrix, &matrix_supernode);
+  } else {
+    LeftLowerUnitTriangularSolves(triangular_matrix, &matrix_supernode);
+  }
+
+  const ConstBlasMatrix<Field> subdiagonal = lower_factor_->blocks[supernode];
+  if (!subdiagonal.height) {
+    return;
+  }
+
+  // Store the updates in the workspace.
+  MatrixMultiplyNormalNormal(Field{-1}, subdiagonal, matrix_supernode.ToConst(),
+                             Field{1},
+                             &shared_state->schur_complements[supernode]);
+}
+#endif  // ifdef _OPENMP
+
 template <class Field>
 void Factorization<Field>::LowerTriangularSolveRecursion(
     Int supernode, BlasMatrix<Field>* matrix, Buffer<Field>* workspace) const {
@@ -1426,29 +1461,69 @@ void Factorization<Field>::LowerTriangularSolveRecursion(
 template <class Field>
 void Factorization<Field>::MultithreadedLowerTriangularSolveRecursion(
     Int supernode, BlasMatrix<Field>* matrix,
-    Buffer<Buffer<Field>>* private_workspaces) const {
+    RightLookingSharedState<Field>* shared_state) const {
   // Recurse on this supernode's children.
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
-  // NOTE: Multithreaded parallelism is currently disabled for this routine
-  // because the updates to the right-hand side can overlap. We must therefore
-  // buffer the updates.
-  //
-  //#pragma omp taskgroup
+  #pragma omp taskgroup
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
-    //#pragma omp task default(none) firstprivate(child)
-    //    shared(matrix, private_workspaces)
-    MultithreadedLowerTriangularSolveRecursion(child, matrix,
-                                               private_workspaces);
+    #pragma omp task default(none) firstprivate(child) \
+        shared(matrix, shared_state)
+    MultithreadedLowerTriangularSolveRecursion(child, matrix, shared_state);
+  }
+
+  const Int supernode_start = ordering_.supernode_sizes[supernode];
+  const Int supernode_size = ordering_.supernode_offsets[supernode];
+  const Int* main_indices = lower_factor_->StructureBeg(supernode);
+
+  // Merge the child Schur complements into the parent.
+  const Int degree = lower_factor_->blocks[supernode].height;
+  const Int num_rhs = matrix->width;
+  const Int workspace_size = degree * num_rhs;
+  shared_state->schur_complement_buffers[supernode].Resize(workspace_size,
+                                                           Field{0});
+  BlasMatrix<Field>& main_matrix = shared_state->schur_complements[supernode];
+  main_matrix.height = degree;
+  main_matrix.width = num_rhs;
+  main_matrix.leading_dim = degree;
+  main_matrix.data = shared_state->schur_complement_buffers[supernode].Data();
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering_.assembly_forest.children[child_beg + child_index];
+    const Int* child_indices = lower_factor_->StructureBeg(child);
+    BlasMatrix<Field>& child_matrix = shared_state->schur_complements[child];
+    const Int child_degree = child_matrix.height;
+
+    Int i_rel = supernode_size;
+    for (Int i = 0; i < child_degree; ++i) {
+      const Int row = child_indices[i];
+      if (row < supernode_start + supernode_size) {
+        for (Int j = 0; j < num_rhs; ++j) {
+          matrix->Entry(row, j) += child_matrix(i, j);
+        }
+      } else {
+        while (main_indices[i_rel - supernode_size] != row) {
+          ++i_rel;
+        }
+        const Int main_rel = i_rel - supernode_size;
+        for (Int j = 0; j < num_rhs; ++j) {
+          main_matrix(main_rel, j) += child_matrix(i, j);
+        }
+      }
+    }
+
+    shared_state->schur_complement_buffers[child].Clear();
+    child_matrix.height = 0;
+    child_matrix.width = 0;
+    child_matrix.leading_dim = 0;
+    child_matrix.data = nullptr;
   }
 
   // Perform this supernode's trapezoidal solve.
-  const int thread = omp_get_thread_num();
-  Buffer<Field>* workspace = &(*private_workspaces)[thread];
-  LowerSupernodalTrapezoidalSolve(supernode, matrix, workspace);
+  MultithreadedLowerSupernodalTrapezoidalSolve(supernode, matrix, shared_state);
 }
 #endif  // ifdef _OPENMP
 
@@ -1471,16 +1546,11 @@ void Factorization<Field>::LowerTriangularSolve(
 template <class Field>
 void Factorization<Field>::MultithreadedLowerTriangularSolve(
     BlasMatrix<Field>* matrix) const {
-  // Allocate workspaces for each thread.
-  const int max_threads = omp_get_max_threads();
-  const Int workspace_size = max_degree_ * matrix->width;
-  Buffer<Buffer<Field>> private_workspaces(max_threads);
-  #pragma omp taskgroup
-  for (int t = 0; t < max_threads; ++t) {
-    #pragma omp task default(none) firstprivate(t, workspace_size) \
-        shared(private_workspaces)
-    private_workspaces[t].Resize(workspace_size, Field{0});
-  }
+  // Set up the shared state.
+  const Int num_supernodes = ordering_.supernode_sizes.Size();
+  RightLookingSharedState<Field> shared_state;
+  shared_state.schur_complement_buffers.Resize(num_supernodes);
+  shared_state.schur_complements.Resize(num_supernodes);
 
   // Recurse on each tree in the elimination forest.
   const Int num_roots = ordering_.assembly_forest.roots.Size();
@@ -1488,9 +1558,8 @@ void Factorization<Field>::MultithreadedLowerTriangularSolve(
   for (Int root_index = 0; root_index < num_roots; ++root_index) {
     const Int root = ordering_.assembly_forest.roots[root_index];
     #pragma omp task default(none) firstprivate(root) \
-        shared(matrix, private_workspaces)
-    MultithreadedLowerTriangularSolveRecursion(root, matrix,
-                                               &private_workspaces);
+        shared(matrix, shared_state)
+    MultithreadedLowerTriangularSolveRecursion(root, matrix, &shared_state);
   }
 }
 #endif  // ifdef _OPENMP

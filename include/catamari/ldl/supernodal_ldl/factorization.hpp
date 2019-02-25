@@ -258,12 +258,18 @@ class Factorization {
 #ifdef _OPENMP
   void MultithreadedLowerTriangularSolveRecursion(
       Int supernode, BlasMatrix<Field>* matrix,
-      Buffer<Buffer<Field>>* private_workspaces) const;
+      RightLookingSharedState<Field>* shared_state) const;
 #endif  // ifdef _OPENMP
 
   // Performs the trapezoidal solve associated with a particular supernode.
   void LowerSupernodalTrapezoidalSolve(Int supernode, BlasMatrix<Field>* matrix,
                                        Buffer<Field>* workspace) const;
+
+#ifdef _OPENMP
+  void MultithreadedLowerSupernodalTrapezoidalSolve(
+      Int supernode, BlasMatrix<Field>* matrix,
+      RightLookingSharedState<Field>* shared_state) const;
+#endif  // ifdef _OPENMP
 
   // Performs the portion of the transposed lower-triangular solve
   // corresponding to the subtree with the given root supernode.
