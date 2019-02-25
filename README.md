@@ -1,7 +1,8 @@
-**catamari** is a C++14, header-only implementation of real and complex
-supernodal sparse-direct Cholesky, LDL^T, and LDL^H factorizations. It also
-contains modifications of dense and sparse-direct LDL^H factorizations to
-support fast Determinantal Point Process sampling.
+**catamari** is a C++14, header-only implementations of sequential and
+DAG-scheduled, real and complex, supernodal sparse-direct Cholesky, LDL^T, and
+LDL^H factorizations. It similarly contains sequential and DAG-scheduled,
+dense and sparse-direct, real and complex, Determinantal Point Process sampling
+through modified LDL^H factorizations.
 
 ### Dependencies
 The only strict dependency for manually including the headers in your project
@@ -86,6 +87,10 @@ cd build-release
 ninja
 ninja test
 ```
+
+OpenMP task parallelism will be used by default if support for OpenMP was
+detected; shared-memory parallelism can be disabled with the
+`-Ddisable-openmp=true` configuration option.
 
 ### Running the example drivers
 One can factor Matrix Market examples from the Davis sparse matrix collection
