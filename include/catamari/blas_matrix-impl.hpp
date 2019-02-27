@@ -102,6 +102,26 @@ const Field& BlasMatrix<Field>::Entry(Int row, Int column) const {
   return view(row, column);
 }
 
+template <typename Field>
+Field* BlasMatrix<Field>::Pointer(Int row, Int column) {
+  return view.Pointer(row, column);
+}
+
+template <typename Field>
+const Field* BlasMatrix<Field>::Pointer(Int row, Int column) const {
+  return view.Pointer(row, column);
+}
+
+template <typename Field>
+BlasMatrixView<Field> BlasMatrix<Field>::View() {
+  return view;
+}
+
+template <typename Field>
+const ConstBlasMatrixView<Field> BlasMatrix<Field>::ConstView() const {
+  return view.ToConst();
+}
+
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_BLAS_MATRIX_IMPL_H_

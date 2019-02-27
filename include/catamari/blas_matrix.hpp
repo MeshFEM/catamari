@@ -9,6 +9,7 @@
 #define CATAMARI_BLAS_MATRIX_H_
 
 #include "catamari/blas_matrix_view.hpp"
+#include "catamari/buffer.hpp"
 
 namespace catamari {
 
@@ -48,6 +49,18 @@ struct BlasMatrix {
 
   // Returns an immutable reference to an entry of the matrix.
   const Field& Entry(Int row, Int column) const;
+
+  // Returns a modifiable pointer to a particular entry of the matrix.
+  Field* Pointer(Int row, Int column);
+
+  // Returns an immutable pointer to a particular entry of the matrix.
+  const Field* Pointer(Int row, Int column) const;
+
+  // Returns a modifiable view of the matrix.
+  BlasMatrixView<Field> View();
+
+  // Returns a constant view of the matrix.
+  const ConstBlasMatrixView<Field> ConstView() const;
 };
 
 }  // namespace catamari

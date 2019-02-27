@@ -8,28 +8,23 @@
 #include <cmath>
 #include <iostream>
 
+#include "catamari/blas_matrix.hpp"
 #include "catamari/dense_factorizations.hpp"
 #include "catamari/ldl.hpp"
 #include "quotient/timer.hpp"
 #include "specify.hpp"
 
+using catamari::BlasMatrix;
 using catamari::BlasMatrixView;
 using catamari::Complex;
-using catamari::ComplexBase;
-using catamari::Conjugate;
-using catamari::ConstBlasMatrixView;
 using catamari::Int;
 using quotient::Buffer;
 
 namespace {
 
 template <typename Field>
-void InitializeMatrix(Int matrix_size, BlasMatrixView<Field>* matrix,
-                      Buffer<Field>* buffer) {
-  matrix->height = matrix->width = matrix->leading_dim = matrix_size;
-  buffer->Resize(matrix->leading_dim * matrix->width);
-  matrix->data = buffer->Data();
-
+void InitializeMatrix(Int matrix_size, BlasMatrix<Field>* matrix) {
+  matrix->Resize(matrix_size, matrix_size);
   for (Int j = 0; j < matrix_size; ++j) {
     matrix->Entry(j, j) = 2 * matrix_size;
     for (Int i = j + 1; i < matrix_size; ++i) {
@@ -127,19 +122,20 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  BlasMatrixView<Complex<double>> matrix;
-  Buffer<Complex<double>> buffer;
+  BlasMatrix<Complex<double>> matrix;
   Buffer<Complex<double>> extra_buffer;
 
   for (Int round = 0; round < num_rounds; ++round) {
-    InitializeMatrix(matrix_size, &matrix, &buffer);
-    RunCholeskyFactorization(tile_size, block_size, &matrix);
+    InitializeMatrix(matrix_size, &matrix);
+    RunCholeskyFactorization(tile_size, block_size, &matrix.view);
 
-    InitializeMatrix(matrix_size, &matrix, &buffer);
-    RunLDLAdjointFactorization(tile_size, block_size, &matrix, &extra_buffer);
+    InitializeMatrix(matrix_size, &matrix);
+    RunLDLAdjointFactorization(tile_size, block_size, &matrix.view,
+                               &extra_buffer);
 
-    InitializeMatrix(matrix_size, &matrix, &buffer);
-    RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+    InitializeMatrix(matrix_size, &matrix);
+    RunLDLTransposeFactorization(tile_size, block_size, &matrix.view,
+                                 &extra_buffer);
 
     std::cout << std::endl;
   }

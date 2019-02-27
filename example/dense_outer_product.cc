@@ -8,31 +8,22 @@
 #include <cmath>
 #include <iostream>
 
+#include "catamari/blas_matrix.hpp"
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "quotient/timer.hpp"
 #include "specify.hpp"
 
+using catamari::BlasMatrix;
 using catamari::BlasMatrixView;
 using catamari::Complex;
-using catamari::ComplexBase;
-using catamari::Conjugate;
-using catamari::ConstBlasMatrixView;
 using catamari::Int;
 using quotient::Buffer;
 
 namespace {
 
 template <typename Field>
-void InitializeMatrix(Int height, Int width, BlasMatrixView<Field>* matrix,
-                      Buffer<Field>* buffer) {
-  matrix->height = height;
-  matrix->width = width;
-  matrix->leading_dim = height;
-
-  const Int buffer_size = matrix->leading_dim * matrix->width;
-  buffer->Resize(buffer_size);
-  matrix->data = buffer->Data();
-
+void InitializeMatrix(Int height, Int width, BlasMatrix<Field>* matrix) {
+  matrix->Resize(height, width);
   for (Int j = 0; j < width; ++j) {
     for (Int i = 0; i < height; ++i) {
       matrix->Entry(i, j) = i + j;
@@ -45,18 +36,17 @@ void RunMatrixMultiplyLowerNormalNormal(Int height, Int rank) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   quotient::Timer timer;
 
-  Buffer<Field> left_buffer, right_buffer, output_buffer;
-  BlasMatrixView<Field> left_matrix, right_matrix, output_matrix;
+  BlasMatrix<Field> left_matrix, right_matrix, output_matrix;
 
-  InitializeMatrix(height, rank, &left_matrix, &left_buffer);
-  InitializeMatrix(rank, height, &right_matrix, &right_buffer);
-  InitializeMatrix(height, height, &output_matrix, &output_buffer);
+  InitializeMatrix(height, rank, &left_matrix);
+  InitializeMatrix(rank, height, &right_matrix);
+  InitializeMatrix(height, height, &output_matrix);
 
   timer.Start();
 
-  MatrixMultiplyLowerNormalNormal(Field{-1}, left_matrix.ToConst(),
-                                  right_matrix.ToConst(), Field{1},
-                                  &output_matrix);
+  MatrixMultiplyLowerNormalNormal(Field{-1}, left_matrix.ConstView(),
+                                  right_matrix.ConstView(), Field{1},
+                                  &output_matrix.view);
 
   const double runtime = timer.Stop();
   const double flops =
@@ -73,20 +63,19 @@ void RunMultithreadedMatrixMultiplyLowerNormalNormal(Int tile_size, Int height,
   const bool is_complex = catamari::IsComplex<Field>::value;
   quotient::Timer timer;
 
-  Buffer<Field> left_buffer, right_buffer, output_buffer;
-  BlasMatrixView<Field> left_matrix, right_matrix, output_matrix;
+  BlasMatrix<Field> left_matrix, right_matrix, output_matrix;
 
-  InitializeMatrix(height, rank, &left_matrix, &left_buffer);
-  InitializeMatrix(rank, height, &right_matrix, &right_buffer);
-  InitializeMatrix(height, height, &output_matrix, &output_buffer);
+  InitializeMatrix(height, rank, &left_matrix);
+  InitializeMatrix(rank, height, &right_matrix);
+  InitializeMatrix(height, height, &output_matrix);
 
   timer.Start();
 
   #pragma omp parallel
   #pragma omp single
   MultithreadedMatrixMultiplyLowerNormalNormal(
-      tile_size, Field{-1}, left_matrix.ToConst(), right_matrix.ToConst(),
-      Field{1}, &output_matrix);
+      tile_size, Field{-1}, left_matrix.ConstView(), right_matrix.ConstView(),
+      Field{1}, &output_matrix.view);
 
   const double runtime = timer.Stop();
   const double flops =

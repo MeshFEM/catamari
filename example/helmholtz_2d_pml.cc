@@ -736,8 +736,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
                          &right_hand_sides);
   experiment.construction_seconds = timer.Stop();
   const Int num_rows = matrix.NumRows();
-  const Real right_hand_side_norm =
-      EuclideanNorm(right_hand_sides.view.ToConst());
+  const Real right_hand_side_norm = EuclideanNorm(right_hand_sides.ConstView());
   if (print_progress) {
     std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
   }
@@ -787,9 +786,9 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
 
   // Compute the residual.
   BlasMatrix<Field> residual = right_hand_sides;
-  catamari::ApplySparse(Field{-1}, matrix, solution.view.ToConst(), Field{1},
+  catamari::ApplySparse(Field{-1}, matrix, solution.ConstView(), Field{1},
                         &residual.view);
-  const Real residual_norm = EuclideanNorm(residual.view.ToConst());
+  const Real residual_norm = EuclideanNorm(residual.ConstView());
   std::cout << "  || B - A X ||_F / || B ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
 

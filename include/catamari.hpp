@@ -9,6 +9,7 @@
 #define CATAMARI_H_
 
 #include "catamari/apply_sparse.hpp"
+#include "catamari/blas_matrix.hpp"
 #include "catamari/complex.hpp"
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"

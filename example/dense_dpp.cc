@@ -8,28 +8,24 @@
 #include <cmath>
 #include <iostream>
 
+#include "catamari/blas_matrix.hpp"
 #include "catamari/dense_factorizations.hpp"
 #include "catamari/ldl.hpp"
 #include "quotient/timer.hpp"
 #include "specify.hpp"
 
+using catamari::BlasMatrix;
 using catamari::BlasMatrixView;
 using catamari::Complex;
 using catamari::ComplexBase;
-using catamari::Conjugate;
-using catamari::ConstBlasMatrixView;
 using catamari::Int;
 using quotient::Buffer;
 
 namespace {
 
 template <typename Field>
-void InitializeMatrix(Int matrix_size, BlasMatrixView<Field>* matrix,
-                      Buffer<Field>* buffer) {
-  matrix->height = matrix->width = matrix->leading_dim = matrix_size;
-  buffer->Resize(matrix->leading_dim * matrix->width);
-  matrix->data = buffer->Data();
-
+void InitializeMatrix(Int matrix_size, BlasMatrix<Field>* matrix) {
+  matrix->Resize(matrix_size, matrix_size);
   for (Int j = 0; j < matrix_size; ++j) {
     matrix->Entry(j, j) = 1.;
     for (Int i = j + 1; i < matrix_size; ++i) {
@@ -110,8 +106,7 @@ int main(int argc, char** argv) {
 
   std::cout << "Single-precision:" << std::endl;
   {
-    BlasMatrixView<Complex<float>> matrix;
-    Buffer<Complex<float>> buffer;
+    BlasMatrix<Complex<float>> matrix;
     Buffer<Complex<float>> extra_buffer(matrix_size * matrix_size);
 
     std::mt19937 generator(random_seed);
@@ -119,13 +114,14 @@ int main(int argc, char** argv) {
 
     for (Int round = 0; round < num_rounds; ++round) {
 #ifdef _OPENMP
-      InitializeMatrix(matrix_size, &matrix, &buffer);
-      MultithreadedSampleDPP(tile_size, block_size, maximum_likelihood, &matrix,
-                             &generator, &uniform_dist, &extra_buffer);
+      InitializeMatrix(matrix_size, &matrix);
+      MultithreadedSampleDPP(tile_size, block_size, maximum_likelihood,
+                             &matrix.view, &generator, &uniform_dist,
+                             &extra_buffer);
 #endif  // ifdef _OPENMP
 
-      InitializeMatrix(matrix_size, &matrix, &buffer);
-      SampleDPP(block_size, maximum_likelihood, &matrix, &generator,
+      InitializeMatrix(matrix_size, &matrix);
+      SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator,
                 &uniform_dist);
     }
   }
@@ -133,8 +129,7 @@ int main(int argc, char** argv) {
 
   std::cout << "Double-precision:" << std::endl;
   {
-    BlasMatrixView<Complex<double>> matrix;
-    Buffer<Complex<double>> buffer;
+    BlasMatrix<Complex<double>> matrix;
     Buffer<Complex<double>> extra_buffer(matrix_size * matrix_size);
 
     std::mt19937 generator(random_seed);
@@ -142,13 +137,14 @@ int main(int argc, char** argv) {
 
     for (Int round = 0; round < num_rounds; ++round) {
 #ifdef _OPENMP
-      InitializeMatrix(matrix_size, &matrix, &buffer);
-      MultithreadedSampleDPP(tile_size, block_size, maximum_likelihood, &matrix,
-                             &generator, &uniform_dist, &extra_buffer);
+      InitializeMatrix(matrix_size, &matrix);
+      MultithreadedSampleDPP(tile_size, block_size, maximum_likelihood,
+                             &matrix.view, &generator, &uniform_dist,
+                             &extra_buffer);
 #endif  // ifdef _OPENMP
 
-      InitializeMatrix(matrix_size, &matrix, &buffer);
-      SampleDPP(block_size, maximum_likelihood, &matrix, &generator,
+      InitializeMatrix(matrix_size, &matrix);
+      SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator,
                 &uniform_dist);
     }
   }
