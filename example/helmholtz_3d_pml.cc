@@ -35,6 +35,7 @@
 #include "specify.hpp"
 
 using catamari::BlasMatrix;
+using catamari::Buffer;
 using catamari::Complex;
 using catamari::ComplexBase;
 using catamari::Conjugate;
@@ -352,7 +353,7 @@ class HelmholtzWithPMLTrilinearHexahedra {
     const PMLDifferential gamma_y(omega, pml_scale, pml_exponent, y_pml_width);
     const PMLDifferential gamma_z(omega, pml_scale, pml_exponent, z_pml_width);
 
-    pml_x_points_.resize(num_x_elements * quadrature_1d_order);
+    pml_x_points_.Resize(num_x_elements * quadrature_1d_order);
     for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
       const Int x_offset = x_element * quadrature_1d_order;
       const Real x_beg = x_element * element_x_size_;
@@ -362,7 +363,7 @@ class HelmholtzWithPMLTrilinearHexahedra {
       }
     }
 
-    pml_y_points_.resize(num_y_elements * quadrature_1d_order);
+    pml_y_points_.Resize(num_y_elements * quadrature_1d_order);
     for (Int y_element = 0; y_element < num_y_elements; ++y_element) {
       const Int y_offset = y_element * quadrature_1d_order;
       const Real y_beg = y_element * element_y_size_;
@@ -372,7 +373,7 @@ class HelmholtzWithPMLTrilinearHexahedra {
       }
     }
 
-    pml_z_points_.resize(num_z_elements * quadrature_1d_order);
+    pml_z_points_.Resize(num_z_elements * quadrature_1d_order);
     for (Int z_element = 0; z_element < num_z_elements; ++z_element) {
       const Int z_offset = z_element * quadrature_1d_order;
       const Real z_beg = z_element * element_z_size_;
@@ -383,11 +384,7 @@ class HelmholtzWithPMLTrilinearHexahedra {
     }
 
     // Store the quadrature weights over the tensor product grid.
-    quadrature_weights_buffer_.resize(num_quadrature_points);
-    quadrature_weights_.height = num_quadrature_points;
-    quadrature_weights_.width = 1;
-    quadrature_weights_.leading_dim = num_quadrature_points;
-    quadrature_weights_.data = quadrature_weights_buffer_.data();
+    quadrature_weights_.Resize(num_quadrature_points);
     for (int z_quad = 0; z_quad < quadrature_1d_order; ++z_quad) {
       const Real& z_weight = quadrature_z_weights_[z_quad];
       for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
@@ -396,17 +393,17 @@ class HelmholtzWithPMLTrilinearHexahedra {
           const Real& x_weight = quadrature_x_weights_[x_quad];
           const int row = x_quad + y_quad * quadrature_1d_order +
                           z_quad * quadrature_1d_order * quadrature_1d_order;
-          quadrature_weights_(row, 0) = x_weight * y_weight * z_weight;
+          quadrature_weights_[row] = x_weight * y_weight * z_weight;
         }
       }
     }
 
     // Store the evaluations of the basis functions.
-    basis_evals_buffer_.resize(num_quadrature_points * num_basis_functions);
+    basis_evals_buffer_.Resize(num_quadrature_points * num_basis_functions);
     basis_evals_.height = num_quadrature_points;
     basis_evals_.width = num_basis_functions;
     basis_evals_.leading_dim = num_quadrature_points;
-    basis_evals_.data = basis_evals_buffer_.data();
+    basis_evals_.data = basis_evals_buffer_.Data();
     for (int z_quad = 0; z_quad < quadrature_1d_order; ++z_quad) {
       const Real& z_point = quadrature_z_points_[z_quad];
       for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
@@ -429,12 +426,12 @@ class HelmholtzWithPMLTrilinearHexahedra {
     }
 
     // Store the evaluations of the basis function gradients.
-    basis_grad_evals_buffer_.resize(num_quadrature_points *
+    basis_grad_evals_buffer_.Resize(num_quadrature_points *
                                     num_basis_functions * num_dimensions);
     basis_grad_evals_.height = num_quadrature_points;
     basis_grad_evals_.width = num_basis_functions * num_dimensions;
     basis_grad_evals_.leading_dim = num_quadrature_points;
-    basis_grad_evals_.data = basis_grad_evals_buffer_.data();
+    basis_grad_evals_.data = basis_grad_evals_buffer_.Data();
     for (int z_quad = 0; z_quad < quadrature_1d_order; ++z_quad) {
       const Real& z_point = quadrature_z_points_[z_quad];
       for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
@@ -461,18 +458,14 @@ class HelmholtzWithPMLTrilinearHexahedra {
     }
 
     // Initialize the weight tensor evaluation matrix.
-    gradient_evals_buffer_.resize(num_quadrature_points * num_dimensions);
+    gradient_evals_buffer_.Resize(num_quadrature_points * num_dimensions);
     gradient_evals_.height = num_quadrature_points;
     gradient_evals_.width = num_dimensions;
     gradient_evals_.leading_dim = num_quadrature_points;
-    gradient_evals_.data = gradient_evals_buffer_.data();
+    gradient_evals_.data = gradient_evals_buffer_.Data();
 
     // Initialize the scalar evaluation vector.
-    scalar_evals_buffer_.resize(num_quadrature_points);
-    scalar_evals_.height = num_quadrature_points;
-    scalar_evals_.width = 1;
-    scalar_evals_.leading_dim = num_quadrature_points;
-    scalar_evals_.data = scalar_evals_buffer_.data();
+    scalar_evals_.Resize(num_quadrature_points);
   }
 
   // Form all of the matrix updates for a particular element.
@@ -533,13 +526,14 @@ class HelmholtzWithPMLTrilinearHexahedra {
               i + j * quadrature_1d_order + k * quadrature_1d_order;
 
           const Real rel_omega = omega_ / speed_(point);
-          scalar_evals_(quadrature_index, 0) =
+          scalar_evals_[quadrature_index] =
               rel_omega * rel_omega * gamma_product;
         }
       }
     }
 
     // Compute the element updates.
+    // TODO(Jack Poulson): Add OpenMP task parallelism.
     for (int k_test = 0; k_test <= 1; ++k_test) {
       for (int j_test = 0; j_test <= 1; ++j_test) {
         for (int i_test = 0; i_test <= 1; ++i_test) {
@@ -583,12 +577,11 @@ class HelmholtzWithPMLTrilinearHexahedra {
                       const Real trial_entry =
                           basis_evals_(quadrature_index, element_column);
                       const Complex<Real> diagonal_shift =
-                          scalar_evals_(quadrature_index, 0);
+                          scalar_evals_[quadrature_index];
                       update -=
                           diagonal_shift * trial_entry * Conjugate(test_entry);
 
-                      result +=
-                          quadrature_weights_(quadrature_index, 0) * update;
+                      result += quadrature_weights_[quadrature_index] * update;
                     }
                   }
                 }
@@ -606,7 +599,7 @@ class HelmholtzWithPMLTrilinearHexahedra {
   template <class RightHandSideFunction>
   void ElementRightHandSide(Int x_element, Int y_element, Int z_element,
                             const RightHandSideFunction& rhs_function,
-                            std::vector<Complex<Real>>* element_updates) const {
+                            Buffer<Complex<Real>>* element_updates) const {
     const Real x_beg = x_element * element_x_size_;
     const Real y_beg = y_element * element_y_size_;
     const Real z_beg = z_element * element_z_size_;
@@ -614,6 +607,7 @@ class HelmholtzWithPMLTrilinearHexahedra {
     const int num_basis_functions = 8;
 
     // Evaluate the right-hand side over the element.
+    // TODO(Jack Poulson): Add OpenMP task parallelism.
     for (int k = 0; k < quadrature_1d_order; ++k) {
       const Real z = z_beg + quadrature_z_points_[k];
       for (int j = 0; j < quadrature_1d_order; ++j) {
@@ -624,13 +618,14 @@ class HelmholtzWithPMLTrilinearHexahedra {
           const int quadrature_index =
               i + j * quadrature_1d_order +
               k * quadrature_1d_order * quadrature_1d_order;
-          scalar_evals_(quadrature_index, 0) = rhs_function(point);
+          scalar_evals_[quadrature_index] = rhs_function(point);
         }
       }
     }
 
     // Compute the element updates.
-    element_updates->resize(num_basis_functions);
+    // TODO(Jack Poulson): Add OpenMP task parallelism.
+    element_updates->Resize(num_basis_functions);
     for (int k_test = 0; k_test <= 1; ++k_test) {
       for (int j_test = 0; j_test <= 1; ++j_test) {
         for (int i_test = 0; i_test <= 1; ++i_test) {
@@ -648,9 +643,8 @@ class HelmholtzWithPMLTrilinearHexahedra {
                 // basis functions are real.
                 const Real test_entry =
                     basis_evals_(quadrature_index, element_row);
-                const Complex<Real> rhs_value =
-                    scalar_evals_(quadrature_index, 0);
-                result += quadrature_weights_(quadrature_index, 0) * rhs_value *
+                const Complex<Real> rhs_value = scalar_evals_[quadrature_index];
+                result += quadrature_weights_[quadrature_index] * rhs_value *
                           Conjugate(test_entry);
               }
             }
@@ -688,38 +682,39 @@ class HelmholtzWithPMLTrilinearHexahedra {
 
   // Evaluations of the PML profile over the quadrature points in the x
   // direction.
-  std::vector<Complex<Real>> pml_x_points_;
+  Buffer<Complex<Real>> pml_x_points_;
 
   // Evaluations of the PML profile over the quadrature points in the y
   // direction.
-  std::vector<Complex<Real>> pml_y_points_;
+  Buffer<Complex<Real>> pml_y_points_;
 
   // Evaluations of the PML profile over the quadrature points in the z
   // direction.
-  std::vector<Complex<Real>> pml_z_points_;
+  Buffer<Complex<Real>> pml_z_points_;
 
+  // Locations of quadrature points in each of the three dimensions.
   Real quadrature_x_points_[3];
   Real quadrature_y_points_[3];
   Real quadrature_z_points_[3];
 
+  // Weights of the quadrature points in each of the three dimensions.
   Real quadrature_x_weights_[3];
   Real quadrature_y_weights_[3];
   Real quadrature_z_weights_[3];
 
-  std::vector<Real> quadrature_weights_buffer_;
-  BlasMatrix<Real> quadrature_weights_;
+  // The quadrature weights over the tensor-product grid.
+  Buffer<Real> quadrature_weights_;
 
-  std::vector<Real> basis_evals_buffer_;
+  Buffer<Real> basis_evals_buffer_;
   BlasMatrix<Real> basis_evals_;
 
-  std::vector<Real> basis_grad_evals_buffer_;
+  Buffer<Real> basis_grad_evals_buffer_;
   BlasMatrix<Real> basis_grad_evals_;
 
-  mutable std::vector<Complex<Real>> gradient_evals_buffer_;
+  mutable Buffer<Complex<Real>> gradient_evals_buffer_;
   mutable BlasMatrix<Complex<Real>> gradient_evals_;
 
-  mutable std::vector<Complex<Real>> scalar_evals_buffer_;
-  mutable BlasMatrix<Complex<Real>> scalar_evals_;
+  mutable Buffer<Complex<Real>> scalar_evals_;
 };
 
 // Generates a trilinear hexahedral discretization of the 3D Helmholtz equation
@@ -733,7 +728,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
                       const Real& source_stddev,
                       catamari::CoordinateMatrix<Complex<Real>>* matrix,
                       BlasMatrix<Complex<Real>>* right_hand_sides,
-                      std::vector<Complex<Real>>* right_hand_side_buffer) {
+                      Buffer<Complex<Real>>* right_hand_side_buffer) {
   const Speed<Real> speed(profile);
 
   const HelmholtzWithPMLTrilinearHexahedra<Real> discretization(
@@ -741,12 +736,12 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
       pml_exponent, num_pml_elements, speed);
 
   const Int num_element_members = 64;
-  std::vector<Complex<Real>> element_update_buffer(num_element_members);
+  Buffer<Complex<Real>> element_update_buffer(num_element_members);
   BlasMatrix<Complex<Real>> element_updates;
   element_updates.height = 8;
   element_updates.width = 8;
   element_updates.leading_dim = 8;
-  element_updates.data = element_update_buffer.data();
+  element_updates.data = element_update_buffer.Data();
 
   const Int num_rows =
       (num_x_elements + 1) * (num_y_elements + 1) * (num_z_elements + 1);
@@ -754,6 +749,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
   const Int z_stride = y_stride * (num_y_elements + 1);
 
   // Form the FEM matrix.
+  // TODO(Jack Poulson): Decide how to parallelize this formation.
   matrix->Resize(num_rows, num_rows);
   const Int queue_upper_bound =
       num_element_members * num_x_elements * num_y_elements * num_z_elements;
@@ -797,12 +793,12 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
   matrix->FlushEntryQueues();
 
   // Form the right-hand side.
-  right_hand_side_buffer->clear();
-  right_hand_side_buffer->resize(num_rows, Complex<Real>{0});
+  right_hand_side_buffer->Clear();
+  right_hand_side_buffer->Resize(num_rows, Complex<Real>{0});
   right_hand_sides->height = num_rows;
   right_hand_sides->width = 1;
   right_hand_sides->leading_dim = num_rows;
-  right_hand_sides->data = right_hand_side_buffer->data();
+  right_hand_sides->data = right_hand_side_buffer->Data();
 
   const std::function<Complex<Real>(const Point<Real>&)> point_source =
       [&](const Point<Real>& point) {
@@ -818,7 +814,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
         return Complex<Real>(gaussian);
       };
 
-  std::vector<Complex<Real>> element_right_hand_side(8);
+  Buffer<Complex<Real>> element_right_hand_side(8);
   for (Int z_element = 0; z_element < num_z_elements; ++z_element) {
     for (Int y_element = 0; y_element < num_y_elements; ++y_element) {
       for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
@@ -896,14 +892,14 @@ Real EuclideanNorm(const ConstBlasMatrix<catamari::Complex<Real>>& matrix) {
 
 template <typename Field>
 BlasMatrix<Field> CopyMatrix(const ConstBlasMatrix<Field>& matrix,
-                             std::vector<Field>* buffer) {
+                             Buffer<Field>* buffer) {
   BlasMatrix<Field> matrix_copy;
   matrix_copy.height = matrix.height;
   matrix_copy.width = matrix.width;
   matrix_copy.leading_dim = std::max(matrix.height, Int(1));
-  buffer->clear();
-  buffer->resize(matrix_copy.leading_dim * matrix_copy.width);
-  matrix_copy.data = buffer->data();
+  buffer->Clear();
+  buffer->Resize(matrix_copy.leading_dim * matrix_copy.width);
+  matrix_copy.data = buffer->Data();
   for (Int j = 0; j < matrix.width; ++j) {
     for (Int i = 0; i < matrix.height; ++i) {
       matrix_copy(i, j) = matrix(i, j);
@@ -927,7 +923,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
 
   // Construct the problem.
   timer.Start();
-  std::vector<Field> right_hand_side_buffer;
+  Buffer<Field> right_hand_side_buffer;
   BlasMatrix<Field> right_hand_sides;
   catamari::CoordinateMatrix<Field> matrix;
   HelmholtzWithPML<Real>(profile, omega, num_x_elements, num_y_elements,
@@ -969,7 +965,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   if (print_progress) {
     std::cout << "  Running solve..." << std::endl;
   }
-  std::vector<Field> solution_buffer;
+  Buffer<Field> solution_buffer;
   BlasMatrix<Field> solution =
       CopyMatrix(right_hand_sides.ToConst(), &solution_buffer);
   timer.Start();
@@ -987,7 +983,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   }
 
   // Compute the residual.
-  std::vector<Field> residual_buffer;
+  Buffer<Field> residual_buffer;
   BlasMatrix<Field> residual =
       CopyMatrix(right_hand_sides.ToConst(), &residual_buffer);
   catamari::ApplySparse(Field{-1}, matrix, solution.ToConst(), Field{1},

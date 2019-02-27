@@ -18,6 +18,7 @@
 #include "specify.hpp"
 
 using catamari::BlasMatrix;
+using catamari::Buffer;
 using catamari::ConstBlasMatrix;
 using catamari::Int;
 
@@ -166,14 +167,14 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
 
 template <typename Field>
 ConstBlasMatrix<Field> GenerateRightHandSide(Int num_rows,
-                                             std::vector<Field>* buffer) {
+                                             Buffer<Field>* buffer) {
   BlasMatrix<Field> right_hand_side;
   right_hand_side.height = num_rows;
   right_hand_side.width = 1;
   right_hand_side.leading_dim = std::max(num_rows, Int(1));
-  buffer->clear();
-  buffer->resize(right_hand_side.leading_dim * right_hand_side.width);
-  right_hand_side.data = buffer->data();
+  buffer->Clear();
+  buffer->Resize(right_hand_side.leading_dim * right_hand_side.width);
+  right_hand_side.data = buffer->Data();
 
   for (Int row = 0; row < num_rows; ++row) {
     right_hand_side(row, 0) = row % 5;
@@ -184,14 +185,14 @@ ConstBlasMatrix<Field> GenerateRightHandSide(Int num_rows,
 
 template <typename Field>
 BlasMatrix<Field> CopyMatrix(const ConstBlasMatrix<Field>& matrix,
-                             std::vector<Field>* buffer) {
+                             Buffer<Field>* buffer) {
   BlasMatrix<Field> matrix_copy;
   matrix_copy.height = matrix.height;
   matrix_copy.width = matrix.width;
   matrix_copy.leading_dim = std::max(matrix.height, Int(1));
-  buffer->clear();
-  buffer->resize(matrix_copy.leading_dim * matrix_copy.width);
-  matrix_copy.data = buffer->data();
+  buffer->Clear();
+  buffer->Resize(matrix_copy.leading_dim * matrix_copy.width);
+  matrix_copy.data = buffer->Data();
   for (Int j = 0; j < matrix.width; ++j) {
     for (Int i = 0; i < matrix.height; ++i) {
       matrix_copy(i, j) = matrix(i, j);
@@ -241,7 +242,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   experiment.num_flops = result.num_factorization_flops;
 
   // Generate an arbitrary right-hand side.
-  std::vector<Field> right_hand_side_buffer;
+  Buffer<Field> right_hand_side_buffer;
   const ConstBlasMatrix<Field> right_hand_side =
       GenerateRightHandSide<Field>(num_rows, &right_hand_side_buffer);
   const BaseField right_hand_side_norm = EuclideanNorm(right_hand_side);
@@ -253,7 +254,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   if (print_progress) {
     std::cout << "  Running solve..." << std::endl;
   }
-  std::vector<Field> solution_buffer;
+  Buffer<Field> solution_buffer;
   BlasMatrix<Field> solution = CopyMatrix(right_hand_side, &solution_buffer);
   quotient::Timer solve_timer;
   solve_timer.Start();
@@ -261,7 +262,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   experiment.solve_seconds = solve_timer.Stop();
 
   // Compute the residual.
-  std::vector<Field> residual_buffer;
+  Buffer<Field> residual_buffer;
   BlasMatrix<Field> residual = CopyMatrix(right_hand_side, &residual_buffer);
   catamari::ApplySparse(Field{-1}, *matrix, solution.ToConst(), Field{1},
                         &residual);
