@@ -22,6 +22,8 @@ using catamari::Buffer;
 using catamari::ConstBlasMatrix;
 using catamari::Int;
 
+// TODO(Jack Poulson): Incorporate the new matrix abstraction.
+
 // A list of properties to measure from a sparse LDL factorization / solve.
 struct Experiment {
   // The number of (structural) nonzeros in the associated Cholesky factor.

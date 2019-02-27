@@ -44,6 +44,89 @@ using catamari::Int;
 
 namespace {
 
+// TODO(Jack Poulson): Move this into the official library.
+template <typename Field>
+struct Matrix {
+  BlasMatrix<Field> blas_matrix;
+
+  Buffer<Field> data;
+
+  Matrix() {
+    blas_matrix.height = 0;
+    blas_matrix.width = 0;
+    blas_matrix.leading_dim = 0;
+    blas_matrix.data = nullptr;
+  }
+
+  Matrix(const Matrix<Field>& matrix) {
+    const Int height = matrix.blas_matrix.height;
+    const Int width = matrix.blas_matrix.width;
+
+    data.Resize(height * width);
+    blas_matrix.height = height;
+    blas_matrix.width = width;
+    blas_matrix.leading_dim = height;
+    blas_matrix.data = data.Data();
+
+    // Copy each individual column so that the leading dimension does not
+    // impact the copy time.
+    for (Int j = 0; j < width; ++j) {
+      std::copy(&matrix(0, j), &matrix(height, j), &blas_matrix(0, j));
+    }
+  }
+
+  Matrix<Field>& operator=(const Matrix<Field>& matrix) {
+    if (this != &matrix) {
+      const Int height = matrix.blas_matrix.height;
+      const Int width = matrix.blas_matrix.width;
+
+      data.Resize(height * width);
+      blas_matrix.height = height;
+      blas_matrix.width = width;
+      blas_matrix.leading_dim = height;
+      blas_matrix.data = data.Data();
+
+      // Copy each individual column so that the leading dimension does not
+      // impact the copy time.
+      for (Int j = 0; j < width; ++j) {
+        std::copy(&matrix(0, j), &matrix(height, j), &blas_matrix(0, j));
+      }
+    }
+    return *this;
+  }
+
+  void Resize(const Int& height, const Int& width) {
+    if (height == blas_matrix.height && width == blas_matrix.width) {
+      return;
+    }
+    data.Resize(height * width);
+    blas_matrix.height = height;
+    blas_matrix.width = width;
+    blas_matrix.leading_dim = height;  // TODO(Jack Poulson): Handle 0 case.
+    blas_matrix.data = data.Data();
+  }
+
+  void Resize(const Int& height, const Int& width, const Field& value) {
+    data.Resize(height * width, value);
+    blas_matrix.height = height;
+    blas_matrix.width = width;
+    blas_matrix.leading_dim = height;  // TODO(Jack Poulson): Handle 0 case.
+    blas_matrix.data = data.Data();
+  }
+
+  Field& operator()(Int row, Int column) { return blas_matrix(row, column); }
+
+  const Field& operator()(Int row, Int column) const {
+    return blas_matrix(row, column);
+  }
+
+  Field& Entry(Int row, Int column) { return blas_matrix(row, column); }
+
+  const Field& Entry(Int row, Int column) const {
+    return blas_matrix(row, column);
+  }
+};
+
 // A point in the 2D domain (i.e., [0, 1]^2).
 template <typename Real>
 struct Point {
@@ -331,11 +414,7 @@ class HelmholtzWithPMLQ4 {
     }
 
     // Store the evaluations of the basis functions.
-    basis_evals_buffer_.Resize(num_quadrature_points * num_basis_functions);
-    basis_evals_.height = num_quadrature_points;
-    basis_evals_.width = num_basis_functions;
-    basis_evals_.leading_dim = num_quadrature_points;
-    basis_evals_.data = basis_evals_buffer_.Data();
+    basis_evals_.Resize(num_quadrature_points, num_basis_functions);
     for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
       const Real& y_point = quadrature_y_points_[y_quad];
       for (int x_quad = 0; x_quad < quadrature_1d_order; ++x_quad) {
@@ -352,12 +431,8 @@ class HelmholtzWithPMLQ4 {
     }
 
     // Store the evaluations of the basis function gradients.
-    basis_grad_evals_buffer_.Resize(num_quadrature_points *
-                                    num_basis_functions * num_dimensions);
-    basis_grad_evals_.height = num_quadrature_points;
-    basis_grad_evals_.width = num_basis_functions * num_dimensions;
-    basis_grad_evals_.leading_dim = num_quadrature_points;
-    basis_grad_evals_.data = basis_grad_evals_buffer_.Data();
+    basis_grad_evals_.Resize(num_quadrature_points,
+                             num_basis_functions * num_dimensions);
     for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
       const Real& y_point = quadrature_y_points_[y_quad];
       for (int x_quad = 0; x_quad < quadrature_1d_order; ++x_quad) {
@@ -377,11 +452,7 @@ class HelmholtzWithPMLQ4 {
     }
 
     // Initialize the weight tensor evaluation matrix.
-    gradient_evals_buffer_.Resize(num_quadrature_points * num_dimensions);
-    gradient_evals_.height = num_quadrature_points;
-    gradient_evals_.width = num_dimensions;
-    gradient_evals_.leading_dim = num_quadrature_points;
-    gradient_evals_.data = gradient_evals_buffer_.Data();
+    gradient_evals_.Resize(num_quadrature_points, num_dimensions);
 
     // Initialize the diagonal shift evaluation vector.
     scalar_evals_.Resize(num_quadrature_points);
@@ -571,14 +642,11 @@ class HelmholtzWithPMLQ4 {
 
   Buffer<Real> quadrature_weights_;
 
-  Buffer<Real> basis_evals_buffer_;
-  BlasMatrix<Real> basis_evals_;
+  Matrix<Real> basis_evals_;
 
-  Buffer<Real> basis_grad_evals_buffer_;
-  BlasMatrix<Real> basis_grad_evals_;
+  Matrix<Real> basis_grad_evals_;
 
-  mutable Buffer<Complex<Real>> gradient_evals_buffer_;
-  mutable BlasMatrix<Complex<Real>> gradient_evals_;
+  mutable Matrix<Complex<Real>> gradient_evals_;
 
   mutable Buffer<Complex<Real>> scalar_evals_;
 };
@@ -592,8 +660,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
                       Int num_pml_elements, const Point<Real>& source_point,
                       const Real& source_stddev,
                       catamari::CoordinateMatrix<Complex<Real>>* matrix,
-                      BlasMatrix<Complex<Real>>* right_hand_sides,
-                      Buffer<Complex<Real>>* right_hand_side_buffer) {
+                      Matrix<Complex<Real>>* right_hand_sides) {
   const Speed<Real> speed(profile);
 
   const HelmholtzWithPMLQ4<Real> discretization(num_x_elements, num_y_elements,
@@ -643,12 +710,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
   matrix->FlushEntryQueues();
 
   // Form the right-hand side.
-  right_hand_side_buffer->Clear();
-  right_hand_side_buffer->Resize(num_rows, Complex<Real>{0});
-  right_hand_sides->height = num_rows;
-  right_hand_sides->width = 1;
-  right_hand_sides->leading_dim = num_rows;
-  right_hand_sides->data = right_hand_side_buffer->Data();
+  right_hand_sides->Resize(num_rows, 1, Complex<Real>{0});
 
   const std::function<Complex<Real>(const Point<Real>&)> point_source =
       [&](const Point<Real>& point) {
@@ -731,24 +793,6 @@ Real EuclideanNorm(const ConstBlasMatrix<catamari::Complex<Real>>& matrix) {
   return std::sqrt(squared_norm);
 }
 
-template <typename Field>
-BlasMatrix<Field> CopyMatrix(const ConstBlasMatrix<Field>& matrix,
-                             Buffer<Field>* buffer) {
-  BlasMatrix<Field> matrix_copy;
-  matrix_copy.height = matrix.height;
-  matrix_copy.width = matrix.width;
-  matrix_copy.leading_dim = std::max(matrix.height, Int(1));
-  buffer->Clear();
-  buffer->Resize(matrix_copy.leading_dim * matrix_copy.width);
-  matrix_copy.data = buffer->Data();
-  for (Int j = 0; j < matrix.width; ++j) {
-    for (Int i = 0; i < matrix.height; ++i) {
-      matrix_copy(i, j) = matrix(i, j);
-    }
-  }
-  return matrix_copy;
-}
-
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 Experiment RunTest(SpeedProfile profile, const double& omega,
                    Int num_x_elements, Int num_y_elements,
@@ -764,16 +808,16 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
 
   // Construct the problem.
   timer.Start();
-  Buffer<Field> right_hand_side_buffer;
-  BlasMatrix<Field> right_hand_sides;
+  Matrix<Field> right_hand_sides;
   catamari::CoordinateMatrix<Field> matrix;
   HelmholtzWithPML<Real>(profile, omega, num_x_elements, num_y_elements,
                          pml_scale, pml_exponent, num_pml_elements,
                          source_point, source_stddev, &matrix,
-                         &right_hand_sides, &right_hand_side_buffer);
+                         &right_hand_sides);
   experiment.construction_seconds = timer.Stop();
   const Int num_rows = matrix.NumRows();
-  const Real right_hand_side_norm = EuclideanNorm(right_hand_sides.ToConst());
+  const Real right_hand_side_norm =
+      EuclideanNorm(right_hand_sides.blas_matrix.ToConst());
   if (print_progress) {
     std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
   }
@@ -806,11 +850,9 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   if (print_progress) {
     std::cout << "  Running solve..." << std::endl;
   }
-  Buffer<Field> solution_buffer;
-  BlasMatrix<Field> solution =
-      CopyMatrix(right_hand_sides.ToConst(), &solution_buffer);
+  Matrix<Field> solution = right_hand_sides;
   timer.Start();
-  ldl_factorization.Solve(&solution);
+  ldl_factorization.Solve(&solution.blas_matrix);
   experiment.solve_seconds = timer.Stop();
 
   if (print_progress) {
@@ -824,12 +866,10 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   }
 
   // Compute the residual.
-  Buffer<Field> residual_buffer;
-  BlasMatrix<Field> residual =
-      CopyMatrix(right_hand_sides.ToConst(), &residual_buffer);
-  catamari::ApplySparse(Field{-1}, matrix, solution.ToConst(), Field{1},
-                        &residual);
-  const Real residual_norm = EuclideanNorm(residual.ToConst());
+  Matrix<Field> residual = right_hand_sides;
+  catamari::ApplySparse(Field{-1}, matrix, solution.blas_matrix.ToConst(),
+                        Field{1}, &residual.blas_matrix);
+  const Real residual_norm = EuclideanNorm(residual.blas_matrix.ToConst());
   std::cout << "  || B - A X ||_F / || B ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
 
