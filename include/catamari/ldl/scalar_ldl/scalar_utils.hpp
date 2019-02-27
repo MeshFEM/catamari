@@ -30,9 +30,10 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
                                  Buffer<Int>* parents, Buffer<Int>* degrees);
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedEliminationForestAndDegrees(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    Buffer<Int>* parents, Buffer<Int>* degrees);
+void OpenMPEliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
+                                       const SymmetricOrdering& ordering,
+                                       Buffer<Int>* parents,
+                                       Buffer<Int>* degrees);
 #endif  // ifdef _OPENMP
 
 // Computes the nonzero pattern of L(row, :) in
@@ -61,12 +62,12 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           LowerStructure* lower_structure);
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
-                                       const SymmetricOrdering& ordering,
-                                       AssemblyForest* forest,
-                                       LowerStructure* lower_structure,
-                                       bool preallocate = true,
-                                       int sort_grain_size = 500);
+void OpenMPFillStructureIndices(const CoordinateMatrix<Field>& matrix,
+                                const SymmetricOrdering& ordering,
+                                AssemblyForest* forest,
+                                LowerStructure* lower_structure,
+                                bool preallocate = true,
+                                int sort_grain_size = 500);
 #endif  // ifdef _OPENMP
 
 }  // namespace scalar_ldl

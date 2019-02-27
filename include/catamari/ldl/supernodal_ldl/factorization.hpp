@@ -72,14 +72,14 @@ class Factorization {
   void LowerTriangularSolve(BlasMatrixView<Field>* matrix) const;
 
 #ifdef _OPENMP
-  void MultithreadedLowerTriangularSolve(BlasMatrixView<Field>* matrix) const;
+  void OpenMPLowerTriangularSolve(BlasMatrixView<Field>* matrix) const;
 #endif  // ifdef _OPENMP
 
   // Solves a set of linear systems using the diagonal factor.
   void DiagonalSolve(BlasMatrixView<Field>* matrix) const;
 
 #ifdef _OPENMP
-  void MultithreadedDiagonalSolve(BlasMatrixView<Field>* matrix) const;
+  void OpenMPDiagonalSolve(BlasMatrixView<Field>* matrix) const;
 #endif  // ifdef _OPENMP
 
   // Solves a set of linear systems using the trasnpose (or adjoint) of the
@@ -87,8 +87,7 @@ class Factorization {
   void LowerTransposeTriangularSolve(BlasMatrixView<Field>* matrix) const;
 
 #ifdef _OPENMP
-  void MultithreadedLowerTransposeTriangularSolve(
-      BlasMatrixView<Field>* matrix) const;
+  void OpenMPLowerTransposeTriangularSolve(BlasMatrixView<Field>* matrix) const;
 #endif  // ifdef _OPENMP
 
   // Prints the diagonal of the factorization.
@@ -169,33 +168,33 @@ class Factorization {
                       const SupernodalRelaxationControl& control,
                       AssemblyForest* forest, Buffer<Int>* supernode_degrees);
 #ifdef _OPENMP
-  void MultithreadedFormSupernodes(const CoordinateMatrix<Field>& matrix,
-                                   const SupernodalRelaxationControl& control,
-                                   AssemblyForest* forest,
-                                   Buffer<Int>* supernode_degrees);
+  void OpenMPFormSupernodes(const CoordinateMatrix<Field>& matrix,
+                            const SupernodalRelaxationControl& control,
+                            AssemblyForest* forest,
+                            Buffer<Int>* supernode_degrees);
 #endif  // ifdef _OPENMP
 
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
                          const AssemblyForest& forest,
                          const Buffer<Int>& supernode_degrees);
 #ifdef _OPENMP
-  void MultithreadedInitializeFactors(const CoordinateMatrix<Field>& matrix,
-                                      const AssemblyForest& forest,
-                                      const Buffer<Int>& supernode_degrees);
+  void OpenMPInitializeFactors(const CoordinateMatrix<Field>& matrix,
+                               const AssemblyForest& forest,
+                               const Buffer<Int>& supernode_degrees);
 #endif  // ifdef _OPENMP
 
   LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
                         const Control& control);
 #ifdef _OPENMP
-  LDLResult MultithreadedLeftLooking(const CoordinateMatrix<Field>& matrix,
-                                     const Control& control);
+  LDLResult OpenMPLeftLooking(const CoordinateMatrix<Field>& matrix,
+                              const Control& control);
 #endif  // ifdef _OPENMP
 
   LDLResult RightLooking(const CoordinateMatrix<Field>& matrix,
                          const Control& control);
 #ifdef _OPENMP
-  LDLResult MultithreadedRightLooking(const CoordinateMatrix<Field>& matrix,
-                                      const Control& control);
+  LDLResult OpenMPRightLooking(const CoordinateMatrix<Field>& matrix,
+                               const Control& control);
 #endif  // ifdef _OPENMP
 
   bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
@@ -203,11 +202,12 @@ class Factorization {
                           PrivateState<Field>* private_state,
                           LDLResult* result);
 #ifdef _OPENMP
-  bool MultithreadedLeftLookingSubtree(
-      Int level, Int max_parallel_levels, Int supernode,
-      const CoordinateMatrix<Field>& matrix,
-      LeftLookingSharedState* shared_state,
-      Buffer<PrivateState<Field>>* private_states, LDLResult* result);
+  bool OpenMPLeftLookingSubtree(Int level, Int max_parallel_levels,
+                                Int supernode,
+                                const CoordinateMatrix<Field>& matrix,
+                                LeftLookingSharedState* shared_state,
+                                Buffer<PrivateState<Field>>* private_states,
+                                LDLResult* result);
 #endif  // ifdef _OPENMP
 
   bool RightLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
@@ -215,12 +215,13 @@ class Factorization {
                            PrivateState<Field>* private_state,
                            LDLResult* result);
 #ifdef _OPENMP
-  bool MultithreadedRightLookingSubtree(
-      Int level, Int max_parallel_levels, Int supernode,
-      const CoordinateMatrix<Field>& matrix,
-      const Buffer<double>& work_estimates,
-      RightLookingSharedState<Field>* shared_state,
-      Buffer<PrivateState<Field>>* private_states, LDLResult* result);
+  bool OpenMPRightLookingSubtree(Int level, Int max_parallel_levels,
+                                 Int supernode,
+                                 const CoordinateMatrix<Field>& matrix,
+                                 const Buffer<double>& work_estimates,
+                                 RightLookingSharedState<Field>* shared_state,
+                                 Buffer<PrivateState<Field>>* private_states,
+                                 LDLResult* result);
 #endif  // ifdef _OPENMP
 
   void LeftLookingSupernodeUpdate(Int main_supernode,
@@ -228,7 +229,7 @@ class Factorization {
                                   LeftLookingSharedState* shared_state,
                                   PrivateState<Field>* private_state);
 #ifdef _OPENMP
-  void MultithreadedLeftLookingSupernodeUpdate(
+  void OpenMPLeftLookingSupernodeUpdate(
       Int main_supernode, const CoordinateMatrix<Field>& matrix,
       LeftLookingSharedState* shared_state,
       Buffer<PrivateState<Field>>* private_states);
@@ -236,7 +237,7 @@ class Factorization {
 
   bool LeftLookingSupernodeFinalize(Int main_supernode, LDLResult* result);
 #ifdef _OPENMP
-  bool MultithreadedLeftLookingSupernodeFinalize(
+  bool OpenMPLeftLookingSupernodeFinalize(
       Int supernode, Buffer<PrivateState<Field>>* private_states,
       LDLResult* result);
 #endif  // ifdef _OPENMP
@@ -245,7 +246,7 @@ class Factorization {
       Int supernode, RightLookingSharedState<Field>* shared_state,
       PrivateState<Field>* private_state, LDLResult* result);
 #ifdef _OPENMP
-  bool MultithreadedRightLookingSupernodeFinalize(
+  bool OpenMPRightLookingSupernodeFinalize(
       Int supernode, RightLookingSharedState<Field>* shared_state,
       Buffer<PrivateState<Field>>* private_state, LDLResult* result);
 #endif  // ifdef _OPENMP
@@ -257,7 +258,7 @@ class Factorization {
                                      Buffer<Field>* workspace) const;
 
 #ifdef _OPENMP
-  void MultithreadedLowerTriangularSolveRecursion(
+  void OpenMPLowerTriangularSolveRecursion(
       Int supernode, BlasMatrixView<Field>* matrix,
       RightLookingSharedState<Field>* shared_state) const;
 #endif  // ifdef _OPENMP
@@ -268,7 +269,7 @@ class Factorization {
                                        Buffer<Field>* workspace) const;
 
 #ifdef _OPENMP
-  void MultithreadedLowerSupernodalTrapezoidalSolve(
+  void OpenMPLowerSupernodalTrapezoidalSolve(
       Int supernode, BlasMatrixView<Field>* matrix,
       RightLookingSharedState<Field>* shared_state) const;
 #endif  // ifdef _OPENMP
@@ -280,7 +281,7 @@ class Factorization {
       Buffer<Field>* packed_input_buf) const;
 
 #ifdef _OPENMP
-  void MultithreadedLowerTransposeTriangularSolveRecursion(
+  void OpenMPLowerTransposeTriangularSolveRecursion(
       Int supernode, BlasMatrixView<Field>* matrix,
       Buffer<Buffer<Field>>* private_packed_input_bufs) const;
 #endif  // ifdef _OPENMP

@@ -27,8 +27,8 @@ Int LowerCholeskyFactorization(Int block_size, BlasMatrixView<Field>* matrix);
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerCholeskyFactorization(Int tile_size, Int block_size,
-                                            BlasMatrixView<Field>* matrix);
+Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
+                                     BlasMatrixView<Field>* matrix);
 #endif  // ifdef _OPENMP
 
 // Attempts to overwrite the lower triangle of an (implicitly) Hermitian
@@ -42,9 +42,9 @@ Int LowerLDLAdjointFactorization(Int block_size, BlasMatrixView<Field>* matrix);
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLAdjointFactorization(Int tile_size, Int block_size,
-                                              BlasMatrixView<Field>* matrix,
-                                              Buffer<Field>* buffer);
+Int OpenMPLowerLDLAdjointFactorization(Int tile_size, Int block_size,
+                                       BlasMatrixView<Field>* matrix,
+                                       Buffer<Field>* buffer);
 #endif  // ifdef _OPENMP
 
 // Attempts to overwrite the lower triangle of an (implicitly) symmetric
@@ -59,9 +59,9 @@ Int LowerLDLTransposeFactorization(Int block_size,
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLTransposeFactorization(Int tile_size, Int block_size,
-                                                BlasMatrixView<Field>* matrix,
-                                                Buffer<Field>* buffer);
+Int OpenMPLowerLDLTransposeFactorization(Int tile_size, Int block_size,
+                                         BlasMatrixView<Field>* matrix,
+                                         Buffer<Field>* buffer);
 #endif  // ifdef _OPENMP
 
 // Returns a sample from the Determinantal Point Process implied by the
@@ -77,7 +77,7 @@ std::vector<Int> LowerFactorAndSampleDPP(
 
 #ifdef _OPENMP
 template <class Field>
-std::vector<Int> MultithreadedLowerFactorAndSampleDPP(
+std::vector<Int> OpenMPLowerFactorAndSampleDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,

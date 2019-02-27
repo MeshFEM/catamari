@@ -43,7 +43,7 @@ void RunCholeskyFactorization(Int tile_size, Int block_size,
 #ifdef _OPENMP
   #pragma omp parallel
   #pragma omp single
-  MultithreadedLowerCholeskyFactorization(tile_size, block_size, matrix);
+  OpenMPLowerCholeskyFactorization(tile_size, block_size, matrix);
 #else
   LowerCholeskyFactorization(block_size, matrix);
 #endif
@@ -67,8 +67,8 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
 #ifdef _OPENMP
   #pragma omp parallel
   #pragma omp single
-  MultithreadedLowerLDLAdjointFactorization(tile_size, block_size, matrix,
-                                            extra_buffer);
+  OpenMPLowerLDLAdjointFactorization(tile_size, block_size, matrix,
+                                     extra_buffer);
 #else
   LowerLDLAdjointFactorization(block_size, matrix);
 #endif
@@ -92,8 +92,8 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
 #ifdef _OPENMP
   #pragma omp parallel
   #pragma omp single
-  MultithreadedLowerLDLTransposeFactorization(tile_size, block_size, matrix,
-                                              extra_buffer);
+  OpenMPLowerLDLTransposeFactorization(tile_size, block_size, matrix,
+                                       extra_buffer);
 #else
   LowerLDLTransposeFactorization(block_size, matrix);
 #endif

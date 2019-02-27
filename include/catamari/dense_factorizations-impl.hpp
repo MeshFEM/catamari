@@ -238,8 +238,8 @@ inline Int LowerCholeskyFactorization(Int block_size,
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerCholeskyFactorization(Int tile_size, Int block_size,
-                                            BlasMatrixView<Field>* matrix) {
+Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
+                                     BlasMatrixView<Field>* matrix) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
 
@@ -420,9 +420,9 @@ Int LowerLDLAdjointFactorization(Int block_size,
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLAdjointFactorization(Int tile_size, Int block_size,
-                                              BlasMatrixView<Field>* matrix,
-                                              Buffer<Field>* buffer) {
+Int OpenMPLowerLDLAdjointFactorization(Int tile_size, Int block_size,
+                                       BlasMatrixView<Field>* matrix,
+                                       Buffer<Field>* buffer) {
   const Int height = matrix->height;
   if (buffer->Size() < height * height) {
     buffer->Resize(height * height);
@@ -628,9 +628,9 @@ Int LowerLDLTransposeFactorization(Int block_size,
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedLowerLDLTransposeFactorization(Int tile_size, Int block_size,
-                                                BlasMatrixView<Field>* matrix,
-                                                Buffer<Field>* buffer) {
+Int OpenMPLowerLDLTransposeFactorization(Int tile_size, Int block_size,
+                                         BlasMatrixView<Field>* matrix,
+                                         Buffer<Field>* buffer) {
   const Int height = matrix->height;
   if (buffer->Size() < height * height) {
     buffer->Resize(height * height);
@@ -859,7 +859,7 @@ std::vector<Int> LowerFactorAndSampleDPP(
 
 #ifdef _OPENMP
 template <class Field>
-std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
+std::vector<Int> OpenMPLowerBlockedFactorAndSampleDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
@@ -984,14 +984,14 @@ std::vector<Int> MultithreadedLowerBlockedFactorAndSampleDPP(
 }
 
 template <class Field>
-std::vector<Int> MultithreadedLowerFactorAndSampleDPP(
+std::vector<Int> OpenMPLowerFactorAndSampleDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     Buffer<Field>* buffer) {
-  return MultithreadedLowerBlockedFactorAndSampleDPP(
-      tile_size, block_size, maximum_likelihood, matrix, generator,
-      uniform_dist, buffer);
+  return OpenMPLowerBlockedFactorAndSampleDPP(tile_size, block_size,
+                                              maximum_likelihood, matrix,
+                                              generator, uniform_dist, buffer);
 }
 #endif  // ifdef _OPENMP
 

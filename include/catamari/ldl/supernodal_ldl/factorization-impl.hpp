@@ -99,7 +99,7 @@ void Factorization<Field>::FormSupernodes(
 
 #ifdef _OPENMP
 template <class Field>
-void Factorization<Field>::MultithreadedFormSupernodes(
+void Factorization<Field>::OpenMPFormSupernodes(
     const CoordinateMatrix<Field>& matrix,
     const SupernodalRelaxationControl& control, AssemblyForest* forest,
     Buffer<Int>* supernode_degrees) {
@@ -109,9 +109,9 @@ void Factorization<Field>::MultithreadedFormSupernodes(
   fund_ordering.permutation = ordering_.permutation;
   fund_ordering.inverse_permutation = ordering_.inverse_permutation;
   scalar_ldl::LowerStructure scalar_structure;
-  MultithreadedFormFundamentalSupernodes(matrix, ordering_, &orig_scalar_forest,
-                                         &fund_ordering.supernode_sizes,
-                                         &scalar_structure);
+  OpenMPFormFundamentalSupernodes(matrix, ordering_, &orig_scalar_forest,
+                                  &fund_ordering.supernode_sizes,
+                                  &scalar_structure);
   OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
   CATAMARI_ASSERT(fund_ordering.supernode_offsets.Back() == matrix.NumRows(),
                   "Supernodes did not sum to the matrix size.");
@@ -130,8 +130,8 @@ void Factorization<Field>::MultithreadedFormSupernodes(
   fund_ordering.assembly_forest.FillFromParents();
 
   Buffer<Int> fund_supernode_degrees;
-  MultithreadedSupernodalDegrees(matrix, fund_ordering, orig_scalar_forest,
-                                 fund_member_to_index, &fund_supernode_degrees);
+  OpenMPSupernodalDegrees(matrix, fund_ordering, orig_scalar_forest,
+                          fund_member_to_index, &fund_supernode_degrees);
 
   if (control.relax_supernodes) {
     // TODO(Jack Poulson): Parallelize RelaxSupernodes.
@@ -201,7 +201,7 @@ void Factorization<Field>::InitializeFactors(
 
 #ifdef _OPENMP
 template <class Field>
-void Factorization<Field>::MultithreadedInitializeFactors(
+void Factorization<Field>::OpenMPInitializeFactors(
     const CoordinateMatrix<Field>& matrix, const AssemblyForest& forest,
     const Buffer<Int>& supernode_degrees) {
   lower_factor_.reset(
@@ -229,17 +229,16 @@ void Factorization<Field>::MultithreadedInitializeFactors(
     max_lower_block_size_ = std::max(max_lower_block_size_, lower_block_size);
   }
 
-  MultithreadedFillStructureIndices(sort_grain_size_, matrix, ordering_, forest,
-                                    supernode_member_to_index_,
-                                    lower_factor_.get());
+  OpenMPFillStructureIndices(sort_grain_size_, matrix, ordering_, forest,
+                             supernode_member_to_index_, lower_factor_.get());
   if (algorithm_ == kLeftLookingLDL) {
     // TODO(Jack Poulson): Switch to a multithreaded equivalent.
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                          supernode_member_to_index_);
   }
 
-  MultithreadedFillNonzeros(matrix, ordering_, supernode_member_to_index_,
-                            lower_factor_.get(), diagonal_factor_.get());
+  OpenMPFillNonzeros(matrix, ordering_, supernode_member_to_index_,
+                     lower_factor_.get(), diagonal_factor_.get());
 }
 #endif  // ifdef _OPENMP
 
@@ -393,7 +392,7 @@ LDLResult Factorization<Field>::LeftLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
 #ifdef _OPENMP
   if (omp_get_max_threads() > 1) {
-    return MultithreadedLeftLooking(matrix, control);
+    return OpenMPLeftLooking(matrix, control);
   }
 #endif
   algorithm_ = kLeftLookingLDL;
@@ -496,7 +495,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
 
 #ifdef _OPENMP
 template <class Field>
-bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
+bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     Int supernode, RightLookingSharedState<Field>* shared_state,
     Buffer<PrivateState<Field>>* private_states, LDLResult* result) {
   typedef ComplexBase<Field> Real;
@@ -523,9 +522,9 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
   BlasMatrixView<Field> schur_complement =
       shared_state->schur_complements[supernode];
 
-  MultithreadedMergeChildSchurComplements(merge_grain_size_, supernode,
-                                          ordering_, lower_factor_.get(),
-                                          diagonal_factor_.get(), shared_state);
+  OpenMPMergeChildSchurComplements(merge_grain_size_, supernode, ordering_,
+                                   lower_factor_.get(), diagonal_factor_.get(),
+                                   shared_state);
 
   Int num_supernode_pivots;
   {
@@ -533,7 +532,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     Buffer<Field> multithreaded_buffer(supernode_size * supernode_size);
     #pragma omp taskgroup
     {
-      num_supernode_pivots = MultithreadedFactorDiagonalBlock(
+      num_supernode_pivots = OpenMPFactorDiagonalBlock(
           factor_tile_size_, block_size_, factorization_type_, &diagonal_block,
           &multithreaded_buffer);
       result->num_successful_pivots += num_supernode_pivots;
@@ -551,15 +550,14 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
 
   CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
   #pragma omp taskgroup
-  MultithreadedSolveAgainstDiagonalBlock(
-      outer_product_tile_size_, factorization_type_, diagonal_block.ToConst(),
-      &lower_block);
+  OpenMPSolveAgainstDiagonalBlock(outer_product_tile_size_, factorization_type_,
+                                  diagonal_block.ToConst(), &lower_block);
 
   if (factorization_type_ == kCholeskyFactorization) {
     #pragma omp taskgroup
-    MultithreadedLowerNormalHermitianOuterProduct(
-        outer_product_tile_size_, Real{-1}, lower_block.ToConst(), Real{1},
-        &schur_complement);
+    OpenMPLowerNormalHermitianOuterProduct(outer_product_tile_size_, Real{-1},
+                                           lower_block.ToConst(), Real{1},
+                                           &schur_complement);
   } else {
     BlasMatrixView<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;
@@ -568,13 +566,13 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
 
     #pragma omp taskgroup
-    MultithreadedFormScaledTranspose(
-        outer_product_tile_size_, factorization_type_, diagonal_block.ToConst(),
-        lower_block.ToConst(), &scaled_transpose);
+    OpenMPFormScaledTranspose(outer_product_tile_size_, factorization_type_,
+                              diagonal_block.ToConst(), lower_block.ToConst(),
+                              &scaled_transpose);
 
     // Perform the multi-threaded MatrixMultiplyLowerNormalNormal.
     #pragma omp taskgroup
-    MultithreadedMatrixMultiplyLowerNormalNormal(
+    OpenMPMatrixMultiplyLowerNormalNormal(
         outer_product_tile_size_, Field{-1}, lower_block.ToConst(),
         scaled_transpose.ToConst(), Field{1}, &schur_complement);
   }
@@ -640,7 +638,7 @@ bool Factorization<Field>::RightLookingSubtree(
 
 #ifdef _OPENMP
 template <class Field>
-bool Factorization<Field>::MultithreadedRightLookingSubtree(
+bool Factorization<Field>::OpenMPRightLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode,
     const CoordinateMatrix<Field>& matrix, const Buffer<double>& work_estimates,
     RightLookingSharedState<Field>* shared_state,
@@ -669,7 +667,7 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
       shared(successes, matrix, result_contributions, work_estimates)
     {
       LDLResult& result_contribution = result_contributions[child_index];
-      successes[child_index] = MultithreadedRightLookingSubtree(
+      successes[child_index] = OpenMPRightLookingSubtree(
           level + 1, max_parallel_levels, child, matrix, work_estimates,
           shared_state, private_states, &result_contribution);
     }
@@ -687,8 +685,8 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
 
   if (succeeded) {
     #pragma omp taskgroup
-    succeeded = MultithreadedRightLookingSupernodeFinalize(
-        supernode, shared_state, private_states, result);
+    succeeded = OpenMPRightLookingSupernodeFinalize(supernode, shared_state,
+                                                    private_states, result);
   } else {
     // Clear the child fronts.
     for (Int child_index = 0; child_index < num_children; ++child_index) {
@@ -714,7 +712,7 @@ LDLResult Factorization<Field>::RightLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
 #ifdef _OPENMP
   if (omp_get_max_threads() > 1) {
-    return MultithreadedRightLooking(matrix, control);
+    return OpenMPRightLooking(matrix, control);
   }
 #endif
   algorithm_ = kRightLookingLDL;
@@ -806,7 +804,7 @@ bool Factorization<Field>::LeftLookingSubtree(
 
 #ifdef _OPENMP
 template <class Field>
-void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
+void Factorization<Field>::OpenMPLeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
     LeftLookingSharedState* shared_state,
     Buffer<PrivateState<Field>>* private_states) {
@@ -978,7 +976,7 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
 }
 
 template <class Field>
-bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
+bool Factorization<Field>::OpenMPLeftLookingSupernodeFinalize(
     Int supernode, Buffer<PrivateState<Field>>* private_states,
     LDLResult* result) {
   BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
@@ -992,9 +990,9 @@ bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
     const int thread = omp_get_thread_num();
     Buffer<Field>* buffer = &(*private_states)[thread].scaled_transpose_buffer;
 
-    num_supernode_pivots = MultithreadedFactorDiagonalBlock(
-        factor_tile_size_, block_size_, factorization_type_, &diagonal_block,
-        buffer);
+    num_supernode_pivots =
+        OpenMPFactorDiagonalBlock(factor_tile_size_, block_size_,
+                                  factorization_type_, &diagonal_block, buffer);
     result->num_successful_pivots += num_supernode_pivots;
   }
   if (num_supernode_pivots < supernode_size) {
@@ -1007,15 +1005,14 @@ bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
 
   CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
   #pragma omp taskgroup
-  MultithreadedSolveAgainstDiagonalBlock(
-      outer_product_tile_size_, factorization_type_, diagonal_block.ToConst(),
-      &lower_block);
+  OpenMPSolveAgainstDiagonalBlock(outer_product_tile_size_, factorization_type_,
+                                  diagonal_block.ToConst(), &lower_block);
 
   return true;
 }
 
 template <class Field>
-bool Factorization<Field>::MultithreadedLeftLookingSubtree(
+bool Factorization<Field>::OpenMPLeftLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode,
     const CoordinateMatrix<Field>& matrix, LeftLookingSharedState* shared_state,
     Buffer<PrivateState<Field>>* private_states, LDLResult* result) {
@@ -1042,7 +1039,7 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
         shared(successes, matrix, result_contributions)
     {
       LDLResult& result_contribution = result_contributions[child_index];
-      successes[child_index] = MultithreadedLeftLookingSubtree(
+      successes[child_index] = OpenMPLeftLookingSubtree(
           level + 1, max_parallel_levels, child, matrix, shared_state,
           private_states, &result_contribution);
     }
@@ -1060,19 +1057,19 @@ bool Factorization<Field>::MultithreadedLeftLookingSubtree(
   if (succeeded) {
     // Handle the current supernode's elimination.
     #pragma omp taskgroup
-    MultithreadedLeftLookingSupernodeUpdate(supernode, matrix, shared_state,
-                                            private_states);
+    OpenMPLeftLookingSupernodeUpdate(supernode, matrix, shared_state,
+                                     private_states);
 
     #pragma omp taskgroup
-    succeeded = MultithreadedLeftLookingSupernodeFinalize(
-        supernode, private_states, result);
+    succeeded =
+        OpenMPLeftLookingSupernodeFinalize(supernode, private_states, result);
   }
 
   return succeeded;
 }
 
 template <class Field>
-LDLResult Factorization<Field>::MultithreadedLeftLooking(
+LDLResult Factorization<Field>::OpenMPLeftLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
   algorithm_ = kLeftLookingLDL;
 
@@ -1084,11 +1081,11 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
     #pragma omp single
     {
       #pragma omp taskgroup
-      MultithreadedFormSupernodes(matrix, control.relaxation_control, &forest,
-                                  &supernode_degrees);
+      OpenMPFormSupernodes(matrix, control.relaxation_control, &forest,
+                           &supernode_degrees);
 
       #pragma omp taskgroup
-      MultithreadedInitializeFactors(matrix, forest, supernode_degrees);
+      OpenMPInitializeFactors(matrix, forest, supernode_degrees);
     }
   }
   const Int num_supernodes = ordering_.supernode_sizes.Size();
@@ -1154,7 +1151,7 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
               private_states)
       {
         LDLResult& result_contribution = result_contributions[root_index];
-        successes[root_index] = MultithreadedLeftLookingSubtree(
+        successes[root_index] = OpenMPLeftLookingSubtree(
             level + 1, max_parallel_levels, root, matrix, &shared_state,
             &private_states, &result_contribution);
       }
@@ -1174,7 +1171,7 @@ LDLResult Factorization<Field>::MultithreadedLeftLooking(
 }
 
 template <class Field>
-LDLResult Factorization<Field>::MultithreadedRightLooking(
+LDLResult Factorization<Field>::OpenMPRightLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
   algorithm_ = kRightLookingLDL;
 
@@ -1186,11 +1183,11 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
     #pragma omp single
     {
       #pragma omp taskgroup
-      MultithreadedFormSupernodes(matrix, control.relaxation_control, &forest,
-                                  &supernode_degrees);
+      OpenMPFormSupernodes(matrix, control.relaxation_control, &forest,
+                           &supernode_degrees);
 
       #pragma omp taskgroup
-      MultithreadedInitializeFactors(matrix, forest, supernode_degrees);
+      OpenMPInitializeFactors(matrix, forest, supernode_degrees);
     }
   }
 
@@ -1260,7 +1257,7 @@ LDLResult Factorization<Field>::MultithreadedRightLooking(
               private_states, work_estimates)
       {
         LDLResult& result_contribution = result_contributions[root_index];
-        successes[root_index] = MultithreadedRightLookingSubtree(
+        successes[root_index] = OpenMPRightLookingSubtree(
             level + 1, max_parallel_levels, root, matrix, work_estimates,
             &shared_state, &private_states, &result_contribution);
       }
@@ -1324,9 +1321,9 @@ void Factorization<Field>::Solve(BlasMatrixView<Field>* matrix) const {
     #pragma omp parallel
     #pragma omp single
     {
-      MultithreadedLowerTriangularSolve(matrix);
-      MultithreadedDiagonalSolve(matrix);
-      MultithreadedLowerTransposeTriangularSolve(matrix);
+      OpenMPLowerTriangularSolve(matrix);
+      OpenMPDiagonalSolve(matrix);
+      OpenMPLowerTransposeTriangularSolve(matrix);
     }
 
     SetNumBlasThreads(old_max_threads);
@@ -1412,7 +1409,7 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
 
 #ifdef _OPENMP
 template <class Field>
-void Factorization<Field>::MultithreadedLowerSupernodalTrapezoidalSolve(
+void Factorization<Field>::OpenMPLowerSupernodalTrapezoidalSolve(
     Int supernode, BlasMatrixView<Field>* matrix,
     RightLookingSharedState<Field>* shared_state) const {
   // Eliminate this supernode.
@@ -1466,7 +1463,7 @@ void Factorization<Field>::LowerTriangularSolveRecursion(
 
 #ifdef _OPENMP
 template <class Field>
-void Factorization<Field>::MultithreadedLowerTriangularSolveRecursion(
+void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
     Int supernode, BlasMatrixView<Field>* matrix,
     RightLookingSharedState<Field>* shared_state) const {
   // Recurse on this supernode's children.
@@ -1479,7 +1476,7 @@ void Factorization<Field>::MultithreadedLowerTriangularSolveRecursion(
         ordering_.assembly_forest.children[child_beg + child_index];
     #pragma omp task default(none) firstprivate(child) \
         shared(matrix, shared_state)
-    MultithreadedLowerTriangularSolveRecursion(child, matrix, shared_state);
+    OpenMPLowerTriangularSolveRecursion(child, matrix, shared_state);
   }
 
   const Int supernode_start = ordering_.supernode_sizes[supernode];
@@ -1532,7 +1529,7 @@ void Factorization<Field>::MultithreadedLowerTriangularSolveRecursion(
   }
 
   // Perform this supernode's trapezoidal solve.
-  MultithreadedLowerSupernodalTrapezoidalSolve(supernode, matrix, shared_state);
+  OpenMPLowerSupernodalTrapezoidalSolve(supernode, matrix, shared_state);
 }
 #endif  // ifdef _OPENMP
 
@@ -1553,7 +1550,7 @@ void Factorization<Field>::LowerTriangularSolve(
 
 #ifdef _OPENMP
 template <class Field>
-void Factorization<Field>::MultithreadedLowerTriangularSolve(
+void Factorization<Field>::OpenMPLowerTriangularSolve(
     BlasMatrixView<Field>* matrix) const {
   // Set up the shared state.
   const Int num_supernodes = ordering_.supernode_sizes.Size();
@@ -1568,7 +1565,7 @@ void Factorization<Field>::MultithreadedLowerTriangularSolve(
     const Int root = ordering_.assembly_forest.roots[root_index];
     #pragma omp task default(none) firstprivate(root) \
         shared(matrix, shared_state)
-    MultithreadedLowerTriangularSolveRecursion(root, matrix, &shared_state);
+    OpenMPLowerTriangularSolveRecursion(root, matrix, &shared_state);
   }
 }
 #endif  // ifdef _OPENMP
@@ -1603,7 +1600,7 @@ void Factorization<Field>::DiagonalSolve(BlasMatrixView<Field>* matrix) const {
 
 #ifdef _OPENMP
 template <class Field>
-void Factorization<Field>::MultithreadedDiagonalSolve(
+void Factorization<Field>::OpenMPDiagonalSolve(
     BlasMatrixView<Field>* matrix) const {
   if (factorization_type_ == kCholeskyFactorization) {
     // D is the identity.
@@ -1730,7 +1727,7 @@ void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
 
 #ifdef _OPENMP
 template <class Field>
-void Factorization<Field>::MultithreadedLowerTransposeTriangularSolveRecursion(
+void Factorization<Field>::OpenMPLowerTransposeTriangularSolveRecursion(
     Int supernode, BlasMatrixView<Field>* matrix,
     Buffer<Buffer<Field>>* private_packed_input_bufs) const {
   // Perform this supernode's trapezoidal solve.
@@ -1748,8 +1745,8 @@ void Factorization<Field>::MultithreadedLowerTransposeTriangularSolveRecursion(
         ordering_.assembly_forest.children[child_beg + child_index];
     #pragma omp task default(none) firstprivate(child) \
         shared(matrix, private_packed_input_bufs)
-    MultithreadedLowerTransposeTriangularSolveRecursion(
-        child, matrix, private_packed_input_bufs);
+    OpenMPLowerTransposeTriangularSolveRecursion(child, matrix,
+                                                 private_packed_input_bufs);
   }
 }
 #endif  // ifdef _OPENMP
@@ -1771,7 +1768,7 @@ void Factorization<Field>::LowerTransposeTriangularSolve(
 
 #ifdef _OPENMP
 template <class Field>
-void Factorization<Field>::MultithreadedLowerTransposeTriangularSolve(
+void Factorization<Field>::OpenMPLowerTransposeTriangularSolve(
     BlasMatrixView<Field>* matrix) const {
   // Allocate each thread's workspace.
   const int max_threads = omp_get_max_threads();
@@ -1791,8 +1788,8 @@ void Factorization<Field>::MultithreadedLowerTransposeTriangularSolve(
     const Int root = ordering_.assembly_forest.roots[root_index];
     #pragma omp task default(none) firstprivate(root) \
         shared(matrix, private_packed_input_bufs)
-    MultithreadedLowerTransposeTriangularSolveRecursion(
-        root, matrix, &private_packed_input_bufs);
+    OpenMPLowerTransposeTriangularSolveRecursion(root, matrix,
+                                                 &private_packed_input_bufs);
   }
 }
 #endif  // ifdef _OPENMP

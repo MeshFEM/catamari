@@ -57,8 +57,8 @@ void RunMatrixMultiplyLowerNormalNormal(Int height, Int rank) {
 
 #ifdef _OPENMP
 template <typename Field>
-void RunMultithreadedMatrixMultiplyLowerNormalNormal(Int tile_size, Int height,
-                                                     Int rank) {
+void RunOpenMPMatrixMultiplyLowerNormalNormal(Int tile_size, Int height,
+                                              Int rank) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   quotient::Timer timer;
 
@@ -72,7 +72,7 @@ void RunMultithreadedMatrixMultiplyLowerNormalNormal(Int tile_size, Int height,
 
   #pragma omp parallel
   #pragma omp single
-  MultithreadedMatrixMultiplyLowerNormalNormal(
+  OpenMPMatrixMultiplyLowerNormalNormal(
       tile_size, Field{-1}, left_matrix.ConstView(), right_matrix.ConstView(),
       Field{1}, &output_matrix.view);
 
@@ -81,7 +81,7 @@ void RunMultithreadedMatrixMultiplyLowerNormalNormal(Int tile_size, Int height,
       (is_complex ? 4. : 1.) * std::pow(1. * height, 2.) * rank;
   const double gflops_per_sec = flops / (1.e9 * runtime);
 
-  std::cout << "Multithreaded GFlops/sec: " << gflops_per_sec << std::endl;
+  std::cout << "OpenMP GFlops/sec: " << gflops_per_sec << std::endl;
 }
 #endif  // ifdef _OPENMP
 
@@ -105,8 +105,8 @@ int main(int argc, char** argv) {
 
   for (Int round = 0; round < num_rounds; ++round) {
 #ifdef _OPENMP
-    RunMultithreadedMatrixMultiplyLowerNormalNormal<Complex<double>>(
-        tile_size, height, rank);
+    RunOpenMPMatrixMultiplyLowerNormalNormal<Complex<double>>(tile_size, height,
+                                                              rank);
 #endif  // ifdef _OPENMP
     RunMatrixMultiplyLowerNormalNormal<Complex<double>>(height, rank);
   }

@@ -79,7 +79,7 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedEliminationForestAndDegreesRecursion(
+void OpenMPEliminationForestAndDegreesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     Int root, bool keep_structures, Buffer<Int>* parents, Buffer<Int>* degrees,
     Buffer<Buffer<std::vector<Int>>>* private_children_lists,
@@ -94,7 +94,7 @@ void MultithreadedEliminationForestAndDegreesRecursion(
     #pragma omp task default(none) firstprivate(child, keep_structures)    \
         shared(matrix, ordering, parents, degrees, private_children_lists, \
         structures, private_pattern_flags, private_tmp_structures)
-    MultithreadedEliminationForestAndDegreesRecursion(
+    OpenMPEliminationForestAndDegreesRecursion(
         matrix, ordering, child, keep_structures, parents, degrees,
         private_children_lists, structures, private_pattern_flags,
         private_tmp_structures);
@@ -232,9 +232,10 @@ void MultithreadedEliminationForestAndDegreesRecursion(
 }
 
 template <class Field>
-void MultithreadedEliminationForestAndDegrees(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    Buffer<Int>* parents, Buffer<Int>* degrees) {
+void OpenMPEliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
+                                       const SymmetricOrdering& ordering,
+                                       Buffer<Int>* parents,
+                                       Buffer<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
   const int max_threads = omp_get_max_threads();
   parents->Resize(num_rows);
@@ -269,7 +270,7 @@ void MultithreadedEliminationForestAndDegrees(
     #pragma omp task default(none) firstprivate(root, keep_structures)     \
         shared(matrix, ordering, parents, degrees, private_children_lists, \
             structures, private_pattern_flags, private_tmp_structures)
-    MultithreadedEliminationForestAndDegreesRecursion(
+    OpenMPEliminationForestAndDegreesRecursion(
         matrix, ordering, root, keep_structures, parents, degrees,
         &private_children_lists, &structures, &private_pattern_flags,
         &private_tmp_structures);
@@ -432,7 +433,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFillStructureIndicesRecursion(
+void OpenMPFillStructureIndicesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const AssemblyForest& scalar_forest, Int root,
     LowerStructure* lower_structure,
@@ -446,9 +447,8 @@ void MultithreadedFillStructureIndicesRecursion(
     #pragma omp task default(none) firstprivate(child)           \
         shared(matrix, ordering, scalar_forest, lower_structure, \
         private_pattern_flags)
-    MultithreadedFillStructureIndicesRecursion(matrix, ordering, scalar_forest,
-                                               child, lower_structure,
-                                               private_pattern_flags);
+    OpenMPFillStructureIndicesRecursion(matrix, ordering, scalar_forest, child,
+                                        lower_structure, private_pattern_flags);
   }
 
   const int thread = omp_get_thread_num();
@@ -544,11 +544,11 @@ void MultithreadedFillStructureIndicesRecursion(
 }
 
 template <class Field>
-void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
-                                       const SymmetricOrdering& ordering,
-                                       AssemblyForest* forest,
-                                       LowerStructure* lower_structure,
-                                       bool preallocate, int sort_grain_size) {
+void OpenMPFillStructureIndices(const CoordinateMatrix<Field>& matrix,
+                                const SymmetricOrdering& ordering,
+                                AssemblyForest* forest,
+                                LowerStructure* lower_structure,
+                                bool preallocate, int sort_grain_size) {
   const Int num_rows = matrix.NumRows();
   const int max_threads = omp_get_max_threads();
 
@@ -593,7 +593,7 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
           shared(matrix, ordering, parents, degrees, private_children_lists, \
               structures, private_pattern_flags, private_tmp_structures)
       {
-        MultithreadedEliminationForestAndDegreesRecursion(
+        OpenMPEliminationForestAndDegreesRecursion(
             matrix, ordering, root, keep_structures, parents, &degrees,
             &private_children_lists, &structures, &private_pattern_flags,
             &private_tmp_structures);
@@ -623,9 +623,9 @@ void MultithreadedFillStructureIndices(const CoordinateMatrix<Field>& matrix,
           shared(matrix, ordering, forest, lower_structure, \
               private_pattern_flags)
       {
-        MultithreadedFillStructureIndicesRecursion(matrix, ordering, *forest,
-                                                   root, lower_structure,
-                                                   &private_pattern_flags);
+        OpenMPFillStructureIndicesRecursion(matrix, ordering, *forest, root,
+                                            lower_structure,
+                                            &private_pattern_flags);
       }
     }
 

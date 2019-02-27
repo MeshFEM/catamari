@@ -215,7 +215,7 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFormFundamentalSupernodesRecursion(
+void OpenMPFormFundamentalSupernodesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     Int root, Buffer<Int>* flat_supernode_sizes,
     scalar_ldl::LowerStructure* scalar_structure, Buffer<Int>* column_ptrs) {
@@ -228,9 +228,9 @@ void MultithreadedFormFundamentalSupernodesRecursion(
     #pragma omp task default(none) firstprivate(child)                   \
         shared(matrix, ordering, flat_supernode_sizes, scalar_structure, \
             column_ptrs)
-    MultithreadedFormFundamentalSupernodesRecursion(
-        matrix, ordering, child, flat_supernode_sizes, scalar_structure,
-        column_ptrs);
+    OpenMPFormFundamentalSupernodesRecursion(matrix, ordering, child,
+                                             flat_supernode_sizes,
+                                             scalar_structure, column_ptrs);
   }
 
   const Int orig_supernode_size = ordering.supernode_sizes[root];
@@ -287,7 +287,7 @@ void MultithreadedFormFundamentalSupernodesRecursion(
 }
 
 template <class Field>
-void MultithreadedFormFundamentalSupernodes(
+void OpenMPFormFundamentalSupernodes(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     AssemblyForest* scalar_forest, Buffer<Int>* supernode_sizes,
     scalar_ldl::LowerStructure* scalar_structure) {
@@ -295,8 +295,8 @@ void MultithreadedFormFundamentalSupernodes(
 
   // We will only fill the indices and offsets of the factorization.
   #pragma omp taskgroup
-  scalar_ldl::MultithreadedFillStructureIndices(matrix, ordering, scalar_forest,
-                                                scalar_structure);
+  scalar_ldl::OpenMPFillStructureIndices(matrix, ordering, scalar_forest,
+                                         scalar_structure);
 
   supernode_sizes->Clear();
   if (!num_rows) {
@@ -317,9 +317,9 @@ void MultithreadedFormFundamentalSupernodes(
     #pragma omp task default(none) firstprivate(root)                    \
         shared(matrix, ordering, flat_supernode_sizes, scalar_structure, \
             column_ptrs)
-    MultithreadedFormFundamentalSupernodesRecursion(
-        matrix, ordering, root, &flat_supernode_sizes, scalar_structure,
-        &column_ptrs);
+    OpenMPFormFundamentalSupernodesRecursion(matrix, ordering, root,
+                                             &flat_supernode_sizes,
+                                             scalar_structure, &column_ptrs);
   }
 
   // Compress flat_supernode_sizes into supernode_sizes.
@@ -775,7 +775,7 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedSupernodalDegreesRecursion(
+void OpenMPSupernodalDegreesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
     Int root, Buffer<Int>* supernode_degrees, Buffer<Buffer<Int>>* structures,
@@ -790,7 +790,7 @@ void MultithreadedSupernodalDegreesRecursion(
         shared(matrix, ordering, forest, supernode_member_to_index, \
             supernode_degrees, structures, private_pattern_flags,   \
             private_tmp_structures)
-    MultithreadedSupernodalDegreesRecursion(
+    OpenMPSupernodalDegreesRecursion(
         matrix, ordering, forest, supernode_member_to_index, child,
         supernode_degrees, structures, private_pattern_flags,
         private_tmp_structures);
@@ -867,10 +867,11 @@ void MultithreadedSupernodalDegreesRecursion(
 }
 
 template <class Field>
-void MultithreadedSupernodalDegrees(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
-    Buffer<Int>* supernode_degrees) {
+void OpenMPSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
+                             const SymmetricOrdering& ordering,
+                             const AssemblyForest& forest,
+                             const Buffer<Int>& supernode_member_to_index,
+                             Buffer<Int>* supernode_degrees) {
   const Int num_rows = matrix.NumRows();
   const Int num_supernodes = ordering.supernode_sizes.Size();
   const int max_threads = omp_get_max_threads();
@@ -903,7 +904,7 @@ void MultithreadedSupernodalDegrees(
         shared(matrix, ordering, forest, supernode_member_to_index, \
             supernode_degrees, structures, private_pattern_flags,   \
             private_tmp_structures)
-    MultithreadedSupernodalDegreesRecursion(
+    OpenMPSupernodalDegreesRecursion(
         matrix, ordering, forest, supernode_member_to_index, root,
         supernode_degrees, &structures, &private_pattern_flags,
         &private_tmp_structures);
@@ -1030,7 +1031,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFillStructureIndicesRecursion(
+void OpenMPFillStructureIndicesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
     Int root, LowerFactor<Field>* lower_factor,
@@ -1043,9 +1044,9 @@ void MultithreadedFillStructureIndicesRecursion(
     #pragma omp task default(none) firstprivate(child)              \
         shared(matrix, ordering, forest, supernode_member_to_index, \
             lower_factor, private_pattern_flags)
-    MultithreadedFillStructureIndicesRecursion(
-        matrix, ordering, forest, supernode_member_to_index, child,
-        lower_factor, private_pattern_flags);
+    OpenMPFillStructureIndicesRecursion(matrix, ordering, forest,
+                                        supernode_member_to_index, child,
+                                        lower_factor, private_pattern_flags);
   }
 
   const int thread = omp_get_thread_num();
@@ -1109,11 +1110,12 @@ void MultithreadedFillStructureIndicesRecursion(
 }
 
 template <class Field>
-void MultithreadedFillStructureIndices(
-    Int sort_grain_size, const CoordinateMatrix<Field>& matrix,
-    const SymmetricOrdering& ordering, const AssemblyForest& forest,
-    const Buffer<Int>& supernode_member_to_index,
-    LowerFactor<Field>* lower_factor) {
+void OpenMPFillStructureIndices(Int sort_grain_size,
+                                const CoordinateMatrix<Field>& matrix,
+                                const SymmetricOrdering& ordering,
+                                const AssemblyForest& forest,
+                                const Buffer<Int>& supernode_member_to_index,
+                                LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
   const int max_threads = omp_get_max_threads();
 
@@ -1134,9 +1136,9 @@ void MultithreadedFillStructureIndices(
     #pragma omp task default(none) firstprivate(root)                \
         shared(matrix, ordering, forest, supernode_member_to_index, \
             lower_factor, private_pattern_flags)
-    MultithreadedFillStructureIndicesRecursion(
-        matrix, ordering, forest, supernode_member_to_index, root, lower_factor,
-        &private_pattern_flags);
+    OpenMPFillStructureIndicesRecursion(matrix, ordering, forest,
+                                        supernode_member_to_index, root,
+                                        lower_factor, &private_pattern_flags);
   }
 
   // Sort the structures.
@@ -1240,10 +1242,11 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFillNonzerosRecursion(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const Buffer<Int>& supernode_member_to_index, Int root,
-    LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor) {
+void OpenMPFillNonzerosRecursion(const CoordinateMatrix<Field>& matrix,
+                                 const SymmetricOrdering& ordering,
+                                 const Buffer<Int>& supernode_member_to_index,
+                                 Int root, LowerFactor<Field>* lower_factor,
+                                 DiagonalFactor<Field>* diagonal_factor) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
@@ -1252,9 +1255,8 @@ void MultithreadedFillNonzerosRecursion(
     #pragma omp task default(none) firstprivate(child) \
         shared(matrix, ordering, supernode_member_to_index, lower_factor, \
             diagonal_factor)
-    MultithreadedFillNonzerosRecursion(matrix, ordering,
-                                       supernode_member_to_index, child,
-                                       lower_factor, diagonal_factor);
+    OpenMPFillNonzerosRecursion(matrix, ordering, supernode_member_to_index,
+                                child, lower_factor, diagonal_factor);
   }
 
   const bool have_permutation = !ordering.permutation.Empty();
@@ -1309,19 +1311,18 @@ void MultithreadedFillNonzerosRecursion(
 }
 
 template <class Field>
-void MultithreadedFillNonzeros(const CoordinateMatrix<Field>& matrix,
-                               const SymmetricOrdering& ordering,
-                               const Buffer<Int>& supernode_member_to_index,
-                               LowerFactor<Field>* lower_factor,
-                               DiagonalFactor<Field>* diagonal_factor) {
+void OpenMPFillNonzeros(const CoordinateMatrix<Field>& matrix,
+                        const SymmetricOrdering& ordering,
+                        const Buffer<Int>& supernode_member_to_index,
+                        LowerFactor<Field>* lower_factor,
+                        DiagonalFactor<Field>* diagonal_factor) {
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
     #pragma omp task default(none) firstprivate(root) \
         shared(matrix, ordering, supernode_member_to_index, lower_factor, \
             diagonal_factor)
-    MultithreadedFillNonzerosRecursion(matrix, ordering,
-                                       supernode_member_to_index, root,
-                                       lower_factor, diagonal_factor);
+    OpenMPFillNonzerosRecursion(matrix, ordering, supernode_member_to_index,
+                                root, lower_factor, diagonal_factor);
   }
 }
 #endif  // ifdef _OPENMP
@@ -1347,9 +1348,9 @@ void FillZeros(const SymmetricOrdering& ordering,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFillZerosRecursion(const SymmetricOrdering& ordering,
-                                     Int root, LowerFactor<Field>* lower_factor,
-                                     DiagonalFactor<Field>* diagonal_factor) {
+void OpenMPFillZerosRecursion(const SymmetricOrdering& ordering, Int root,
+                              LowerFactor<Field>* lower_factor,
+                              DiagonalFactor<Field>* diagonal_factor) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
@@ -1357,8 +1358,7 @@ void MultithreadedFillZerosRecursion(const SymmetricOrdering& ordering,
     const Int child = ordering.assembly_forest.children[child_index];
     #pragma omp task default(none) firstprivate(child) \
         shared(ordering, lower_factor, diagonal_factor)
-    MultithreadedFillZerosRecursion(ordering, child, lower_factor,
-                                    diagonal_factor);
+    OpenMPFillZerosRecursion(ordering, child, lower_factor, diagonal_factor);
   }
 
   BlasMatrixView<Field>& diagonal_block = diagonal_factor->blocks[root];
@@ -1374,15 +1374,14 @@ void MultithreadedFillZerosRecursion(const SymmetricOrdering& ordering,
 }
 
 template <class Field>
-void MultithreadedFillZeros(const SymmetricOrdering& ordering,
-                            LowerFactor<Field>* lower_factor,
-                            DiagonalFactor<Field>* diagonal_factor) {
+void OpenMPFillZeros(const SymmetricOrdering& ordering,
+                     LowerFactor<Field>* lower_factor,
+                     DiagonalFactor<Field>* diagonal_factor) {
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
     #pragma omp task default(none) firstprivate(root) \
         shared(ordering, lower_factor, diagonal_factor)
-    MultithreadedFillZerosRecursion(ordering, root, lower_factor,
-                                    diagonal_factor);
+    OpenMPFillZerosRecursion(ordering, root, lower_factor, diagonal_factor);
   }
 }
 #endif  // ifdef _OPENMP
@@ -1468,11 +1467,11 @@ void FormScaledTranspose(SymmetricFactorizationType factorization_type,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFormScaledTranspose(
-    Int tile_size, SymmetricFactorizationType factorization_type,
-    const ConstBlasMatrixView<Field>& diagonal_block,
-    const ConstBlasMatrixView<Field>& matrix,
-    BlasMatrixView<Field>* scaled_transpose) {
+void OpenMPFormScaledTranspose(Int tile_size,
+                               SymmetricFactorizationType factorization_type,
+                               const ConstBlasMatrixView<Field>& diagonal_block,
+                               const ConstBlasMatrixView<Field>& matrix,
+                               BlasMatrixView<Field>* scaled_transpose) {
   const ConstBlasMatrixView<Field> diagonal_block_copy = diagonal_block;
   const ConstBlasMatrixView<Field> matrix_copy = matrix;
 
@@ -1761,7 +1760,7 @@ void MergeChildSchurComplements(Int supernode,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedMergeChildSchurComplements(
+void OpenMPMergeChildSchurComplements(
     Int merge_grain_size, Int supernode, const SymmetricOrdering& ordering,
     LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor,
     RightLookingSharedState<Field>* shared_state) {
@@ -1870,20 +1869,20 @@ Int FactorDiagonalBlock(Int block_size,
 
 #ifdef _OPENMP
 template <class Field>
-Int MultithreadedFactorDiagonalBlock(
-    Int tile_size, Int block_size,
-    SymmetricFactorizationType factorization_type,
-    BlasMatrixView<Field>* diagonal_block, Buffer<Field>* buffer) {
+Int OpenMPFactorDiagonalBlock(Int tile_size, Int block_size,
+                              SymmetricFactorizationType factorization_type,
+                              BlasMatrixView<Field>* diagonal_block,
+                              Buffer<Field>* buffer) {
   Int num_pivots;
   if (factorization_type == kCholeskyFactorization) {
-    num_pivots = MultithreadedLowerCholeskyFactorization(tile_size, block_size,
-                                                         diagonal_block);
+    num_pivots =
+        OpenMPLowerCholeskyFactorization(tile_size, block_size, diagonal_block);
   } else if (factorization_type == kLDLAdjointFactorization) {
-    num_pivots = MultithreadedLowerLDLAdjointFactorization(
-        tile_size, block_size, diagonal_block, buffer);
+    num_pivots = OpenMPLowerLDLAdjointFactorization(tile_size, block_size,
+                                                    diagonal_block, buffer);
   } else {
-    num_pivots = MultithreadedLowerLDLTransposeFactorization(
-        tile_size, block_size, diagonal_block, buffer);
+    num_pivots = OpenMPLowerLDLTransposeFactorization(tile_size, block_size,
+                                                      diagonal_block, buffer);
   }
   return num_pivots;
 }
@@ -1913,7 +1912,7 @@ void SolveAgainstDiagonalBlock(
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedSolveAgainstDiagonalBlock(
+void OpenMPSolveAgainstDiagonalBlock(
     Int tile_size, SymmetricFactorizationType factorization_type,
     const ConstBlasMatrixView<Field>& triangular_matrix,
     BlasMatrixView<Field>* lower_matrix) {

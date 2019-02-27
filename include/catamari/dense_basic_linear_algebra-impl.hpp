@@ -2739,7 +2739,7 @@ inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedMatrixMultiplyLowerNormalNormal(
+void OpenMPMatrixMultiplyLowerNormalNormal(
     Int tile_size, const Field& alpha,
     const ConstBlasMatrixView<Field>& left_matrix,
     const ConstBlasMatrixView<Field>& right_matrix, const Field& beta,
@@ -2790,7 +2790,7 @@ void MultithreadedMatrixMultiplyLowerNormalNormal(
 }
 
 template <class Field>
-void MultithreadedLowerNormalHermitianOuterProduct(
+void OpenMPLowerNormalHermitianOuterProduct(
     Int tile_size, const ComplexBase<Field>& alpha,
     const ConstBlasMatrixView<Field>& left_matrix,
     const ComplexBase<Field>& beta, BlasMatrixView<Field>* output_matrix) {

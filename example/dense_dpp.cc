@@ -55,7 +55,7 @@ void SampleDPP(
 
 #ifdef _OPENMP
 template <typename Field>
-void MultithreadedSampleDPP(
+void OpenMPSampleDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
@@ -67,15 +67,14 @@ void MultithreadedSampleDPP(
 
   #pragma omp parallel
   #pragma omp single
-  MultithreadedLowerFactorAndSampleDPP(tile_size, block_size,
-                                       maximum_likelihood, matrix, generator,
-                                       uniform_dist, extra_buffer);
+  OpenMPLowerFactorAndSampleDPP(tile_size, block_size, maximum_likelihood,
+                                matrix, generator, uniform_dist, extra_buffer);
 
   const double runtime = timer.Stop();
   const double flops =
       (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
   const double gflops_per_sec = flops / (1.e9 * runtime);
-  std::cout << "Multithreaded DPP GFlop/s: " << gflops_per_sec << std::endl;
+  std::cout << "OpenMP DPP GFlop/s: " << gflops_per_sec << std::endl;
 }
 #endif  // ifdef _OPENMP
 
@@ -114,9 +113,8 @@ int main(int argc, char** argv) {
     for (Int round = 0; round < num_rounds; ++round) {
 #ifdef _OPENMP
       InitializeMatrix(matrix_size, &matrix);
-      MultithreadedSampleDPP(tile_size, block_size, maximum_likelihood,
-                             &matrix.view, &generator, &uniform_dist,
-                             &extra_buffer);
+      OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
+                      &generator, &uniform_dist, &extra_buffer);
 #endif  // ifdef _OPENMP
 
       InitializeMatrix(matrix_size, &matrix);
@@ -137,9 +135,8 @@ int main(int argc, char** argv) {
     for (Int round = 0; round < num_rounds; ++round) {
 #ifdef _OPENMP
       InitializeMatrix(matrix_size, &matrix);
-      MultithreadedSampleDPP(tile_size, block_size, maximum_likelihood,
-                             &matrix.view, &generator, &uniform_dist,
-                             &extra_buffer);
+      OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
+                      &generator, &uniform_dist, &extra_buffer);
 #endif  // ifdef _OPENMP
 
       InitializeMatrix(matrix_size, &matrix);

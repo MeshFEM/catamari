@@ -104,21 +104,20 @@ class SupernodalDPP {
   void FormSupernodes();
 
 #ifdef _OPENMP
-  void MultithreadedFormSupernodes();
+  void OpenMPFormSupernodes();
 #endif  // ifdef _OPENMP
 
   void FormStructure();
 
 #ifdef _OPENMP
-  void MultithreadedFormStructure();
+  void OpenMPFormStructure();
 #endif  // ifdef _OPENMP
 
   // Return a sample from the DPP using a left-looking algorithm.
   std::vector<Int> LeftLookingSample(bool maximum_likelihood) const;
 
 #ifdef _OPENMP
-  std::vector<Int> MultithreadedLeftLookingSample(
-      bool maximum_likelihood) const;
+  std::vector<Int> OpenMPLeftLookingSample(bool maximum_likelihood) const;
 #endif  // ifdef _OPENMP
 
 #ifdef _OPENMP
@@ -127,7 +126,7 @@ class SupernodalDPP {
                           PrivateState* private_state,
                           std::vector<Int>* sample) const;
 
-  void MultithreadedLeftLookingSubtree(
+  void OpenMPLeftLookingSubtree(
       Int level, Int max_parallel_levels, Int supernode,
       bool maximum_likelihood,
       supernodal_ldl::LeftLookingSharedState* shared_state,
@@ -140,7 +139,7 @@ class SupernodalDPP {
       PrivateState* private_state) const;
 
 #ifdef _OPENMP
-  void MultithreadedLeftLookingSupernodeUpdate(
+  void OpenMPLeftLookingSupernodeUpdate(
       Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
       Buffer<PrivateState>* private_states) const;
 #endif  // ifdef _OPENMP
@@ -151,17 +150,17 @@ class SupernodalDPP {
                                   std::vector<Int>* sample) const;
 
 #ifdef _OPENMP
-  void MultithreadedLeftLookingSupernodeSample(
-      Int main_supernode, bool maximum_likelihood,
-      Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;
+  void OpenMPLeftLookingSupernodeSample(Int main_supernode,
+                                        bool maximum_likelihood,
+                                        Buffer<PrivateState>* private_states,
+                                        std::vector<Int>* sample) const;
 #endif  // ifdef _OPENMP
 
   // Return a sample from the DPP using a right-looking algorithm.
   std::vector<Int> RightLookingSample(bool maximum_likelihood) const;
 
 #ifdef _OPENMP
-  std::vector<Int> MultithreadedRightLookingSample(
-      bool maximum_likelihood) const;
+  std::vector<Int> OpenMPRightLookingSample(bool maximum_likelihood) const;
 #endif  // ifdef _OPENMP
 
   void RightLookingSubtree(
@@ -170,7 +169,7 @@ class SupernodalDPP {
       PrivateState* private_state, std::vector<Int>* sample) const;
 
 #ifdef _OPENMP
-  void MultithreadedRightLookingSubtree(
+  void OpenMPRightLookingSubtree(
       Int level, Int max_parallel_levels, Int supernode,
       bool maximum_likelihood,
       supernodal_ldl::RightLookingSharedState<Field>* shared_state,
@@ -183,7 +182,7 @@ class SupernodalDPP {
       PrivateState* private_state, std::vector<Int>* sample) const;
 
 #ifdef _OPENMP
-  void MultithreadedRightLookingSupernodeSample(
+  void OpenMPRightLookingSupernodeSample(
       Int supernode, bool maximum_likelihood,
       supernodal_ldl::RightLookingSharedState<Field>* shared_state,
       Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;

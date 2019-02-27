@@ -24,8 +24,8 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
     #pragma omp parallel
     #pragma omp single
     {
-      MultithreadedFormSupernodes();
-      MultithreadedFormStructure();
+      OpenMPFormSupernodes();
+      OpenMPFormStructure();
     }
     return;
   }
@@ -90,14 +90,14 @@ void SupernodalDPP<Field>::FormSupernodes() {
 
 #ifdef _OPENMP
 template <class Field>
-void SupernodalDPP<Field>::MultithreadedFormSupernodes() {
+void SupernodalDPP<Field>::OpenMPFormSupernodes() {
   // Greedily compute a supernodal partition using the original ordering.
   AssemblyForest orig_scalar_forest;
   SymmetricOrdering fund_ordering;
   fund_ordering.permutation = ordering_.permutation;
   fund_ordering.inverse_permutation = ordering_.inverse_permutation;
   scalar_ldl::LowerStructure scalar_structure;
-  supernodal_ldl::MultithreadedFormFundamentalSupernodes(
+  supernodal_ldl::OpenMPFormFundamentalSupernodes(
       matrix_, ordering_, &orig_scalar_forest, &fund_ordering.supernode_sizes,
       &scalar_structure);
   OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
@@ -119,7 +119,7 @@ void SupernodalDPP<Field>::MultithreadedFormSupernodes() {
   fund_ordering.assembly_forest.FillFromParents();
 
   Buffer<Int> fund_supernode_degrees;
-  supernodal_ldl::MultithreadedSupernodalDegrees(
+  supernodal_ldl::OpenMPSupernodalDegrees(
       matrix_, fund_ordering, orig_scalar_forest, fund_member_to_index,
       &fund_supernode_degrees);
 
@@ -175,7 +175,7 @@ void SupernodalDPP<Field>::FormStructure() {
 
 #ifdef _OPENMP
 template <class Field>
-void SupernodalDPP<Field>::MultithreadedFormStructure() {
+void SupernodalDPP<Field>::OpenMPFormStructure() {
   CATAMARI_ASSERT(supernode_degrees_.Size() == ordering_.supernode_sizes.Size(),
                   "Invalid supernode degrees size.");
 
@@ -187,7 +187,7 @@ void SupernodalDPP<Field>::MultithreadedFormStructure() {
   max_supernode_size_ = *std::max_element(ordering_.supernode_sizes.begin(),
                                           ordering_.supernode_sizes.end());
 
-  supernodal_ldl::MultithreadedFillStructureIndices(
+  supernodal_ldl::OpenMPFillStructureIndices(
       control_.sort_grain_size, matrix_, ordering_, forest_,
       supernode_member_to_index_, lower_factor_.get());
 
@@ -204,14 +204,14 @@ std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
   if (control_.algorithm == kLeftLookingLDL) {
 #ifdef _OPENMP
     if (omp_get_max_threads() > 1) {
-      return MultithreadedLeftLookingSample(maximum_likelihood);
+      return OpenMPLeftLookingSample(maximum_likelihood);
     }
 #endif  // ifdef _OPENMP
     return LeftLookingSample(maximum_likelihood);
   } else {
 #ifdef _OPENMP
     if (omp_get_max_threads() > 1) {
-      return MultithreadedRightLookingSample(maximum_likelihood);
+      return OpenMPRightLookingSample(maximum_likelihood);
     }
 #endif
     return RightLookingSample(maximum_likelihood);
@@ -343,7 +343,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
 
 #ifdef _OPENMP
 template <class Field>
-void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
+void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeUpdate(
     Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
     Buffer<PrivateState>* private_states) const {
   const SymmetricFactorizationType factorization_type =
@@ -562,7 +562,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
 
 #ifdef _OPENMP
 template <class Field>
-void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeSample(
+void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeSample(
     Int main_supernode, bool maximum_likelihood,
     Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
   const SymmetricFactorizationType factorization_type =
@@ -580,7 +580,7 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeSample(
     const int thread = omp_get_thread_num();
     PrivateState& private_state = (*private_states)[thread];
     Buffer<Field>* buffer = &private_state.ldl_state.scaled_transpose_buffer;
-    supernode_sample = MultithreadedLowerFactorAndSampleDPP(
+    supernode_sample = OpenMPLowerFactorAndSampleDPP(
         control_.factor_tile_size, control_.block_size, maximum_likelihood,
         &main_diagonal_block, &private_state.generator,
         &private_state.unit_uniform, buffer);
@@ -588,7 +588,7 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeSample(
   AppendSupernodeSample(main_supernode, supernode_sample, sample);
 
   #pragma omp taskgroup
-  supernodal_ldl::MultithreadedSolveAgainstDiagonalBlock(
+  supernodal_ldl::OpenMPSolveAgainstDiagonalBlock(
       control_.outer_product_tile_size, factorization_type,
       main_diagonal_block.ToConst(), &main_lower_block);
 }
@@ -664,7 +664,7 @@ void SupernodalDPP<Field>::LeftLookingSubtree(
 }
 
 template <class Field>
-void SupernodalDPP<Field>::MultithreadedLeftLookingSubtree(
+void SupernodalDPP<Field>::OpenMPLeftLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode, bool maximum_likelihood,
     supernodal_ldl::LeftLookingSharedState* shared_state,
     Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
@@ -693,9 +693,9 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSubtree(
         firstprivate(level, max_parallel_levels, supernode,       \
             maximum_likelihood, child_index, child, shared_state, \
             private_states, subsample)
-    MultithreadedLeftLookingSubtree(level + 1, max_parallel_levels, child,
-                                    maximum_likelihood, shared_state,
-                                    private_states, subsample);
+    OpenMPLeftLookingSubtree(level + 1, max_parallel_levels, child,
+                             maximum_likelihood, shared_state, private_states,
+                             subsample);
   }
 
   // Merge the subsamples into the current sample.
@@ -704,30 +704,29 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSubtree(
   }
 
   #pragma omp taskgroup
-  MultithreadedLeftLookingSupernodeUpdate(supernode, shared_state,
-                                          private_states);
+  OpenMPLeftLookingSupernodeUpdate(supernode, shared_state, private_states);
 
   std::vector<Int> subsample;
   #pragma omp taskgroup
-  MultithreadedLeftLookingSupernodeSample(supernode, maximum_likelihood,
-                                          private_states, &subsample);
+  OpenMPLeftLookingSupernodeSample(supernode, maximum_likelihood,
+                                   private_states, &subsample);
 
   sample->insert(sample->end(), subsample.begin(), subsample.end());
 }
 
 template <class Field>
-std::vector<Int> SupernodalDPP<Field>::MultithreadedLeftLookingSample(
+std::vector<Int> SupernodalDPP<Field>::OpenMPLeftLookingSample(
     bool maximum_likelihood) const {
   const Int num_rows = ordering_.supernode_offsets.Back();
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   const int max_threads = omp_get_max_threads();
 
-  supernodal_ldl::MultithreadedFillZeros(ordering_, lower_factor_.get(),
-                                         diagonal_factor_.get());
+  supernodal_ldl::OpenMPFillZeros(ordering_, lower_factor_.get(),
+                                  diagonal_factor_.get());
 
   // Initialize the factors with the input matrix.
-  supernodal_ldl::MultithreadedFillNonzeros(
+  supernodal_ldl::OpenMPFillNonzeros(
       matrix_, ordering_, supernode_member_to_index_, lower_factor_.get(),
       diagonal_factor_.get());
 
@@ -780,9 +779,9 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedLeftLookingSample(
               maximum_likelihood, root, subsample)                            \
           shared(shared_state, private_states)
       {
-        MultithreadedLeftLookingSubtree(level + 1, max_parallel_levels, root,
-                                        maximum_likelihood, &shared_state,
-                                        &private_states, subsample);
+        OpenMPLeftLookingSubtree(level + 1, max_parallel_levels, root,
+                                 maximum_likelihood, &shared_state,
+                                 &private_states, subsample);
       }
     }
 
@@ -859,7 +858,7 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
 
 #ifdef _OPENMP
 template <class Field>
-void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
+void SupernodalDPP<Field>::OpenMPRightLookingSupernodeSample(
     Int supernode, bool maximum_likelihood,
     supernodal_ldl::RightLookingSharedState<Field>* shared_state,
     Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
@@ -879,7 +878,7 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
   schur_complement.leading_dim = degree;
   schur_complement.data = schur_complement_buffer.Data();
 
-  supernodal_ldl::MultithreadedMergeChildSchurComplements(
+  supernodal_ldl::OpenMPMergeChildSchurComplements(
       control_.merge_grain_size, supernode, ordering_, lower_factor_.get(),
       diagonal_factor_.get(), shared_state);
 
@@ -890,7 +889,7 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
     const int thread = omp_get_thread_num();
     PrivateState& private_state = (*private_states)[thread];
     Buffer<Field>* buffer = &private_state.ldl_state.scaled_transpose_buffer;
-    supernode_sample = MultithreadedLowerFactorAndSampleDPP(
+    supernode_sample = OpenMPLowerFactorAndSampleDPP(
         control_.factor_tile_size, control_.block_size, maximum_likelihood,
         &diagonal_block, &private_state.generator, &private_state.unit_uniform,
         buffer);
@@ -906,7 +905,7 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
   #pragma omp taskgroup
-  supernodal_ldl::MultithreadedSolveAgainstDiagonalBlock(
+  supernodal_ldl::OpenMPSolveAgainstDiagonalBlock(
       control_.outer_product_tile_size, factorization_type,
       diagonal_block.ToConst(), &lower_block);
 
@@ -919,12 +918,12 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
   scaled_transpose.data = scaled_transpose_buffer.Data();
 
   #pragma omp taskgroup
-  supernodal_ldl::MultithreadedFormScaledTranspose(
+  supernodal_ldl::OpenMPFormScaledTranspose(
       control_.outer_product_tile_size, factorization_type,
       diagonal_block.ToConst(), lower_block.ToConst(), &scaled_transpose);
 
   #pragma omp taskgroup
-  MultithreadedMatrixMultiplyLowerNormalNormal(
+  OpenMPMatrixMultiplyLowerNormalNormal(
       control_.outer_product_tile_size, Field{-1}, lower_block.ToConst(),
       scaled_transpose.ToConst(), Field{1}, &schur_complement);
 }
@@ -956,7 +955,7 @@ void SupernodalDPP<Field>::RightLookingSubtree(
 
 #ifdef _OPENMP
 template <class Field>
-void SupernodalDPP<Field>::MultithreadedRightLookingSubtree(
+void SupernodalDPP<Field>::OpenMPRightLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode, bool maximum_likelihood,
     supernodal_ldl::RightLookingSharedState<Field>* shared_state,
     Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
@@ -988,9 +987,9 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSubtree(
     #pragma omp task default(none) firstprivate(child, level, \
         max_parallel_levels, maximum_likelihood, subsample)   \
         shared(shared_state, private_states)
-    MultithreadedRightLookingSubtree(level + 1, max_parallel_levels, child,
-                                     maximum_likelihood, shared_state,
-                                     private_states, subsample);
+    OpenMPRightLookingSubtree(level + 1, max_parallel_levels, child,
+                              maximum_likelihood, shared_state, private_states,
+                              subsample);
   }
 
   // Merge the subsamples into the current sample.
@@ -1000,8 +999,8 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSubtree(
 
   std::vector<Int> subsample;
   #pragma omp taskgroup
-  MultithreadedRightLookingSupernodeSample(
-      supernode, maximum_likelihood, shared_state, private_states, &subsample);
+  OpenMPRightLookingSupernodeSample(supernode, maximum_likelihood, shared_state,
+                                    private_states, &subsample);
   sample->insert(sample->end(), subsample.begin(), subsample.end());
 }
 #endif  // ifdef _OPENMP
@@ -1045,17 +1044,17 @@ std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
 
 #ifdef _OPENMP
 template <class Field>
-std::vector<Int> SupernodalDPP<Field>::MultithreadedRightLookingSample(
+std::vector<Int> SupernodalDPP<Field>::OpenMPRightLookingSample(
     bool maximum_likelihood) const {
   const Int num_rows = matrix_.NumRows();
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
 
-  supernodal_ldl::MultithreadedFillZeros(ordering_, lower_factor_.get(),
-                                         diagonal_factor_.get());
+  supernodal_ldl::OpenMPFillZeros(ordering_, lower_factor_.get(),
+                                  diagonal_factor_.get());
 
   // Initialize the factors with the input matrix.
-  supernodal_ldl::MultithreadedFillNonzeros(
+  supernodal_ldl::OpenMPFillNonzeros(
       matrix_, ordering_, supernode_member_to_index_, lower_factor_.get(),
       diagonal_factor_.get());
 
@@ -1114,9 +1113,9 @@ std::vector<Int> SupernodalDPP<Field>::MultithreadedRightLookingSample(
       #pragma omp task default(none) firstprivate(root, level, \
           max_parallel_levels, maximum_likelihood, subsample)  \
           shared(shared_state, private_states)
-      MultithreadedRightLookingSubtree(level + 1, max_parallel_levels, root,
-                                       maximum_likelihood, &shared_state,
-                                       &private_states, subsample);
+      OpenMPRightLookingSubtree(level + 1, max_parallel_levels, root,
+                                maximum_likelihood, &shared_state,
+                                &private_states, subsample);
     }
 
     // Merge the subsamples into the current sample.

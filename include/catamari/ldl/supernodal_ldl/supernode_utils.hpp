@@ -114,7 +114,7 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                scalar_ldl::LowerStructure* scalar_structure);
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFormFundamentalSupernodes(
+void OpenMPFormFundamentalSupernodes(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     AssemblyForest* scalar_forest, Buffer<Int>* supernode_sizes,
     scalar_ldl::LowerStructure* scalar_structure);
@@ -194,11 +194,11 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
                        Buffer<Int>* supernode_degrees);
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
-                                    const SymmetricOrdering& ordering,
-                                    const AssemblyForest& forest,
-                                    const Buffer<Int>& member_to_index,
-                                    Buffer<Int>* supernode_degrees);
+void OpenMPSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
+                             const SymmetricOrdering& ordering,
+                             const AssemblyForest& forest,
+                             const Buffer<Int>& member_to_index,
+                             Buffer<Int>* supernode_degrees);
 #endif  // ifdef _OPENMP
 
 // Fills an estimate of the work required to eliminate the subtree in a
@@ -217,11 +217,12 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           LowerFactor<Field>* lower_factor);
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFillStructureIndices(
-    Int sort_grain_size, const CoordinateMatrix<Field>& matrix,
-    const SymmetricOrdering& ordering, const AssemblyForest& forest,
-    const Buffer<Int>& supernode_member_to_index,
-    LowerFactor<Field>* lower_factor);
+void OpenMPFillStructureIndices(Int sort_grain_size,
+                                const CoordinateMatrix<Field>& matrix,
+                                const SymmetricOrdering& ordering,
+                                const AssemblyForest& forest,
+                                const Buffer<Int>& supernode_member_to_index,
+                                LowerFactor<Field>* lower_factor);
 #endif  // ifdef _OPENMP
 
 // Fill in the nonzeros from the original sparse matrix.
@@ -233,11 +234,11 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
                   DiagonalFactor<Field>* diagonal_factor);
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFillNonzeros(const CoordinateMatrix<Field>& matrix,
-                               const SymmetricOrdering& ordering,
-                               const Buffer<Int>& supernode_member_to_index,
-                               LowerFactor<Field>* lower_factor,
-                               DiagonalFactor<Field>* diagonal_factor);
+void OpenMPFillNonzeros(const CoordinateMatrix<Field>& matrix,
+                        const SymmetricOrdering& ordering,
+                        const Buffer<Int>& supernode_member_to_index,
+                        LowerFactor<Field>* lower_factor,
+                        DiagonalFactor<Field>* diagonal_factor);
 #endif  // ifdef _OPENMP
 
 // Explicitly fill the factorization blocks with zeros.
@@ -248,9 +249,9 @@ void FillZeros(const SymmetricOrdering& ordering,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFillZeros(const SymmetricOrdering& ordering,
-                            LowerFactor<Field>* lower_factor,
-                            DiagonalFactor<Field>* diagonal_factor);
+void OpenMPFillZeros(const SymmetricOrdering& ordering,
+                     LowerFactor<Field>* lower_factor,
+                     DiagonalFactor<Field>* diagonal_factor);
 #endif  // ifdef _OPENMP
 
 // Computes the supernodal nonzero pattern of L(row, :) in
@@ -275,11 +276,11 @@ void FormScaledTranspose(SymmetricFactorizationType factorization_type,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedFormScaledTranspose(
-    Int tile_size, SymmetricFactorizationType factorization_type,
-    const ConstBlasMatrixView<Field>& diagonal_block,
-    const ConstBlasMatrixView<Field>& matrix,
-    BlasMatrixView<Field>* scaled_transpose);
+void OpenMPFormScaledTranspose(Int tile_size,
+                               SymmetricFactorizationType factorization_type,
+                               const ConstBlasMatrixView<Field>& diagonal_block,
+                               const ConstBlasMatrixView<Field>& matrix,
+                               BlasMatrixView<Field>* scaled_transpose);
 #endif  // ifdef _OPENMP
 
 // Moves the pointers for the main supernode down to the active supernode of
@@ -302,7 +303,7 @@ void MergeChildSchurComplements(Int supernode,
 
 #ifdef _OPENMP
 template <class Field>
-void MultithreadedMergeChildSchurComplements(
+void OpenMPMergeChildSchurComplements(
     Int merge_grain_size, Int supernode, const SymmetricOrdering& ordering,
     LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor,
     RightLookingSharedState<Field>* shared_state);
@@ -354,10 +355,10 @@ Int FactorDiagonalBlock(Int block_size,
 #ifdef _OPENMP
 // Perform an in-place LDL' factorization of the supernodal diagonal block.
 template <class Field>
-Int MultithreadedFactorDiagonalBlock(
-    Int tile_size, Int block_size,
-    SymmetricFactorizationType factorization_type,
-    BlasMatrixView<Field>* diagonal_block, Buffer<Field>* buffer);
+Int OpenMPFactorDiagonalBlock(Int tile_size, Int block_size,
+                              SymmetricFactorizationType factorization_type,
+                              BlasMatrixView<Field>* diagonal_block,
+                              Buffer<Field>* buffer);
 #endif  // ifdef _OPENMP
 
 // L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
@@ -370,7 +371,7 @@ void SolveAgainstDiagonalBlock(
 #ifdef _OPENMP
 // L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
 template <class Field>
-void MultithreadedSolveAgainstDiagonalBlock(
+void OpenMPSolveAgainstDiagonalBlock(
     Int tile_size, SymmetricFactorizationType factorization_type,
     const ConstBlasMatrixView<Field>& triangular_matrix,
     BlasMatrixView<Field>* lower_matrix);
