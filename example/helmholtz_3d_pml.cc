@@ -19,20 +19,13 @@
 //   "Fast solvers for the Helmholtz equation with a perfectly matched layer /
 //   an absorbing boundary condition", 2002.
 //
-#include <cmath>
-#include <cstdlib>
-#include <ctime>
 #include <functional>
 #include <iostream>
-#include <limits>
-#include <numeric>
-#include <vector>
 
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
 #include "catamari/ldl.hpp"
 #include "catamari/unit_reach_nested_dissection.hpp"
-#include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
 
 using catamari::BlasMatrix;
