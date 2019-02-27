@@ -60,7 +60,7 @@ const catamari::LDLResult result =
     ldl_factorization.Factor(matrix, ldl_control);
 
 // Solve a linear system using the factorization.
-catamari::BlasMatrix<double> right_hand_sides;
+catamari::BlasMatrixView<double> right_hand_sides;
 right_hand_sides.height = num_rows;
 right_hand_sides.width = num_right_hand_sides;
 right_hand_sides.leading_dim = num_rows;

@@ -65,17 +65,17 @@ class LDLFactorization {
                    const LDLControl& control);
 
   // Solves a set of linear systems using the factorization.
-  void Solve(BlasMatrix<Field>* matrix) const;
+  void Solve(BlasMatrixView<Field>* matrix) const;
 
   // Solves a set of linear systems using the lower-triangular factor.
-  void LowerTriangularSolve(BlasMatrix<Field>* matrix) const;
+  void LowerTriangularSolve(BlasMatrixView<Field>* matrix) const;
 
   // Solves a set of linear systems using the diagonal factor.
-  void DiagonalSolve(BlasMatrix<Field>* matrix) const;
+  void DiagonalSolve(BlasMatrixView<Field>* matrix) const;
 
   // Solves a set of linear systems using the transpose (or adjoint) of the
   // lower-triangular matrix.
-  void LowerTransposeTriangularSolve(BlasMatrix<Field>* matrix) const;
+  void LowerTransposeTriangularSolve(BlasMatrixView<Field>* matrix) const;
 
   // Prints the lower-triangular factor of the factorization.
   void PrintLowerFactor(const std::string& label, std::ostream& os) const;

@@ -13,18 +13,18 @@
 #include "quotient/timer.hpp"
 #include "specify.hpp"
 
-using catamari::BlasMatrix;
+using catamari::BlasMatrixView;
 using catamari::Complex;
 using catamari::ComplexBase;
 using catamari::Conjugate;
-using catamari::ConstBlasMatrix;
+using catamari::ConstBlasMatrixView;
 using catamari::Int;
 using quotient::Buffer;
 
 namespace {
 
 template <typename Field>
-void InitializeMatrix(Int matrix_size, BlasMatrix<Field>* matrix,
+void InitializeMatrix(Int matrix_size, BlasMatrixView<Field>* matrix,
                       Buffer<Field>* buffer) {
   matrix->height = matrix->width = matrix->leading_dim = matrix_size;
   buffer->Resize(matrix->leading_dim * matrix->width);
@@ -40,7 +40,7 @@ void InitializeMatrix(Int matrix_size, BlasMatrix<Field>* matrix,
 
 template <typename Field>
 void RunCholeskyFactorization(Int tile_size, Int block_size,
-                              BlasMatrix<Field>* matrix) {
+                              BlasMatrixView<Field>* matrix) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   const Int matrix_size = matrix->height;
   quotient::Timer timer;
@@ -63,7 +63,7 @@ void RunCholeskyFactorization(Int tile_size, Int block_size,
 
 template <typename Field>
 void RunLDLAdjointFactorization(Int tile_size, Int block_size,
-                                BlasMatrix<Field>* matrix,
+                                BlasMatrixView<Field>* matrix,
                                 Buffer<Field>* extra_buffer) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   const Int matrix_size = matrix->height;
@@ -88,7 +88,7 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
 
 template <typename Field>
 void RunLDLTransposeFactorization(Int tile_size, Int block_size,
-                                  BlasMatrix<Field>* matrix,
+                                  BlasMatrixView<Field>* matrix,
                                   Buffer<Field>* extra_buffer) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   const Int matrix_size = matrix->height;
@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  BlasMatrix<Complex<double>> matrix;
+  BlasMatrixView<Complex<double>> matrix;
   Buffer<Complex<double>> buffer;
   Buffer<Complex<double>> extra_buffer;
 

@@ -13,18 +13,18 @@
 #include "quotient/timer.hpp"
 #include "specify.hpp"
 
-using catamari::BlasMatrix;
+using catamari::BlasMatrixView;
 using catamari::Complex;
 using catamari::ComplexBase;
 using catamari::Conjugate;
-using catamari::ConstBlasMatrix;
+using catamari::ConstBlasMatrixView;
 using catamari::Int;
 using quotient::Buffer;
 
 namespace {
 
 template <typename Field>
-void InitializeMatrix(Int matrix_size, BlasMatrix<Field>* matrix,
+void InitializeMatrix(Int matrix_size, BlasMatrixView<Field>* matrix,
                       Buffer<Field>* buffer) {
   matrix->height = matrix->width = matrix->leading_dim = matrix_size;
   buffer->Resize(matrix->leading_dim * matrix->width);
@@ -40,7 +40,7 @@ void InitializeMatrix(Int matrix_size, BlasMatrix<Field>* matrix,
 
 template <typename Field>
 void SampleDPP(
-    Int block_size, bool maximum_likelihood, BlasMatrix<Field>* matrix,
+    Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
     std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
   const bool is_complex = catamari::IsComplex<Field>::value;
@@ -62,7 +62,7 @@ void SampleDPP(
 template <typename Field>
 void MultithreadedSampleDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
-    BlasMatrix<Field>* matrix, std::mt19937* generator,
+    BlasMatrixView<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     Buffer<Field>* extra_buffer) {
   const bool is_complex = catamari::IsComplex<Field>::value;
@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
 
   std::cout << "Single-precision:" << std::endl;
   {
-    BlasMatrix<Complex<float>> matrix;
+    BlasMatrixView<Complex<float>> matrix;
     Buffer<Complex<float>> buffer;
     Buffer<Complex<float>> extra_buffer(matrix_size * matrix_size);
 
@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
 
   std::cout << "Double-precision:" << std::endl;
   {
-    BlasMatrix<Complex<double>> matrix;
+    BlasMatrixView<Complex<double>> matrix;
     Buffer<Complex<double>> buffer;
     Buffer<Complex<double>> extra_buffer(matrix_size * matrix_size);
 

@@ -60,7 +60,7 @@ struct RightLookingSharedState {
   // The Schur complement matrices for each of the supernodes in the
   // multifrontal method. Each front should only be allocated while it is
   // actively in use.
-  Buffer<BlasMatrix<Field>> schur_complements;
+  Buffer<BlasMatrixView<Field>> schur_complements;
 
   // The underlying buffers for the Schur complement portions of the fronts.
   // They are allocated and deallocated as the factorization progresses.
@@ -269,16 +269,17 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
 // the scaled transpose, Z(d, m) = D(d, d) L(m, d)^T.
 template <class Field>
 void FormScaledTranspose(SymmetricFactorizationType factorization_type,
-                         const ConstBlasMatrix<Field>& diagonal_block,
-                         const ConstBlasMatrix<Field>& matrix,
-                         BlasMatrix<Field>* scaled_transpose);
+                         const ConstBlasMatrixView<Field>& diagonal_block,
+                         const ConstBlasMatrixView<Field>& matrix,
+                         BlasMatrixView<Field>* scaled_transpose);
 
 #ifdef _OPENMP
 template <class Field>
 void MultithreadedFormScaledTranspose(
     Int tile_size, SymmetricFactorizationType factorization_type,
-    const ConstBlasMatrix<Field>& diagonal_block,
-    const ConstBlasMatrix<Field>& matrix, BlasMatrix<Field>* scaled_transpose);
+    const ConstBlasMatrixView<Field>& diagonal_block,
+    const ConstBlasMatrixView<Field>& matrix,
+    BlasMatrixView<Field>* scaled_transpose);
 #endif  // ifdef _OPENMP
 
 // Moves the pointers for the main supernode down to the active supernode of
@@ -315,15 +316,14 @@ void MultithreadedMergeChildSchurComplements(
 // descendant_main_intersect_size x descendant_supernode_size, and Z(:, m)
 // being descendant_supernode_size x descendant_main_intersect_size.
 template <class Field>
-void UpdateDiagonalBlock(SymmetricFactorizationType factorization_type,
-                         const Buffer<Int>& supernode_starts,
-                         const LowerFactor<Field>& lower_factor,
-                         Int main_supernode, Int descendant_supernode,
-                         Int descendant_main_rel_row,
-                         const ConstBlasMatrix<Field>& descendant_main_matrix,
-                         const ConstBlasMatrix<Field>& scaled_transpose,
-                         BlasMatrix<Field>* main_diag_block,
-                         BlasMatrix<Field>* workspace_matrix);
+void UpdateDiagonalBlock(
+    SymmetricFactorizationType factorization_type,
+    const Buffer<Int>& supernode_starts, const LowerFactor<Field>& lower_factor,
+    Int main_supernode, Int descendant_supernode, Int descendant_main_rel_row,
+    const ConstBlasMatrixView<Field>& descendant_main_matrix,
+    const ConstBlasMatrixView<Field>& scaled_transpose,
+    BlasMatrixView<Field>* main_diag_block,
+    BlasMatrixView<Field>* workspace_matrix);
 
 // L(a, m) -= L(a, d) * (D(d, d) * L(m, d)')
 //          = L(a, d) * Z(:, m).
@@ -339,16 +339,17 @@ void UpdateSubdiagonalBlock(
     Int descendant_main_rel_row, Int descendant_active_rel_row,
     const Buffer<Int>& supernode_starts,
     const Buffer<Int>& supernode_member_to_index,
-    const ConstBlasMatrix<Field>& scaled_transpose,
-    const ConstBlasMatrix<Field>& descendant_active_matrix,
+    const ConstBlasMatrixView<Field>& scaled_transpose,
+    const ConstBlasMatrixView<Field>& descendant_active_matrix,
     const LowerFactor<Field>& lower_factor,
-    BlasMatrix<Field>* main_active_block, BlasMatrix<Field>* workspace_matrix);
+    BlasMatrixView<Field>* main_active_block,
+    BlasMatrixView<Field>* workspace_matrix);
 
 // Perform an in-place LDL' factorization of the supernodal diagonal block.
 template <class Field>
 Int FactorDiagonalBlock(Int block_size,
                         SymmetricFactorizationType factorization_type,
-                        BlasMatrix<Field>* diagonal_block);
+                        BlasMatrixView<Field>* diagonal_block);
 
 #ifdef _OPENMP
 // Perform an in-place LDL' factorization of the supernodal diagonal block.
@@ -356,22 +357,23 @@ template <class Field>
 Int MultithreadedFactorDiagonalBlock(
     Int tile_size, Int block_size,
     SymmetricFactorizationType factorization_type,
-    BlasMatrix<Field>* diagonal_block, Buffer<Field>* buffer);
+    BlasMatrixView<Field>* diagonal_block, Buffer<Field>* buffer);
 #endif  // ifdef _OPENMP
 
 // L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
 template <class Field>
-void SolveAgainstDiagonalBlock(SymmetricFactorizationType factorization_type,
-                               const ConstBlasMatrix<Field>& triangular_matrix,
-                               BlasMatrix<Field>* lower_matrix);
+void SolveAgainstDiagonalBlock(
+    SymmetricFactorizationType factorization_type,
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* lower_matrix);
 
 #ifdef _OPENMP
 // L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
 template <class Field>
 void MultithreadedSolveAgainstDiagonalBlock(
     Int tile_size, SymmetricFactorizationType factorization_type,
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* lower_matrix);
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* lower_matrix);
 #endif  // ifdef _OPENMP
 
 }  // namespace supernodal_ldl

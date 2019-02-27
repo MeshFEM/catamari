@@ -10,7 +10,7 @@
 
 #include <vector>
 
-#include "catamari/blas_matrix.hpp"
+#include "catamari/blas_matrix_view.hpp"
 #include "catamari/buffer.hpp"
 
 namespace catamari {
@@ -21,7 +21,7 @@ template <class Field>
 class DiagonalFactor {
  public:
   // Representations of the diagonal blocks of the factorization.
-  Buffer<BlasMatrix<Field>> blocks;
+  Buffer<BlasMatrixView<Field>> blocks;
 
   DiagonalFactor(const Buffer<Int>& supernode_sizes);
 

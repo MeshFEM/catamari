@@ -225,9 +225,10 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
 
-  BlasMatrix<Field>& main_diagonal_block =
+  BlasMatrixView<Field>& main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
-  BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
+  BlasMatrixView<Field>& main_lower_block =
+      lower_factor_->blocks[main_supernode];
   const Int main_supernode_size = ordering_.supernode_sizes[main_supernode];
 
   shared_state->rel_rows[main_supernode] = 0;
@@ -250,7 +251,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
         private_state->ldl_state.row_structure[index];
     CATAMARI_ASSERT(descendant_supernode < main_supernode,
                     "Looking into upper triangle.");
-    const ConstBlasMatrix<Field>& descendant_lower_block =
+    const ConstBlasMatrixView<Field>& descendant_lower_block =
         lower_factor_->blocks[descendant_supernode];
     const Int descendant_degree = descendant_lower_block.height;
     const Int descendant_supernode_size = descendant_lower_block.width;
@@ -260,15 +261,15 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
     const Int descendant_main_intersect_size =
         *shared_state->intersect_ptrs[descendant_supernode];
 
-    const ConstBlasMatrix<Field> descendant_diag_block =
+    const ConstBlasMatrixView<Field> descendant_diag_block =
         diagonal_factor_->blocks[descendant_supernode].ToConst();
 
-    const ConstBlasMatrix<Field> descendant_main_matrix =
+    const ConstBlasMatrixView<Field> descendant_main_matrix =
         descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
                                          descendant_main_intersect_size,
                                          descendant_supernode_size);
 
-    BlasMatrix<Field> scaled_transpose;
+    BlasMatrixView<Field> scaled_transpose;
     scaled_transpose.height = descendant_supernode_size;
     scaled_transpose.width = descendant_main_intersect_size;
     scaled_transpose.leading_dim = descendant_supernode_size;
@@ -279,7 +280,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
         factorization_type, descendant_diag_block, descendant_main_matrix,
         &scaled_transpose);
 
-    BlasMatrix<Field> workspace_matrix;
+    BlasMatrixView<Field> workspace_matrix;
     workspace_matrix.height = descendant_main_intersect_size;
     workspace_matrix.width = descendant_main_intersect_size;
     workspace_matrix.leading_dim = descendant_main_intersect_size;
@@ -308,7 +309,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
       const Int descendant_active_intersect_size =
           *descendant_active_intersect_size_beg;
 
-      const ConstBlasMatrix<Field> descendant_active_matrix =
+      const ConstBlasMatrixView<Field> descendant_active_matrix =
           descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
                                            descendant_active_intersect_size,
                                            descendant_supernode_size);
@@ -323,7 +324,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
           &main_active_intersect_sizes);
       const Int main_active_intersect_size = *main_active_intersect_sizes;
 
-      BlasMatrix<Field> main_active_block = main_lower_block.Submatrix(
+      BlasMatrixView<Field> main_active_block = main_lower_block.Submatrix(
           main_active_rel_row, 0, main_active_intersect_size,
           main_supernode_size);
 
@@ -348,9 +349,10 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
 
-  BlasMatrix<Field> main_diagonal_block =
+  BlasMatrixView<Field> main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
-  BlasMatrix<Field> main_lower_block = lower_factor_->blocks[main_supernode];
+  BlasMatrixView<Field> main_lower_block =
+      lower_factor_->blocks[main_supernode];
   const Int main_supernode_size = ordering_.supernode_sizes[main_supernode];
 
   shared_state->rel_rows[main_supernode] = 0;
@@ -386,7 +388,7 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
     const Int descendant_supernode = row_structure[index];
     CATAMARI_ASSERT(descendant_supernode < main_supernode,
                     "Looking into upper triangle.");
-    const ConstBlasMatrix<Field> descendant_lower_block =
+    const ConstBlasMatrixView<Field> descendant_lower_block =
         lower_factor_->blocks[descendant_supernode];
     const Int descendant_degree = descendant_lower_block.height;
     const Int descendant_supernode_size = descendant_lower_block.width;
@@ -396,7 +398,7 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
     const Int descendant_main_intersect_size =
         *shared_state->intersect_ptrs[descendant_supernode];
 
-    const ConstBlasMatrix<Field> descendant_diag_block =
+    const ConstBlasMatrixView<Field> descendant_diag_block =
         diagonal_factor_->blocks[descendant_supernode].ToConst();
 
     #pragma omp task default(none)                                         \
@@ -410,13 +412,13 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
       const int thread = omp_get_thread_num();
       PrivateState& private_state = (*private_states)[thread];
 
-      const ConstBlasMatrix<Field> descendant_main_matrix =
+      const ConstBlasMatrixView<Field> descendant_main_matrix =
           descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
                                            descendant_main_intersect_size,
                                            descendant_supernode_size);
 
-      // BlasMatrix<Field> scaled_transpose;
-      BlasMatrix<Field> scaled_transpose;
+      // BlasMatrixView<Field> scaled_transpose;
+      BlasMatrixView<Field> scaled_transpose;
       scaled_transpose.height = descendant_supernode_size;
       scaled_transpose.width = descendant_main_intersect_size;
       scaled_transpose.leading_dim = descendant_supernode_size;
@@ -427,7 +429,7 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
           factorization_type, descendant_diag_block, descendant_main_matrix,
           &scaled_transpose);
 
-      BlasMatrix<Field> workspace_matrix;
+      BlasMatrixView<Field> workspace_matrix;
       workspace_matrix.height = descendant_main_intersect_size;
       workspace_matrix.width = descendant_main_intersect_size;
       workspace_matrix.leading_dim = descendant_main_intersect_size;
@@ -477,17 +479,17 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
         const int thread = omp_get_thread_num();
         PrivateState& private_state = (*private_states)[thread];
 
-        const ConstBlasMatrix<Field> descendant_active_matrix =
+        const ConstBlasMatrixView<Field> descendant_active_matrix =
             descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
                                              descendant_active_intersect_size,
                                              descendant_supernode_size);
 
-        const ConstBlasMatrix<Field> descendant_main_matrix =
+        const ConstBlasMatrixView<Field> descendant_main_matrix =
             descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
                                              descendant_main_intersect_size,
                                              descendant_supernode_size);
 
-        BlasMatrix<Field> scaled_transpose;
+        BlasMatrixView<Field> scaled_transpose;
         scaled_transpose.height = descendant_supernode_size;
         scaled_transpose.width = descendant_main_intersect_size;
         scaled_transpose.leading_dim = descendant_supernode_size;
@@ -498,11 +500,11 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeUpdate(
             factorization_type, descendant_diag_block, descendant_main_matrix,
             &scaled_transpose);
 
-        BlasMatrix<Field> main_active_block = main_lower_block.Submatrix(
+        BlasMatrixView<Field> main_active_block = main_lower_block.Submatrix(
             main_active_rel_row, 0, main_active_intersect_size,
             main_supernode_size);
 
-        BlasMatrix<Field> workspace_matrix;
+        BlasMatrixView<Field> workspace_matrix;
         workspace_matrix.height = descendant_active_intersect_size;
         workspace_matrix.width = descendant_main_intersect_size;
         workspace_matrix.leading_dim = descendant_active_intersect_size;
@@ -545,8 +547,8 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
 
-  BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
-  BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
 
   // Sample and factor the diagonal block.
   const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
@@ -566,9 +568,10 @@ void SupernodalDPP<Field>::MultithreadedLeftLookingSupernodeSample(
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
 
-  BlasMatrix<Field>& main_diagonal_block =
+  BlasMatrixView<Field>& main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
-  BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
+  BlasMatrixView<Field>& main_lower_block =
+      lower_factor_->blocks[main_supernode];
 
   // Sample and factor the diagonal block.
   std::vector<Int> supernode_sample;
@@ -802,15 +805,15 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
     Int supernode, bool maximum_likelihood,
     supernodal_ldl::RightLookingSharedState<Field>* shared_state,
     PrivateState* private_state, std::vector<Int>* sample) const {
-  BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
-  BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
 
   // Initialize this supernode's Schur complement as the zero matrix.
   Buffer<Field>& schur_complement_buffer =
       shared_state->schur_complement_buffers[supernode];
-  BlasMatrix<Field>& schur_complement =
+  BlasMatrixView<Field>& schur_complement =
       shared_state->schur_complements[supernode];
   schur_complement_buffer.Resize(degree * degree, Field{0});
   schur_complement.height = degree;
@@ -840,7 +843,7 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
       factorization_type, diagonal_block.ToConst(), &lower_block);
 
   Buffer<Field> scaled_transpose_buffer(degree * supernode_size);
-  BlasMatrix<Field> scaled_transpose;
+  BlasMatrixView<Field> scaled_transpose;
   scaled_transpose.height = supernode_size;
   scaled_transpose.width = degree;
   scaled_transpose.leading_dim = supernode_size;
@@ -860,15 +863,15 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
     Int supernode, bool maximum_likelihood,
     supernodal_ldl::RightLookingSharedState<Field>* shared_state,
     Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
-  BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
-  BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
 
   // Initialize this supernode's Schur complement as the zero matrix.
   Buffer<Field>& schur_complement_buffer =
       shared_state->schur_complement_buffers[supernode];
-  BlasMatrix<Field>& schur_complement =
+  BlasMatrixView<Field>& schur_complement =
       shared_state->schur_complements[supernode];
   schur_complement_buffer.Resize(degree * degree, Field{0});
   schur_complement.height = degree;
@@ -909,7 +912,7 @@ void SupernodalDPP<Field>::MultithreadedRightLookingSupernodeSample(
 
   // TODO(Jack Poulson): See if this can be pre-allocated.
   Buffer<Field> scaled_transpose_buffer(degree * supernode_size);
-  BlasMatrix<Field> scaled_transpose;
+  BlasMatrixView<Field> scaled_transpose;
   scaled_transpose.height = supernode_size;
   scaled_transpose.width = degree;
   scaled_transpose.leading_dim = supernode_size;

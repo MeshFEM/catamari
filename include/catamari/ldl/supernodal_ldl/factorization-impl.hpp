@@ -247,9 +247,10 @@ template <class Field>
 void Factorization<Field>::LeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
     LeftLookingSharedState* shared_state, PrivateState<Field>* private_state) {
-  BlasMatrix<Field>& main_diagonal_block =
+  BlasMatrixView<Field>& main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
-  BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
+  BlasMatrixView<Field>& main_lower_block =
+      lower_factor_->blocks[main_supernode];
   const Int main_supernode_size = main_lower_block.width;
 
   private_state->pattern_flags[main_supernode] = main_supernode;
@@ -272,7 +273,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     const Int descendant_supernode = private_state->row_structure[index];
     CATAMARI_ASSERT(descendant_supernode < main_supernode,
                     "Looking into upper triangle");
-    const ConstBlasMatrix<Field>& descendant_lower_block =
+    const ConstBlasMatrixView<Field>& descendant_lower_block =
         lower_factor_->blocks[descendant_supernode];
     const Int descendant_degree = descendant_lower_block.height;
     const Int descendant_supernode_size = descendant_lower_block.width;
@@ -282,12 +283,12 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     const Int descendant_main_intersect_size =
         *shared_state->intersect_ptrs[descendant_supernode];
 
-    const ConstBlasMatrix<Field> descendant_main_matrix =
+    const ConstBlasMatrixView<Field> descendant_main_matrix =
         descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
                                          descendant_main_intersect_size,
                                          descendant_supernode_size);
 
-    BlasMatrix<Field> scaled_transpose;
+    BlasMatrixView<Field> scaled_transpose;
     scaled_transpose.height = descendant_supernode_size;
     scaled_transpose.width = descendant_main_intersect_size;
     scaled_transpose.leading_dim = descendant_supernode_size;
@@ -298,7 +299,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
         diagonal_factor_->blocks[descendant_supernode].ToConst(),
         descendant_main_matrix, &scaled_transpose);
 
-    BlasMatrix<Field> workspace_matrix;
+    BlasMatrixView<Field> workspace_matrix;
     workspace_matrix.height = descendant_main_intersect_size;
     workspace_matrix.width = descendant_main_intersect_size;
     workspace_matrix.leading_dim = descendant_main_intersect_size;
@@ -333,7 +334,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
           &main_active_intersect_sizes);
       const Int main_active_intersect_size = *main_active_intersect_sizes;
 
-      const ConstBlasMatrix<Field> descendant_active_matrix =
+      const ConstBlasMatrixView<Field> descendant_active_matrix =
           descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
                                            descendant_active_intersect_size,
                                            descendant_supernode_size);
@@ -342,7 +343,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
       workspace_matrix.height = descendant_active_intersect_size;
       workspace_matrix.leading_dim = descendant_active_intersect_size;
 
-      BlasMatrix<Field> main_active_block = main_lower_block.Submatrix(
+      BlasMatrixView<Field> main_active_block = main_lower_block.Submatrix(
           main_active_rel_row, 0, main_active_intersect_size,
           main_supernode_size);
 
@@ -362,9 +363,10 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
 template <class Field>
 bool Factorization<Field>::LeftLookingSupernodeFinalize(Int main_supernode,
                                                         LDLResult* result) {
-  BlasMatrix<Field>& main_diagonal_block =
+  BlasMatrixView<Field>& main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
-  BlasMatrix<Field>& main_lower_block = lower_factor_->blocks[main_supernode];
+  BlasMatrixView<Field>& main_lower_block =
+      lower_factor_->blocks[main_supernode];
   const Int main_degree = main_lower_block.height;
   const Int main_supernode_size = main_lower_block.width;
 
@@ -437,15 +439,15 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
     Int supernode, RightLookingSharedState<Field>* shared_state,
     PrivateState<Field>* private_state, LDLResult* result) {
   typedef ComplexBase<Field> Real;
-  BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
-  BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
 
   // Initialize this supernode's Schur complement as the zero matrix.
   Buffer<Field>& schur_complement_buffer =
       shared_state->schur_complement_buffers[supernode];
-  BlasMatrix<Field>& schur_complement =
+  BlasMatrixView<Field>& schur_complement =
       shared_state->schur_complements[supernode];
   schur_complement_buffer.Resize(degree * degree, Field{0});
   schur_complement.height = degree;
@@ -477,7 +479,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
     LowerNormalHermitianOuterProduct(Real{-1}, lower_block.ToConst(), Real{1},
                                      &schur_complement);
   } else {
-    BlasMatrix<Field> scaled_transpose;
+    BlasMatrixView<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;
     scaled_transpose.width = degree;
     scaled_transpose.leading_dim = supernode_size;
@@ -498,8 +500,8 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     Int supernode, RightLookingSharedState<Field>* shared_state,
     Buffer<PrivateState<Field>>* private_states, LDLResult* result) {
   typedef ComplexBase<Field> Real;
-  BlasMatrix<Field> diagonal_block = diagonal_factor_->blocks[supernode];
-  BlasMatrix<Field> lower_block = lower_factor_->blocks[supernode];
+  BlasMatrixView<Field> diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field> lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
 
@@ -510,7 +512,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
   Buffer<Field>& schur_complement_buffer =
       shared_state->schur_complement_buffers[supernode];
   {
-    BlasMatrix<Field>& schur_complement =
+    BlasMatrixView<Field>& schur_complement =
         shared_state->schur_complements[supernode];
     schur_complement_buffer.Resize(degree * degree, Field{0});
     schur_complement.height = degree;
@@ -518,7 +520,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
     schur_complement.leading_dim = degree;
     schur_complement.data = schur_complement_buffer.Data();
   }
-  BlasMatrix<Field> schur_complement =
+  BlasMatrixView<Field> schur_complement =
       shared_state->schur_complements[supernode];
 
   MultithreadedMergeChildSchurComplements(merge_grain_size_, supernode,
@@ -559,7 +561,7 @@ bool Factorization<Field>::MultithreadedRightLookingSupernodeFinalize(
         outer_product_tile_size_, Real{-1}, lower_block.ToConst(), Real{1},
         &schur_complement);
   } else {
-    BlasMatrix<Field> scaled_transpose;
+    BlasMatrixView<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;
     scaled_transpose.width = degree;
     scaled_transpose.leading_dim = supernode_size;
@@ -624,7 +626,7 @@ bool Factorization<Field>::RightLookingSubtree(
           ordering_.assembly_forest.children[child_beg + child_index];
       Buffer<Field>& child_schur_complement_buffer =
           shared_state->schur_complement_buffers[child];
-      BlasMatrix<Field>& child_schur_complement =
+      BlasMatrixView<Field>& child_schur_complement =
           shared_state->schur_complements[child];
       child_schur_complement.height = 0;
       child_schur_complement.width = 0;
@@ -694,7 +696,7 @@ bool Factorization<Field>::MultithreadedRightLookingSubtree(
           ordering_.assembly_forest.children[child_beg + child_index];
       Buffer<Field>& child_schur_complement_buffer =
           shared_state->schur_complement_buffers[child];
-      BlasMatrix<Field>& child_schur_complement =
+      BlasMatrixView<Field>& child_schur_complement =
           shared_state->schur_complements[child];
       child_schur_complement.height = 0;
       child_schur_complement.width = 0;
@@ -808,9 +810,10 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
     LeftLookingSharedState* shared_state,
     Buffer<PrivateState<Field>>* private_states) {
-  BlasMatrix<Field> main_diagonal_block =
+  BlasMatrixView<Field> main_diagonal_block =
       diagonal_factor_->blocks[main_supernode];
-  BlasMatrix<Field> main_lower_block = lower_factor_->blocks[main_supernode];
+  BlasMatrixView<Field> main_lower_block =
+      lower_factor_->blocks[main_supernode];
   const Int main_supernode_size = main_lower_block.width;
 
   shared_state->rel_rows[main_supernode] = 0;
@@ -845,7 +848,7 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
     const Int descendant_supernode = row_structure[index];
     CATAMARI_ASSERT(descendant_supernode < main_supernode,
                     "Looking into upper triangle (multithreaded).");
-    const ConstBlasMatrix<Field> descendant_lower_block =
+    const ConstBlasMatrixView<Field> descendant_lower_block =
         lower_factor_ptr->blocks[descendant_supernode];
     const Int descendant_degree = descendant_lower_block.height;
     const Int descendant_supernode_size = descendant_lower_block.width;
@@ -855,7 +858,7 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
     const Int descendant_main_intersect_size =
         *shared_state->intersect_ptrs[descendant_supernode];
 
-    const ConstBlasMatrix<Field> descendant_diag_block =
+    const ConstBlasMatrixView<Field> descendant_diag_block =
         diagonal_factor_->blocks[descendant_supernode].ToConst();
 
     #pragma omp task default(none)                                         \
@@ -869,12 +872,12 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
       const int thread = omp_get_thread_num();
       PrivateState<Field>& private_state = (*private_states)[thread];
 
-      const ConstBlasMatrix<Field> descendant_main_matrix =
+      const ConstBlasMatrixView<Field> descendant_main_matrix =
           descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
                                            descendant_main_intersect_size,
                                            descendant_supernode_size);
 
-      BlasMatrix<Field> scaled_transpose;
+      BlasMatrixView<Field> scaled_transpose;
       scaled_transpose.height = descendant_supernode_size;
       scaled_transpose.width = descendant_main_intersect_size;
       scaled_transpose.leading_dim = descendant_supernode_size;
@@ -882,7 +885,7 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
       FormScaledTranspose(factorization_type_copy, descendant_diag_block,
                           descendant_main_matrix, &scaled_transpose);
 
-      BlasMatrix<Field> workspace_matrix;
+      BlasMatrixView<Field> workspace_matrix;
       workspace_matrix.height = descendant_main_intersect_size;
       workspace_matrix.width = descendant_main_intersect_size;
       workspace_matrix.leading_dim = descendant_main_intersect_size;
@@ -932,17 +935,17 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
         const int thread = omp_get_thread_num();
         PrivateState<Field>& private_state = (*private_states)[thread];
 
-        const ConstBlasMatrix<Field> descendant_active_matrix =
+        const ConstBlasMatrixView<Field> descendant_active_matrix =
             descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
                                              descendant_active_intersect_size,
                                              descendant_supernode_size);
 
-        const ConstBlasMatrix<Field> descendant_main_matrix =
+        const ConstBlasMatrixView<Field> descendant_main_matrix =
             descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
                                              descendant_main_intersect_size,
                                              descendant_supernode_size);
 
-        BlasMatrix<Field> scaled_transpose;
+        BlasMatrixView<Field> scaled_transpose;
         scaled_transpose.height = descendant_supernode_size;
         scaled_transpose.width = descendant_main_intersect_size;
         scaled_transpose.leading_dim = descendant_supernode_size;
@@ -950,11 +953,11 @@ void Factorization<Field>::MultithreadedLeftLookingSupernodeUpdate(
         FormScaledTranspose(factorization_type_copy, descendant_diag_block,
                             descendant_main_matrix, &scaled_transpose);
 
-        BlasMatrix<Field> main_active_block = main_lower_block.Submatrix(
+        BlasMatrixView<Field> main_active_block = main_lower_block.Submatrix(
             main_active_rel_row, 0, main_active_intersect_size,
             main_supernode_size);
 
-        BlasMatrix<Field> workspace_matrix;
+        BlasMatrixView<Field> workspace_matrix;
         workspace_matrix.height = descendant_active_intersect_size;
         workspace_matrix.width = descendant_main_intersect_size;
         workspace_matrix.leading_dim = descendant_active_intersect_size;
@@ -978,8 +981,8 @@ template <class Field>
 bool Factorization<Field>::MultithreadedLeftLookingSupernodeFinalize(
     Int supernode, Buffer<PrivateState<Field>>* private_states,
     LDLResult* result) {
-  BlasMatrix<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
-  BlasMatrix<Field>& lower_block = lower_factor_->blocks[supernode];
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
 
@@ -1306,7 +1309,7 @@ LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
+void Factorization<Field>::Solve(BlasMatrixView<Field>* matrix) const {
   const bool have_permutation = !ordering_.permutation.Empty();
   // Reorder the input into the permutation of the factorization.
   if (have_permutation) {
@@ -1346,16 +1349,17 @@ void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
 
 template <class Field>
 void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
-    Int supernode, BlasMatrix<Field>* matrix, Buffer<Field>* workspace) const {
+    Int supernode, BlasMatrixView<Field>* matrix,
+    Buffer<Field>* workspace) const {
   // Eliminate this supernode.
   const Int num_rhs = matrix->width;
   const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
-  const ConstBlasMatrix<Field> triangular_matrix =
+  const ConstBlasMatrixView<Field> triangular_matrix =
       diagonal_factor_->blocks[supernode];
 
   const Int supernode_size = ordering_.supernode_sizes[supernode];
   const Int supernode_start = ordering_.supernode_offsets[supernode];
-  BlasMatrix<Field> matrix_supernode =
+  BlasMatrixView<Field> matrix_supernode =
       matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
   // Solve against the diagonal block of the supernode.
@@ -1365,7 +1369,8 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
     LeftLowerUnitTriangularSolves(triangular_matrix, &matrix_supernode);
   }
 
-  const ConstBlasMatrix<Field> subdiagonal = lower_factor_->blocks[supernode];
+  const ConstBlasMatrixView<Field> subdiagonal =
+      lower_factor_->blocks[supernode];
   if (!subdiagonal.height) {
     return;
   }
@@ -1374,7 +1379,7 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
   const Int* indices = lower_factor_->StructureBeg(supernode);
   if (supernode_size >= forward_solve_out_of_place_supernode_threshold_) {
     // Perform an out-of-place GEMM.
-    BlasMatrix<Field> work_matrix;
+    BlasMatrixView<Field> work_matrix;
     work_matrix.height = subdiagonal.height;
     work_matrix.width = num_rhs;
     work_matrix.leading_dim = subdiagonal.height;
@@ -1408,17 +1413,17 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
 #ifdef _OPENMP
 template <class Field>
 void Factorization<Field>::MultithreadedLowerSupernodalTrapezoidalSolve(
-    Int supernode, BlasMatrix<Field>* matrix,
+    Int supernode, BlasMatrixView<Field>* matrix,
     RightLookingSharedState<Field>* shared_state) const {
   // Eliminate this supernode.
   const Int num_rhs = matrix->width;
   const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
-  const ConstBlasMatrix<Field> triangular_matrix =
+  const ConstBlasMatrixView<Field> triangular_matrix =
       diagonal_factor_->blocks[supernode];
 
   const Int supernode_size = ordering_.supernode_sizes[supernode];
   const Int supernode_start = ordering_.supernode_offsets[supernode];
-  BlasMatrix<Field> matrix_supernode =
+  BlasMatrixView<Field> matrix_supernode =
       matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
   // Solve against the diagonal block of the supernode.
@@ -1428,7 +1433,8 @@ void Factorization<Field>::MultithreadedLowerSupernodalTrapezoidalSolve(
     LeftLowerUnitTriangularSolves(triangular_matrix, &matrix_supernode);
   }
 
-  const ConstBlasMatrix<Field> subdiagonal = lower_factor_->blocks[supernode];
+  const ConstBlasMatrixView<Field> subdiagonal =
+      lower_factor_->blocks[supernode];
   if (!subdiagonal.height) {
     return;
   }
@@ -1442,7 +1448,8 @@ void Factorization<Field>::MultithreadedLowerSupernodalTrapezoidalSolve(
 
 template <class Field>
 void Factorization<Field>::LowerTriangularSolveRecursion(
-    Int supernode, BlasMatrix<Field>* matrix, Buffer<Field>* workspace) const {
+    Int supernode, BlasMatrixView<Field>* matrix,
+    Buffer<Field>* workspace) const {
   // Recurse on this supernode's children.
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
@@ -1460,7 +1467,7 @@ void Factorization<Field>::LowerTriangularSolveRecursion(
 #ifdef _OPENMP
 template <class Field>
 void Factorization<Field>::MultithreadedLowerTriangularSolveRecursion(
-    Int supernode, BlasMatrix<Field>* matrix,
+    Int supernode, BlasMatrixView<Field>* matrix,
     RightLookingSharedState<Field>* shared_state) const {
   // Recurse on this supernode's children.
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
@@ -1485,7 +1492,8 @@ void Factorization<Field>::MultithreadedLowerTriangularSolveRecursion(
   const Int workspace_size = degree * num_rhs;
   shared_state->schur_complement_buffers[supernode].Resize(workspace_size,
                                                            Field{0});
-  BlasMatrix<Field>& main_matrix = shared_state->schur_complements[supernode];
+  BlasMatrixView<Field>& main_matrix =
+      shared_state->schur_complements[supernode];
   main_matrix.height = degree;
   main_matrix.width = num_rhs;
   main_matrix.leading_dim = degree;
@@ -1494,7 +1502,8 @@ void Factorization<Field>::MultithreadedLowerTriangularSolveRecursion(
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
     const Int* child_indices = lower_factor_->StructureBeg(child);
-    BlasMatrix<Field>& child_matrix = shared_state->schur_complements[child];
+    BlasMatrixView<Field>& child_matrix =
+        shared_state->schur_complements[child];
     const Int child_degree = child_matrix.height;
 
     Int i_rel = supernode_size;
@@ -1529,7 +1538,7 @@ void Factorization<Field>::MultithreadedLowerTriangularSolveRecursion(
 
 template <class Field>
 void Factorization<Field>::LowerTriangularSolve(
-    BlasMatrix<Field>* matrix) const {
+    BlasMatrixView<Field>* matrix) const {
   // Allocate the workspace.
   const Int workspace_size = max_degree_ * matrix->width;
   Buffer<Field> workspace(workspace_size, Field{0});
@@ -1545,7 +1554,7 @@ void Factorization<Field>::LowerTriangularSolve(
 #ifdef _OPENMP
 template <class Field>
 void Factorization<Field>::MultithreadedLowerTriangularSolve(
-    BlasMatrix<Field>* matrix) const {
+    BlasMatrixView<Field>* matrix) const {
   // Set up the shared state.
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   RightLookingSharedState<Field> shared_state;
@@ -1565,7 +1574,7 @@ void Factorization<Field>::MultithreadedLowerTriangularSolve(
 #endif  // ifdef _OPENMP
 
 template <class Field>
-void Factorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
+void Factorization<Field>::DiagonalSolve(BlasMatrixView<Field>* matrix) const {
   const Int num_rhs = matrix->width;
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
@@ -1575,12 +1584,12 @@ void Factorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
   }
 
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const ConstBlasMatrix<Field> diagonal_matrix =
+    const ConstBlasMatrixView<Field> diagonal_matrix =
         diagonal_factor_->blocks[supernode];
 
     const Int supernode_size = ordering_.supernode_sizes[supernode];
     const Int supernode_start = ordering_.supernode_offsets[supernode];
-    BlasMatrix<Field> matrix_supernode =
+    BlasMatrixView<Field> matrix_supernode =
         matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
     // Handle the diagonal-block portion of the supernode.
@@ -1595,7 +1604,7 @@ void Factorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
 #ifdef _OPENMP
 template <class Field>
 void Factorization<Field>::MultithreadedDiagonalSolve(
-    BlasMatrix<Field>* matrix) const {
+    BlasMatrixView<Field>* matrix) const {
   if (factorization_type_ == kCholeskyFactorization) {
     // D is the identity.
     return;
@@ -1610,13 +1619,13 @@ void Factorization<Field>::MultithreadedDiagonalSolve(
     #pragma omp task default(none) firstprivate(supernode) \
         shared(matrix, ordering_ptr, diagonal_factor_ptr)
     {
-      const ConstBlasMatrix<Field> diagonal_matrix =
+      const ConstBlasMatrixView<Field> diagonal_matrix =
           diagonal_factor_ptr->blocks[supernode];
 
       const Int num_rhs = matrix->width;
       const Int supernode_size = ordering_ptr->supernode_sizes[supernode];
       const Int supernode_start = ordering_ptr->supernode_offsets[supernode];
-      BlasMatrix<Field> matrix_supernode =
+      BlasMatrixView<Field> matrix_supernode =
           matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
       // Handle the diagonal-block portion of the supernode.
@@ -1632,7 +1641,7 @@ void Factorization<Field>::MultithreadedDiagonalSolve(
 
 template <class Field>
 void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
-    Int supernode, BlasMatrix<Field>* matrix,
+    Int supernode, BlasMatrixView<Field>* matrix,
     Buffer<Field>* packed_input_buf) const {
   const Int num_rhs = matrix->width;
   const bool is_selfadjoint = factorization_type_ != kLDLTransposeFactorization;
@@ -1640,15 +1649,16 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
   const Int supernode_start = ordering_.supernode_offsets[supernode];
   const Int* indices = lower_factor_->StructureBeg(supernode);
 
-  BlasMatrix<Field> matrix_supernode =
+  BlasMatrixView<Field> matrix_supernode =
       matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
-  const ConstBlasMatrix<Field> subdiagonal = lower_factor_->blocks[supernode];
+  const ConstBlasMatrixView<Field> subdiagonal =
+      lower_factor_->blocks[supernode];
   if (subdiagonal.height) {
     // Handle the external updates for this supernode.
     if (supernode_size >= backward_solve_out_of_place_supernode_threshold_) {
       // Fill the work matrix.
-      BlasMatrix<Field> work_matrix;
+      BlasMatrixView<Field> work_matrix;
       work_matrix.height = subdiagonal.height;
       work_matrix.width = num_rhs;
       work_matrix.leading_dim = subdiagonal.height;
@@ -1688,7 +1698,7 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
   }
 
   // Solve against the diagonal block of this supernode.
-  const ConstBlasMatrix<Field> triangular_matrix =
+  const ConstBlasMatrixView<Field> triangular_matrix =
       diagonal_factor_->blocks[supernode];
   if (factorization_type_ == kCholeskyFactorization) {
     LeftLowerAdjointTriangularSolves(triangular_matrix, &matrix_supernode);
@@ -1702,7 +1712,7 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
 
 template <class Field>
 void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
-    Int supernode, BlasMatrix<Field>* matrix,
+    Int supernode, BlasMatrixView<Field>* matrix,
     Buffer<Field>* packed_input_buf) const {
   // Perform this supernode's trapezoidal solve.
   LowerTransposeSupernodalTrapezoidalSolve(supernode, matrix, packed_input_buf);
@@ -1721,7 +1731,7 @@ void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
 #ifdef _OPENMP
 template <class Field>
 void Factorization<Field>::MultithreadedLowerTransposeTriangularSolveRecursion(
-    Int supernode, BlasMatrix<Field>* matrix,
+    Int supernode, BlasMatrixView<Field>* matrix,
     Buffer<Buffer<Field>>* private_packed_input_bufs) const {
   // Perform this supernode's trapezoidal solve.
   const int thread = omp_get_thread_num();
@@ -1746,7 +1756,7 @@ void Factorization<Field>::MultithreadedLowerTransposeTriangularSolveRecursion(
 
 template <class Field>
 void Factorization<Field>::LowerTransposeTriangularSolve(
-    BlasMatrix<Field>* matrix) const {
+    BlasMatrixView<Field>* matrix) const {
   // Allocate the workspace.
   const Int workspace_size = max_degree_ * matrix->width;
   Buffer<Field> packed_input_buf(workspace_size);
@@ -1762,7 +1772,7 @@ void Factorization<Field>::LowerTransposeTriangularSolve(
 #ifdef _OPENMP
 template <class Field>
 void Factorization<Field>::MultithreadedLowerTransposeTriangularSolve(
-    BlasMatrix<Field>* matrix) const {
+    BlasMatrixView<Field>* matrix) const {
   // Allocate each thread's workspace.
   const int max_threads = omp_get_max_threads();
   const Int workspace_size = max_degree_ * matrix->width;
@@ -1793,7 +1803,7 @@ void Factorization<Field>::PrintDiagonalFactor(const std::string& label,
   os << label << ": \n";
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const ConstBlasMatrix<Field>& diag_matrix =
+    const ConstBlasMatrixView<Field>& diag_matrix =
         diagonal_factor_->blocks[supernode];
     if (factorization_type_ == kCholeskyFactorization) {
       for (Int j = 0; j < diag_matrix.height; ++j) {
@@ -1824,9 +1834,9 @@ void Factorization<Field>::PrintLowerFactor(const std::string& label,
     const Int supernode_start = ordering_.supernode_offsets[supernode];
     const Int* indices = lower_factor_->StructureBeg(supernode);
 
-    const ConstBlasMatrix<Field>& diag_matrix =
+    const ConstBlasMatrixView<Field>& diag_matrix =
         diagonal_factor_->blocks[supernode];
-    const ConstBlasMatrix<Field>& lower_matrix =
+    const ConstBlasMatrixView<Field>& lower_matrix =
         lower_factor_->blocks[supernode];
 
     for (Int j = 0; j < diag_matrix.height; ++j) {

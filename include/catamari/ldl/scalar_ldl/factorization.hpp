@@ -10,7 +10,7 @@
 
 #include <ostream>
 
-#include "catamari/blas_matrix.hpp"
+#include "catamari/blas_matrix_view.hpp"
 #include "catamari/buffer.hpp"
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"
@@ -153,16 +153,16 @@ class Factorization {
   void PrintLowerFactor(const std::string& label, std::ostream& os) const;
 
   // Solves a linear system using the factorization.
-  void Solve(BlasMatrix<Field>* matrix) const;
+  void Solve(BlasMatrixView<Field>* matrix) const;
 
   // Solves against the lower-triangular factor.
-  void LowerTriangularSolve(BlasMatrix<Field>* matrix) const;
+  void LowerTriangularSolve(BlasMatrixView<Field>* matrix) const;
 
   // Solves against the diagonal factor.
-  void DiagonalSolve(BlasMatrix<Field>* matrix) const;
+  void DiagonalSolve(BlasMatrixView<Field>* matrix) const;
 
   // Solves against the transpose (or adjoint) of the lower factor.
-  void LowerTransposeTriangularSolve(BlasMatrix<Field>* matrix) const;
+  void LowerTransposeTriangularSolve(BlasMatrixView<Field>* matrix) const;
 
  private:
   // The temporary state used by the left-looking factorization.

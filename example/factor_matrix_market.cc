@@ -17,9 +17,9 @@
 #include "catamari/ldl.hpp"
 #include "specify.hpp"
 
-using catamari::BlasMatrix;
+using catamari::BlasMatrixView;
 using catamari::Buffer;
-using catamari::ConstBlasMatrix;
+using catamari::ConstBlasMatrixView;
 using catamari::Int;
 
 // TODO(Jack Poulson): Incorporate the new matrix abstraction.
@@ -55,7 +55,7 @@ void PrintExperiment(const Experiment& experiment, const std::string& label) {
 // NOTE: Due to the direct accumulation of the squared norm, this algorithm is
 // unstable. But it suffices for example purposes.
 template <typename Real>
-Real EuclideanNorm(const ConstBlasMatrix<Real>& matrix) {
+Real EuclideanNorm(const ConstBlasMatrixView<Real>& matrix) {
   Real squared_norm{0};
   const Int height = matrix.height;
   const Int width = matrix.width;
@@ -71,7 +71,7 @@ Real EuclideanNorm(const ConstBlasMatrix<Real>& matrix) {
 // NOTE: Due to the direct accumulation of the squared norm, this algorithm is
 // unstable. But it suffices for example purposes.
 template <typename Real>
-Real EuclideanNorm(const ConstBlasMatrix<catamari::Complex<Real>>& matrix) {
+Real EuclideanNorm(const ConstBlasMatrixView<catamari::Complex<Real>>& matrix) {
   Real squared_norm{0};
   const Int height = matrix.height;
   const Int width = matrix.width;
@@ -168,9 +168,9 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
 }
 
 template <typename Field>
-ConstBlasMatrix<Field> GenerateRightHandSide(Int num_rows,
-                                             Buffer<Field>* buffer) {
-  BlasMatrix<Field> right_hand_side;
+ConstBlasMatrixView<Field> GenerateRightHandSide(Int num_rows,
+                                                 Buffer<Field>* buffer) {
+  BlasMatrixView<Field> right_hand_side;
   right_hand_side.height = num_rows;
   right_hand_side.width = 1;
   right_hand_side.leading_dim = std::max(num_rows, Int(1));
@@ -186,9 +186,9 @@ ConstBlasMatrix<Field> GenerateRightHandSide(Int num_rows,
 }
 
 template <typename Field>
-BlasMatrix<Field> CopyMatrix(const ConstBlasMatrix<Field>& matrix,
-                             Buffer<Field>* buffer) {
-  BlasMatrix<Field> matrix_copy;
+BlasMatrixView<Field> CopyMatrix(const ConstBlasMatrixView<Field>& matrix,
+                                 Buffer<Field>* buffer) {
+  BlasMatrixView<Field> matrix_copy;
   matrix_copy.height = matrix.height;
   matrix_copy.width = matrix.width;
   matrix_copy.leading_dim = std::max(matrix.height, Int(1));
@@ -245,7 +245,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
 
   // Generate an arbitrary right-hand side.
   Buffer<Field> right_hand_side_buffer;
-  const ConstBlasMatrix<Field> right_hand_side =
+  const ConstBlasMatrixView<Field> right_hand_side =
       GenerateRightHandSide<Field>(num_rows, &right_hand_side_buffer);
   const BaseField right_hand_side_norm = EuclideanNorm(right_hand_side);
   if (print_progress) {
@@ -257,7 +257,8 @@ Experiment RunMatrixMarketTest(const std::string& filename,
     std::cout << "  Running solve..." << std::endl;
   }
   Buffer<Field> solution_buffer;
-  BlasMatrix<Field> solution = CopyMatrix(right_hand_side, &solution_buffer);
+  BlasMatrixView<Field> solution =
+      CopyMatrix(right_hand_side, &solution_buffer);
   quotient::Timer solve_timer;
   solve_timer.Start();
   ldl_factorization.Solve(&solution);
@@ -265,7 +266,8 @@ Experiment RunMatrixMarketTest(const std::string& filename,
 
   // Compute the residual.
   Buffer<Field> residual_buffer;
-  BlasMatrix<Field> residual = CopyMatrix(right_hand_side, &residual_buffer);
+  BlasMatrixView<Field> residual =
+      CopyMatrix(right_hand_side, &residual_buffer);
   catamari::ApplySparse(Field{-1}, *matrix, solution.ToConst(), Field{1},
                         &residual);
   const BaseField residual_norm = EuclideanNorm(residual.ToConst());

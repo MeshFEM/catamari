@@ -377,7 +377,7 @@ LDLResult Factorization<Field>::UpLooking(
 }
 
 template <class Field>
-void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
+void Factorization<Field>::Solve(BlasMatrixView<Field>* matrix) const {
   const bool have_permutation = !ordering.permutation.Empty();
 
   // Reorder the input into the relaxation permutation of the factorization.
@@ -397,7 +397,7 @@ void Factorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
 
 template <class Field>
 void Factorization<Field>::LowerTriangularSolve(
-    BlasMatrix<Field>* matrix) const {
+    BlasMatrixView<Field>* matrix) const {
   const Int num_rhs = matrix->width;
   const LowerStructure& lower_structure = lower_factor.structure;
   const Int num_rows = lower_structure.column_offsets.Size() - 1;
@@ -428,7 +428,7 @@ void Factorization<Field>::LowerTriangularSolve(
 }
 
 template <class Field>
-void Factorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
+void Factorization<Field>::DiagonalSolve(BlasMatrixView<Field>* matrix) const {
   if (factorization_type == kCholeskyFactorization) {
     return;
   }
@@ -448,7 +448,7 @@ void Factorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
 
 template <class Field>
 void Factorization<Field>::LowerTransposeTriangularSolve(
-    BlasMatrix<Field>* matrix) const {
+    BlasMatrixView<Field>* matrix) const {
   const Int num_rhs = matrix->width;
   const LowerStructure& lower_structure = lower_factor.structure;
   const Int num_rows = lower_structure.column_offsets.Size() - 1;

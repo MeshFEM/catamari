@@ -10,7 +10,6 @@
 
 #include <vector>
 
-#include "catamari/blas_matrix.hpp"
 #include "catamari/buffer.hpp"
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/integers.hpp"

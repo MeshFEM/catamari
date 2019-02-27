@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Jack Poulson <jack@hodgestar.com>
+ * Copyright (c) 2019 Jack Poulson <jack@hodgestar.com>
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -12,108 +12,94 @@
 
 namespace catamari {
 
-template <class T>
-const T* ConstBlasMatrix<T>::Pointer(Int row, Int column) const {
-  return &data[row + column * leading_dim];
+template <typename Field>
+BlasMatrix<Field>::BlasMatrix() {
+  view.height = 0;
+  view.width = 0;
+  view.leading_dim = 0;
+  view.data = nullptr;
 }
 
-template <class T>
-const T& ConstBlasMatrix<T>::operator()(Int row, Int column) const {
-  return data[row + column * leading_dim];
+template <typename Field>
+BlasMatrix<Field>::BlasMatrix(const BlasMatrix<Field>& matrix) {
+  const Int height = matrix.view.height;
+  const Int width = matrix.view.width;
+
+  data.Resize(height * width);
+  view.height = height;
+  view.width = width;
+  view.leading_dim = height;
+  view.data = data.Data();
+
+  // Copy each individual column so that the leading dimension does not
+  // impact the copy time.
+  for (Int j = 0; j < width; ++j) {
+    std::copy(&matrix(0, j), &matrix(height, j), &view(0, j));
+  }
 }
 
-template <class T>
-const T& ConstBlasMatrix<T>::Entry(Int row, Int column) const {
-  return data[row + column * leading_dim];
+template <typename Field>
+BlasMatrix<Field>& BlasMatrix<Field>::operator=(
+    const BlasMatrix<Field>& matrix) {
+  if (this != &matrix) {
+    const Int height = matrix.view.height;
+    const Int width = matrix.view.width;
+
+    data.Resize(height * width);
+    view.height = height;
+    view.width = width;
+    view.leading_dim = height;
+    view.data = data.Data();
+
+    // Copy each individual column so that the leading dimension does not
+    // impact the copy time.
+    for (Int j = 0; j < width; ++j) {
+      std::copy(&matrix(0, j), &matrix(height, j), &view(0, j));
+    }
+  }
+  return *this;
 }
 
-template <class T>
-ConstBlasMatrix<T> ConstBlasMatrix<T>::Submatrix(Int row_beg, Int column_beg,
-                                                 Int num_rows,
-                                                 Int num_columns) const {
-  ConstBlasMatrix<T> submatrix;
-  submatrix.height = num_rows;
-  submatrix.width = num_columns;
-  submatrix.leading_dim = leading_dim;
-  submatrix.data = Pointer(row_beg, column_beg);
-  return submatrix;
+template <typename Field>
+void BlasMatrix<Field>::Resize(const Int& height, const Int& width) {
+  if (height == view.height && width == view.width) {
+    return;
+  }
+  data.Resize(height * width);
+  view.height = height;
+  view.width = width;
+  view.leading_dim = height;  // TODO(Jack Poulson): Handle 0 case.
+  view.data = data.Data();
 }
 
-template <class T>
-ConstBlasMatrix<T>::ConstBlasMatrix() {}
-
-template <class T>
-ConstBlasMatrix<T>::ConstBlasMatrix(const BlasMatrix<T>& matrix)
-    : height(matrix.height),
-      width(matrix.width),
-      leading_dim(matrix.leading_dim),
-      data(matrix.data) {}
-
-template <class T>
-ConstBlasMatrix<T>& ConstBlasMatrix<T>::operator=(const BlasMatrix<T>& matrix) {
-  height = matrix.height;
-  width = matrix.width;
-  leading_dim = matrix.leading_dim;
-  data = matrix.leading_dim;
+template <typename Field>
+void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
+                               const Field& value) {
+  data.Resize(height * width, value);
+  view.height = height;
+  view.width = width;
+  view.leading_dim = height;  // TODO(Jack Poulson): Handle 0 case.
+  view.data = data.Data();
 }
 
-template <class T>
-ConstBlasMatrix<T> BlasMatrix<T>::ToConst() const {
-  ConstBlasMatrix<T> const_matrix = *this;
-  return const_matrix;
+template <typename Field>
+Field& BlasMatrix<Field>::operator()(Int row, Int column) {
+  return view(row, column);
 }
 
-template <class T>
-T* BlasMatrix<T>::Pointer(Int row, Int column) {
-  return &data[row + column * leading_dim];
+template <typename Field>
+const Field& BlasMatrix<Field>::operator()(Int row, Int column) const {
+  return view(row, column);
 }
 
-template <class T>
-const T* BlasMatrix<T>::Pointer(Int row, Int column) const {
-  return &data[row + column * leading_dim];
+template <typename Field>
+Field& BlasMatrix<Field>::Entry(Int row, Int column) {
+  return view(row, column);
 }
 
-template <class T>
-T& BlasMatrix<T>::operator()(Int row, Int column) {
-  return data[row + column * leading_dim];
-}
-
-template <class T>
-const T& BlasMatrix<T>::operator()(Int row, Int column) const {
-  return data[row + column * leading_dim];
-}
-
-template <class T>
-T& BlasMatrix<T>::Entry(Int row, Int column) {
-  return data[row + column * leading_dim];
-}
-
-template <class T>
-const T& BlasMatrix<T>::Entry(Int row, Int column) const {
-  return data[row + column * leading_dim];
-}
-
-template <class T>
-BlasMatrix<T> BlasMatrix<T>::Submatrix(Int row_beg, Int column_beg,
-                                       Int num_rows, Int num_columns) {
-  BlasMatrix<T> submatrix;
-  submatrix.height = num_rows;
-  submatrix.width = num_columns;
-  submatrix.leading_dim = leading_dim;
-  submatrix.data = Pointer(row_beg, column_beg);
-  return submatrix;
-}
-
-template <class T>
-ConstBlasMatrix<T> BlasMatrix<T>::Submatrix(Int row_beg, Int column_beg,
-                                            Int num_rows,
-                                            Int num_columns) const {
-  ConstBlasMatrix<T> submatrix;
-  submatrix.height = num_rows;
-  submatrix.width = num_columns;
-  submatrix.leading_dim = leading_dim;
-  submatrix.data = Pointer(row_beg, column_beg);
-  return submatrix;
+template <typename Field>
+const Field& BlasMatrix<Field>::Entry(Int row, Int column) const {
+  return view(row, column);
 }
 
 }  // namespace catamari

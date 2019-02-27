@@ -66,29 +66,29 @@ class Factorization {
                    const Control& control);
 
   // Solve a set of linear systems using the factorization.
-  void Solve(BlasMatrix<Field>* matrix) const;
+  void Solve(BlasMatrixView<Field>* matrix) const;
 
   // Solves a set of linear systems using the lower-triangular factor.
-  void LowerTriangularSolve(BlasMatrix<Field>* matrix) const;
+  void LowerTriangularSolve(BlasMatrixView<Field>* matrix) const;
 
 #ifdef _OPENMP
-  void MultithreadedLowerTriangularSolve(BlasMatrix<Field>* matrix) const;
+  void MultithreadedLowerTriangularSolve(BlasMatrixView<Field>* matrix) const;
 #endif  // ifdef _OPENMP
 
   // Solves a set of linear systems using the diagonal factor.
-  void DiagonalSolve(BlasMatrix<Field>* matrix) const;
+  void DiagonalSolve(BlasMatrixView<Field>* matrix) const;
 
 #ifdef _OPENMP
-  void MultithreadedDiagonalSolve(BlasMatrix<Field>* matrix) const;
+  void MultithreadedDiagonalSolve(BlasMatrixView<Field>* matrix) const;
 #endif  // ifdef _OPENMP
 
   // Solves a set of linear systems using the trasnpose (or adjoint) of the
   // lower-triangular factor.
-  void LowerTransposeTriangularSolve(BlasMatrix<Field>* matrix) const;
+  void LowerTransposeTriangularSolve(BlasMatrixView<Field>* matrix) const;
 
 #ifdef _OPENMP
   void MultithreadedLowerTransposeTriangularSolve(
-      BlasMatrix<Field>* matrix) const;
+      BlasMatrixView<Field>* matrix) const;
 #endif  // ifdef _OPENMP
 
   // Prints the diagonal of the factorization.
@@ -252,40 +252,42 @@ class Factorization {
 
   // Performs the portion of the lower-triangular solve corresponding to the
   // subtree with the given root supernode.
-  void LowerTriangularSolveRecursion(Int supernode, BlasMatrix<Field>* matrix,
+  void LowerTriangularSolveRecursion(Int supernode,
+                                     BlasMatrixView<Field>* matrix,
                                      Buffer<Field>* workspace) const;
 
 #ifdef _OPENMP
   void MultithreadedLowerTriangularSolveRecursion(
-      Int supernode, BlasMatrix<Field>* matrix,
+      Int supernode, BlasMatrixView<Field>* matrix,
       RightLookingSharedState<Field>* shared_state) const;
 #endif  // ifdef _OPENMP
 
   // Performs the trapezoidal solve associated with a particular supernode.
-  void LowerSupernodalTrapezoidalSolve(Int supernode, BlasMatrix<Field>* matrix,
+  void LowerSupernodalTrapezoidalSolve(Int supernode,
+                                       BlasMatrixView<Field>* matrix,
                                        Buffer<Field>* workspace) const;
 
 #ifdef _OPENMP
   void MultithreadedLowerSupernodalTrapezoidalSolve(
-      Int supernode, BlasMatrix<Field>* matrix,
+      Int supernode, BlasMatrixView<Field>* matrix,
       RightLookingSharedState<Field>* shared_state) const;
 #endif  // ifdef _OPENMP
 
   // Performs the portion of the transposed lower-triangular solve
   // corresponding to the subtree with the given root supernode.
   void LowerTransposeTriangularSolveRecursion(
-      Int supernode, BlasMatrix<Field>* matrix,
+      Int supernode, BlasMatrixView<Field>* matrix,
       Buffer<Field>* packed_input_buf) const;
 
 #ifdef _OPENMP
   void MultithreadedLowerTransposeTriangularSolveRecursion(
-      Int supernode, BlasMatrix<Field>* matrix,
+      Int supernode, BlasMatrixView<Field>* matrix,
       Buffer<Buffer<Field>>* private_packed_input_bufs) const;
 #endif  // ifdef _OPENMP
 
   // Performs the trapezoidal solve associated with a particular supernode.
   void LowerTransposeSupernodalTrapezoidalSolve(Int supernode,
-                                                BlasMatrix<Field>* matrix,
+                                                BlasMatrixView<Field>* matrix,
                                                 Buffer<Field>* workspace) const;
 };
 

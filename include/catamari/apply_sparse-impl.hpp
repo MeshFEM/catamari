@@ -17,8 +17,8 @@ namespace catamari {
 template <class Field>
 void ApplySparse(const Field& alpha,
                  const CoordinateMatrix<Field>& sparse_matrix,
-                 const ConstBlasMatrix<Field>& input_matrix, const Field& beta,
-                 BlasMatrix<Field>* result) {
+                 const ConstBlasMatrixView<Field>& input_matrix,
+                 const Field& beta, BlasMatrixView<Field>* result) {
   const Int num_rows = sparse_matrix.NumRows();
   const Int num_rhs = input_matrix.width;
   CATAMARI_ASSERT(input_matrix.height == sparse_matrix.NumColumns(),

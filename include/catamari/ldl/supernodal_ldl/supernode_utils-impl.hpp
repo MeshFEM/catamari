@@ -1171,7 +1171,7 @@ void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_forest,
     (*work_estimates)[root] += (*work_estimates)[child];
   }
 
-  const ConstBlasMatrix<Field>& lower_block =
+  const ConstBlasMatrixView<Field>& lower_block =
       lower_factor.blocks[root].ToConst();
   const Int supernode_size = lower_block.width;
   const Int degree = lower_block.height;
@@ -1332,13 +1332,13 @@ void FillZeros(const SymmetricOrdering& ordering,
                DiagonalFactor<Field>* diagonal_factor) {
   const Int num_supernodes = diagonal_factor->blocks.Size();
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    BlasMatrix<Field>& diagonal_block = diagonal_factor->blocks[supernode];
+    BlasMatrixView<Field>& diagonal_block = diagonal_factor->blocks[supernode];
     std::fill(
         diagonal_block.data,
         diagonal_block.data + diagonal_block.leading_dim * diagonal_block.width,
         Field{0});
 
-    BlasMatrix<Field>& lower_block = lower_factor->blocks[supernode];
+    BlasMatrixView<Field>& lower_block = lower_factor->blocks[supernode];
     std::fill(lower_block.data,
               lower_block.data + lower_block.leading_dim * lower_block.width,
               Field{0});
@@ -1361,13 +1361,13 @@ void MultithreadedFillZerosRecursion(const SymmetricOrdering& ordering,
                                     diagonal_factor);
   }
 
-  BlasMatrix<Field>& diagonal_block = diagonal_factor->blocks[root];
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor->blocks[root];
   std::fill(
       diagonal_block.data,
       diagonal_block.data + diagonal_block.leading_dim * diagonal_block.width,
       Field{0});
 
-  BlasMatrix<Field>& lower_block = lower_factor->blocks[root];
+  BlasMatrixView<Field>& lower_block = lower_factor->blocks[root];
   std::fill(lower_block.data,
             lower_block.data + lower_block.leading_dim * lower_block.width,
             Field{0});
@@ -1440,9 +1440,9 @@ Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
 
 template <class Field>
 void FormScaledTranspose(SymmetricFactorizationType factorization_type,
-                         const ConstBlasMatrix<Field>& diagonal_block,
-                         const ConstBlasMatrix<Field>& matrix,
-                         BlasMatrix<Field>* scaled_transpose) {
+                         const ConstBlasMatrixView<Field>& diagonal_block,
+                         const ConstBlasMatrixView<Field>& matrix,
+                         BlasMatrixView<Field>* scaled_transpose) {
   if (factorization_type == kCholeskyFactorization) {
     for (Int j = 0; j < matrix.width; ++j) {
       for (Int i = 0; i < matrix.height; ++i) {
@@ -1470,10 +1470,11 @@ void FormScaledTranspose(SymmetricFactorizationType factorization_type,
 template <class Field>
 void MultithreadedFormScaledTranspose(
     Int tile_size, SymmetricFactorizationType factorization_type,
-    const ConstBlasMatrix<Field>& diagonal_block,
-    const ConstBlasMatrix<Field>& matrix, BlasMatrix<Field>* scaled_transpose) {
-  const ConstBlasMatrix<Field> diagonal_block_copy = diagonal_block;
-  const ConstBlasMatrix<Field> matrix_copy = matrix;
+    const ConstBlasMatrixView<Field>& diagonal_block,
+    const ConstBlasMatrixView<Field>& matrix,
+    BlasMatrixView<Field>* scaled_transpose) {
+  const ConstBlasMatrixView<Field> diagonal_block_copy = diagonal_block;
+  const ConstBlasMatrixView<Field> matrix_copy = matrix;
 
   if (factorization_type == kCholeskyFactorization) {
     for (Int i_beg = 0; i_beg < matrix.height; i_beg += tile_size) {
@@ -1523,22 +1524,21 @@ void MultithreadedFormScaledTranspose(
 #endif  // ifdef _OPENMP
 
 template <class Field>
-void UpdateDiagonalBlock(SymmetricFactorizationType factorization_type,
-                         const Buffer<Int>& supernode_starts,
-                         const LowerFactor<Field>& lower_factor,
-                         Int main_supernode, Int descendant_supernode,
-                         Int descendant_main_rel_row,
-                         const ConstBlasMatrix<Field>& descendant_main_matrix,
-                         const ConstBlasMatrix<Field>& scaled_transpose,
-                         BlasMatrix<Field>* main_diag_block,
-                         BlasMatrix<Field>* workspace_matrix) {
+void UpdateDiagonalBlock(
+    SymmetricFactorizationType factorization_type,
+    const Buffer<Int>& supernode_starts, const LowerFactor<Field>& lower_factor,
+    Int main_supernode, Int descendant_supernode, Int descendant_main_rel_row,
+    const ConstBlasMatrixView<Field>& descendant_main_matrix,
+    const ConstBlasMatrixView<Field>& scaled_transpose,
+    BlasMatrixView<Field>* main_diag_block,
+    BlasMatrixView<Field>* workspace_matrix) {
   typedef ComplexBase<Field> Real;
   const Int main_supernode_size = main_diag_block->height;
   const Int descendant_main_intersect_size = scaled_transpose.width;
 
   const bool inplace_update =
       descendant_main_intersect_size == main_supernode_size;
-  BlasMatrix<Field>* accumulation_block =
+  BlasMatrixView<Field>* accumulation_block =
       inplace_update ? main_diag_block : workspace_matrix;
 
   if (factorization_type == kCholeskyFactorization) {
@@ -1576,10 +1576,11 @@ void UpdateSubdiagonalBlock(
     Int descendant_main_rel_row, Int descendant_active_rel_row,
     const Buffer<Int>& supernode_starts,
     const Buffer<Int>& supernode_member_to_index,
-    const ConstBlasMatrix<Field>& scaled_transpose,
-    const ConstBlasMatrix<Field>& descendant_active_matrix,
+    const ConstBlasMatrixView<Field>& scaled_transpose,
+    const ConstBlasMatrixView<Field>& descendant_active_matrix,
     const LowerFactor<Field>& lower_factor,
-    BlasMatrix<Field>* main_active_block, BlasMatrix<Field>* workspace_matrix) {
+    BlasMatrixView<Field>* main_active_block,
+    BlasMatrixView<Field>* workspace_matrix) {
   const Int main_supernode_size = lower_factor.blocks[main_supernode].width;
   const Int main_active_intersect_size = main_active_block->height;
   const Int descendant_main_intersect_size = scaled_transpose.width;
@@ -1588,7 +1589,7 @@ void UpdateSubdiagonalBlock(
       main_active_intersect_size == descendant_active_intersect_size &&
       main_supernode_size == descendant_main_intersect_size;
 
-  BlasMatrix<Field>* accumulation_matrix =
+  BlasMatrixView<Field>* accumulation_matrix =
       inplace_update ? main_active_block : workspace_matrix;
   MatrixMultiplyNormalNormal(Field{-1}, descendant_active_matrix,
                              scaled_transpose, Field{1}, accumulation_matrix);
@@ -1686,9 +1687,9 @@ void MergeChildSchurComplements(Int supernode,
   const Int child_beg = ordering.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
-  BlasMatrix<Field> lower_block = lower_factor->blocks[supernode];
-  BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
-  BlasMatrix<Field> schur_complement =
+  BlasMatrixView<Field> lower_block = lower_factor->blocks[supernode];
+  BlasMatrixView<Field> diagonal_block = diagonal_factor->blocks[supernode];
+  BlasMatrixView<Field> schur_complement =
       shared_state->schur_complements[supernode];
 
   const Int supernode_size = ordering.supernode_sizes[supernode];
@@ -1700,7 +1701,7 @@ void MergeChildSchurComplements(Int supernode,
     const Int* child_indices = lower_factor->StructureBeg(child);
     Buffer<Field>& child_schur_complement_buffer =
         shared_state->schur_complement_buffers[child];
-    BlasMatrix<Field>& child_schur_complement =
+    BlasMatrixView<Field>& child_schur_complement =
         shared_state->schur_complements[child];
     const Int child_degree = child_schur_complement.height;
 
@@ -1767,9 +1768,9 @@ void MultithreadedMergeChildSchurComplements(
   const Int child_beg = ordering.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
-  BlasMatrix<Field> lower_block = lower_factor->blocks[supernode];
-  BlasMatrix<Field> diagonal_block = diagonal_factor->blocks[supernode];
-  BlasMatrix<Field> schur_complement =
+  BlasMatrixView<Field> lower_block = lower_factor->blocks[supernode];
+  BlasMatrixView<Field> diagonal_block = diagonal_factor->blocks[supernode];
+  BlasMatrixView<Field> schur_complement =
       shared_state->schur_complements[supernode];
 
   const Int supernode_size = ordering.supernode_sizes[supernode];
@@ -1781,7 +1782,7 @@ void MultithreadedMergeChildSchurComplements(
     const Int* child_indices = lower_factor->StructureBeg(child);
     Buffer<Field>& child_schur_complement_buffer =
         shared_state->schur_complement_buffers[child];
-    BlasMatrix<Field> child_schur_complement =
+    BlasMatrixView<Field> child_schur_complement =
         shared_state->schur_complements[child];
     const Int child_degree = child_schur_complement.height;
 
@@ -1855,7 +1856,7 @@ void MultithreadedMergeChildSchurComplements(
 template <class Field>
 Int FactorDiagonalBlock(Int block_size,
                         SymmetricFactorizationType factorization_type,
-                        BlasMatrix<Field>* diagonal_block) {
+                        BlasMatrixView<Field>* diagonal_block) {
   Int num_pivots;
   if (factorization_type == kCholeskyFactorization) {
     num_pivots = LowerCholeskyFactorization(block_size, diagonal_block);
@@ -1872,7 +1873,7 @@ template <class Field>
 Int MultithreadedFactorDiagonalBlock(
     Int tile_size, Int block_size,
     SymmetricFactorizationType factorization_type,
-    BlasMatrix<Field>* diagonal_block, Buffer<Field>* buffer) {
+    BlasMatrixView<Field>* diagonal_block, Buffer<Field>* buffer) {
   Int num_pivots;
   if (factorization_type == kCholeskyFactorization) {
     num_pivots = MultithreadedLowerCholeskyFactorization(tile_size, block_size,
@@ -1889,9 +1890,10 @@ Int MultithreadedFactorDiagonalBlock(
 #endif  // ifdef _OPENMP
 
 template <class Field>
-void SolveAgainstDiagonalBlock(SymmetricFactorizationType factorization_type,
-                               const ConstBlasMatrix<Field>& triangular_matrix,
-                               BlasMatrix<Field>* lower_matrix) {
+void SolveAgainstDiagonalBlock(
+    SymmetricFactorizationType factorization_type,
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* lower_matrix) {
   if (!lower_matrix->height) {
     return;
   }
@@ -1913,14 +1915,14 @@ void SolveAgainstDiagonalBlock(SymmetricFactorizationType factorization_type,
 template <class Field>
 void MultithreadedSolveAgainstDiagonalBlock(
     Int tile_size, SymmetricFactorizationType factorization_type,
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* lower_matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* lower_matrix) {
   if (!lower_matrix->height) {
     return;
   }
 
-  const ConstBlasMatrix<Field> triangular_matrix_copy = triangular_matrix;
-  BlasMatrix<Field> lower_matrix_copy = *lower_matrix;
+  const ConstBlasMatrixView<Field> triangular_matrix_copy = triangular_matrix;
+  BlasMatrixView<Field> lower_matrix_copy = *lower_matrix;
 
   const Int height = lower_matrix->height;
   const Int width = lower_matrix->width;
@@ -1932,7 +1934,7 @@ void MultithreadedSolveAgainstDiagonalBlock(
               lower_matrix_copy)
       {
         const Int tsize = std::min(height - i, tile_size);
-        BlasMatrix<Field> lower_block =
+        BlasMatrixView<Field> lower_block =
             lower_matrix_copy.Submatrix(i, 0, tsize, width);
         RightLowerAdjointTriangularSolves(triangular_matrix_copy, &lower_block);
       }
@@ -1945,7 +1947,7 @@ void MultithreadedSolveAgainstDiagonalBlock(
           lower_matrix_copy)
       {
         const Int tsize = std::min(height - i, tile_size);
-        BlasMatrix<Field> lower_block =
+        BlasMatrixView<Field> lower_block =
             lower_matrix_copy.Submatrix(i, 0, tsize, width);
         RightDiagonalTimesLowerAdjointUnitTriangularSolves(
             triangular_matrix_copy, &lower_block);
@@ -1959,7 +1961,7 @@ void MultithreadedSolveAgainstDiagonalBlock(
               lower_matrix_copy)
       {
         const Int tsize = std::min(height - i, tile_size);
-        BlasMatrix<Field> lower_block =
+        BlasMatrixView<Field> lower_block =
             lower_matrix_copy.Submatrix(i, 0, tsize, width);
         RightDiagonalTimesLowerTransposeUnitTriangularSolves(
             triangular_matrix_copy, &lower_block);

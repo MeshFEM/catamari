@@ -103,7 +103,7 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-void LDLFactorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
+void LDLFactorization<Field>::Solve(BlasMatrixView<Field>* matrix) const {
   if (is_supernodal) {
     supernodal_factorization->Solve(matrix);
   } else {
@@ -113,7 +113,7 @@ void LDLFactorization<Field>::Solve(BlasMatrix<Field>* matrix) const {
 
 template <class Field>
 void LDLFactorization<Field>::LowerTriangularSolve(
-    BlasMatrix<Field>* matrix) const {
+    BlasMatrixView<Field>* matrix) const {
   if (is_supernodal) {
     supernodal_factorization->LowerTriangularSolve(matrix);
   } else {
@@ -122,7 +122,8 @@ void LDLFactorization<Field>::LowerTriangularSolve(
 }
 
 template <class Field>
-void LDLFactorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
+void LDLFactorization<Field>::DiagonalSolve(
+    BlasMatrixView<Field>* matrix) const {
   if (is_supernodal) {
     supernodal_factorization->DiagonalSolve(matrix);
   } else {
@@ -132,7 +133,7 @@ void LDLFactorization<Field>::DiagonalSolve(BlasMatrix<Field>* matrix) const {
 
 template <class Field>
 void LDLFactorization<Field>::LowerTransposeTriangularSolve(
-    BlasMatrix<Field>* matrix) const {
+    BlasMatrixView<Field>* matrix) const {
   if (is_supernodal) {
     supernodal_factorization->LowerTransposeTriangularSolve(matrix);
   } else {

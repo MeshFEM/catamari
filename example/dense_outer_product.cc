@@ -12,18 +12,18 @@
 #include "quotient/timer.hpp"
 #include "specify.hpp"
 
-using catamari::BlasMatrix;
+using catamari::BlasMatrixView;
 using catamari::Complex;
 using catamari::ComplexBase;
 using catamari::Conjugate;
-using catamari::ConstBlasMatrix;
+using catamari::ConstBlasMatrixView;
 using catamari::Int;
 using quotient::Buffer;
 
 namespace {
 
 template <typename Field>
-void InitializeMatrix(Int height, Int width, BlasMatrix<Field>* matrix,
+void InitializeMatrix(Int height, Int width, BlasMatrixView<Field>* matrix,
                       Buffer<Field>* buffer) {
   matrix->height = height;
   matrix->width = width;
@@ -46,7 +46,7 @@ void RunMatrixMultiplyLowerNormalNormal(Int height, Int rank) {
   quotient::Timer timer;
 
   Buffer<Field> left_buffer, right_buffer, output_buffer;
-  BlasMatrix<Field> left_matrix, right_matrix, output_matrix;
+  BlasMatrixView<Field> left_matrix, right_matrix, output_matrix;
 
   InitializeMatrix(height, rank, &left_matrix, &left_buffer);
   InitializeMatrix(rank, height, &right_matrix, &right_buffer);
@@ -74,7 +74,7 @@ void RunMultithreadedMatrixMultiplyLowerNormalNormal(Int tile_size, Int height,
   quotient::Timer timer;
 
   Buffer<Field> left_buffer, right_buffer, output_buffer;
-  BlasMatrix<Field> left_matrix, right_matrix, output_matrix;
+  BlasMatrixView<Field> left_matrix, right_matrix, output_matrix;
 
   InitializeMatrix(height, rank, &left_matrix, &left_buffer);
   InitializeMatrix(rank, height, &right_matrix, &right_buffer);

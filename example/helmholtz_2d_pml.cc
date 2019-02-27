@@ -29,103 +29,22 @@
 #include <vector>
 
 #include "catamari/apply_sparse.hpp"
+#include "catamari/blas_matrix.hpp"
 #include "catamari/ldl.hpp"
 #include "catamari/unit_reach_nested_dissection.hpp"
 #include "quotient/minimum_degree.hpp"
 #include "specify.hpp"
 
 using catamari::BlasMatrix;
+using catamari::BlasMatrixView;
 using catamari::Buffer;
 using catamari::Complex;
 using catamari::ComplexBase;
 using catamari::Conjugate;
-using catamari::ConstBlasMatrix;
+using catamari::ConstBlasMatrixView;
 using catamari::Int;
 
 namespace {
-
-// TODO(Jack Poulson): Move this into the official library.
-template <typename Field>
-struct Matrix {
-  BlasMatrix<Field> blas_matrix;
-
-  Buffer<Field> data;
-
-  Matrix() {
-    blas_matrix.height = 0;
-    blas_matrix.width = 0;
-    blas_matrix.leading_dim = 0;
-    blas_matrix.data = nullptr;
-  }
-
-  Matrix(const Matrix<Field>& matrix) {
-    const Int height = matrix.blas_matrix.height;
-    const Int width = matrix.blas_matrix.width;
-
-    data.Resize(height * width);
-    blas_matrix.height = height;
-    blas_matrix.width = width;
-    blas_matrix.leading_dim = height;
-    blas_matrix.data = data.Data();
-
-    // Copy each individual column so that the leading dimension does not
-    // impact the copy time.
-    for (Int j = 0; j < width; ++j) {
-      std::copy(&matrix(0, j), &matrix(height, j), &blas_matrix(0, j));
-    }
-  }
-
-  Matrix<Field>& operator=(const Matrix<Field>& matrix) {
-    if (this != &matrix) {
-      const Int height = matrix.blas_matrix.height;
-      const Int width = matrix.blas_matrix.width;
-
-      data.Resize(height * width);
-      blas_matrix.height = height;
-      blas_matrix.width = width;
-      blas_matrix.leading_dim = height;
-      blas_matrix.data = data.Data();
-
-      // Copy each individual column so that the leading dimension does not
-      // impact the copy time.
-      for (Int j = 0; j < width; ++j) {
-        std::copy(&matrix(0, j), &matrix(height, j), &blas_matrix(0, j));
-      }
-    }
-    return *this;
-  }
-
-  void Resize(const Int& height, const Int& width) {
-    if (height == blas_matrix.height && width == blas_matrix.width) {
-      return;
-    }
-    data.Resize(height * width);
-    blas_matrix.height = height;
-    blas_matrix.width = width;
-    blas_matrix.leading_dim = height;  // TODO(Jack Poulson): Handle 0 case.
-    blas_matrix.data = data.Data();
-  }
-
-  void Resize(const Int& height, const Int& width, const Field& value) {
-    data.Resize(height * width, value);
-    blas_matrix.height = height;
-    blas_matrix.width = width;
-    blas_matrix.leading_dim = height;  // TODO(Jack Poulson): Handle 0 case.
-    blas_matrix.data = data.Data();
-  }
-
-  Field& operator()(Int row, Int column) { return blas_matrix(row, column); }
-
-  const Field& operator()(Int row, Int column) const {
-    return blas_matrix(row, column);
-  }
-
-  Field& Entry(Int row, Int column) { return blas_matrix(row, column); }
-
-  const Field& Entry(Int row, Int column) const {
-    return blas_matrix(row, column);
-  }
-};
 
 // A point in the 2D domain (i.e., [0, 1]^2).
 template <typename Real>
@@ -459,8 +378,9 @@ class HelmholtzWithPMLQ4 {
   }
 
   // Form all of the matrix updates for a particular element.
-  void ElementBilinearForms(Int x_element, Int y_element,
-                            BlasMatrix<Complex<Real>>* element_updates) const {
+  void ElementBilinearForms(
+      Int x_element, Int y_element,
+      BlasMatrixView<Complex<Real>>* element_updates) const {
     const int quadrature_1d_order = 3;
     const int num_dimensions = 2;
     const int num_basis_functions = 4;
@@ -642,11 +562,11 @@ class HelmholtzWithPMLQ4 {
 
   Buffer<Real> quadrature_weights_;
 
-  Matrix<Real> basis_evals_;
+  BlasMatrix<Real> basis_evals_;
 
-  Matrix<Real> basis_grad_evals_;
+  BlasMatrix<Real> basis_grad_evals_;
 
-  mutable Matrix<Complex<Real>> gradient_evals_;
+  mutable BlasMatrix<Complex<Real>> gradient_evals_;
 
   mutable Buffer<Complex<Real>> scalar_evals_;
 };
@@ -660,7 +580,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
                       Int num_pml_elements, const Point<Real>& source_point,
                       const Real& source_stddev,
                       catamari::CoordinateMatrix<Complex<Real>>* matrix,
-                      Matrix<Complex<Real>>* right_hand_sides) {
+                      BlasMatrix<Complex<Real>>* right_hand_sides) {
   const Speed<Real> speed(profile);
 
   const HelmholtzWithPMLQ4<Real> discretization(num_x_elements, num_y_elements,
@@ -669,7 +589,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
 
   const Int num_element_members = 16;
   Buffer<Complex<Real>> element_update_buffer(num_element_members);
-  BlasMatrix<Complex<Real>> element_updates;
+  BlasMatrixView<Complex<Real>> element_updates;
   element_updates.height = 4;
   element_updates.width = 4;
   element_updates.leading_dim = 4;
@@ -781,7 +701,7 @@ void PrintExperiment(const Experiment& experiment) {
 // NOTE: Due to the direct accumulation of the squared norm, this algorithm is
 // unstable. But it suffices for example purposes.
 template <typename Real>
-Real EuclideanNorm(const ConstBlasMatrix<catamari::Complex<Real>>& matrix) {
+Real EuclideanNorm(const ConstBlasMatrixView<catamari::Complex<Real>>& matrix) {
   Real squared_norm{0};
   const Int height = matrix.height;
   const Int width = matrix.width;
@@ -808,7 +728,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
 
   // Construct the problem.
   timer.Start();
-  Matrix<Field> right_hand_sides;
+  BlasMatrix<Field> right_hand_sides;
   catamari::CoordinateMatrix<Field> matrix;
   HelmholtzWithPML<Real>(profile, omega, num_x_elements, num_y_elements,
                          pml_scale, pml_exponent, num_pml_elements,
@@ -817,7 +737,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   experiment.construction_seconds = timer.Stop();
   const Int num_rows = matrix.NumRows();
   const Real right_hand_side_norm =
-      EuclideanNorm(right_hand_sides.blas_matrix.ToConst());
+      EuclideanNorm(right_hand_sides.view.ToConst());
   if (print_progress) {
     std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
   }
@@ -850,9 +770,9 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   if (print_progress) {
     std::cout << "  Running solve..." << std::endl;
   }
-  Matrix<Field> solution = right_hand_sides;
+  BlasMatrix<Field> solution = right_hand_sides;
   timer.Start();
-  ldl_factorization.Solve(&solution.blas_matrix);
+  ldl_factorization.Solve(&solution.view);
   experiment.solve_seconds = timer.Stop();
 
   if (print_progress) {
@@ -866,10 +786,10 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   }
 
   // Compute the residual.
-  Matrix<Field> residual = right_hand_sides;
-  catamari::ApplySparse(Field{-1}, matrix, solution.blas_matrix.ToConst(),
-                        Field{1}, &residual.blas_matrix);
-  const Real residual_norm = EuclideanNorm(residual.blas_matrix.ToConst());
+  BlasMatrix<Field> residual = right_hand_sides;
+  catamari::ApplySparse(Field{-1}, matrix, solution.view.ToConst(), Field{1},
+                        &residual.view);
+  const Real residual_norm = EuclideanNorm(residual.view.ToConst());
   std::cout << "  || B - A X ||_F / || B ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
 

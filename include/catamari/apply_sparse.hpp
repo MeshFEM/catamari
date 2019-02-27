@@ -8,7 +8,7 @@
 #ifndef CATAMARI_APPLY_SPARSE_H_
 #define CATAMARI_APPLY_SPARSE_H_
 
-#include "catamari/blas_matrix.hpp"
+#include "catamari/blas_matrix_view.hpp"
 #include "catamari/coordinate_matrix.hpp"
 
 namespace catamari {
@@ -17,8 +17,8 @@ namespace catamari {
 template <class Field>
 void ApplySparse(const Field& alpha,
                  const CoordinateMatrix<Field>& sparse_matrix,
-                 const ConstBlasMatrix<Field>& input_matrix, const Field& beta,
-                 BlasMatrix<Field>* result);
+                 const ConstBlasMatrixView<Field>& input_matrix,
+                 const Field& beta, BlasMatrixView<Field>* result);
 
 }  // namespace catamari
 

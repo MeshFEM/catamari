@@ -16,7 +16,7 @@
 namespace catamari {
 
 template <class Field>
-void ConjugateMatrix(BlasMatrix<Field>* matrix) {
+void ConjugateMatrix(BlasMatrixView<Field>* matrix) {
   const Int height = matrix->height;
   const Int width = matrix->width;
   for (Int j = 0; j < width; ++j) {
@@ -28,7 +28,7 @@ void ConjugateMatrix(BlasMatrix<Field>* matrix) {
 
 template <class Field>
 void MatrixVectorProduct(const Field& alpha,
-                         const ConstBlasMatrix<Field>& matrix,
+                         const ConstBlasMatrixView<Field>& matrix,
                          const Field* input_vector, Field* result) {
   const Int height = matrix.height;
   const Int width = matrix.width;
@@ -42,7 +42,7 @@ void MatrixVectorProduct(const Field& alpha,
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void MatrixVectorProduct(const float& alpha,
-                                const ConstBlasMatrix<float>& matrix,
+                                const ConstBlasMatrixView<float>& matrix,
                                 const float* input_vector, float* result) {
   const char trans = 'N';
   const BlasInt height_blas = matrix.height;
@@ -57,7 +57,7 @@ inline void MatrixVectorProduct(const float& alpha,
 
 template <>
 inline void MatrixVectorProduct(const double& alpha,
-                                const ConstBlasMatrix<double>& matrix,
+                                const ConstBlasMatrixView<double>& matrix,
                                 const double* input_vector, double* result) {
   const char trans = 'N';
   const BlasInt height_blas = matrix.height;
@@ -71,10 +71,10 @@ inline void MatrixVectorProduct(const double& alpha,
 }
 
 template <>
-inline void MatrixVectorProduct(const Complex<float>& alpha,
-                                const ConstBlasMatrix<Complex<float>>& matrix,
-                                const Complex<float>* input_vector,
-                                Complex<float>* result) {
+inline void MatrixVectorProduct(
+    const Complex<float>& alpha,
+    const ConstBlasMatrixView<Complex<float>>& matrix,
+    const Complex<float>* input_vector, Complex<float>* result) {
   const char trans = 'N';
   const BlasInt height_blas = matrix.height;
   const BlasInt width_blas = matrix.width;
@@ -87,10 +87,10 @@ inline void MatrixVectorProduct(const Complex<float>& alpha,
 }
 
 template <>
-inline void MatrixVectorProduct(const Complex<double>& alpha,
-                                const ConstBlasMatrix<Complex<double>>& matrix,
-                                const Complex<double>* input_vector,
-                                Complex<double>* result) {
+inline void MatrixVectorProduct(
+    const Complex<double>& alpha,
+    const ConstBlasMatrixView<Complex<double>>& matrix,
+    const Complex<double>* input_vector, Complex<double>* result) {
   const char trans = 'N';
   const BlasInt height_blas = matrix.height;
   const BlasInt width_blas = matrix.width;
@@ -105,7 +105,7 @@ inline void MatrixVectorProduct(const Complex<double>& alpha,
 
 template <class Field>
 void ConjugateMatrixVectorProduct(const Field& alpha,
-                                  const ConstBlasMatrix<Field>& matrix,
+                                  const ConstBlasMatrixView<Field>& matrix,
                                   const Field* input_vector, Field* result) {
   const Int height = matrix.height;
   const Int width = matrix.width;
@@ -118,18 +118,16 @@ void ConjugateMatrixVectorProduct(const Field& alpha,
 
 #ifdef CATAMARI_HAVE_BLAS
 template <>
-inline void ConjugateMatrixVectorProduct(const float& alpha,
-                                         const ConstBlasMatrix<float>& matrix,
-                                         const float* input_vector,
-                                         float* result) {
+inline void ConjugateMatrixVectorProduct(
+    const float& alpha, const ConstBlasMatrixView<float>& matrix,
+    const float* input_vector, float* result) {
   MatrixVectorProduct(alpha, matrix, input_vector, result);
 }
 
 template <>
-inline void ConjugateMatrixVectorProduct(const double& alpha,
-                                         const ConstBlasMatrix<double>& matrix,
-                                         const double* input_vector,
-                                         double* result) {
+inline void ConjugateMatrixVectorProduct(
+    const double& alpha, const ConstBlasMatrixView<double>& matrix,
+    const double* input_vector, double* result) {
   MatrixVectorProduct(alpha, matrix, input_vector, result);
 }
 
@@ -141,7 +139,8 @@ inline void ConjugateMatrixVectorProduct(const double& alpha,
 
 template <>
 inline void ConjugateMatrixVectorProduct(
-    const Complex<float>& alpha, const ConstBlasMatrix<Complex<float>>& matrix,
+    const Complex<float>& alpha,
+    const ConstBlasMatrixView<Complex<float>>& matrix,
     const Complex<float>* input_vector, Complex<float>* result) {
   // Make a conjugated copy of the input vector.
   Buffer<Complex<float>> conjugated_input(matrix.width);
@@ -149,7 +148,7 @@ inline void ConjugateMatrixVectorProduct(
     conjugated_input[i] = Conjugate(input_vector[i]);
   }
 
-  BlasMatrix<Complex<float>> result_matrix;
+  BlasMatrixView<Complex<float>> result_matrix;
   result_matrix.height = matrix.height;
   result_matrix.width = 1;
   result_matrix.leading_dim = matrix.height;
@@ -164,7 +163,7 @@ inline void ConjugateMatrixVectorProduct(
 template <>
 inline void ConjugateMatrixVectorProduct(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& matrix,
+    const ConstBlasMatrixView<Complex<double>>& matrix,
     const Complex<double>* input_vector, Complex<double>* result) {
   // Make a conjugated copy of the input vector.
   Buffer<Complex<double>> conjugated_input(matrix.width);
@@ -172,7 +171,7 @@ inline void ConjugateMatrixVectorProduct(
     conjugated_input[i] = Conjugate(input_vector[i]);
   }
 
-  BlasMatrix<Complex<double>> result_matrix;
+  BlasMatrixView<Complex<double>> result_matrix;
   result_matrix.height = matrix.height;
   result_matrix.width = 1;
   result_matrix.leading_dim = matrix.height;
@@ -187,7 +186,7 @@ inline void ConjugateMatrixVectorProduct(
 
 template <class Field>
 void TransposeMatrixVectorProduct(const Field& alpha,
-                                  const ConstBlasMatrix<Field>& matrix,
+                                  const ConstBlasMatrixView<Field>& matrix,
                                   const Field* input_vector, Field* result) {
   const Int height = matrix.height;
   const Int width = matrix.width;
@@ -200,10 +199,9 @@ void TransposeMatrixVectorProduct(const Field& alpha,
 
 #ifdef CATAMARI_HAVE_BLAS
 template <>
-inline void TransposeMatrixVectorProduct(const float& alpha,
-                                         const ConstBlasMatrix<float>& matrix,
-                                         const float* input_vector,
-                                         float* result) {
+inline void TransposeMatrixVectorProduct(
+    const float& alpha, const ConstBlasMatrixView<float>& matrix,
+    const float* input_vector, float* result) {
   const char trans = 'T';
   const BlasInt height_blas = matrix.height;
   const BlasInt width_blas = matrix.width;
@@ -216,10 +214,9 @@ inline void TransposeMatrixVectorProduct(const float& alpha,
 }
 
 template <>
-inline void TransposeMatrixVectorProduct(const double& alpha,
-                                         const ConstBlasMatrix<double>& matrix,
-                                         const double* input_vector,
-                                         double* result) {
+inline void TransposeMatrixVectorProduct(
+    const double& alpha, const ConstBlasMatrixView<double>& matrix,
+    const double* input_vector, double* result) {
   const char trans = 'T';
   const BlasInt height_blas = matrix.height;
   const BlasInt width_blas = matrix.width;
@@ -233,7 +230,8 @@ inline void TransposeMatrixVectorProduct(const double& alpha,
 
 template <>
 inline void TransposeMatrixVectorProduct(
-    const Complex<float>& alpha, const ConstBlasMatrix<Complex<float>>& matrix,
+    const Complex<float>& alpha,
+    const ConstBlasMatrixView<Complex<float>>& matrix,
     const Complex<float>* input_vector, Complex<float>* result) {
   const char trans = 'T';
   const BlasInt height_blas = matrix.height;
@@ -249,7 +247,7 @@ inline void TransposeMatrixVectorProduct(
 template <>
 inline void TransposeMatrixVectorProduct(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& matrix,
+    const ConstBlasMatrixView<Complex<double>>& matrix,
     const Complex<double>* input_vector, Complex<double>* result) {
   const char trans = 'T';
   const BlasInt height_blas = matrix.height;
@@ -264,8 +262,8 @@ inline void TransposeMatrixVectorProduct(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
-void TriangularSolveLeftLower(const ConstBlasMatrix<Field>& triangular_matrix,
-                              Field* vector) {
+void TriangularSolveLeftLower(
+    const ConstBlasMatrixView<Field>& triangular_matrix, Field* vector) {
   for (Int j = 0; j < triangular_matrix.height; ++j) {
     const Field* triang_column = triangular_matrix.Pointer(0, j);
     vector[j] /= triang_column[j];
@@ -279,7 +277,7 @@ void TriangularSolveLeftLower(const ConstBlasMatrix<Field>& triangular_matrix,
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void TriangularSolveLeftLower(
-    const ConstBlasMatrix<float>& triangular_matrix, float* vector) {
+    const ConstBlasMatrixView<float>& triangular_matrix, float* vector) {
   const char uplo = 'L';
   const char trans = 'N';
   const char diag = 'N';
@@ -293,7 +291,7 @@ inline void TriangularSolveLeftLower(
 
 template <>
 inline void TriangularSolveLeftLower(
-    const ConstBlasMatrix<double>& triangular_matrix, double* vector) {
+    const ConstBlasMatrixView<double>& triangular_matrix, double* vector) {
   const char uplo = 'L';
   const char trans = 'N';
   const char diag = 'N';
@@ -307,7 +305,7 @@ inline void TriangularSolveLeftLower(
 
 template <>
 inline void TriangularSolveLeftLower(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
     Complex<float>* vector) {
   const char uplo = 'L';
   const char trans = 'N';
@@ -322,7 +320,7 @@ inline void TriangularSolveLeftLower(
 
 template <>
 inline void TriangularSolveLeftLower(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
     Complex<double>* vector) {
   const char uplo = 'L';
   const char trans = 'N';
@@ -338,7 +336,7 @@ inline void TriangularSolveLeftLower(
 
 template <class Field>
 void TriangularSolveLeftLowerUnit(
-    const ConstBlasMatrix<Field>& triangular_matrix, Field* vector) {
+    const ConstBlasMatrixView<Field>& triangular_matrix, Field* vector) {
   for (Int j = 0; j < triangular_matrix.height; ++j) {
     const Field* triang_column = triangular_matrix.Pointer(0, j);
     const Field eta = vector[j];
@@ -351,7 +349,7 @@ void TriangularSolveLeftLowerUnit(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void TriangularSolveLeftLowerUnit(
-    const ConstBlasMatrix<float>& triangular_matrix, float* vector) {
+    const ConstBlasMatrixView<float>& triangular_matrix, float* vector) {
   const char uplo = 'L';
   const char trans = 'N';
   const char diag = 'U';
@@ -365,7 +363,7 @@ inline void TriangularSolveLeftLowerUnit(
 
 template <>
 inline void TriangularSolveLeftLowerUnit(
-    const ConstBlasMatrix<double>& triangular_matrix, double* vector) {
+    const ConstBlasMatrixView<double>& triangular_matrix, double* vector) {
   const char uplo = 'L';
   const char trans = 'N';
   const char diag = 'U';
@@ -379,7 +377,7 @@ inline void TriangularSolveLeftLowerUnit(
 
 template <>
 inline void TriangularSolveLeftLowerUnit(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
     Complex<float>* vector) {
   const char uplo = 'L';
   const char trans = 'N';
@@ -394,7 +392,7 @@ inline void TriangularSolveLeftLowerUnit(
 
 template <>
 inline void TriangularSolveLeftLowerUnit(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
     Complex<double>* vector) {
   const char uplo = 'L';
   const char trans = 'N';
@@ -410,7 +408,7 @@ inline void TriangularSolveLeftLowerUnit(
 
 template <class Field>
 void TriangularSolveLeftLowerAdjoint(
-    const ConstBlasMatrix<Field>& triangular_matrix, Field* vector) {
+    const ConstBlasMatrixView<Field>& triangular_matrix, Field* vector) {
   for (Int j = triangular_matrix.height - 1; j >= 0; --j) {
     const Field* triang_column = triangular_matrix.Pointer(0, j);
     Field& eta = vector[j];
@@ -424,7 +422,7 @@ void TriangularSolveLeftLowerAdjoint(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void TriangularSolveLeftLowerAdjoint(
-    const ConstBlasMatrix<float>& triangular_matrix, float* vector) {
+    const ConstBlasMatrixView<float>& triangular_matrix, float* vector) {
   const char uplo = 'L';
   const char trans = 'T';
   const char diag = 'N';
@@ -438,7 +436,7 @@ inline void TriangularSolveLeftLowerAdjoint(
 
 template <>
 inline void TriangularSolveLeftLowerAdjoint(
-    const ConstBlasMatrix<double>& triangular_matrix, double* vector) {
+    const ConstBlasMatrixView<double>& triangular_matrix, double* vector) {
   const char uplo = 'L';
   const char trans = 'T';
   const char diag = 'N';
@@ -452,7 +450,7 @@ inline void TriangularSolveLeftLowerAdjoint(
 
 template <>
 inline void TriangularSolveLeftLowerAdjoint(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
     Complex<float>* vector) {
   const char uplo = 'L';
   const char trans = 'C';
@@ -467,7 +465,7 @@ inline void TriangularSolveLeftLowerAdjoint(
 
 template <>
 inline void TriangularSolveLeftLowerAdjoint(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
     Complex<double>* vector) {
   const char uplo = 'L';
   const char trans = 'C';
@@ -483,7 +481,7 @@ inline void TriangularSolveLeftLowerAdjoint(
 
 template <class Field>
 void TriangularSolveLeftLowerAdjointUnit(
-    const ConstBlasMatrix<Field>& triangular_matrix, Field* vector) {
+    const ConstBlasMatrixView<Field>& triangular_matrix, Field* vector) {
   for (Int j = triangular_matrix.height - 1; j >= 0; --j) {
     const Field* triang_column = triangular_matrix.Pointer(0, j);
     Field& eta = vector[j];
@@ -496,7 +494,7 @@ void TriangularSolveLeftLowerAdjointUnit(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void TriangularSolveLeftLowerAdjointUnit(
-    const ConstBlasMatrix<float>& triangular_matrix, float* vector) {
+    const ConstBlasMatrixView<float>& triangular_matrix, float* vector) {
   const char uplo = 'L';
   const char trans = 'T';
   const char diag = 'U';
@@ -510,7 +508,7 @@ inline void TriangularSolveLeftLowerAdjointUnit(
 
 template <>
 inline void TriangularSolveLeftLowerAdjointUnit(
-    const ConstBlasMatrix<double>& triangular_matrix, double* vector) {
+    const ConstBlasMatrixView<double>& triangular_matrix, double* vector) {
   const char uplo = 'L';
   const char trans = 'T';
   const char diag = 'U';
@@ -524,7 +522,7 @@ inline void TriangularSolveLeftLowerAdjointUnit(
 
 template <>
 inline void TriangularSolveLeftLowerAdjointUnit(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
     Complex<float>* vector) {
   const char uplo = 'L';
   const char trans = 'C';
@@ -539,7 +537,7 @@ inline void TriangularSolveLeftLowerAdjointUnit(
 
 template <>
 inline void TriangularSolveLeftLowerAdjointUnit(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
     Complex<double>* vector) {
   const char uplo = 'L';
   const char trans = 'C';
@@ -555,10 +553,10 @@ inline void TriangularSolveLeftLowerAdjointUnit(
 
 template <class Field>
 void MatrixMultiplyNormalNormal(const Field& alpha,
-                                const ConstBlasMatrix<Field>& left_matrix,
-                                const ConstBlasMatrix<Field>& right_matrix,
+                                const ConstBlasMatrixView<Field>& left_matrix,
+                                const ConstBlasMatrixView<Field>& right_matrix,
                                 const Field& beta,
-                                BlasMatrix<Field>* output_matrix) {
+                                BlasMatrixView<Field>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.width == output_matrix->width,
@@ -582,9 +580,9 @@ void MatrixMultiplyNormalNormal(const Field& alpha,
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void MatrixMultiplyNormalNormal(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.width == output_matrix->width,
@@ -608,9 +606,9 @@ inline void MatrixMultiplyNormalNormal(
 
 template <>
 inline void MatrixMultiplyNormalNormal(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.width == output_matrix->width,
@@ -635,9 +633,9 @@ inline void MatrixMultiplyNormalNormal(
 template <>
 inline void MatrixMultiplyNormalNormal(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.width == output_matrix->width,
@@ -662,9 +660,10 @@ inline void MatrixMultiplyNormalNormal(
 template <>
 inline void MatrixMultiplyNormalNormal(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.width == output_matrix->width,
@@ -694,11 +693,10 @@ inline void MatrixMultiplyNormalNormal(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
-void MatrixMultiplyNormalTranspose(const Field& alpha,
-                                   const ConstBlasMatrix<Field>& left_matrix,
-                                   const ConstBlasMatrix<Field>& right_matrix,
-                                   const Field& beta,
-                                   BlasMatrix<Field>* output_matrix) {
+void MatrixMultiplyNormalTranspose(
+    const Field& alpha, const ConstBlasMatrixView<Field>& left_matrix,
+    const ConstBlasMatrixView<Field>& right_matrix, const Field& beta,
+    BlasMatrixView<Field>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
@@ -722,9 +720,9 @@ void MatrixMultiplyNormalTranspose(const Field& alpha,
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void MatrixMultiplyNormalTranspose(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
@@ -748,9 +746,9 @@ inline void MatrixMultiplyNormalTranspose(
 
 template <>
 inline void MatrixMultiplyNormalTranspose(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
@@ -775,9 +773,9 @@ inline void MatrixMultiplyNormalTranspose(
 template <>
 inline void MatrixMultiplyNormalTranspose(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
@@ -802,9 +800,10 @@ inline void MatrixMultiplyNormalTranspose(
 template <>
 inline void MatrixMultiplyNormalTranspose(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
@@ -829,10 +828,10 @@ inline void MatrixMultiplyNormalTranspose(
 
 template <class Field>
 void MatrixMultiplyNormalAdjoint(const Field& alpha,
-                                 const ConstBlasMatrix<Field>& left_matrix,
-                                 const ConstBlasMatrix<Field>& right_matrix,
+                                 const ConstBlasMatrixView<Field>& left_matrix,
+                                 const ConstBlasMatrixView<Field>& right_matrix,
                                  const Field& beta,
-                                 BlasMatrix<Field>* output_matrix) {
+                                 BlasMatrixView<Field>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
@@ -857,18 +856,18 @@ void MatrixMultiplyNormalAdjoint(const Field& alpha,
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void MatrixMultiplyNormalAdjoint(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   MatrixMultiplyNormalTranspose(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 }
 
 template <>
 inline void MatrixMultiplyNormalAdjoint(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   MatrixMultiplyNormalTranspose(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 }
@@ -876,9 +875,9 @@ inline void MatrixMultiplyNormalAdjoint(
 template <>
 inline void MatrixMultiplyNormalAdjoint(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
@@ -903,9 +902,10 @@ inline void MatrixMultiplyNormalAdjoint(
 template <>
 inline void MatrixMultiplyNormalAdjoint(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   CATAMARI_ASSERT(left_matrix.height == output_matrix->height,
                   "Output height was incompatible");
   CATAMARI_ASSERT(right_matrix.height == output_matrix->width,
@@ -929,11 +929,10 @@ inline void MatrixMultiplyNormalAdjoint(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
-void MatrixMultiplyTransposeNormal(const Field& alpha,
-                                   const ConstBlasMatrix<Field>& left_matrix,
-                                   const ConstBlasMatrix<Field>& right_matrix,
-                                   const Field& beta,
-                                   BlasMatrix<Field>* output_matrix) {
+void MatrixMultiplyTransposeNormal(
+    const Field& alpha, const ConstBlasMatrixView<Field>& left_matrix,
+    const ConstBlasMatrixView<Field>& right_matrix, const Field& beta,
+    BlasMatrixView<Field>* output_matrix) {
   const Int output_height = output_matrix->height;
   const Int output_width = output_matrix->width;
   const Int contraction_size = left_matrix.height;
@@ -951,9 +950,9 @@ void MatrixMultiplyTransposeNormal(const Field& alpha,
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void MatrixMultiplyTransposeNormal(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   const char trans_left = 'T';
   const char trans_right = 'N';
   const BlasInt output_height_blas = output_matrix->height;
@@ -971,9 +970,9 @@ inline void MatrixMultiplyTransposeNormal(
 
 template <>
 inline void MatrixMultiplyTransposeNormal(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   const char trans_left = 'T';
   const char trans_right = 'N';
   const BlasInt output_height_blas = output_matrix->height;
@@ -992,9 +991,9 @@ inline void MatrixMultiplyTransposeNormal(
 template <>
 inline void MatrixMultiplyTransposeNormal(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   const char trans_left = 'T';
   const char trans_right = 'N';
   const BlasInt output_height_blas = output_matrix->height;
@@ -1013,9 +1012,10 @@ inline void MatrixMultiplyTransposeNormal(
 template <>
 inline void MatrixMultiplyTransposeNormal(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   const char trans_left = 'T';
   const char trans_right = 'N';
   const BlasInt output_height_blas = output_matrix->height;
@@ -1034,10 +1034,10 @@ inline void MatrixMultiplyTransposeNormal(
 
 template <class Field>
 void MatrixMultiplyAdjointNormal(const Field& alpha,
-                                 const ConstBlasMatrix<Field>& left_matrix,
-                                 const ConstBlasMatrix<Field>& right_matrix,
+                                 const ConstBlasMatrixView<Field>& left_matrix,
+                                 const ConstBlasMatrixView<Field>& right_matrix,
                                  const Field& beta,
-                                 BlasMatrix<Field>* output_matrix) {
+                                 BlasMatrixView<Field>* output_matrix) {
   const Int output_height = output_matrix->height;
   const Int output_width = output_matrix->width;
   const Int contraction_size = left_matrix.height;
@@ -1056,18 +1056,18 @@ void MatrixMultiplyAdjointNormal(const Field& alpha,
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void MatrixMultiplyAdjointNormal(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   MatrixMultiplyTransposeNormal(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 }
 
 template <>
 inline void MatrixMultiplyAdjointNormal(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   MatrixMultiplyTransposeNormal(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 }
@@ -1075,9 +1075,9 @@ inline void MatrixMultiplyAdjointNormal(
 template <>
 inline void MatrixMultiplyAdjointNormal(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   const char trans_left = 'C';
   const char trans_right = 'N';
   const BlasInt output_height_blas = output_matrix->height;
@@ -1096,9 +1096,10 @@ inline void MatrixMultiplyAdjointNormal(
 template <>
 inline void MatrixMultiplyAdjointNormal(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   const char trans_left = 'C';
   const char trans_right = 'N';
   const BlasInt output_height_blas = output_matrix->height;
@@ -1116,10 +1117,10 @@ inline void MatrixMultiplyAdjointNormal(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
-void LowerNormalHermitianOuterProduct(const ComplexBase<Field>& alpha,
-                                      const ConstBlasMatrix<Field>& left_matrix,
-                                      const ComplexBase<Field>& beta,
-                                      BlasMatrix<Field>* output_matrix) {
+void LowerNormalHermitianOuterProduct(
+    const ComplexBase<Field>& alpha,
+    const ConstBlasMatrixView<Field>& left_matrix,
+    const ComplexBase<Field>& beta, BlasMatrixView<Field>* output_matrix) {
   const Int output_height = output_matrix->height;
   const Int contraction_size = left_matrix.width;
   for (Int j = 0; j < output_height; ++j) {
@@ -1137,8 +1138,8 @@ void LowerNormalHermitianOuterProduct(const ComplexBase<Field>& alpha,
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void LowerNormalHermitianOuterProduct(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const float& beta, BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const float& beta, BlasMatrixView<float>* output_matrix) {
   const char uplo = 'L';
   const char trans = 'N';
   const BlasInt height_blas = output_matrix->height;
@@ -1152,8 +1153,8 @@ inline void LowerNormalHermitianOuterProduct(
 
 template <>
 inline void LowerNormalHermitianOuterProduct(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const double& beta, BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const double& beta, BlasMatrixView<double>* output_matrix) {
   const char uplo = 'L';
   const char trans = 'N';
   const BlasInt height_blas = output_matrix->height;
@@ -1167,8 +1168,8 @@ inline void LowerNormalHermitianOuterProduct(
 
 template <>
 inline void LowerNormalHermitianOuterProduct(
-    const float& alpha, const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const float& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const float& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   const char uplo = 'L';
   const char trans = 'N';
   const BlasInt height_blas = output_matrix->height;
@@ -1182,8 +1183,9 @@ inline void LowerNormalHermitianOuterProduct(
 
 template <>
 inline void LowerNormalHermitianOuterProduct(
-    const double& alpha, const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const double& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const double& alpha,
+    const ConstBlasMatrixView<Complex<double>>& left_matrix, const double& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   const char uplo = 'L';
   const char trans = 'N';
   const BlasInt height_blas = output_matrix->height;
@@ -1197,11 +1199,10 @@ inline void LowerNormalHermitianOuterProduct(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
-void MatrixMultiplyLowerNormalNormal(const Field& alpha,
-                                     const ConstBlasMatrix<Field>& left_matrix,
-                                     const ConstBlasMatrix<Field>& right_matrix,
-                                     const Field& beta,
-                                     BlasMatrix<Field>* output_matrix) {
+void MatrixMultiplyLowerNormalNormal(
+    const Field& alpha, const ConstBlasMatrixView<Field>& left_matrix,
+    const ConstBlasMatrixView<Field>& right_matrix, const Field& beta,
+    BlasMatrixView<Field>* output_matrix) {
   const Int output_height = output_matrix->height;
   const Int contraction_size = left_matrix.width;
   for (Int j = 0; j < output_height; ++j) {
@@ -1218,9 +1219,9 @@ void MatrixMultiplyLowerNormalNormal(const Field& alpha,
 #ifdef CATAMARI_USE_GEMMT
 template <>
 inline void MatrixMultiplyLowerNormalNormal(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'N';
   const char trans_right = 'N';
@@ -1238,9 +1239,9 @@ inline void MatrixMultiplyLowerNormalNormal(
 
 template <>
 inline void MatrixMultiplyLowerNormalNormal(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'N';
   const char trans_right = 'N';
@@ -1259,9 +1260,9 @@ inline void MatrixMultiplyLowerNormalNormal(
 template <>
 inline void MatrixMultiplyLowerNormalNormal(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'N';
   const char trans_right = 'N';
@@ -1280,9 +1281,10 @@ inline void MatrixMultiplyLowerNormalNormal(
 template <>
 inline void MatrixMultiplyLowerNormalNormal(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'N';
   const char trans_right = 'N';
@@ -1300,9 +1302,9 @@ inline void MatrixMultiplyLowerNormalNormal(
 #elif defined(CATAMARI_HAVE_BLAS)
 template <>
 inline void MatrixMultiplyLowerNormalNormal(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   MatrixMultiplyNormalNormal(alpha, left_matrix, right_matrix, beta,
                              output_matrix);
 
@@ -1317,9 +1319,9 @@ inline void MatrixMultiplyLowerNormalNormal(
 
 template <>
 inline void MatrixMultiplyLowerNormalNormal(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   MatrixMultiplyNormalNormal(alpha, left_matrix, right_matrix, beta,
                              output_matrix);
 
@@ -1335,9 +1337,9 @@ inline void MatrixMultiplyLowerNormalNormal(
 template <>
 inline void MatrixMultiplyLowerNormalNormal(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   MatrixMultiplyNormalNormal(alpha, left_matrix, right_matrix, beta,
                              output_matrix);
 
@@ -1353,9 +1355,10 @@ inline void MatrixMultiplyLowerNormalNormal(
 template <>
 inline void MatrixMultiplyLowerNormalNormal(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   MatrixMultiplyNormalNormal(alpha, left_matrix, right_matrix, beta,
                              output_matrix);
 
@@ -1371,9 +1374,9 @@ inline void MatrixMultiplyLowerNormalNormal(
 
 template <class Field>
 void MatrixMultiplyLowerNormalTranspose(
-    const Field& alpha, const ConstBlasMatrix<Field>& left_matrix,
-    const ConstBlasMatrix<Field>& right_matrix, const Field& beta,
-    BlasMatrix<Field>* output_matrix) {
+    const Field& alpha, const ConstBlasMatrixView<Field>& left_matrix,
+    const ConstBlasMatrixView<Field>& right_matrix, const Field& beta,
+    BlasMatrixView<Field>* output_matrix) {
   const Int output_height = output_matrix->height;
   const Int contraction_size = left_matrix.width;
   for (Int j = 0; j < output_height; ++j) {
@@ -1390,9 +1393,9 @@ void MatrixMultiplyLowerNormalTranspose(
 #ifdef CATAMARI_USE_GEMMT
 template <>
 inline void MatrixMultiplyLowerNormalTranspose(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'N';
   const char trans_right = 'T';
@@ -1410,9 +1413,9 @@ inline void MatrixMultiplyLowerNormalTranspose(
 
 template <>
 inline void MatrixMultiplyLowerNormalTranspose(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'N';
   const char trans_right = 'T';
@@ -1431,9 +1434,9 @@ inline void MatrixMultiplyLowerNormalTranspose(
 template <>
 inline void MatrixMultiplyLowerNormalTranspose(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'N';
   const char trans_right = 'T';
@@ -1452,9 +1455,10 @@ inline void MatrixMultiplyLowerNormalTranspose(
 template <>
 inline void MatrixMultiplyLowerNormalTranspose(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'N';
   const char trans_right = 'T';
@@ -1472,9 +1476,9 @@ inline void MatrixMultiplyLowerNormalTranspose(
 #elif defined(CATAMARI_HAVE_BLAS)
 template <>
 inline void MatrixMultiplyLowerNormalTranspose(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   MatrixMultiplyNormalTranspose(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 
@@ -1489,9 +1493,9 @@ inline void MatrixMultiplyLowerNormalTranspose(
 
 template <>
 inline void MatrixMultiplyLowerNormalTranspose(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   MatrixMultiplyNormalTranspose(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 
@@ -1507,9 +1511,9 @@ inline void MatrixMultiplyLowerNormalTranspose(
 template <>
 inline void MatrixMultiplyLowerNormalTranspose(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   MatrixMultiplyNormalTranspose(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 
@@ -1525,9 +1529,10 @@ inline void MatrixMultiplyLowerNormalTranspose(
 template <>
 inline void MatrixMultiplyLowerNormalTranspose(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   MatrixMultiplyNormalTranspose(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 
@@ -1543,9 +1548,9 @@ inline void MatrixMultiplyLowerNormalTranspose(
 
 template <class Field>
 void MatrixMultiplyLowerTransposeNormal(
-    const Field& alpha, const ConstBlasMatrix<Field>& left_matrix,
-    const ConstBlasMatrix<Field>& right_matrix, const Field& beta,
-    BlasMatrix<Field>* output_matrix) {
+    const Field& alpha, const ConstBlasMatrixView<Field>& left_matrix,
+    const ConstBlasMatrixView<Field>& right_matrix, const Field& beta,
+    BlasMatrixView<Field>* output_matrix) {
   const Int output_height = output_matrix->height;
   const Int contraction_size = left_matrix.height;
   for (Int j = 0; j < output_height; ++j) {
@@ -1562,9 +1567,9 @@ void MatrixMultiplyLowerTransposeNormal(
 #ifdef CATAMARI_USE_GEMMT
 template <>
 inline void MatrixMultiplyLowerTransposeNormal(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'T';
   const char trans_right = 'N';
@@ -1582,9 +1587,9 @@ inline void MatrixMultiplyLowerTransposeNormal(
 
 template <>
 inline void MatrixMultiplyLowerTransposeNormal(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'T';
   const char trans_right = 'N';
@@ -1603,9 +1608,9 @@ inline void MatrixMultiplyLowerTransposeNormal(
 template <>
 inline void MatrixMultiplyLowerTransposeNormal(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'T';
   const char trans_right = 'N';
@@ -1624,9 +1629,10 @@ inline void MatrixMultiplyLowerTransposeNormal(
 template <>
 inline void MatrixMultiplyLowerTransposeNormal(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   const char uplo = 'L';
   const char trans_left = 'T';
   const char trans_right = 'N';
@@ -1644,9 +1650,9 @@ inline void MatrixMultiplyLowerTransposeNormal(
 #elif defined(CATAMARI_HAVE_BLAS)
 template <>
 inline void MatrixMultiplyLowerTransposeNormal(
-    const float& alpha, const ConstBlasMatrix<float>& left_matrix,
-    const ConstBlasMatrix<float>& right_matrix, const float& beta,
-    BlasMatrix<float>* output_matrix) {
+    const float& alpha, const ConstBlasMatrixView<float>& left_matrix,
+    const ConstBlasMatrixView<float>& right_matrix, const float& beta,
+    BlasMatrixView<float>* output_matrix) {
   MatrixMultiplyTransposeNormal(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 
@@ -1661,9 +1667,9 @@ inline void MatrixMultiplyLowerTransposeNormal(
 
 template <>
 inline void MatrixMultiplyLowerTransposeNormal(
-    const double& alpha, const ConstBlasMatrix<double>& left_matrix,
-    const ConstBlasMatrix<double>& right_matrix, const double& beta,
-    BlasMatrix<double>* output_matrix) {
+    const double& alpha, const ConstBlasMatrixView<double>& left_matrix,
+    const ConstBlasMatrixView<double>& right_matrix, const double& beta,
+    BlasMatrixView<double>* output_matrix) {
   MatrixMultiplyTransposeNormal(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 
@@ -1679,9 +1685,9 @@ inline void MatrixMultiplyLowerTransposeNormal(
 template <>
 inline void MatrixMultiplyLowerTransposeNormal(
     const Complex<float>& alpha,
-    const ConstBlasMatrix<Complex<float>>& left_matrix,
-    const ConstBlasMatrix<Complex<float>>& right_matrix,
-    const Complex<float>& beta, BlasMatrix<Complex<float>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<float>>& left_matrix,
+    const ConstBlasMatrixView<Complex<float>>& right_matrix,
+    const Complex<float>& beta, BlasMatrixView<Complex<float>>* output_matrix) {
   MatrixMultiplyTransposeNormal(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 
@@ -1697,9 +1703,10 @@ inline void MatrixMultiplyLowerTransposeNormal(
 template <>
 inline void MatrixMultiplyLowerTransposeNormal(
     const Complex<double>& alpha,
-    const ConstBlasMatrix<Complex<double>>& left_matrix,
-    const ConstBlasMatrix<Complex<double>>& right_matrix,
-    const Complex<double>& beta, BlasMatrix<Complex<double>>* output_matrix) {
+    const ConstBlasMatrixView<Complex<double>>& left_matrix,
+    const ConstBlasMatrixView<Complex<double>>& right_matrix,
+    const Complex<double>& beta,
+    BlasMatrixView<Complex<double>>* output_matrix) {
   MatrixMultiplyTransposeNormal(alpha, left_matrix, right_matrix, beta,
                                 output_matrix);
 
@@ -1714,8 +1721,9 @@ inline void MatrixMultiplyLowerTransposeNormal(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
-void LeftLowerTriangularSolves(const ConstBlasMatrix<Field>& triangular_matrix,
-                               BlasMatrix<Field>* matrix) {
+void LeftLowerTriangularSolves(
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1737,8 +1745,8 @@ void LeftLowerTriangularSolves(const ConstBlasMatrix<Field>& triangular_matrix,
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void LeftLowerTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1760,8 +1768,8 @@ inline void LeftLowerTriangularSolves(
 
 template <>
 inline void LeftLowerTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1783,8 +1791,8 @@ inline void LeftLowerTriangularSolves(
 
 template <>
 inline void LeftLowerTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1806,8 +1814,8 @@ inline void LeftLowerTriangularSolves(
 
 template <>
 inline void LeftLowerTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1830,8 +1838,8 @@ inline void LeftLowerTriangularSolves(
 
 template <class Field>
 void LeftLowerUnitTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1852,8 +1860,8 @@ void LeftLowerUnitTriangularSolves(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void LeftLowerUnitTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1875,8 +1883,8 @@ inline void LeftLowerUnitTriangularSolves(
 
 template <>
 inline void LeftLowerUnitTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1898,8 +1906,8 @@ inline void LeftLowerUnitTriangularSolves(
 
 template <>
 inline void LeftLowerUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1921,8 +1929,8 @@ inline void LeftLowerUnitTriangularSolves(
 
 template <>
 inline void LeftLowerUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1945,8 +1953,8 @@ inline void LeftLowerUnitTriangularSolves(
 
 template <class Field>
 void LeftLowerAdjointTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1966,8 +1974,8 @@ void LeftLowerAdjointTriangularSolves(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void LeftLowerAdjointTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -1989,8 +1997,8 @@ inline void LeftLowerAdjointTriangularSolves(
 
 template <>
 inline void LeftLowerAdjointTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2012,8 +2020,8 @@ inline void LeftLowerAdjointTriangularSolves(
 
 template <>
 inline void LeftLowerAdjointTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2035,8 +2043,8 @@ inline void LeftLowerAdjointTriangularSolves(
 
 template <>
 inline void LeftLowerAdjointTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2059,8 +2067,8 @@ inline void LeftLowerAdjointTriangularSolves(
 
 template <class Field>
 void LeftLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2079,8 +2087,8 @@ void LeftLowerAdjointUnitTriangularSolves(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void LeftLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2102,8 +2110,8 @@ inline void LeftLowerAdjointUnitTriangularSolves(
 
 template <>
 inline void LeftLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2125,8 +2133,8 @@ inline void LeftLowerAdjointUnitTriangularSolves(
 
 template <>
 inline void LeftLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2148,8 +2156,8 @@ inline void LeftLowerAdjointUnitTriangularSolves(
 
 template <>
 inline void LeftLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2172,8 +2180,8 @@ inline void LeftLowerAdjointUnitTriangularSolves(
 
 template <class Field>
 void LeftLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2192,22 +2200,22 @@ void LeftLowerTransposeUnitTriangularSolves(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void LeftLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   LeftLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
 }
 
 template <>
 inline void LeftLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   LeftLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
 }
 
 template <>
 inline void LeftLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2229,8 +2237,8 @@ inline void LeftLowerTransposeUnitTriangularSolves(
 
 template <>
 inline void LeftLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
                       triangular_matrix.height == matrix->height,
                   "Incompatible matrix dimensions");
@@ -2253,8 +2261,8 @@ inline void LeftLowerTransposeUnitTriangularSolves(
 
 template <class Field>
 void RightLowerAdjointTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   const Int height = matrix->height;
   const Int width = matrix->width;
   for (Int i = 0; i < height; ++i) {
@@ -2271,8 +2279,8 @@ void RightLowerAdjointTriangularSolves(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void RightLowerAdjointTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'T';
@@ -2290,8 +2298,8 @@ inline void RightLowerAdjointTriangularSolves(
 
 template <>
 inline void RightLowerAdjointTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'T';
@@ -2309,8 +2317,8 @@ inline void RightLowerAdjointTriangularSolves(
 
 template <>
 inline void RightLowerAdjointTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'C';
@@ -2328,8 +2336,8 @@ inline void RightLowerAdjointTriangularSolves(
 
 template <>
 inline void RightLowerAdjointTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'C';
@@ -2348,8 +2356,8 @@ inline void RightLowerAdjointTriangularSolves(
 
 template <class Field>
 void RightLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   const Int height = matrix->height;
   const Int width = matrix->width;
   for (Int i = 0; i < height; ++i) {
@@ -2365,8 +2373,8 @@ void RightLowerAdjointUnitTriangularSolves(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void RightLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'T';
@@ -2384,8 +2392,8 @@ inline void RightLowerAdjointUnitTriangularSolves(
 
 template <>
 inline void RightLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'T';
@@ -2403,8 +2411,8 @@ inline void RightLowerAdjointUnitTriangularSolves(
 
 template <>
 inline void RightLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'C';
@@ -2422,8 +2430,8 @@ inline void RightLowerAdjointUnitTriangularSolves(
 
 template <>
 inline void RightLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'C';
@@ -2442,8 +2450,8 @@ inline void RightLowerAdjointUnitTriangularSolves(
 
 template <class Field>
 void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   const Int height = matrix->height;
   const Int width = matrix->width;
   for (Int i = 0; i < height; ++i) {
@@ -2460,8 +2468,8 @@ void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   RightLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
 
   // Solve against the diagonal.
@@ -2476,8 +2484,8 @@ inline void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
 
 template <>
 inline void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   RightLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
 
   // Solve against the diagonal.
@@ -2492,8 +2500,8 @@ inline void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
 
 template <>
 inline void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   RightLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
 
   // Solve against the diagonal.
@@ -2508,8 +2516,8 @@ inline void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
 
 template <>
 inline void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   RightLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
 
   // Solve against the diagonal.
@@ -2525,8 +2533,8 @@ inline void RightDiagonalTimesLowerAdjointUnitTriangularSolves(
 
 template <class Field>
 void RightLowerTransposeTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   const Int height = matrix->height;
   const Int width = matrix->width;
   for (Int i = 0; i < height; ++i) {
@@ -2543,22 +2551,22 @@ void RightLowerTransposeTriangularSolves(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void RightLowerTransposeTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   RightLowerAdjointTriangularSolves(triangular_matrix, matrix);
 }
 
 template <>
 inline void RightLowerTransposeTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   RightLowerAdjointTriangularSolves(triangular_matrix, matrix);
 }
 
 template <>
 inline void RightLowerTransposeTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'T';
@@ -2576,8 +2584,8 @@ inline void RightLowerTransposeTriangularSolves(
 
 template <>
 inline void RightLowerTransposeTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'T';
@@ -2596,8 +2604,8 @@ inline void RightLowerTransposeTriangularSolves(
 
 template <class Field>
 void RightLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   const Int height = matrix->height;
   const Int width = matrix->width;
   for (Int i = 0; i < height; ++i) {
@@ -2613,22 +2621,22 @@ void RightLowerTransposeUnitTriangularSolves(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void RightLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   RightLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
 }
 
 template <>
 inline void RightLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   RightLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
 }
 
 template <>
 inline void RightLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'T';
@@ -2646,8 +2654,8 @@ inline void RightLowerTransposeUnitTriangularSolves(
 
 template <>
 inline void RightLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   const char side = 'R';
   const char uplo = 'L';
   const char trans_triang = 'T';
@@ -2666,8 +2674,8 @@ inline void RightLowerTransposeUnitTriangularSolves(
 
 template <class Field>
 void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<Field>& triangular_matrix,
-    BlasMatrix<Field>* matrix) {
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
   const Int height = matrix->height;
   const Int width = matrix->width;
   for (Int i = 0; i < height; ++i) {
@@ -2684,22 +2692,22 @@ void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
 #ifdef CATAMARI_HAVE_BLAS
 template <>
 inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<float>& triangular_matrix,
-    BlasMatrix<float>* matrix) {
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
   RightDiagonalTimesLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
 }
 
 template <>
 inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<double>& triangular_matrix,
-    BlasMatrix<double>* matrix) {
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
   RightDiagonalTimesLowerAdjointUnitTriangularSolves(triangular_matrix, matrix);
 }
 
 template <>
 inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<float>>& triangular_matrix,
-    BlasMatrix<Complex<float>>* matrix) {
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
   RightLowerTransposeUnitTriangularSolves(triangular_matrix, matrix);
 
   // Solve against the diagonal.
@@ -2714,8 +2722,8 @@ inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
 
 template <>
 inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
-    const ConstBlasMatrix<Complex<double>>& triangular_matrix,
-    BlasMatrix<Complex<double>>* matrix) {
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
   RightLowerTransposeUnitTriangularSolves(triangular_matrix, matrix);
 
   // Solve against the diagonal.
@@ -2733,15 +2741,15 @@ inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
 template <class Field>
 void MultithreadedMatrixMultiplyLowerNormalNormal(
     Int tile_size, const Field& alpha,
-    const ConstBlasMatrix<Field>& left_matrix,
-    const ConstBlasMatrix<Field>& right_matrix, const Field& beta,
-    BlasMatrix<Field>* output_matrix) {
+    const ConstBlasMatrixView<Field>& left_matrix,
+    const ConstBlasMatrixView<Field>& right_matrix, const Field& beta,
+    BlasMatrixView<Field>* output_matrix) {
   const Int height = output_matrix->height;
   const Int rank = left_matrix.width;
   const Field alpha_copy = alpha;
   const Field beta_copy = beta;
-  const ConstBlasMatrix<Field> left_matrix_copy = left_matrix;
-  const ConstBlasMatrix<Field> right_matrix_copy = right_matrix;
+  const ConstBlasMatrixView<Field> left_matrix_copy = left_matrix;
+  const ConstBlasMatrixView<Field> right_matrix_copy = right_matrix;
   CATAMARI_ASSERT(left_matrix.width == right_matrix.height,
                   "Contraction dimensions do not match.");
 
@@ -2751,11 +2759,11 @@ void MultithreadedMatrixMultiplyLowerNormalNormal(
            right_matrix_copy, output_matrix, alpha_copy, beta_copy)
     {
       const Int tsize = std::min(height - j, tile_size);
-      const ConstBlasMatrix<Field> row_block =
+      const ConstBlasMatrixView<Field> row_block =
           left_matrix_copy.Submatrix(j, 0, tsize, rank);
-      const ConstBlasMatrix<Field> column_block =
+      const ConstBlasMatrixView<Field> column_block =
           right_matrix_copy.Submatrix(0, j, rank, tsize);
-      BlasMatrix<Field> output_block =
+      BlasMatrixView<Field> output_block =
           output_matrix->Submatrix(j, j, tsize, tsize);
       MatrixMultiplyLowerNormalNormal(alpha_copy, row_block, column_block,
                                       beta_copy, &output_block);
@@ -2768,11 +2776,11 @@ void MultithreadedMatrixMultiplyLowerNormalNormal(
       {
         const Int row_tsize = std::min(height - i, tile_size);
         const Int column_tsize = std::min(height - j, tile_size);
-        const ConstBlasMatrix<Field> row_block =
+        const ConstBlasMatrixView<Field> row_block =
             left_matrix_copy.Submatrix(i, 0, row_tsize, rank);
-        const ConstBlasMatrix<Field> column_block =
+        const ConstBlasMatrixView<Field> column_block =
             right_matrix_copy.Submatrix(0, j, rank, column_tsize);
-        BlasMatrix<Field> output_block =
+        BlasMatrixView<Field> output_block =
             output_matrix->Submatrix(i, j, row_tsize, column_tsize);
         MatrixMultiplyNormalNormal(alpha_copy, row_block, column_block,
                                    beta_copy, &output_block);
@@ -2784,14 +2792,14 @@ void MultithreadedMatrixMultiplyLowerNormalNormal(
 template <class Field>
 void MultithreadedLowerNormalHermitianOuterProduct(
     Int tile_size, const ComplexBase<Field>& alpha,
-    const ConstBlasMatrix<Field>& left_matrix, const ComplexBase<Field>& beta,
-    BlasMatrix<Field>* output_matrix) {
+    const ConstBlasMatrixView<Field>& left_matrix,
+    const ComplexBase<Field>& beta, BlasMatrixView<Field>* output_matrix) {
   typedef ComplexBase<Field> Real;
   const Int height = output_matrix->height;
   const Int rank = left_matrix.width;
   const Real alpha_copy = alpha;
   const Real beta_copy = beta;
-  const ConstBlasMatrix<Field> left_matrix_copy = left_matrix;
+  const ConstBlasMatrixView<Field> left_matrix_copy = left_matrix;
 
   for (Int j = 0; j < height; j += tile_size) {
     #pragma omp task default(none) \
@@ -2799,9 +2807,9 @@ void MultithreadedLowerNormalHermitianOuterProduct(
             alpha_copy, beta_copy)
     {
       const Int tsize = std::min(height - j, tile_size);
-      const ConstBlasMatrix<Field> column_block =
+      const ConstBlasMatrixView<Field> column_block =
           left_matrix_copy.Submatrix(j, 0, tsize, rank);
-      BlasMatrix<Field> output_block =
+      BlasMatrixView<Field> output_block =
           output_matrix->Submatrix(j, j, tsize, tsize);
       LowerNormalHermitianOuterProduct(alpha_copy, column_block, beta_copy,
                                        &output_block);
@@ -2814,11 +2822,11 @@ void MultithreadedLowerNormalHermitianOuterProduct(
       {
         const Int row_tsize = std::min(height - i, tile_size);
         const Int column_tsize = std::min(height - j, tile_size);
-        const ConstBlasMatrix<Field> row_block =
+        const ConstBlasMatrixView<Field> row_block =
             left_matrix_copy.Submatrix(i, 0, row_tsize, rank);
-        const ConstBlasMatrix<Field> column_block =
+        const ConstBlasMatrixView<Field> column_block =
             left_matrix_copy.Submatrix(j, 0, column_tsize, rank);
-        BlasMatrix<Field> output_block =
+        BlasMatrixView<Field> output_block =
             output_matrix->Submatrix(i, j, row_tsize, column_tsize);
         MatrixMultiplyNormalAdjoint(Field{alpha_copy}, row_block, column_block,
                                     Field{beta_copy}, &output_block);
@@ -2829,7 +2837,7 @@ void MultithreadedLowerNormalHermitianOuterProduct(
 #endif  // ifdef _OPENMP
 
 template <class Field>
-void Permute(const Buffer<Int>& permutation, BlasMatrix<Field>* matrix) {
+void Permute(const Buffer<Int>& permutation, BlasMatrixView<Field>* matrix) {
   for (Int j = 0; j < matrix->width; ++j) {
     // Make a copy of the current column.
     Buffer<Field> column_copy(matrix->height);
