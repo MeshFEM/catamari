@@ -424,7 +424,7 @@ Int OpenMPLowerLDLAdjointFactorization(Int tile_size, Int block_size,
                                        BlasMatrixView<Field>* matrix,
                                        Buffer<Field>* buffer) {
   const Int height = matrix->height;
-  if (buffer->Size() < height * height) {
+  if (buffer->Size() < static_cast<std::size_t>(height * height)) {
     buffer->Resize(height * height);
   }
 
@@ -449,7 +449,7 @@ Int OpenMPLowerLDLAdjointFactorization(Int tile_size, Int block_size,
     #pragma omp taskgroup
     #pragma omp task default(none)               \
         firstprivate(block_size, diagonal_block) \
-        shared(num_pivots, failed_pivot) \
+        shared(num_pivots, failed_pivot)         \
         depend(inout: matrix_data[i + i * leading_dim])
     {
       const Int num_diag_pivots =
@@ -533,6 +533,10 @@ Int OpenMPLowerLDLAdjointFactorization(Int tile_size, Int block_size,
       }
     }
   }
+
+  // Exit after all of the tasks have finished.
+  #pragma omp taskwait
+
   return num_pivots;
 }
 #endif  // ifdef CATAMARI_OPENMP
@@ -632,7 +636,7 @@ Int OpenMPLowerLDLTransposeFactorization(Int tile_size, Int block_size,
                                          BlasMatrixView<Field>* matrix,
                                          Buffer<Field>* buffer) {
   const Int height = matrix->height;
-  if (buffer->Size() < height * height) {
+  if (buffer->Size() < static_cast<std::size_t>(height * height)) {
     buffer->Resize(height * height);
   }
 
@@ -741,6 +745,10 @@ Int OpenMPLowerLDLTransposeFactorization(Int tile_size, Int block_size,
       }
     }
   }
+
+  // Exit after all of the tasks have finished.
+  #pragma omp taskwait
+
   return num_pivots;
 }
 #endif  // ifdef CATAMARI_OPENMP
@@ -865,7 +873,7 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleDPP(
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     Buffer<Field>* buffer) {
   const Int height = matrix->height;
-  if (buffer->Size() < height * height) {
+  if (buffer->Size() < static_cast<std::size_t>(height * height)) {
     buffer->Resize(height * height);
   }
 
@@ -980,6 +988,10 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleDPP(
       }
     }
   }
+
+  // Exit after all of the tasks have finished.
+  #pragma omp taskwait
+
   return sample;
 }
 

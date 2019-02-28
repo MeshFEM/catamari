@@ -45,24 +45,31 @@ else
 endif
 
 # For controlling whether OpenMP support is enabled.
-if get_option('enable-openmp')
-  openmp_dep = dependency('openmp', version : '>=4.0')
-  have_openmp = true
-  deps += openmp_dep
-elif get_option('disable-openmp')
-  openmp_dep = false
-  have_openmp = false
-else
-  openmp_dep = dependency('openmp', version : '>=4.0', required : false)
-  if openmp_dep.found()
+have_openmp = false
+trust_omp_version = true
+# Older versions of clang, e.g., 3.8.0-2ubuntu4, falsely report support for
+# OpenMP 4.0 despite numerous issues (e.g., with task data sharing attributes).
+# As of clang 8.0, only OpenMP 3.1 is supported. We therefore block OpenMP
+# if the version of clang is less than 9.0.
+if cxx.get_id() == 'clang' and cxx.version() < '9.0'
+  message('Ignoring Clang\'s reported OpenMP version')
+  trust_omp_version = false
+endif
+if trust_omp_version
+  if get_option('enable-openmp')
+    openmp_dep = dependency('openmp', version : '>=4.0')
     have_openmp = true
     deps += openmp_dep
-  else
-    have_openmp = false
+  elif not get_option('disable-openmp')
+    openmp_dep = dependency('openmp', version : '>=4.0', required : false)
+    if openmp_dep.found()
+      have_openmp = true
+      deps += openmp_dep
+    endif
   endif
-endif
-if have_openmp
-  cxx_args += '-DCATAMARI_OPENMP'
+  if have_openmp
+    cxx_args += '-DCATAMARI_OPENMP'
+  endif
 endif
 
 # Simple BLAS/LAPACK detection.

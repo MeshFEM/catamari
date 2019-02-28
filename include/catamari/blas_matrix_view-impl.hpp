@@ -55,6 +55,7 @@ ConstBlasMatrixView<T>& ConstBlasMatrixView<T>::operator=(
   width = matrix.width;
   leading_dim = matrix.leading_dim;
   data = matrix.leading_dim;
+  return *this;
 }
 
 template <class T>
