@@ -323,6 +323,10 @@ Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
       }
     }
   }
+
+  // Exit after all of the tasks have finished.
+  #pragma omp taskwait
+
   return num_pivots;
 }
 #endif  // ifdef CATAMARI_OPENMP
