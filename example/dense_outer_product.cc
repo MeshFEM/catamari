@@ -70,11 +70,16 @@ void RunOpenMPMatrixMultiplyLowerNormalNormal(Int tile_size, Int height,
 
   timer.Start();
 
+  const int old_max_threads = catamari::GetMaxBlasThreads();
+  catamari::SetNumBlasThreads(1);
+
   #pragma omp parallel
   #pragma omp single
   OpenMPMatrixMultiplyLowerNormalNormal(
       tile_size, Field{-1}, left_matrix.ConstView(), right_matrix.ConstView(),
       Field{1}, &output_matrix.view);
+
+  catamari::SetNumBlasThreads(old_max_threads);
 
   const double runtime = timer.Stop();
   const double flops =

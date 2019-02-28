@@ -65,10 +65,15 @@ void OpenMPSampleDPP(
   quotient::Timer timer;
   timer.Start();
 
+  const int old_max_threads = catamari::GetMaxBlasThreads();
+  catamari::SetNumBlasThreads(1);
+
   #pragma omp parallel
   #pragma omp single
   OpenMPLowerFactorAndSampleDPP(tile_size, block_size, maximum_likelihood,
                                 matrix, generator, uniform_dist, extra_buffer);
+
+  catamari::SetNumBlasThreads(old_max_threads);
 
   const double runtime = timer.Stop();
   const double flops =

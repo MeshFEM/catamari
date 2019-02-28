@@ -2753,9 +2753,10 @@ void OpenMPMatrixMultiplyLowerNormalNormal(
   CATAMARI_ASSERT(left_matrix.width == right_matrix.height,
                   "Contraction dimensions do not match.");
 
+  #pragma omp taskgroup
   for (Int j = 0; j < height; j += tile_size) {
-    #pragma omp task default(none) \
-       firstprivate(tile_size, j, height, rank, left_matrix_copy, \
+    #pragma omp task default(none)                                  \
+       firstprivate(tile_size, j, height, rank, left_matrix_copy,   \
            right_matrix_copy, output_matrix, alpha_copy, beta_copy)
     {
       const Int tsize = std::min(height - j, tile_size);
@@ -2770,7 +2771,7 @@ void OpenMPMatrixMultiplyLowerNormalNormal(
     }
 
     for (Int i = j + tile_size; i < height; i += tile_size) {
-      #pragma omp task default(none) \
+      #pragma omp task default(none)                                    \
           firstprivate(tile_size, i, j, height, rank, left_matrix_copy, \
               right_matrix_copy, output_matrix, alpha_copy, beta_copy)
       {
@@ -2801,8 +2802,9 @@ void OpenMPLowerNormalHermitianOuterProduct(
   const Real beta_copy = beta;
   const ConstBlasMatrixView<Field> left_matrix_copy = left_matrix;
 
+  #pragma omp taskgroup
   for (Int j = 0; j < height; j += tile_size) {
-    #pragma omp task default(none) \
+    #pragma omp task default(none)                                  \
         firstprivate(tile_size, j, left_matrix_copy, output_matrix, \
             alpha_copy, beta_copy)
     {
@@ -2816,7 +2818,7 @@ void OpenMPLowerNormalHermitianOuterProduct(
     }
 
     for (Int i = j + tile_size; i < height; i += tile_size) {
-      #pragma omp task default(none) \
+      #pragma omp task default(none)                                     \
           firstprivate(tile_size, i, j, left_matrix_copy, output_matrix, \
               alpha_copy, beta_copy)
       {

@@ -41,9 +41,12 @@ void RunCholeskyFactorization(Int tile_size, Int block_size,
   timer.Start();
 
 #ifdef CATAMARI_OPENMP
+  const int old_max_threads = catamari::GetMaxBlasThreads();
+  catamari::SetNumBlasThreads(1);
   #pragma omp parallel
   #pragma omp single
   OpenMPLowerCholeskyFactorization(tile_size, block_size, matrix);
+  catamari::SetNumBlasThreads(old_max_threads);
 #else
   LowerCholeskyFactorization(block_size, matrix);
 #endif
@@ -65,10 +68,13 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
   timer.Start();
 
 #ifdef CATAMARI_OPENMP
+  const int old_max_threads = catamari::GetMaxBlasThreads();
+  catamari::SetNumBlasThreads(1);
   #pragma omp parallel
   #pragma omp single
   OpenMPLowerLDLAdjointFactorization(tile_size, block_size, matrix,
                                      extra_buffer);
+  catamari::SetNumBlasThreads(old_max_threads);
 #else
   LowerLDLAdjointFactorization(block_size, matrix);
 #endif
@@ -90,10 +96,13 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
   timer.Start();
 
 #ifdef CATAMARI_OPENMP
+  const int old_max_threads = catamari::GetMaxBlasThreads();
+  catamari::SetNumBlasThreads(1);
   #pragma omp parallel
   #pragma omp single
   OpenMPLowerLDLTransposeFactorization(tile_size, block_size, matrix,
                                        extra_buffer);
+  catamari::SetNumBlasThreads(old_max_threads);
 #else
   LowerLDLTransposeFactorization(block_size, matrix);
 #endif
