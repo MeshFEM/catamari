@@ -15,25 +15,11 @@
 #define LAPACK_SYMBOL(name) name##_
 
 #ifndef CATAMARI_HAVE_LAPACK_PROTOS
-#define CATAMARI_HAVE_LAPACK_PROTOS
 
-extern "C" {
+#include "catamari/lapack/protos.hpp"
 
-void LAPACK_SYMBOL(spotrf)(const char* uplo, const BlasInt* n, float* matrix,
-                           const BlasInt* leading_dim, BlasInt* info);
-
-void LAPACK_SYMBOL(dpotrf)(const char* uplo, const BlasInt* n, double* matrix,
-                           const BlasInt* leading_dim, BlasInt* info);
-
-void LAPACK_SYMBOL(cpotrf)(const char* uplo, const BlasInt* n,
-                           BlasComplexFloat* matrix, const BlasInt* leading_dim,
-                           BlasInt* info);
-
-void LAPACK_SYMBOL(zpotrf)(const char* uplo, const BlasInt* n,
-                           BlasComplexDouble* matrix,
-                           const BlasInt* leading_dim, BlasInt* info);
-}
 #endif  // ifndef CATAMARI_HAVE_LAPACK_PROTOS
+
 #endif  // ifdef CATAMARI_HAVE_LAPACK
 
 #endif  // ifndef CATAMARI_LAPACK_H_
