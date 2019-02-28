@@ -77,7 +77,7 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPEliminationForestAndDegreesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
@@ -276,7 +276,7 @@ void OpenMPEliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
         &private_tmp_structures);
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
@@ -431,7 +431,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFillStructureIndicesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
@@ -660,7 +660,7 @@ void OpenMPFillStructureIndices(const CoordinateMatrix<Field>& matrix,
     }
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 }  // namespace scalar_ldl
 }  // namespace catamari

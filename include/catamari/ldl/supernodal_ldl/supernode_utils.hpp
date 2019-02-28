@@ -112,13 +112,13 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                AssemblyForest* scalar_forest,
                                Buffer<Int>* supernode_sizes,
                                scalar_ldl::LowerStructure* scalar_structure);
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFormFundamentalSupernodes(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     AssemblyForest* scalar_forest, Buffer<Int>* supernode_sizes,
     scalar_ldl::LowerStructure* scalar_structure);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Returns whether or not the child supernode can be merged into its parent by
 // counting the number of explicit zeros that would be introduced by the
@@ -192,14 +192,14 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
                        const AssemblyForest& forest,
                        const Buffer<Int>& member_to_index,
                        Buffer<Int>* supernode_degrees);
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
                              const SymmetricOrdering& ordering,
                              const AssemblyForest& forest,
                              const Buffer<Int>& member_to_index,
                              Buffer<Int>* supernode_degrees);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Fills an estimate of the work required to eliminate the subtree in a
 // right-looking factorization.
@@ -215,7 +215,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const AssemblyForest& forest,
                           const Buffer<Int>& supernode_member_to_index,
                           LowerFactor<Field>* lower_factor);
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFillStructureIndices(Int sort_grain_size,
                                 const CoordinateMatrix<Field>& matrix,
@@ -223,7 +223,7 @@ void OpenMPFillStructureIndices(Int sort_grain_size,
                                 const AssemblyForest& forest,
                                 const Buffer<Int>& supernode_member_to_index,
                                 LowerFactor<Field>* lower_factor);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Fill in the nonzeros from the original sparse matrix.
 template <class Field>
@@ -232,14 +232,14 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
                   const Buffer<Int>& supernode_member_to_index,
                   LowerFactor<Field>* lower_factor,
                   DiagonalFactor<Field>* diagonal_factor);
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFillNonzeros(const CoordinateMatrix<Field>& matrix,
                         const SymmetricOrdering& ordering,
                         const Buffer<Int>& supernode_member_to_index,
                         LowerFactor<Field>* lower_factor,
                         DiagonalFactor<Field>* diagonal_factor);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Explicitly fill the factorization blocks with zeros.
 template <class Field>
@@ -247,12 +247,12 @@ void FillZeros(const SymmetricOrdering& ordering,
                LowerFactor<Field>* lower_factor,
                DiagonalFactor<Field>* diagonal_factor);
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFillZeros(const SymmetricOrdering& ordering,
                      LowerFactor<Field>* lower_factor,
                      DiagonalFactor<Field>* diagonal_factor);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Computes the supernodal nonzero pattern of L(row, :) in
 // row_structure[0 : num_packed - 1].
@@ -274,14 +274,14 @@ void FormScaledTranspose(SymmetricFactorizationType factorization_type,
                          const ConstBlasMatrixView<Field>& matrix,
                          BlasMatrixView<Field>* scaled_transpose);
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFormScaledTranspose(Int tile_size,
                                SymmetricFactorizationType factorization_type,
                                const ConstBlasMatrixView<Field>& diagonal_block,
                                const ConstBlasMatrixView<Field>& matrix,
                                BlasMatrixView<Field>* scaled_transpose);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Moves the pointers for the main supernode down to the active supernode of
 // the descendant column block.
@@ -301,13 +301,13 @@ void MergeChildSchurComplements(Int supernode,
                                 DiagonalFactor<Field>* diagonal_factor,
                                 RightLookingSharedState<Field>* shared_state);
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPMergeChildSchurComplements(
     Int merge_grain_size, Int supernode, const SymmetricOrdering& ordering,
     LowerFactor<Field>* lower_factor, DiagonalFactor<Field>* diagonal_factor,
     RightLookingSharedState<Field>* shared_state);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // L(m, m) -= L(m, d) * (D(d, d) * L(m, d)')
 //          = L(m, d) * Z(:, m).
@@ -352,14 +352,14 @@ Int FactorDiagonalBlock(Int block_size,
                         SymmetricFactorizationType factorization_type,
                         BlasMatrixView<Field>* diagonal_block);
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 // Perform an in-place LDL' factorization of the supernodal diagonal block.
 template <class Field>
 Int OpenMPFactorDiagonalBlock(Int tile_size, Int block_size,
                               SymmetricFactorizationType factorization_type,
                               BlasMatrixView<Field>* diagonal_block,
                               Buffer<Field>* buffer);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
 template <class Field>
@@ -368,14 +368,14 @@ void SolveAgainstDiagonalBlock(
     const ConstBlasMatrixView<Field>& triangular_matrix,
     BlasMatrixView<Field>* lower_matrix);
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 // L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.
 template <class Field>
 void OpenMPSolveAgainstDiagonalBlock(
     Int tile_size, SymmetricFactorizationType factorization_type,
     const ConstBlasMatrixView<Field>& triangular_matrix,
     BlasMatrixView<Field>* lower_matrix);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 }  // namespace supernodal_ldl
 }  // namespace catamari

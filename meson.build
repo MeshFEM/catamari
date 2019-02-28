@@ -56,10 +56,13 @@ else
   openmp_dep = dependency('openmp', version : '>=4.0', required : false)
   if openmp_dep.found()
     have_openmp = true
+    deps += openmp_dep
   else
     have_openmp = false
   endif
-  deps += openmp_dep
+endif
+if have_openmp
+  cxx_args += '-DCATAMARI_OPENMP'
 endif
 
 # Simple BLAS/LAPACK detection.

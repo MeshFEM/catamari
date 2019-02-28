@@ -40,7 +40,7 @@ void RunCholeskyFactorization(Int tile_size, Int block_size,
   quotient::Timer timer;
   timer.Start();
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   #pragma omp parallel
   #pragma omp single
   OpenMPLowerCholeskyFactorization(tile_size, block_size, matrix);
@@ -64,7 +64,7 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
   quotient::Timer timer;
   timer.Start();
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   #pragma omp parallel
   #pragma omp single
   OpenMPLowerLDLAdjointFactorization(tile_size, block_size, matrix,
@@ -89,7 +89,7 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
   quotient::Timer timer;
   timer.Start();
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   #pragma omp parallel
   #pragma omp single
   OpenMPLowerLDLTransposeFactorization(tile_size, block_size, matrix,

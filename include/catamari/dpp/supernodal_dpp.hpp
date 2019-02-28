@@ -26,7 +26,7 @@ struct SupernodalDPPControl {
   // The algorithmic block size for the factorization.
   Int block_size = 64;
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   // The size of the matrix tiles for factorization OpenMP tasks.
   Int factor_tile_size = 128;
 
@@ -40,7 +40,7 @@ struct SupernodalDPPControl {
   // The number of columns to group into a single task when multithreading
   // the scalar structure formation.
   Int sort_grain_size = 200;
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 };
 
 // The user-facing data structure for storing a supernodal LDL'-based DPP
@@ -103,24 +103,24 @@ class SupernodalDPP {
 
   void FormSupernodes();
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   void OpenMPFormSupernodes();
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
   void FormStructure();
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   void OpenMPFormStructure();
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
   // Return a sample from the DPP using a left-looking algorithm.
   std::vector<Int> LeftLookingSample(bool maximum_likelihood) const;
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   std::vector<Int> OpenMPLeftLookingSample(bool maximum_likelihood) const;
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   void LeftLookingSubtree(Int supernode, bool maximum_likelihood,
                           supernodal_ldl::LeftLookingSharedState* shared_state,
                           PrivateState* private_state,
@@ -131,62 +131,62 @@ class SupernodalDPP {
       bool maximum_likelihood,
       supernodal_ldl::LeftLookingSharedState* shared_state,
       Buffer<PrivateState>* private_states, std::vector<Int>* subsample) const;
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
   // Updates a supernode using its descendants.
   void LeftLookingSupernodeUpdate(
       Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
       PrivateState* private_state) const;
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   void OpenMPLeftLookingSupernodeUpdate(
       Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
       Buffer<PrivateState>* private_states) const;
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
   // Appends a supernode's contribution to the current sample.
   void LeftLookingSupernodeSample(Int supernode, bool maximum_likelihood,
                                   PrivateState* private_state,
                                   std::vector<Int>* sample) const;
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   void OpenMPLeftLookingSupernodeSample(Int main_supernode,
                                         bool maximum_likelihood,
                                         Buffer<PrivateState>* private_states,
                                         std::vector<Int>* sample) const;
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
   // Return a sample from the DPP using a right-looking algorithm.
   std::vector<Int> RightLookingSample(bool maximum_likelihood) const;
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   std::vector<Int> OpenMPRightLookingSample(bool maximum_likelihood) const;
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
   void RightLookingSubtree(
       Int supernode, bool maximum_likelihood,
       supernodal_ldl::RightLookingSharedState<Field>* shared_state,
       PrivateState* private_state, std::vector<Int>* sample) const;
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   void OpenMPRightLookingSubtree(
       Int level, Int max_parallel_levels, Int supernode,
       bool maximum_likelihood,
       supernodal_ldl::RightLookingSharedState<Field>* shared_state,
       Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
   void RightLookingSupernodeSample(
       Int supernode, bool maximum_likelihood,
       supernodal_ldl::RightLookingSharedState<Field>* shared_state,
       PrivateState* private_state, std::vector<Int>* sample) const;
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   void OpenMPRightLookingSupernodeSample(
       Int supernode, bool maximum_likelihood,
       supernodal_ldl::RightLookingSharedState<Field>* shared_state,
       Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
   // Appends a supernode sample into an unsorted sample vector in the
   // original ordering.

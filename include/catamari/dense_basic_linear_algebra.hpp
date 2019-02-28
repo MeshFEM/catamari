@@ -228,7 +228,7 @@ void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
     const ConstBlasMatrixView<Field>& triangular_matrix,
     BlasMatrixView<Field>* matrix);
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 // Performs a multi-threaded MatrixMultiplyLowerNormalNormal using OpenMP tasks.
 // In most circumstances, it should be surrounded by:
 //     #pragma parallel
@@ -249,7 +249,7 @@ void OpenMPLowerNormalHermitianOuterProduct(
     Int tile_size, const ComplexBase<Field>& alpha,
     const ConstBlasMatrixView<Field>& left_matrix,
     const ComplexBase<Field>& beta, BlasMatrixView<Field>* output_matrix);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Applies a row permutation to a dense matrix.
 template <class Field>

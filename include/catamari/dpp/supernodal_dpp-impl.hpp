@@ -19,7 +19,7 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
                                     const SymmetricOrdering& ordering,
                                     const SupernodalDPPControl& control)
     : matrix_(matrix), ordering_(ordering), control_(control) {
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {
     #pragma omp parallel
     #pragma omp single
@@ -29,7 +29,7 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
     }
     return;
   }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
   FormSupernodes();
   FormStructure();
 }
@@ -88,7 +88,7 @@ void SupernodalDPP<Field>::FormSupernodes() {
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void SupernodalDPP<Field>::OpenMPFormSupernodes() {
   // Greedily compute a supernodal partition using the original ordering.
@@ -148,7 +148,7 @@ void SupernodalDPP<Field>::OpenMPFormSupernodes() {
     supernode_degrees_ = fund_supernode_degrees;
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void SupernodalDPP<Field>::FormStructure() {
@@ -173,7 +173,7 @@ void SupernodalDPP<Field>::FormStructure() {
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void SupernodalDPP<Field>::OpenMPFormStructure() {
   CATAMARI_ASSERT(supernode_degrees_.Size() == ordering_.supernode_sizes.Size(),
@@ -197,19 +197,19 @@ void SupernodalDPP<Field>::OpenMPFormStructure() {
                                          supernode_member_to_index_);
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
   if (control_.algorithm == kLeftLookingLDL) {
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
     if (omp_get_max_threads() > 1) {
       return OpenMPLeftLookingSample(maximum_likelihood);
     }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
     return LeftLookingSample(maximum_likelihood);
   } else {
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
     if (omp_get_max_threads() > 1) {
       return OpenMPRightLookingSample(maximum_likelihood);
     }
@@ -341,7 +341,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeUpdate(
     Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
@@ -523,7 +523,7 @@ void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeUpdate(
     }
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <typename Field>
 void SupernodalDPP<Field>::AppendSupernodeSample(
@@ -560,7 +560,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
       factorization_type, diagonal_block.ToConst(), &lower_block);
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeSample(
     Int main_supernode, bool maximum_likelihood,
@@ -592,7 +592,7 @@ void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeSample(
       control_.outer_product_tile_size, factorization_type,
       main_diagonal_block.ToConst(), &main_lower_block);
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
@@ -636,7 +636,7 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   return sample;
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void SupernodalDPP<Field>::LeftLookingSubtree(
     Int supernode, bool maximum_likelihood,
@@ -797,7 +797,7 @@ std::vector<Int> SupernodalDPP<Field>::OpenMPLeftLookingSample(
 
   return sample;
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void SupernodalDPP<Field>::RightLookingSupernodeSample(
@@ -856,7 +856,7 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
                                   &schur_complement);
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void SupernodalDPP<Field>::OpenMPRightLookingSupernodeSample(
     Int supernode, bool maximum_likelihood,
@@ -927,7 +927,7 @@ void SupernodalDPP<Field>::OpenMPRightLookingSupernodeSample(
       control_.outer_product_tile_size, Field{-1}, lower_block.ToConst(),
       scaled_transpose.ToConst(), Field{1}, &schur_complement);
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void SupernodalDPP<Field>::RightLookingSubtree(
@@ -953,7 +953,7 @@ void SupernodalDPP<Field>::RightLookingSubtree(
   sample->insert(sample->end(), subsample.begin(), subsample.end());
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void SupernodalDPP<Field>::OpenMPRightLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode, bool maximum_likelihood,
@@ -1003,7 +1003,7 @@ void SupernodalDPP<Field>::OpenMPRightLookingSubtree(
                                     private_states, &subsample);
   sample->insert(sample->end(), subsample.begin(), subsample.end());
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
@@ -1042,7 +1042,7 @@ std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
   return sample;
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 std::vector<Int> SupernodalDPP<Field>::OpenMPRightLookingSample(
     bool maximum_likelihood) const {
@@ -1130,7 +1130,7 @@ std::vector<Int> SupernodalDPP<Field>::OpenMPRightLookingSample(
 
   return sample;
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 }  // namespace catamari
 

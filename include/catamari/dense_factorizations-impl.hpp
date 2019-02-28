@@ -236,7 +236,7 @@ inline Int LowerCholeskyFactorization(Int block_size,
 }
 #endif  // ifdef CATAMARI_HAVE_LAPACK
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
                                      BlasMatrixView<Field>* matrix) {
@@ -325,7 +325,7 @@ Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
   }
   return num_pivots;
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 Int LowerUnblockedLDLAdjointFactorization(BlasMatrixView<Field>* matrix) {
@@ -418,7 +418,7 @@ Int LowerLDLAdjointFactorization(Int block_size,
   return LowerBlockedLDLAdjointFactorization(block_size, matrix);
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 Int OpenMPLowerLDLAdjointFactorization(Int tile_size, Int block_size,
                                        BlasMatrixView<Field>* matrix,
@@ -535,7 +535,7 @@ Int OpenMPLowerLDLAdjointFactorization(Int tile_size, Int block_size,
   }
   return num_pivots;
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 Int LowerUnblockedLDLTransposeFactorization(BlasMatrixView<Field>* matrix) {
@@ -626,7 +626,7 @@ Int LowerLDLTransposeFactorization(Int block_size,
   return LowerBlockedLDLTransposeFactorization(block_size, matrix);
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 Int OpenMPLowerLDLTransposeFactorization(Int tile_size, Int block_size,
                                          BlasMatrixView<Field>* matrix,
@@ -743,7 +743,7 @@ Int OpenMPLowerLDLTransposeFactorization(Int tile_size, Int block_size,
   }
   return num_pivots;
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 std::vector<Int> LowerUnblockedFactorAndSampleDPP(
@@ -857,7 +857,7 @@ std::vector<Int> LowerFactorAndSampleDPP(
                                         generator, uniform_dist);
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 std::vector<Int> OpenMPLowerBlockedFactorAndSampleDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
@@ -993,7 +993,7 @@ std::vector<Int> OpenMPLowerFactorAndSampleDPP(
                                               maximum_likelihood, matrix,
                                               generator, uniform_dist, buffer);
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 }  // namespace catamari
 

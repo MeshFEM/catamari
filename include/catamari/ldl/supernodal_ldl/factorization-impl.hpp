@@ -97,7 +97,7 @@ void Factorization<Field>::FormSupernodes(
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void Factorization<Field>::OpenMPFormSupernodes(
     const CoordinateMatrix<Field>& matrix,
@@ -157,7 +157,7 @@ void Factorization<Field>::OpenMPFormSupernodes(
     *supernode_degrees = fund_supernode_degrees;
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void Factorization<Field>::InitializeFactors(
@@ -199,7 +199,7 @@ void Factorization<Field>::InitializeFactors(
                lower_factor_.get(), diagonal_factor_.get());
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void Factorization<Field>::OpenMPInitializeFactors(
     const CoordinateMatrix<Field>& matrix, const AssemblyForest& forest,
@@ -240,7 +240,7 @@ void Factorization<Field>::OpenMPInitializeFactors(
   OpenMPFillNonzeros(matrix, ordering_, supernode_member_to_index_,
                      lower_factor_.get(), diagonal_factor_.get());
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void Factorization<Field>::LeftLookingSupernodeUpdate(
@@ -390,7 +390,7 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(Int main_supernode,
 template <class Field>
 LDLResult Factorization<Field>::LeftLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {
     return OpenMPLeftLooking(matrix, control);
   }
@@ -493,7 +493,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   return true;
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     Int supernode, RightLookingSharedState<Field>* shared_state,
@@ -579,7 +579,7 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
 
   return true;
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 bool Factorization<Field>::RightLookingSubtree(
@@ -636,7 +636,7 @@ bool Factorization<Field>::RightLookingSubtree(
   return succeeded;
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 bool Factorization<Field>::OpenMPRightLookingSubtree(
     Int level, Int max_parallel_levels, Int supernode,
@@ -705,12 +705,12 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
 
   return succeeded;
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 LDLResult Factorization<Field>::RightLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {
     return OpenMPRightLooking(matrix, control);
   }
@@ -802,7 +802,7 @@ bool Factorization<Field>::LeftLookingSubtree(
   return succeeded;
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void Factorization<Field>::OpenMPLeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
@@ -1275,7 +1275,7 @@ LDLResult Factorization<Field>::OpenMPRightLooking(
 
   return result;
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
@@ -1285,12 +1285,12 @@ LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   factorization_type_ = control.factorization_type;
   block_size_ = control.block_size;
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   factor_tile_size_ = control.factor_tile_size;
   outer_product_tile_size_ = control.outer_product_tile_size;
   merge_grain_size_ = control.merge_grain_size;
   sort_grain_size_ = control.sort_grain_size;
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
   forward_solve_out_of_place_supernode_threshold_ =
       control.forward_solve_out_of_place_supernode_threshold;
@@ -1313,7 +1313,7 @@ void Factorization<Field>::Solve(BlasMatrixView<Field>* matrix) const {
     Permute(ordering_.permutation, matrix);
   }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {
     const int old_max_threads = GetMaxBlasThreads();
     SetNumBlasThreads(1);
@@ -1336,7 +1336,7 @@ void Factorization<Field>::Solve(BlasMatrixView<Field>* matrix) const {
   LowerTriangularSolve(matrix);
   DiagonalSolve(matrix);
   LowerTransposeTriangularSolve(matrix);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
   // Reverse the factorization permutation.
   if (have_permutation) {
@@ -1407,7 +1407,7 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void Factorization<Field>::OpenMPLowerSupernodalTrapezoidalSolve(
     Int supernode, BlasMatrixView<Field>* matrix,
@@ -1441,7 +1441,7 @@ void Factorization<Field>::OpenMPLowerSupernodalTrapezoidalSolve(
                              Field{1},
                              &shared_state->schur_complements[supernode]);
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void Factorization<Field>::LowerTriangularSolveRecursion(
@@ -1461,7 +1461,7 @@ void Factorization<Field>::LowerTriangularSolveRecursion(
   LowerSupernodalTrapezoidalSolve(supernode, matrix, workspace);
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
     Int supernode, BlasMatrixView<Field>* matrix,
@@ -1531,7 +1531,7 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
   // Perform this supernode's trapezoidal solve.
   OpenMPLowerSupernodalTrapezoidalSolve(supernode, matrix, shared_state);
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void Factorization<Field>::LowerTriangularSolve(
@@ -1548,7 +1548,7 @@ void Factorization<Field>::LowerTriangularSolve(
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void Factorization<Field>::OpenMPLowerTriangularSolve(
     BlasMatrixView<Field>* matrix) const {
@@ -1568,7 +1568,7 @@ void Factorization<Field>::OpenMPLowerTriangularSolve(
     OpenMPLowerTriangularSolveRecursion(root, matrix, &shared_state);
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void Factorization<Field>::DiagonalSolve(BlasMatrixView<Field>* matrix) const {
@@ -1598,7 +1598,7 @@ void Factorization<Field>::DiagonalSolve(BlasMatrixView<Field>* matrix) const {
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void Factorization<Field>::OpenMPDiagonalSolve(
     BlasMatrixView<Field>* matrix) const {
@@ -1634,7 +1634,7 @@ void Factorization<Field>::OpenMPDiagonalSolve(
     }
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
@@ -1725,7 +1725,7 @@ void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void Factorization<Field>::OpenMPLowerTransposeTriangularSolveRecursion(
     Int supernode, BlasMatrixView<Field>* matrix,
@@ -1749,7 +1749,7 @@ void Factorization<Field>::OpenMPLowerTransposeTriangularSolveRecursion(
                                                  private_packed_input_bufs);
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void Factorization<Field>::LowerTransposeTriangularSolve(
@@ -1766,7 +1766,7 @@ void Factorization<Field>::LowerTransposeTriangularSolve(
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void Factorization<Field>::OpenMPLowerTransposeTriangularSolve(
     BlasMatrixView<Field>* matrix) const {
@@ -1792,7 +1792,7 @@ void Factorization<Field>::OpenMPLowerTransposeTriangularSolve(
                                                  &private_packed_input_bufs);
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void Factorization<Field>::PrintDiagonalFactor(const std::string& label,

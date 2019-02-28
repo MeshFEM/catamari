@@ -28,13 +28,13 @@ template <class Field>
 void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
                                  const SymmetricOrdering& ordering,
                                  Buffer<Int>* parents, Buffer<Int>* degrees);
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPEliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
                                        const SymmetricOrdering& ordering,
                                        Buffer<Int>* parents,
                                        Buffer<Int>* degrees);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Computes the nonzero pattern of L(row, :) in
 // row_structure[0 : num_packed - 1].
@@ -60,7 +60,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const AssemblyForest& forest,
                           const Buffer<Int>& degrees,
                           LowerStructure* lower_structure);
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFillStructureIndices(const CoordinateMatrix<Field>& matrix,
                                 const SymmetricOrdering& ordering,
@@ -68,7 +68,7 @@ void OpenMPFillStructureIndices(const CoordinateMatrix<Field>& matrix,
                                 LowerStructure* lower_structure,
                                 bool preallocate = true,
                                 int sort_grain_size = 500);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 }  // namespace scalar_ldl
 }  // namespace catamari

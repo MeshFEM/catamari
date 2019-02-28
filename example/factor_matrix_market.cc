@@ -335,11 +335,6 @@ int main(int argc, char** argv) {
       "matrix_market_directory",
       "The directory where the ADD96 matrix market .tar.gz's were unpacked",
       "");
-#ifdef _OPENMP
-  const int num_omp_threads = parser.OptionalInput<int>(
-      "num_omp_threads",
-      "The desired number of OpenMP threads. Uses default if <= 0.", 1);
-#endif
   if (!parser.OK()) {
     return 0;
   }
@@ -353,18 +348,6 @@ int main(int argc, char** argv) {
 
   const quotient::EntryMask mask =
       static_cast<quotient::EntryMask>(entry_mask_int);
-
-#ifdef _OPENMP
-  if (num_omp_threads > 0) {
-    const int max_omp_threads = omp_get_max_threads();
-    omp_set_num_threads(num_omp_threads);
-    std::cout << "Will use " << num_omp_threads << " of " << max_omp_threads
-              << " OpenMP threads." << std::endl;
-  } else {
-    std::cout << "Will use all " << omp_get_max_threads() << " OpenMP threads."
-              << std::endl;
-  }
-#endif
 
   catamari::LDLControl ldl_control;
   ldl_control.md_control.degree_type =

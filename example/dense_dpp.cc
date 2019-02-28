@@ -53,7 +53,7 @@ void SampleDPP(
   std::cout << "Sequential DPP GFlop/s: " << gflops_per_sec << std::endl;
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <typename Field>
 void OpenMPSampleDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
@@ -76,7 +76,7 @@ void OpenMPSampleDPP(
   const double gflops_per_sec = flops / (1.e9 * runtime);
   std::cout << "OpenMP DPP GFlop/s: " << gflops_per_sec << std::endl;
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 }  // anonymous namespace
 
@@ -84,10 +84,10 @@ int main(int argc, char** argv) {
   specify::ArgumentParser parser(argc, argv);
   const Int matrix_size = parser.OptionalInput<Int>(
       "matrix_size", "The dimension of the matrix to factor.", 1000);
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
   const Int tile_size = parser.OptionalInput<Int>(
       "tile_size", "The tile size for multithreaded factorization.", 128);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
   const Int block_size = parser.OptionalInput<Int>(
       "block_size", "The block_size for dense factorization.", 64);
   const Int num_rounds = parser.OptionalInput<Int>(
@@ -111,11 +111,11 @@ int main(int argc, char** argv) {
     std::uniform_real_distribution<float> uniform_dist(0., 1.);
 
     for (Int round = 0; round < num_rounds; ++round) {
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
       InitializeMatrix(matrix_size, &matrix);
       OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
                       &generator, &uniform_dist, &extra_buffer);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
       InitializeMatrix(matrix_size, &matrix);
       SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator,
@@ -133,11 +133,11 @@ int main(int argc, char** argv) {
     std::uniform_real_distribution<double> uniform_dist(0., 1.);
 
     for (Int round = 0; round < num_rounds; ++round) {
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
       InitializeMatrix(matrix_size, &matrix);
       OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
                       &generator, &uniform_dist, &extra_buffer);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
       InitializeMatrix(matrix_size, &matrix);
       SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator,

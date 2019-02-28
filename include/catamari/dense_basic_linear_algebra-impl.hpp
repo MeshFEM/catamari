@@ -2737,7 +2737,7 @@ inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPMatrixMultiplyLowerNormalNormal(
     Int tile_size, const Field& alpha,
@@ -2834,7 +2834,7 @@ void OpenMPLowerNormalHermitianOuterProduct(
     }
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void Permute(const Buffer<Int>& permutation, BlasMatrixView<Field>* matrix) {

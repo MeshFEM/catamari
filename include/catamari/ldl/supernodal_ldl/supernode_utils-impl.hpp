@@ -213,7 +213,7 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 #endif
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFormFundamentalSupernodesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
@@ -351,7 +351,7 @@ void OpenMPFormFundamentalSupernodes(
   }
 #endif
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 inline MergableStatus MergableSupernode(
     Int child_tail, Int parent_tail, Int child_size, Int parent_size,
@@ -773,7 +773,7 @@ void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPSupernodalDegreesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
@@ -910,7 +910,7 @@ void OpenMPSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
         &private_tmp_structures);
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
@@ -1029,7 +1029,7 @@ void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
 #endif  // ifdef CATAMARI_DEBUG
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFillStructureIndicesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
@@ -1041,8 +1041,8 @@ void OpenMPFillStructureIndicesRecursion(
   #pragma omp taskgroup
   for (Int child_index = child_beg; child_index < child_end; ++child_index) {
     const Int child = ordering.assembly_forest.children[child_index];
-    #pragma omp task default(none) firstprivate(child)              \
-        shared(matrix, ordering, forest, supernode_member_to_index, \
+    #pragma omp task default(none) firstprivate(child)               \
+        shared(matrix, ordering, forest, supernode_member_to_index,  \
             lower_factor, private_pattern_flags)
     OpenMPFillStructureIndicesRecursion(matrix, ordering, forest,
                                         supernode_member_to_index, child,
@@ -1156,7 +1156,7 @@ void OpenMPFillStructureIndices(Int sort_grain_size,
     }
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_forest,
@@ -1240,7 +1240,7 @@ void FillNonzeros(const CoordinateMatrix<Field>& matrix,
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFillNonzerosRecursion(const CoordinateMatrix<Field>& matrix,
                                  const SymmetricOrdering& ordering,
@@ -1325,7 +1325,7 @@ void OpenMPFillNonzeros(const CoordinateMatrix<Field>& matrix,
                                 root, lower_factor, diagonal_factor);
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void FillZeros(const SymmetricOrdering& ordering,
@@ -1346,7 +1346,7 @@ void FillZeros(const SymmetricOrdering& ordering,
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFillZerosRecursion(const SymmetricOrdering& ordering, Int root,
                               LowerFactor<Field>* lower_factor,
@@ -1384,7 +1384,7 @@ void OpenMPFillZeros(const SymmetricOrdering& ordering,
     OpenMPFillZerosRecursion(ordering, root, lower_factor, diagonal_factor);
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
@@ -1465,7 +1465,7 @@ void FormScaledTranspose(SymmetricFactorizationType factorization_type,
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPFormScaledTranspose(Int tile_size,
                                SymmetricFactorizationType factorization_type,
@@ -1520,7 +1520,7 @@ void OpenMPFormScaledTranspose(Int tile_size,
     }
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void UpdateDiagonalBlock(
@@ -1758,7 +1758,7 @@ void MergeChildSchurComplements(Int supernode,
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPMergeChildSchurComplements(
     Int merge_grain_size, Int supernode, const SymmetricOrdering& ordering,
@@ -1850,7 +1850,7 @@ void OpenMPMergeChildSchurComplements(
     child_schur_complement_buffer.Clear();
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 Int FactorDiagonalBlock(Int block_size,
@@ -1867,7 +1867,7 @@ Int FactorDiagonalBlock(Int block_size,
   return num_pivots;
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 Int OpenMPFactorDiagonalBlock(Int tile_size, Int block_size,
                               SymmetricFactorizationType factorization_type,
@@ -1886,7 +1886,7 @@ Int OpenMPFactorDiagonalBlock(Int tile_size, Int block_size,
   }
   return num_pivots;
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 template <class Field>
 void SolveAgainstDiagonalBlock(
@@ -1910,7 +1910,7 @@ void SolveAgainstDiagonalBlock(
   }
 }
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPSolveAgainstDiagonalBlock(
     Int tile_size, SymmetricFactorizationType factorization_type,
@@ -1968,7 +1968,7 @@ void OpenMPSolveAgainstDiagonalBlock(
     }
   }
 }
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 }  // namespace supernodal_ldl
 }  // namespace catamari

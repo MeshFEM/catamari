@@ -25,11 +25,11 @@ namespace catamari {
 template <class Field>
 Int LowerCholeskyFactorization(Int block_size, BlasMatrixView<Field>* matrix);
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
                                      BlasMatrixView<Field>* matrix);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Attempts to overwrite the lower triangle of an (implicitly) Hermitian
 // matrix with its L D L^H factorization, where L is lower-triangular with
@@ -40,12 +40,12 @@ Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
 template <class Field>
 Int LowerLDLAdjointFactorization(Int block_size, BlasMatrixView<Field>* matrix);
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 Int OpenMPLowerLDLAdjointFactorization(Int tile_size, Int block_size,
                                        BlasMatrixView<Field>* matrix,
                                        Buffer<Field>* buffer);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Attempts to overwrite the lower triangle of an (implicitly) symmetric
 // matrix with its L D L^T factorization, where L is lower-triangular with
@@ -57,12 +57,12 @@ template <class Field>
 Int LowerLDLTransposeFactorization(Int block_size,
                                    BlasMatrixView<Field>* matrix);
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 Int OpenMPLowerLDLTransposeFactorization(Int tile_size, Int block_size,
                                          BlasMatrixView<Field>* matrix,
                                          Buffer<Field>* buffer);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 // Returns a sample from the Determinantal Point Process implied by the
 // marginal kernel matrix (i.e., a Hermitian matrix with all eigenvalues
@@ -75,14 +75,14 @@ std::vector<Int> LowerFactorAndSampleDPP(
     std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist);
 
-#ifdef _OPENMP
+#ifdef CATAMARI_OPENMP
 template <class Field>
 std::vector<Int> OpenMPLowerFactorAndSampleDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator,
     std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     std::vector<Field>* buffer);
-#endif  // ifdef _OPENMP
+#endif  // ifdef CATAMARI_OPENMP
 
 }  // namespace catamari
 
