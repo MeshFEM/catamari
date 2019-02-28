@@ -170,6 +170,7 @@ complex_test_exe = executable(
     include_directories : include_dir,
     dependencies : deps + test_deps,
     cpp_args : cxx_args)
+test('Complex tests', complex_test_exe)
 
 # Tests for the CoordinateMatrix class.
 coordinate_matrix_test_exe = executable(
@@ -178,6 +179,7 @@ coordinate_matrix_test_exe = executable(
     include_directories : include_dir,
     dependencies : deps + test_deps,
     cpp_args : cxx_args)
+test('CoordinateMatrix tests', coordinate_matrix_test_exe)
 
 # A performance test for multithreaded dense outer products.
 dense_outer_product_exe = executable(
