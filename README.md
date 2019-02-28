@@ -89,7 +89,7 @@ ninja test
 
 OpenMP task parallelism will be used by default if support for OpenMP was
 detected; shared-memory parallelism can be disabled with the
-`-Ddisable-openmp=true` configuration option.
+`-Ddisable_openmp=true` configuration option.
 
 ### Running the example drivers
 One can factor Matrix Market examples from the Davis sparse matrix collection

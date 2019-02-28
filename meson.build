@@ -35,7 +35,7 @@ if cxx.get_id() == 'gcc'
   cxx_args += '-fcx-fortran-rules'
 endif
 
-if get_option('disable-tcmalloc')
+if get_option('disable_tcmalloc')
   have_tcmalloc = false
 else
   tcmalloc_dep = cxx.find_library('tcmalloc_minimal')
@@ -63,11 +63,11 @@ if cxx.get_id() == 'gcc' and cxx.version() < '5.5'
   trust_omp_version = false
 endif
 if trust_omp_version
-  if get_option('enable-openmp')
+  if get_option('enable_openmp')
     openmp_dep = dependency('openmp', version : '>=4.0')
     have_openmp = true
     deps += openmp_dep
-  elif not get_option('disable-openmp')
+  elif not get_option('disable_openmp')
     openmp_dep = dependency('openmp', version : '>=4.0', required : false)
     if openmp_dep.found()
       have_openmp = true
@@ -80,18 +80,24 @@ if trust_omp_version
 endif
 
 # Simple BLAS/LAPACK detection.
-if not get_option('disable-blas')
+if not get_option('disable_blas')
   have_blas = false
   have_mkl = false
   have_openblas = false
 
-  if not get_option('disable-mkl')
-    mkl_lib = cxx.find_library('libmkl_rt', required : false)
+  if not get_option('disable_mkl')
+    mkl_lib_dir = get_option('mkl_lib')
+    if mkl_lib_dir == ''
+      mkl_dirs = []
+    else
+      mkl_dirs = [mkl_lib_dir,]
+    endif
+    mkl_lib = cxx.find_library('libmkl_rt', dirs : mkl_dirs, required : false)
     if mkl_lib.found()
       if have_openmp
         mkl_intel_thread_lib = cxx.find_library('libmkl_intel_thread', \
-            required : false)
-        iomp5_lib = cxx.find_library('iomp5', required : false)
+            dirs : mkl_dirs, required : false)
+        iomp5_lib = cxx.find_library('iomp5', dirs : mkl_dirs, required : false)
         if mkl_intel_thread_lib.found() and iomp5_lib.found()
           have_mkl = true
           deps += mkl_lib
@@ -115,7 +121,7 @@ if not get_option('disable-blas')
     endif
   endif
 
-  if not have_blas and not get_option('disable-openblas')
+  if not have_blas and not get_option('disable_openblas')
     openblas_lib = cxx.find_library('libopenblas', required : false)
     if openblas_lib.found()
       message('Found OpenBLAS')
@@ -156,26 +162,26 @@ test_deps += subproject('catch2').get_variable('catch2_dep')
 
 # For controlling whether 32-bit or 64-bit integers are used. By default,
 # 64-bit integers are used.
-if get_option('use-64bit')
+if get_option('use_64bit')
   cxx_args += '-DQUOTIENT_USE_64BIT'
 endif
 
 # For controlling the tradeoff between quality and speed for the supervariable
 # hash function. It seems to typically be preferable to prefer the cheapest-
 # possible hash.
-if get_option('strong-hashes')
+if get_option('strong_hashes')
   cxx_args += '-DQUOTIENT_STRONG_HASHES'
 endif
 
 # For controlling whether QuotientGraph includes timers for the various stages
 # of minimum-degree analysis.
-if get_option('enable-timers')
+if get_option('enable_timers')
   cxx_args += '-DQUOTIENT_ENABLE_TIMERS'
   cxx_args += '-DCATAMARI_ENABLE_TIMERS'
 endif
 
 # For controlling whether (expensive) debugging checks are performed.
-if get_option('enable-debug')
+if get_option('enable_debug')
   cxx_args += '-DQUOTIENT_DEBUG'
   cxx_args += '-DCATAMARI_DEBUG'
 endif

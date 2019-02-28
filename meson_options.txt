@@ -6,52 +6,57 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
 
-option('disable-tcmalloc',
+option('disable_tcmalloc',
     type : 'boolean',
     value : true,
     description : 'disable libtcmalloc allocation?')
 
-option('disable-blas',
+option('disable_blas',
     type : 'boolean',
     value : false,
     description : 'disable BLAS support?')
 
-option('disable-mkl',
+option('disable_mkl',
     type : 'boolean',
     value : false,
     description : 'disable Intel MKL support?')
 
-option('disable-openblas',
+option('mkl_lib',
+    type : 'string',
+    value : '',
+    description : 'a path to MKL libraries')
+
+option('disable_openblas',
     type : 'boolean',
     value : false,
     description : 'disable OpenBLAS support?')
 
-option('use-64bit',
+option('use_64bit',
     type : 'boolean',
     value : true,
     description : 'use 64-bit integers for representing indices?')
 
-option('strong-hashes',
+option('strong_hashes',
     type : 'boolean',
     value : false,
     description : 'use a more expensive, but better supervariable hash?')
 
-option('enable-timers',
+option('enable_timers',
     type : 'boolean',
     value : false,
     description : 'enable code for timing components?')
 
-option('enable-debug',
+option('enable_debug',
     type : 'boolean',
     value : false,
     description : 'enable extra debugging assertions?')
 
-option('enable-openmp',
+option('enable_openmp',
     type : 'boolean',
     value : false,
     description : 'demand OpenMP support?')
 
-option('disable-openmp',
+option('disable_openmp',
     type : 'boolean',
     value : false,
     description : 'disable OpenMP support?')
