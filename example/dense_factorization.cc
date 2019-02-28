@@ -40,22 +40,28 @@ void RunCholeskyFactorization(Int tile_size, Int block_size,
   quotient::Timer timer;
   timer.Start();
 
+  int num_pivots;
 #ifdef CATAMARI_OPENMP
   const int old_max_threads = catamari::GetMaxBlasThreads();
   catamari::SetNumBlasThreads(1);
   #pragma omp parallel
   #pragma omp single
-  OpenMPLowerCholeskyFactorization(tile_size, block_size, matrix);
+  num_pivots = OpenMPLowerCholeskyFactorization(tile_size, block_size, matrix);
   catamari::SetNumBlasThreads(old_max_threads);
 #else
-  LowerCholeskyFactorization(block_size, matrix);
+  num_pivots = LowerCholeskyFactorization(block_size, matrix);
 #endif
 
-  const double runtime = timer.Stop();
-  const double flops =
-      (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
-  const double gflops_per_sec = flops / (1.e9 * runtime);
-  std::cout << "Cholesky GFlops/sec: " << gflops_per_sec << std::endl;
+  if (num_pivots == matrix_size) {
+    const double runtime = timer.Stop();
+    const double flops =
+        (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
+    const double gflops_per_sec = flops / (1.e9 * runtime);
+    std::cout << "Cholesky GFlops/sec: " << gflops_per_sec << std::endl;
+  } else {
+    std::cout << "Cholesky failed after " << num_pivots << " pivots."
+              << std::endl;
+  }
 }
 
 template <typename Field>
@@ -67,23 +73,29 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
   quotient::Timer timer;
   timer.Start();
 
+  int num_pivots;
 #ifdef CATAMARI_OPENMP
   const int old_max_threads = catamari::GetMaxBlasThreads();
   catamari::SetNumBlasThreads(1);
   #pragma omp parallel
   #pragma omp single
-  OpenMPLowerLDLAdjointFactorization(tile_size, block_size, matrix,
-                                     extra_buffer);
+  num_pivots = OpenMPLowerLDLAdjointFactorization(tile_size, block_size, matrix,
+                                                  extra_buffer);
   catamari::SetNumBlasThreads(old_max_threads);
 #else
-  LowerLDLAdjointFactorization(block_size, matrix);
+  num_pivots = LowerLDLAdjointFactorization(block_size, matrix);
 #endif
 
-  const double runtime = timer.Stop();
-  const double flops =
-      (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
-  const double gflops_per_sec = flops / (1.e9 * runtime);
-  std::cout << "LDLAdjoint GFlops/sec: " << gflops_per_sec << std::endl;
+  if (num_pivots == matrix_size) {
+    const double runtime = timer.Stop();
+    const double flops =
+        (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
+    const double gflops_per_sec = flops / (1.e9 * runtime);
+    std::cout << "LDLAdjoint GFlops/sec: " << gflops_per_sec << std::endl;
+  } else {
+    std::cout << "LDLAdjoint failed after " << num_pivots << " pivots."
+              << std::endl;
+  }
 }
 
 template <typename Field>
@@ -95,23 +107,29 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
   quotient::Timer timer;
   timer.Start();
 
+  int num_pivots;
 #ifdef CATAMARI_OPENMP
   const int old_max_threads = catamari::GetMaxBlasThreads();
   catamari::SetNumBlasThreads(1);
   #pragma omp parallel
   #pragma omp single
-  OpenMPLowerLDLTransposeFactorization(tile_size, block_size, matrix,
-                                       extra_buffer);
+  num_pivots = OpenMPLowerLDLTransposeFactorization(tile_size, block_size,
+                                                    matrix, extra_buffer);
   catamari::SetNumBlasThreads(old_max_threads);
 #else
-  LowerLDLTransposeFactorization(block_size, matrix);
+  num_pivots = LowerLDLTransposeFactorization(block_size, matrix);
 #endif
 
-  const double runtime = timer.Stop();
-  const double flops =
-      (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
-  const double gflops_per_sec = flops / (1.e9 * runtime);
-  std::cout << "LDLTranspose GFlops/sec: " << gflops_per_sec << std::endl;
+  if (num_pivots == matrix_size) {
+    const double runtime = timer.Stop();
+    const double flops =
+        (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
+    const double gflops_per_sec = flops / (1.e9 * runtime);
+    std::cout << "LDLTranspose GFlops/sec: " << gflops_per_sec << std::endl;
+  } else {
+    std::cout << "LDLTranspose failed after " << num_pivots << " pivots."
+              << std::endl;
+  }
 }
 
 }  // anonymous namespace
