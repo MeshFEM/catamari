@@ -91,6 +91,8 @@ OpenMP task parallelism will be used by default if support for OpenMP was
 detected; shared-memory parallelism can be disabled with the
 `-Ddisable_openmp=true` configuration option.
 
+And MKL support can be enabled by configuring with `-Dmkl_lib=/PATH/TO/MKL/LIB`.
+
 ### Running the example drivers
 One can factor Matrix Market examples from the Davis sparse matrix collection
 via `examples/factor_matrix_market.cc`, sample a Determinantal Point Process
