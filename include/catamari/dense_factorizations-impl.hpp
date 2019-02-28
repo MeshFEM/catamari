@@ -248,6 +248,7 @@ Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
   const Int leading_dim CATAMARI_UNUSED = matrix->leading_dim;
 
   Int num_pivots = 0;
+  bool failed_pivot = false;
   #pragma omp taskgroup
   for (Int i = 0; i < height; i += tile_size) {
     const Int tsize = std::min(height - i, tile_size);
@@ -255,10 +256,10 @@ Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
     // Overwrite the diagonal block with its Cholesky factor.
     BlasMatrixView<Field> diagonal_block =
         matrix->Submatrix(i, i, tsize, tsize);
-    bool failed_pivot = false;
     #pragma omp taskgroup
-    #pragma omp task default(none) firstprivate(block_size, diagonal_block) \
-        shared(num_pivots, failed_pivot)                                    \
+    #pragma omp task default(none)                               \
+        firstprivate(i, leading_dim, block_size, diagonal_block) \
+        shared(num_pivots, failed_pivot)                         \
         depend(inout: matrix_data[i + i * leading_dim])
     {
       const Int num_diag_pivots =
@@ -275,8 +276,10 @@ Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
 
     // Solve for the remainder of the block column of L.
     for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
-      #pragma omp task default(none)                                  \
-          firstprivate(i, i_sub, matrix, const_diagonal_block, tsize) \
+      #pragma omp task default(none)                          \
+          firstprivate(height, i, i_sub, matrix, leading_dim, \
+              const_diagonal_block, tsize)                    \
+          depend(in: matrix_data[i + i * leading_dim])        \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
         const Int tsize_solve = std::min(height - i_sub, tsize);
@@ -289,8 +292,9 @@ Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
 
     // Perform the Hermitian rank-bsize update.
     for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
-      #pragma omp task default(none) firstprivate(i, j_sub, matrix, tsize) \
-          depend(in: matrix_data[j_sub + i * leading_dim])                 \
+      #pragma omp task default(none)                                 \
+          firstprivate(height, leading_dim, i, j_sub, matrix, tsize) \
+          depend(in: matrix_data[j_sub + i * leading_dim])           \
           depend(inout: matrix_data[j_sub + j_sub * leading_dim])
       {
         const Int column_tsize = std::min(height - j_sub, tsize);
@@ -303,10 +307,10 @@ Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
       }
 
       for (Int i_sub = j_sub + tsize; i_sub < height; i_sub += tile_size) {
-        #pragma omp task default(none)                     \
-          firstprivate(i, i_sub, j_sub, matrix, tsize)     \
-          depend(in: matrix_data[i_sub + i * leading_dim], \
-              matrix_data[j_sub + i * leading_dim])        \
+        #pragma omp task default(none)                                      \
+          firstprivate(height, leading_dim, i, i_sub, j_sub, matrix, tsize) \
+          depend(in: matrix_data[i_sub + i * leading_dim])                  \
+          depend(in: matrix_data[j_sub + i * leading_dim])                  \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
         {
           const Int row_tsize = std::min(height - i_sub, tsize);

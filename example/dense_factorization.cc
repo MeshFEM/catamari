@@ -23,7 +23,7 @@ namespace {
 
 template <typename Field>
 void InitializeMatrix(Int matrix_size, BlasMatrix<Field>* matrix) {
-  matrix->Resize(matrix_size, matrix_size);
+  matrix->Resize(matrix_size, matrix_size, Field{0});
   for (Int j = 0; j < matrix_size; ++j) {
     matrix->Entry(j, j) = 2 * matrix_size;
     for (Int i = j + 1; i < matrix_size; ++i) {
