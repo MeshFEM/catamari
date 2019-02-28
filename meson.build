@@ -55,6 +55,13 @@ if cxx.get_id() == 'clang' and cxx.version() < '9.0'
   message('Ignoring Clang\'s reported OpenMP version')
   trust_omp_version = false
 endif
+# Older versions of gcc, e.g., 5.4.0-6ubuntu1~16.04.11, falsely report support
+# for OpenMP 4.0 despite bugs in task dependencies. However, version
+# 5.5.0-12ubuntu1 appears to have fixed this issue.
+if cxx.get_id() == 'gcc' and cxx.version() < '5.5'
+  message('Ignoring GCC\'s reported OpenMP version')
+  trust_omp_version = false
+endif
 if trust_omp_version
   if get_option('enable-openmp')
     openmp_dep = dependency('openmp', version : '>=4.0')
