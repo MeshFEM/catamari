@@ -205,6 +205,15 @@ coordinate_matrix_test_exe = executable(
 test('CoordinateMatrix tests', coordinate_matrix_test_exe)
 
 # An test of factoring and solving against a 2D negative Laplacian.
+dense_factorization_test_exe = executable(
+    'dense_factorization_test',
+    ['test/dense_factorization_test.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps + test_deps,
+    cpp_args : cxx_args)
+test('Dense factorization tests', dense_factorization_test_exe)
+
+# An test of factoring and solving against a 2D negative Laplacian.
 laplacian_test_exe = executable(
     'laplacian_test',
     ['test/laplacian_test.cc', 'include/catamari.hpp'],
