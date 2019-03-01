@@ -1,4 +1,5 @@
 ![](./images/rainbow_lhr34.png)
+[![Join the chat at https://gitter.im/elemental/chat](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/hodge_star/chat?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 **catamari** is a C++14, header-only implementations of sequential and
 DAG-scheduled, real and complex, supernodal sparse-direct Cholesky, LDL^T, and
