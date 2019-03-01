@@ -296,17 +296,25 @@ int main(int argc, char** argv) {
       static_cast<quotient::EntryMask>(entry_mask_int);
 
   catamari::DPPControl dpp_control;
-  dpp_control.md_control.degree_type =
-      static_cast<quotient::DegreeType>(degree_type_int);
-  dpp_control.md_control.aggressive_absorption = aggressive_absorption;
-  dpp_control.md_control.min_dense_threshold = min_dense_threshold;
-  dpp_control.md_control.dense_sqrt_multiple = dense_sqrt_multiple;
-  dpp_control.supernodal_control.relaxation_control.relax_supernodes =
-      relax_supernodes;
-  dpp_control.supernodal_control.relaxation_control.allowable_supernode_zeros =
-      allowable_supernode_zeros;
-  dpp_control.supernodal_control.relaxation_control
-      .allowable_supernode_zero_ratio = allowable_supernode_zero_ratio;
+
+  // Set the minimum degree control options.
+  {
+    auto& md_control = dpp_control.md_control;
+    md_control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
+    md_control.aggressive_absorption = aggressive_absorption;
+    md_control.min_dense_threshold = min_dense_threshold;
+    md_control.dense_sqrt_multiple = dense_sqrt_multiple;
+  }
+
+  // Set the supernodal control options.
+  {
+    auto& sn_control = dpp_control.supernodal_control;
+    sn_control.relaxation_control.relax_supernodes = relax_supernodes;
+    sn_control.relaxation_control.allowable_supernode_zeros =
+        allowable_supernode_zeros;
+    sn_control.relaxation_control.allowable_supernode_zero_ratio =
+        allowable_supernode_zero_ratio;
+  }
 
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =

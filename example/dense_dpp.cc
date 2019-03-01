@@ -83,16 +83,38 @@ void OpenMPSampleDPP(
 }
 #endif  // ifdef CATAMARI_OPENMP
 
+template <typename Field>
+void RunDPPTests(bool maximum_likelihood, Int matrix_size, Int block_size,
+                 Int CATAMARI_UNUSED tile_size, Int num_rounds,
+                 unsigned int random_seed) {
+  typedef catamari::ComplexBase<Field> Real;
+  BlasMatrix<Field> matrix;
+  Buffer<Field> extra_buffer(matrix_size * matrix_size);
+
+  std::mt19937 generator(random_seed);
+  std::uniform_real_distribution<Real> uniform_dist(Real{0}, Real{1});
+
+  for (Int round = 0; round < num_rounds; ++round) {
+#ifdef CATAMARI_OPENMP
+    InitializeMatrix(matrix_size, &matrix);
+    OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
+                    &generator, &uniform_dist, &extra_buffer);
+#endif  // ifdef CATAMARI_OPENMP
+
+    InitializeMatrix(matrix_size, &matrix);
+    SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator,
+              &uniform_dist);
+  }
+}
+
 }  // anonymous namespace
 
 int main(int argc, char** argv) {
   specify::ArgumentParser parser(argc, argv);
   const Int matrix_size = parser.OptionalInput<Int>(
       "matrix_size", "The dimension of the matrix to factor.", 1000);
-#ifdef CATAMARI_OPENMP
   const Int tile_size = parser.OptionalInput<Int>(
       "tile_size", "The tile size for multithreaded factorization.", 128);
-#endif  // ifdef CATAMARI_OPENMP
   const Int block_size = parser.OptionalInput<Int>(
       "block_size", "The block_size for dense factorization.", 64);
   const Int num_rounds = parser.OptionalInput<Int>(
@@ -105,50 +127,14 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  // TODO(Jack Poulson): Templatize so that there is no float/double redundancy.
-
   std::cout << "Single-precision:" << std::endl;
-  {
-    BlasMatrix<Complex<float>> matrix;
-    Buffer<Complex<float>> extra_buffer(matrix_size * matrix_size);
-
-    std::mt19937 generator(random_seed);
-    std::uniform_real_distribution<float> uniform_dist(0., 1.);
-
-    for (Int round = 0; round < num_rounds; ++round) {
-#ifdef CATAMARI_OPENMP
-      InitializeMatrix(matrix_size, &matrix);
-      OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
-                      &generator, &uniform_dist, &extra_buffer);
-#endif  // ifdef CATAMARI_OPENMP
-
-      InitializeMatrix(matrix_size, &matrix);
-      SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator,
-                &uniform_dist);
-    }
-  }
+  RunDPPTests<Complex<float>>(maximum_likelihood, matrix_size, block_size,
+                              tile_size, num_rounds, random_seed);
   std::cout << std::endl;
 
   std::cout << "Double-precision:" << std::endl;
-  {
-    BlasMatrix<Complex<double>> matrix;
-    Buffer<Complex<double>> extra_buffer(matrix_size * matrix_size);
-
-    std::mt19937 generator(random_seed);
-    std::uniform_real_distribution<double> uniform_dist(0., 1.);
-
-    for (Int round = 0; round < num_rounds; ++round) {
-#ifdef CATAMARI_OPENMP
-      InitializeMatrix(matrix_size, &matrix);
-      OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
-                      &generator, &uniform_dist, &extra_buffer);
-#endif  // ifdef CATAMARI_OPENMP
-
-      InitializeMatrix(matrix_size, &matrix);
-      SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator,
-                &uniform_dist);
-    }
-  }
+  RunDPPTests<Complex<double>>(maximum_likelihood, matrix_size, block_size,
+                               tile_size, num_rounds, random_seed);
 
   return 0;
 }

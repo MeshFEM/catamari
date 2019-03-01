@@ -350,27 +350,36 @@ int main(int argc, char** argv) {
       static_cast<quotient::EntryMask>(entry_mask_int);
 
   catamari::LDLControl ldl_control;
-  ldl_control.md_control.degree_type =
-      static_cast<quotient::DegreeType>(degree_type_int);
-  ldl_control.md_control.aggressive_absorption = aggressive_absorption;
-  ldl_control.md_control.min_dense_threshold = min_dense_threshold;
-  ldl_control.md_control.dense_sqrt_multiple = dense_sqrt_multiple;
+  ldl_control.SetFactorizationType(
+      static_cast<catamari::SymmetricFactorizationType>(
+          factorization_type_int));
   ldl_control.supernodal_strategy =
       static_cast<catamari::SupernodalStrategy>(supernodal_strategy_int);
-  ldl_control.scalar_control.factorization_type =
-      static_cast<catamari::SymmetricFactorizationType>(factorization_type_int);
+
+  // Set the minimum degree control options.
+  {
+    auto& md_control = ldl_control.md_control;
+    md_control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
+    md_control.aggressive_absorption = aggressive_absorption;
+    md_control.min_dense_threshold = min_dense_threshold;
+    md_control.dense_sqrt_multiple = dense_sqrt_multiple;
+  }
+
+  // Set the scalar control options.
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
-  ldl_control.supernodal_control.factorization_type =
-      static_cast<catamari::SymmetricFactorizationType>(factorization_type_int);
-  ldl_control.supernodal_control.algorithm =
-      static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
-  ldl_control.supernodal_control.relaxation_control.relax_supernodes =
-      relax_supernodes;
-  ldl_control.supernodal_control.relaxation_control.allowable_supernode_zeros =
-      allowable_supernode_zeros;
-  ldl_control.supernodal_control.relaxation_control
-      .allowable_supernode_zero_ratio = allowable_supernode_zero_ratio;
+
+  // Set the supernodal control options.
+  {
+    auto& sn_control = ldl_control.supernodal_control;
+    sn_control.algorithm =
+        static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+    sn_control.relaxation_control.relax_supernodes = relax_supernodes;
+    sn_control.relaxation_control.allowable_supernode_zeros =
+        allowable_supernode_zeros;
+    sn_control.relaxation_control.allowable_supernode_zero_ratio =
+        allowable_supernode_zero_ratio;
+  }
 
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =

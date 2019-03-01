@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "catamari/ldl/scalar_ldl.hpp"
 #include "catamari/ldl/supernodal_ldl.hpp"
 #include "quotient/minimum_degree.hpp"
 
@@ -38,6 +39,13 @@ struct LDLControl {
 
   // The configuration options for the supernodal LDL factorization.
   supernodal_ldl::Control supernodal_control;
+
+  // Sets the factorization type for both the scalar and supernodal control
+  // structures.
+  void SetFactorizationType(SymmetricFactorizationType type) {
+    scalar_control.factorization_type = type;
+    supernodal_control.factorization_type = type;
+  }
 };
 
 // A wrapper for the scalar and supernodal factorization data structures.

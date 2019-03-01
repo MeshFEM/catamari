@@ -234,12 +234,16 @@ int main(int argc, char** argv) {
   }
 
   catamari::DPPControl dpp_control;
-  dpp_control.supernodal_control.relaxation_control.relax_supernodes =
-      relax_supernodes;
-  dpp_control.supernodal_control.relaxation_control.allowable_supernode_zeros =
-      allowable_supernode_zeros;
-  dpp_control.supernodal_control.relaxation_control
-      .allowable_supernode_zero_ratio = allowable_supernode_zero_ratio;
+
+  // Set the supernodal control options.
+  {
+    auto& sn_control = dpp_control.supernodal_control;
+    sn_control.relaxation_control.relax_supernodes = relax_supernodes;
+    sn_control.relaxation_control.allowable_supernode_zeros =
+        allowable_supernode_zeros;
+    sn_control.relaxation_control.allowable_supernode_zero_ratio =
+        allowable_supernode_zero_ratio;
+  }
 
   const Experiment experiment = RunShifted2DNegativeLaplacianTest(
       x_size, y_size, diagonal_shift, scale, maximum_likelihood,

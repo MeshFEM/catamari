@@ -10,6 +10,7 @@
 
 #include <cmath>
 
+#include "catamari/index_utils.hpp"
 #include "catamari/ldl/scalar_ldl/scalar_utils.hpp"
 #include "quotient/io_utils.hpp"
 
