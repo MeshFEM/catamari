@@ -14,8 +14,6 @@
 #include "catch2/catch.hpp"
 
 using catamari::BlasMatrix;
-using catamari::BlasMatrixView;
-using catamari::Buffer;
 using catamari::ConstBlasMatrixView;
 using catamari::Int;
 
