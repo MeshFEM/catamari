@@ -1,12 +1,12 @@
 ![](./images/rainbow_lhr34.png)
 
-[![Join the chat at https://gitter.im/elemental/chat](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/hodge_star/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
 **catamari** is a C++14, header-only implementations of sequential and
 DAG-scheduled, real and complex, supernodal sparse-direct Cholesky, LDL^T, and
 LDL^H factorizations. It similarly contains sequential and DAG-scheduled,
 dense and sparse-direct, real and complex, Determinantal Point Process sampling
 through modified LDL^H factorizations.
+
+[![Join the chat at https://gitter.im/hodge_star/community](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/hodge_star/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 ### Dependencies
 The only strict dependency for manually including the headers in your project
