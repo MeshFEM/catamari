@@ -53,18 +53,24 @@ matrix.ReserveEntryAdditions(num_entries_upper_bound);
 //   matrix.QueueEdgeAddition(row, column, value);
 matrix.FlushEntryQueues();
 
-// Factor the matrix.
+// Fill the options for the factorization.
 catamari::LDLControl ldl_control;
-catamari::LDLFactorization<double> ldl_factorization;
-const catamari::LDLResult result =
-    ldl_factorization.Factor(matrix, ldl_control);
+// The options for the factorization type are:
+//   * catamari::kCholeskyFactorization,
+//   * catamari::kLDLAdjointFactorization,
+//   * catamari::kLDLTransposeFactorization.
+ldl_control.SetFactorizationType(catamari::kCholeskyFactorization);
+
+// Factor the matrix.
+catamari::LDLFactorization<double> factorization;
+const catamari::LDLResult result = factorization.Factor(matrix, ldl_control);
 
 // Solve a linear system using the factorization.
 catamari::BlasMatrix<double> right_hand_sides;
 right_hand_sides.Resize(height, width);
 // The (i, j) entry of the right-hand side can easily be read or modified, e.g.:
 //   right_hand_sides(i, j) = 1.;
-ldl_factorization.Solve(&right_hand_sides.view);
+factorization.Solve(&right_hand_sides.view);
 ```
 
 ### Running the unit tests
