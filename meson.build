@@ -204,6 +204,15 @@ coordinate_matrix_test_exe = executable(
     cpp_args : cxx_args)
 test('CoordinateMatrix tests', coordinate_matrix_test_exe)
 
+# An test of factoring and solving against a 2D negative Laplacian.
+laplacian_test_exe = executable(
+    'laplacian_test',
+    ['test/laplacian_test.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps + test_deps,
+    cpp_args : cxx_args)
+test('Laplacian tests', laplacian_test_exe)
+
 # A performance test for multithreaded dense outer products.
 dense_outer_product_exe = executable(
     'dense_outer_product',
