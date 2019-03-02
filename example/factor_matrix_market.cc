@@ -11,6 +11,7 @@
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
 #include "catamari/ldl.hpp"
+#include "catamari/norms.hpp"
 #include "specify.hpp"
 
 using catamari::BlasMatrix;
@@ -44,38 +45,6 @@ void PrintExperiment(const Experiment& experiment, const std::string& label) {
             << "\n";
   std::cout << "  solve_seconds:         " << experiment.solve_seconds << "\n";
   std::cout << std::endl;
-}
-
-// Returns the Frobenius norm of a real matrix.
-// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
-// unstable. But it suffices for example purposes.
-template <typename Real>
-Real EuclideanNorm(const ConstBlasMatrixView<Real>& matrix) {
-  Real squared_norm{0};
-  const Int height = matrix.height;
-  const Int width = matrix.width;
-  for (Int j = 0; j < width; ++j) {
-    for (Int i = 0; i < height; ++i) {
-      squared_norm += matrix(i, j) * matrix(i, j);
-    }
-  }
-  return std::sqrt(squared_norm);
-}
-
-// Returns the Frobenius norm of a complex vector.
-// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
-// unstable. But it suffices for example purposes.
-template <typename Real>
-Real EuclideanNorm(const ConstBlasMatrixView<catamari::Complex<Real>>& matrix) {
-  Real squared_norm{0};
-  const Int height = matrix.height;
-  const Int width = matrix.width;
-  for (Int j = 0; j < width; ++j) {
-    for (Int i = 0; i < height; ++i) {
-      squared_norm += std::norm(matrix(i, j));
-    }
-  }
-  return std::sqrt(squared_norm);
 }
 
 // Overwrites a matrix A with A + A' or A + A^T.
@@ -214,7 +183,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   BlasMatrix<Field> right_hand_side;
   GenerateRightHandSide(num_rows, &right_hand_side);
   const BaseField right_hand_side_norm =
-      EuclideanNorm(right_hand_side.ConstView());
+      catamari::EuclideanNorm(right_hand_side.ConstView());
   if (print_progress) {
     std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
   }
@@ -233,7 +202,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   BlasMatrix<Field> residual = right_hand_side;
   catamari::ApplySparse(Field{-1}, *matrix, solution.ConstView(), Field{1},
                         &residual.view);
-  const BaseField residual_norm = EuclideanNorm(residual.ConstView());
+  const BaseField residual_norm = catamari::EuclideanNorm(residual.ConstView());
   std::cout << "  || B - A X ||_F / || B ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
 

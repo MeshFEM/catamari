@@ -31,32 +31,6 @@ void PrintExperiment(const Experiment& experiment) {
   std::cout << std::endl;
 }
 
-// Returns the Frobenius norm of a real sparse matrix.
-// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
-// unstable. But it suffices for example purposes.
-template <typename Real>
-Real EuclideanNorm(const catamari::CoordinateMatrix<Real>& matrix) {
-  Real squared_norm{0};
-  for (const catamari::MatrixEntry<Real>& entry : matrix.Entries()) {
-    squared_norm += entry.value * entry.value;
-  }
-  return std::sqrt(squared_norm);
-}
-
-// Returns the Frobenius norm of a complex sparse matrix.
-// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
-// unstable. But it suffices for example purposes.
-template <typename Real>
-Real EuclideanNorm(
-    const catamari::CoordinateMatrix<catamari::Complex<Real>>& matrix) {
-  Real squared_norm{0};
-  for (const catamari::MatrixEntry<catamari::Complex<Real>>& entry :
-       matrix.Entries()) {
-    squared_norm += std::norm(entry.value);
-  }
-  return std::sqrt(squared_norm);
-}
-
 template <typename Field>
 void Rescale(const catamari::ComplexBase<Field>& scale,
              catamari::CoordinateMatrix<Field>* matrix) {

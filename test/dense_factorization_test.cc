@@ -10,6 +10,7 @@
 #include "catamari/blas_matrix.hpp"
 #include "catamari/dense_factorizations.hpp"
 #include "catamari/ldl.hpp"
+#include "catamari/norms.hpp"
 #include "catch2/catch.hpp"
 
 using catamari::BlasMatrix;
@@ -96,22 +97,6 @@ void InitializeSymmetric(Int matrix_size, BlasMatrix<Complex<Real>>* matrix) {
   }
 }
 
-// Returns the Frobenius norm of a complex vector.
-// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
-// unstable. But it suffices for example purposes.
-template <typename Real>
-Real EuclideanNorm(const ConstBlasMatrixView<Complex<Real>>& matrix) {
-  Real squared_norm{0};
-  const Int height = matrix.height;
-  const Int width = matrix.width;
-  for (Int j = 0; j < width; ++j) {
-    for (Int i = 0; i < height; ++i) {
-      squared_norm += std::norm(matrix(i, j));
-    }
-  }
-  return std::sqrt(squared_norm);
-}
-
 template <typename Field>
 void RunCholeskyFactorization(Int tile_size, Int block_size,
                               BlasMatrix<Field>* matrix) {
@@ -137,7 +122,8 @@ void RunCholeskyFactorization(Int tile_size, Int block_size,
   BlasMatrix<Field> right_hand_side;
   right_hand_side.Resize(matrix_size, 1, Field{0});
   right_hand_side(matrix_size / 2, 0) = Field{1};
-  const Real right_hand_side_norm = EuclideanNorm(right_hand_side.ConstView());
+  const Real right_hand_side_norm =
+      catamari::EuclideanNorm(right_hand_side.ConstView());
 
   BlasMatrix<Field> solution = right_hand_side;
   catamari::LeftLowerTriangularSolves(matrix->ConstView(), &solution.view);
@@ -148,7 +134,7 @@ void RunCholeskyFactorization(Int tile_size, Int block_size,
   catamari::MatrixMultiplyNormalNormal(Field{-1}, matrix_copy.ConstView(),
                                        solution.ConstView(), Field{1},
                                        &residual.view);
-  const Real residual_norm = EuclideanNorm(residual.ConstView());
+  const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
   REQUIRE(relative_residual < 1e-12);
 }
@@ -179,7 +165,8 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
   BlasMatrix<Field> right_hand_side;
   right_hand_side.Resize(matrix_size, 1, Field{0});
   right_hand_side(matrix_size / 2, 0) = Field{1};
-  const Real right_hand_side_norm = EuclideanNorm(right_hand_side.ConstView());
+  const Real right_hand_side_norm =
+      catamari::EuclideanNorm(right_hand_side.ConstView());
 
   BlasMatrix<Field> solution = right_hand_side;
   catamari::LeftLowerUnitTriangularSolves(matrix->ConstView(), &solution.view);
@@ -193,7 +180,7 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
   catamari::MatrixMultiplyNormalNormal(Field{-1}, matrix_copy.ConstView(),
                                        solution.ConstView(), Field{1},
                                        &residual.view);
-  const Real residual_norm = EuclideanNorm(residual.ConstView());
+  const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
   REQUIRE(relative_residual < 1e-12);
 }
@@ -224,7 +211,8 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
   BlasMatrix<Field> right_hand_side;
   right_hand_side.Resize(matrix_size, 1, Field{0});
   right_hand_side(matrix_size / 2, 0) = Field{1};
-  const Real right_hand_side_norm = EuclideanNorm(right_hand_side.ConstView());
+  const Real right_hand_side_norm =
+      catamari::EuclideanNorm(right_hand_side.ConstView());
 
   BlasMatrix<Field> solution = right_hand_side;
   catamari::LeftLowerUnitTriangularSolves(matrix->ConstView(), &solution.view);
@@ -238,7 +226,7 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
   catamari::MatrixMultiplyNormalNormal(Field{-1}, matrix_copy.ConstView(),
                                        solution.ConstView(), Field{1},
                                        &residual.view);
-  const Real residual_norm = EuclideanNorm(residual.ConstView());
+  const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
   REQUIRE(relative_residual < 1e-12);
 }

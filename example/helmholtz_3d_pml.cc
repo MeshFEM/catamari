@@ -25,6 +25,7 @@
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
 #include "catamari/ldl.hpp"
+#include "catamari/norms.hpp"
 #include "catamari/unit_reach_nested_dissection.hpp"
 #include "specify.hpp"
 
@@ -849,22 +850,6 @@ void PrintExperiment(const Experiment& experiment) {
   std::cout << std::endl;
 }
 
-// Returns the Frobenius norm of a complex vector.
-// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
-// unstable. But it suffices for example purposes.
-template <typename Real>
-Real EuclideanNorm(const ConstBlasMatrixView<catamari::Complex<Real>>& matrix) {
-  Real squared_norm{0};
-  const Int height = matrix.height;
-  const Int width = matrix.width;
-  for (Int j = 0; j < width; ++j) {
-    for (Int i = 0; i < height; ++i) {
-      squared_norm += std::norm(matrix(i, j));
-    }
-  }
-  return std::sqrt(squared_norm);
-}
-
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 Experiment RunTest(SpeedProfile profile, const double& omega,
                    Int num_x_elements, Int num_y_elements, Int num_z_elements,
@@ -888,7 +873,8 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
                          &right_hand_sides);
   experiment.construction_seconds = timer.Stop();
   const Int num_rows = matrix.NumRows();
-  const Real right_hand_side_norm = EuclideanNorm(right_hand_sides.ConstView());
+  const Real right_hand_side_norm =
+      catamari::EuclideanNorm(right_hand_sides.ConstView());
   if (print_progress) {
     std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
   }
@@ -940,7 +926,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   BlasMatrix<Field> residual = right_hand_sides;
   catamari::ApplySparse(Field{-1}, matrix, solution.ConstView(), Field{1},
                         &residual.view);
-  const Real residual_norm = EuclideanNorm(residual.ConstView());
+  const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   std::cout << "  || B - A X ||_F / || B ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
 

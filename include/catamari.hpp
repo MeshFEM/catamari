@@ -15,5 +15,7 @@
 #include "catamari/integers.hpp"
 #include "catamari/ldl.hpp"
 #include "catamari/macros.hpp"
+#include "catamari/norms.hpp"
+#include "catamari/scalar_functions.hpp"
 
 #endif  // ifndef CATAMARI_H_

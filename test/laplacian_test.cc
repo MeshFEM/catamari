@@ -10,6 +10,7 @@
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
 #include "catamari/ldl.hpp"
+#include "catamari/norms.hpp"
 #include "catamari/unit_reach_nested_dissection.hpp"
 #include "catch2/catch.hpp"
 
@@ -18,22 +19,6 @@ using catamari::ConstBlasMatrixView;
 using catamari::Int;
 
 namespace {
-
-// Returns the Frobenius norm of a real vector.
-// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
-// unstable. But it suffices for example purposes.
-template <typename Real>
-Real EuclideanNorm(const ConstBlasMatrixView<Real>& matrix) {
-  Real squared_norm{0};
-  const Int height = matrix.height;
-  const Int width = matrix.width;
-  for (Int j = 0; j < width; ++j) {
-    for (Int i = 0; i < height; ++i) {
-      squared_norm += matrix(i, j) * matrix(i, j);
-    }
-  }
-  return std::sqrt(squared_norm);
-}
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 void RunTest(Int num_x_elements, Int num_y_elements, bool analytical_ordering,
@@ -70,7 +55,8 @@ void RunTest(Int num_x_elements, Int num_y_elements, bool analytical_ordering,
   BlasMatrix<Field> right_hand_sides;
   right_hand_sides.Resize(num_rows, 1, Field{0});
   right_hand_sides(num_rows / 2, 0) = Field{1};
-  const Real right_hand_side_norm = EuclideanNorm(right_hand_sides.ConstView());
+  const Real right_hand_side_norm =
+      catamari::EuclideanNorm(right_hand_sides.ConstView());
 
   // Factor the matrix.
   catamari::LDLFactorization<Field> ldl_factorization;
@@ -93,7 +79,7 @@ void RunTest(Int num_x_elements, Int num_y_elements, bool analytical_ordering,
   BlasMatrix<Field> residual = right_hand_sides;
   catamari::ApplySparse(Field{-1}, matrix, solution.ConstView(), Field{1},
                         &residual.view);
-  const Real residual_norm = EuclideanNorm(residual.ConstView());
+  const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
   REQUIRE(relative_residual < 1e-12);
 }

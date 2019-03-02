@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "catamari/dpp.hpp"
+#include "catamari/norms.hpp"
 #include "quotient/io_utils.hpp"
 #include "specify.hpp"
 
@@ -29,32 +30,6 @@ void PrintExperiment(const Experiment& experiment, const std::string& label) {
   std::cout << "  init_seconds: " << experiment.init_seconds << "\n";
   std::cout << "  sample_seconds: " << experiment.sample_seconds << "\n";
   std::cout << std::endl;
-}
-
-// Returns the Frobenius norm of a real sparse matrix.
-// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
-// unstable. But it suffices for example purposes.
-template <typename Real>
-Real EuclideanNorm(const catamari::CoordinateMatrix<Real>& matrix) {
-  Real squared_norm{0};
-  for (const catamari::MatrixEntry<Real>& entry : matrix.Entries()) {
-    squared_norm += entry.value * entry.value;
-  }
-  return std::sqrt(squared_norm);
-}
-
-// Returns the Frobenius norm of a complex sparse matrix.
-// NOTE: Due to the direct accumulation of the squared norm, this algorithm is
-// unstable. But it suffices for example purposes.
-template <typename Real>
-Real EuclideanNorm(
-    const catamari::CoordinateMatrix<catamari::Complex<Real>>& matrix) {
-  Real squared_norm{0};
-  for (const catamari::MatrixEntry<catamari::Complex<Real>>& entry :
-       matrix.Entries()) {
-    squared_norm += std::norm(entry.value);
-  }
-  return std::sqrt(squared_norm);
 }
 
 // Overwrites a matrix A with A + A'.
@@ -136,7 +111,7 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
   // Adding the diagonal shift.
   AddDiagonalShift(diagonal_shift, matrix.get());
 
-  const Real frob_norm = EuclideanNorm(*matrix);
+  const Real frob_norm = catamari::EuclideanNorm(*matrix);
   Rescale(Real{1} / frob_norm, matrix.get());
 
   if (print_progress) {
