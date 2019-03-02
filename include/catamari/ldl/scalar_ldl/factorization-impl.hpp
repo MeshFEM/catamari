@@ -378,99 +378,101 @@ LDLResult Factorization<Field>::UpLooking(
 }
 
 template <class Field>
-void Factorization<Field>::Solve(BlasMatrixView<Field>* matrix) const {
+void Factorization<Field>::Solve(
+    BlasMatrixView<Field>* right_hand_sides) const {
   const bool have_permutation = !ordering.permutation.Empty();
 
   // Reorder the input into the relaxation permutation of the factorization.
   if (have_permutation) {
-    Permute(ordering.permutation, matrix);
+    Permute(ordering.permutation, right_hand_sides);
   }
 
-  LowerTriangularSolve(matrix);
-  DiagonalSolve(matrix);
-  LowerTransposeTriangularSolve(matrix);
+  LowerTriangularSolve(right_hand_sides);
+  DiagonalSolve(right_hand_sides);
+  LowerTransposeTriangularSolve(right_hand_sides);
 
   // Reverse the factorization relxation permutation.
   if (have_permutation) {
-    Permute(ordering.inverse_permutation, matrix);
+    Permute(ordering.inverse_permutation, right_hand_sides);
   }
 }
 
 template <class Field>
 void Factorization<Field>::LowerTriangularSolve(
-    BlasMatrixView<Field>* matrix) const {
-  const Int num_rhs = matrix->width;
+    BlasMatrixView<Field>* right_hand_sides) const {
+  const Int num_rhs = right_hand_sides->width;
   const LowerStructure& lower_structure = lower_factor.structure;
   const Int num_rows = lower_structure.column_offsets.Size() - 1;
   const bool is_cholesky = factorization_type == kCholeskyFactorization;
 
-  CATAMARI_ASSERT(matrix->height == num_rows,
+  CATAMARI_ASSERT(right_hand_sides->height == num_rows,
                   "matrix was an incorrect height.");
 
   for (Int column = 0; column < num_rows; ++column) {
     if (is_cholesky) {
       const Field delta = diagonal_factor.values[column];
       for (Int j = 0; j < num_rhs; ++j) {
-        matrix->Entry(column, j) /= delta;
+        right_hand_sides->Entry(column, j) /= delta;
       }
     }
 
     const Int factor_column_beg = lower_structure.ColumnOffset(column);
     const Int factor_column_end = lower_structure.ColumnOffset(column + 1);
     for (Int j = 0; j < num_rhs; ++j) {
-      const Field eta = matrix->Entry(column, j);
+      const Field eta = right_hand_sides->Entry(column, j);
       for (Int index = factor_column_beg; index < factor_column_end; ++index) {
         const Int i = lower_structure.indices[index];
         const Field& value = lower_factor.values[index];
-        matrix->Entry(i, j) -= value * eta;
+        right_hand_sides->Entry(i, j) -= value * eta;
       }
     }
   }
 }
 
 template <class Field>
-void Factorization<Field>::DiagonalSolve(BlasMatrixView<Field>* matrix) const {
+void Factorization<Field>::DiagonalSolve(
+    BlasMatrixView<Field>* right_hand_sides) const {
   if (factorization_type == kCholeskyFactorization) {
     return;
   }
 
-  const Int num_rhs = matrix->width;
+  const Int num_rhs = right_hand_sides->width;
   const Int num_rows = diagonal_factor.values.Size();
 
-  CATAMARI_ASSERT(matrix->height == num_rows,
+  CATAMARI_ASSERT(right_hand_sides->height == num_rows,
                   "matrix was an incorrect height.");
 
   for (Int j = 0; j < num_rhs; ++j) {
     for (Int column = 0; column < num_rows; ++column) {
-      matrix->Entry(column, j) /= diagonal_factor.values[column];
+      right_hand_sides->Entry(column, j) /= diagonal_factor.values[column];
     }
   }
 }
 
 template <class Field>
 void Factorization<Field>::LowerTransposeTriangularSolve(
-    BlasMatrixView<Field>* matrix) const {
-  const Int num_rhs = matrix->width;
+    BlasMatrixView<Field>* right_hand_sides) const {
+  const Int num_rhs = right_hand_sides->width;
   const LowerStructure& lower_structure = lower_factor.structure;
   const Int num_rows = lower_structure.column_offsets.Size() - 1;
   const bool is_cholesky = factorization_type == kCholeskyFactorization;
   const bool is_selfadjoint = factorization_type != kLDLTransposeFactorization;
 
-  CATAMARI_ASSERT(matrix->height == num_rows,
+  CATAMARI_ASSERT(right_hand_sides->height == num_rows,
                   "matrix was an incorrect height.");
 
   for (Int column = num_rows - 1; column >= 0; --column) {
     const Int factor_column_beg = lower_structure.ColumnOffset(column);
     const Int factor_column_end = lower_structure.ColumnOffset(column + 1);
     for (Int j = 0; j < num_rhs; ++j) {
-      Field& eta = matrix->Entry(column, j);
+      Field& eta = right_hand_sides->Entry(column, j);
       for (Int index = factor_column_beg; index < factor_column_end; ++index) {
         const Int i = lower_structure.indices[index];
         const Field& value = lower_factor.values[index];
         if (is_selfadjoint) {
-          eta -= Conjugate(value) * matrix->Entry(i, j);
+          eta -= Conjugate(value) * right_hand_sides->Entry(i, j);
         } else {
-          eta -= value * matrix->Entry(i, j);
+          eta -= value * right_hand_sides->Entry(i, j);
         }
       }
     }
@@ -478,7 +480,7 @@ void Factorization<Field>::LowerTransposeTriangularSolve(
     if (is_cholesky) {
       const Field delta = diagonal_factor.values[column];
       for (Int j = 0; j < num_rhs; ++j) {
-        matrix->Entry(column, j) /= delta;
+        right_hand_sides->Entry(column, j) /= delta;
       }
     }
   }

@@ -567,11 +567,12 @@ LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-void Factorization<Field>::Solve(BlasMatrixView<Field>* matrix) const {
+void Factorization<Field>::Solve(
+    BlasMatrixView<Field>* right_hand_sides) const {
   const bool have_permutation = !ordering_.permutation.Empty();
   // Reorder the input into the permutation of the factorization.
   if (have_permutation) {
-    Permute(ordering_.permutation, matrix);
+    Permute(ordering_.permutation, right_hand_sides);
   }
 
 #ifdef CATAMARI_OPENMP
@@ -582,49 +583,51 @@ void Factorization<Field>::Solve(BlasMatrixView<Field>* matrix) const {
     #pragma omp parallel
     #pragma omp single
     {
-      OpenMPLowerTriangularSolve(matrix);
-      OpenMPDiagonalSolve(matrix);
-      OpenMPLowerTransposeTriangularSolve(matrix);
+      OpenMPLowerTriangularSolve(right_hand_sides);
+      OpenMPDiagonalSolve(right_hand_sides);
+      OpenMPLowerTransposeTriangularSolve(right_hand_sides);
     }
 
     SetNumBlasThreads(old_max_threads);
   } else {
-    LowerTriangularSolve(matrix);
-    DiagonalSolve(matrix);
-    LowerTransposeTriangularSolve(matrix);
+    LowerTriangularSolve(right_hand_sides);
+    DiagonalSolve(right_hand_sides);
+    LowerTransposeTriangularSolve(right_hand_sides);
   }
 #else
-  LowerTriangularSolve(matrix);
-  DiagonalSolve(matrix);
-  LowerTransposeTriangularSolve(matrix);
+  LowerTriangularSolve(right_hand_sides);
+  DiagonalSolve(right_hand_sides);
+  LowerTransposeTriangularSolve(right_hand_sides);
 #endif  // ifdef CATAMARI_OPENMP
 
   // Reverse the factorization permutation.
   if (have_permutation) {
-    Permute(ordering_.inverse_permutation, matrix);
+    Permute(ordering_.inverse_permutation, right_hand_sides);
   }
 }
 
 template <class Field>
 void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
-    Int supernode, BlasMatrixView<Field>* matrix,
+    Int supernode, BlasMatrixView<Field>* right_hand_sides,
     Buffer<Field>* workspace) const {
   // Eliminate this supernode.
-  const Int num_rhs = matrix->width;
+  const Int num_rhs = right_hand_sides->width;
   const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
-  const ConstBlasMatrixView<Field> triangular_matrix =
+  const ConstBlasMatrixView<Field> triangular_right_hand_sides =
       diagonal_factor_->blocks[supernode];
 
   const Int supernode_size = ordering_.supernode_sizes[supernode];
   const Int supernode_start = ordering_.supernode_offsets[supernode];
-  BlasMatrixView<Field> matrix_supernode =
-      matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
+  BlasMatrixView<Field> right_hand_sides_supernode =
+      right_hand_sides->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
   // Solve against the diagonal block of the supernode.
   if (is_cholesky) {
-    LeftLowerTriangularSolves(triangular_matrix, &matrix_supernode);
+    LeftLowerTriangularSolves(triangular_right_hand_sides,
+                              &right_hand_sides_supernode);
   } else {
-    LeftLowerUnitTriangularSolves(triangular_matrix, &matrix_supernode);
+    LeftLowerUnitTriangularSolves(triangular_right_hand_sides,
+                                  &right_hand_sides_supernode);
   }
 
   const ConstBlasMatrixView<Field> subdiagonal =
@@ -637,31 +640,31 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
   const Int* indices = lower_factor_->StructureBeg(supernode);
   if (supernode_size >= forward_solve_out_of_place_supernode_threshold_) {
     // Perform an out-of-place GEMM.
-    BlasMatrixView<Field> work_matrix;
-    work_matrix.height = subdiagonal.height;
-    work_matrix.width = num_rhs;
-    work_matrix.leading_dim = subdiagonal.height;
-    work_matrix.data = workspace->Data();
+    BlasMatrixView<Field> work_right_hand_sides;
+    work_right_hand_sides.height = subdiagonal.height;
+    work_right_hand_sides.width = num_rhs;
+    work_right_hand_sides.leading_dim = subdiagonal.height;
+    work_right_hand_sides.data = workspace->Data();
 
     // Store the updates in the workspace.
     MatrixMultiplyNormalNormal(Field{-1}, subdiagonal,
-                               matrix_supernode.ToConst(), Field{0},
-                               &work_matrix);
+                               right_hand_sides_supernode.ToConst(), Field{0},
+                               &work_right_hand_sides);
 
-    // Accumulate the workspace into the solution matrix.
+    // Accumulate the workspace into the solution right_hand_sides.
     for (Int j = 0; j < num_rhs; ++j) {
       for (Int i = 0; i < subdiagonal.height; ++i) {
         const Int row = indices[i];
-        matrix->Entry(row, j) += work_matrix(i, j);
+        right_hand_sides->Entry(row, j) += work_right_hand_sides(i, j);
       }
     }
   } else {
     for (Int j = 0; j < num_rhs; ++j) {
       for (Int k = 0; k < supernode_size; ++k) {
-        const Field& eta = matrix_supernode(k, j);
+        const Field& eta = right_hand_sides_supernode(k, j);
         for (Int i = 0; i < subdiagonal.height; ++i) {
           const Int row = indices[i];
-          matrix->Entry(row, j) -= subdiagonal(i, k) * eta;
+          right_hand_sides->Entry(row, j) -= subdiagonal(i, k) * eta;
         }
       }
     }
@@ -670,7 +673,7 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
 
 template <class Field>
 void Factorization<Field>::LowerTriangularSolveRecursion(
-    Int supernode, BlasMatrixView<Field>* matrix,
+    Int supernode, BlasMatrixView<Field>* right_hand_sides,
     Buffer<Field>* workspace) const {
   // Recurse on this supernode's children.
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
@@ -679,31 +682,32 @@ void Factorization<Field>::LowerTriangularSolveRecursion(
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
-    LowerTriangularSolveRecursion(child, matrix, workspace);
+    LowerTriangularSolveRecursion(child, right_hand_sides, workspace);
   }
 
   // Perform this supernode's trapezoidal solve.
-  LowerSupernodalTrapezoidalSolve(supernode, matrix, workspace);
+  LowerSupernodalTrapezoidalSolve(supernode, right_hand_sides, workspace);
 }
 
 template <class Field>
 void Factorization<Field>::LowerTriangularSolve(
-    BlasMatrixView<Field>* matrix) const {
+    BlasMatrixView<Field>* right_hand_sides) const {
   // Allocate the workspace.
-  const Int workspace_size = max_degree_ * matrix->width;
+  const Int workspace_size = max_degree_ * right_hand_sides->width;
   Buffer<Field> workspace(workspace_size, Field{0});
 
   // Recurse on each tree in the elimination forest.
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   for (Int root_index = 0; root_index < num_roots; ++root_index) {
     const Int root = ordering_.assembly_forest.roots[root_index];
-    LowerTriangularSolveRecursion(root, matrix, &workspace);
+    LowerTriangularSolveRecursion(root, right_hand_sides, &workspace);
   }
 }
 
 template <class Field>
-void Factorization<Field>::DiagonalSolve(BlasMatrixView<Field>* matrix) const {
-  const Int num_rhs = matrix->width;
+void Factorization<Field>::DiagonalSolve(
+    BlasMatrixView<Field>* right_hand_sides) const {
+  const Int num_rhs = right_hand_sides->width;
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
   if (is_cholesky) {
@@ -712,18 +716,19 @@ void Factorization<Field>::DiagonalSolve(BlasMatrixView<Field>* matrix) const {
   }
 
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const ConstBlasMatrixView<Field> diagonal_matrix =
+    const ConstBlasMatrixView<Field> diagonal_right_hand_sides =
         diagonal_factor_->blocks[supernode];
 
     const Int supernode_size = ordering_.supernode_sizes[supernode];
     const Int supernode_start = ordering_.supernode_offsets[supernode];
-    BlasMatrixView<Field> matrix_supernode =
-        matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
+    BlasMatrixView<Field> right_hand_sides_supernode =
+        right_hand_sides->Submatrix(supernode_start, 0, supernode_size,
+                                    num_rhs);
 
     // Handle the diagonal-block portion of the supernode.
     for (Int j = 0; j < num_rhs; ++j) {
       for (Int i = 0; i < supernode_size; ++i) {
-        matrix_supernode(i, j) /= diagonal_matrix(i, i);
+        right_hand_sides_supernode(i, j) /= diagonal_right_hand_sides(i, i);
       }
     }
   }
@@ -731,43 +736,43 @@ void Factorization<Field>::DiagonalSolve(BlasMatrixView<Field>* matrix) const {
 
 template <class Field>
 void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
-    Int supernode, BlasMatrixView<Field>* matrix,
+    Int supernode, BlasMatrixView<Field>* right_hand_sides,
     Buffer<Field>* packed_input_buf) const {
-  const Int num_rhs = matrix->width;
+  const Int num_rhs = right_hand_sides->width;
   const bool is_selfadjoint = factorization_type_ != kLDLTransposeFactorization;
   const Int supernode_size = ordering_.supernode_sizes[supernode];
   const Int supernode_start = ordering_.supernode_offsets[supernode];
   const Int* indices = lower_factor_->StructureBeg(supernode);
 
-  BlasMatrixView<Field> matrix_supernode =
-      matrix->Submatrix(supernode_start, 0, supernode_size, num_rhs);
+  BlasMatrixView<Field> right_hand_sides_supernode =
+      right_hand_sides->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
   const ConstBlasMatrixView<Field> subdiagonal =
       lower_factor_->blocks[supernode];
   if (subdiagonal.height) {
     // Handle the external updates for this supernode.
     if (supernode_size >= backward_solve_out_of_place_supernode_threshold_) {
-      // Fill the work matrix.
-      BlasMatrixView<Field> work_matrix;
-      work_matrix.height = subdiagonal.height;
-      work_matrix.width = num_rhs;
-      work_matrix.leading_dim = subdiagonal.height;
-      work_matrix.data = packed_input_buf->Data();
+      // Fill the work right_hand_sides.
+      BlasMatrixView<Field> work_right_hand_sides;
+      work_right_hand_sides.height = subdiagonal.height;
+      work_right_hand_sides.width = num_rhs;
+      work_right_hand_sides.leading_dim = subdiagonal.height;
+      work_right_hand_sides.data = packed_input_buf->Data();
       for (Int j = 0; j < num_rhs; ++j) {
         for (Int i = 0; i < subdiagonal.height; ++i) {
           const Int row = indices[i];
-          work_matrix(i, j) = matrix->Entry(row, j);
+          work_right_hand_sides(i, j) = right_hand_sides->Entry(row, j);
         }
       }
 
       if (is_selfadjoint) {
         MatrixMultiplyAdjointNormal(Field{-1}, subdiagonal,
-                                    work_matrix.ToConst(), Field{1},
-                                    &matrix_supernode);
+                                    work_right_hand_sides.ToConst(), Field{1},
+                                    &right_hand_sides_supernode);
       } else {
         MatrixMultiplyTransposeNormal(Field{-1}, subdiagonal,
-                                      work_matrix.ToConst(), Field{1},
-                                      &matrix_supernode);
+                                      work_right_hand_sides.ToConst(), Field{1},
+                                      &right_hand_sides_supernode);
       }
     } else {
       for (Int k = 0; k < supernode_size; ++k) {
@@ -775,11 +780,12 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
           const Int row = indices[i];
           for (Int j = 0; j < num_rhs; ++j) {
             if (is_selfadjoint) {
-              matrix_supernode(k, j) -=
-                  Conjugate(subdiagonal(i, k)) * matrix->Entry(row, j);
+              right_hand_sides_supernode(k, j) -=
+                  Conjugate(subdiagonal(i, k)) *
+                  right_hand_sides->Entry(row, j);
             } else {
-              matrix_supernode(k, j) -=
-                  subdiagonal(i, k) * matrix->Entry(row, j);
+              right_hand_sides_supernode(k, j) -=
+                  subdiagonal(i, k) * right_hand_sides->Entry(row, j);
             }
           }
         }
@@ -788,24 +794,27 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
   }
 
   // Solve against the diagonal block of this supernode.
-  const ConstBlasMatrixView<Field> triangular_matrix =
+  const ConstBlasMatrixView<Field> triangular_right_hand_sides =
       diagonal_factor_->blocks[supernode];
   if (factorization_type_ == kCholeskyFactorization) {
-    LeftLowerAdjointTriangularSolves(triangular_matrix, &matrix_supernode);
+    LeftLowerAdjointTriangularSolves(triangular_right_hand_sides,
+                                     &right_hand_sides_supernode);
   } else if (factorization_type_ == kLDLAdjointFactorization) {
-    LeftLowerAdjointUnitTriangularSolves(triangular_matrix, &matrix_supernode);
+    LeftLowerAdjointUnitTriangularSolves(triangular_right_hand_sides,
+                                         &right_hand_sides_supernode);
   } else {
-    LeftLowerTransposeUnitTriangularSolves(triangular_matrix,
-                                           &matrix_supernode);
+    LeftLowerTransposeUnitTriangularSolves(triangular_right_hand_sides,
+                                           &right_hand_sides_supernode);
   }
 }
 
 template <class Field>
 void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
-    Int supernode, BlasMatrixView<Field>* matrix,
+    Int supernode, BlasMatrixView<Field>* right_hand_sides,
     Buffer<Field>* packed_input_buf) const {
   // Perform this supernode's trapezoidal solve.
-  LowerTransposeSupernodalTrapezoidalSolve(supernode, matrix, packed_input_buf);
+  LowerTransposeSupernodalTrapezoidalSolve(supernode, right_hand_sides,
+                                           packed_input_buf);
 
   // Recurse on this supernode's children.
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
@@ -814,22 +823,24 @@ void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
-    LowerTransposeTriangularSolveRecursion(child, matrix, packed_input_buf);
+    LowerTransposeTriangularSolveRecursion(child, right_hand_sides,
+                                           packed_input_buf);
   }
 }
 
 template <class Field>
 void Factorization<Field>::LowerTransposeTriangularSolve(
-    BlasMatrixView<Field>* matrix) const {
+    BlasMatrixView<Field>* right_hand_sides) const {
   // Allocate the workspace.
-  const Int workspace_size = max_degree_ * matrix->width;
+  const Int workspace_size = max_degree_ * right_hand_sides->width;
   Buffer<Field> packed_input_buf(workspace_size);
 
   // Recurse from each root of the elimination forest.
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   for (Int root_index = 0; root_index < num_roots; ++root_index) {
     const Int root = ordering_.assembly_forest.roots[root_index];
-    LowerTransposeTriangularSolveRecursion(root, matrix, &packed_input_buf);
+    LowerTransposeTriangularSolveRecursion(root, right_hand_sides,
+                                           &packed_input_buf);
   }
 }
 

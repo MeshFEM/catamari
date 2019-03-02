@@ -73,6 +73,14 @@ right_hand_sides.Resize(height, width);
 // The (i, j) entry of the right-hand side can easily be read or modified, e.g.:
 //   right_hand_sides(i, j) = 1.;
 factorization.Solve(&right_hand_sides.view);
+
+// Alternatively, one can solve using iterative-refinement, e.g., using:
+const Int max_refine_iters = 3;
+const double relative_tol = 1e-12;
+const bool verbose = true;
+factorization.RefinedSolve(
+    matrix, relative_tol, max_refine_iters, verbose, &right_hand_sides.view);
+
 ```
 
 ### Running the unit tests

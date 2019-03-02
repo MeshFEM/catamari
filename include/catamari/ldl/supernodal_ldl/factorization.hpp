@@ -66,28 +66,31 @@ class Factorization {
                    const Control& control);
 
   // Solve a set of linear systems using the factorization.
-  void Solve(BlasMatrixView<Field>* matrix) const;
+  void Solve(BlasMatrixView<Field>* right_hand_sides) const;
 
   // Solves a set of linear systems using the lower-triangular factor.
-  void LowerTriangularSolve(BlasMatrixView<Field>* matrix) const;
+  void LowerTriangularSolve(BlasMatrixView<Field>* right_hand_sides) const;
 
 #ifdef CATAMARI_OPENMP
-  void OpenMPLowerTriangularSolve(BlasMatrixView<Field>* matrix) const;
+  void OpenMPLowerTriangularSolve(
+      BlasMatrixView<Field>* right_hand_sides) const;
 #endif  // ifdef CATAMARI_OPENMP
 
   // Solves a set of linear systems using the diagonal factor.
-  void DiagonalSolve(BlasMatrixView<Field>* matrix) const;
+  void DiagonalSolve(BlasMatrixView<Field>* right_hand_sides) const;
 
 #ifdef CATAMARI_OPENMP
-  void OpenMPDiagonalSolve(BlasMatrixView<Field>* matrix) const;
+  void OpenMPDiagonalSolve(BlasMatrixView<Field>* right_hand_sides) const;
 #endif  // ifdef CATAMARI_OPENMP
 
   // Solves a set of linear systems using the trasnpose (or adjoint) of the
   // lower-triangular factor.
-  void LowerTransposeTriangularSolve(BlasMatrixView<Field>* matrix) const;
+  void LowerTransposeTriangularSolve(
+      BlasMatrixView<Field>* right_hand_sides) const;
 
 #ifdef CATAMARI_OPENMP
-  void OpenMPLowerTransposeTriangularSolve(BlasMatrixView<Field>* matrix) const;
+  void OpenMPLowerTransposeTriangularSolve(
+      BlasMatrixView<Field>* right_hand_sides) const;
 #endif  // ifdef CATAMARI_OPENMP
 
   // Prints the diagonal of the factorization.
@@ -254,42 +257,42 @@ class Factorization {
   // Performs the portion of the lower-triangular solve corresponding to the
   // subtree with the given root supernode.
   void LowerTriangularSolveRecursion(Int supernode,
-                                     BlasMatrixView<Field>* matrix,
+                                     BlasMatrixView<Field>* right_hand_sides,
                                      Buffer<Field>* workspace) const;
 
 #ifdef CATAMARI_OPENMP
   void OpenMPLowerTriangularSolveRecursion(
-      Int supernode, BlasMatrixView<Field>* matrix,
+      Int supernode, BlasMatrixView<Field>* right_hand_sides,
       RightLookingSharedState<Field>* shared_state) const;
 #endif  // ifdef CATAMARI_OPENMP
 
   // Performs the trapezoidal solve associated with a particular supernode.
   void LowerSupernodalTrapezoidalSolve(Int supernode,
-                                       BlasMatrixView<Field>* matrix,
+                                       BlasMatrixView<Field>* right_hand_sides,
                                        Buffer<Field>* workspace) const;
 
 #ifdef CATAMARI_OPENMP
   void OpenMPLowerSupernodalTrapezoidalSolve(
-      Int supernode, BlasMatrixView<Field>* matrix,
+      Int supernode, BlasMatrixView<Field>* right_hand_sides,
       RightLookingSharedState<Field>* shared_state) const;
 #endif  // ifdef CATAMARI_OPENMP
 
   // Performs the portion of the transposed lower-triangular solve
   // corresponding to the subtree with the given root supernode.
   void LowerTransposeTriangularSolveRecursion(
-      Int supernode, BlasMatrixView<Field>* matrix,
+      Int supernode, BlasMatrixView<Field>* right_hand_sides,
       Buffer<Field>* packed_input_buf) const;
 
 #ifdef CATAMARI_OPENMP
   void OpenMPLowerTransposeTriangularSolveRecursion(
-      Int supernode, BlasMatrixView<Field>* matrix,
+      Int supernode, BlasMatrixView<Field>* right_hand_sides,
       Buffer<Buffer<Field>>* private_packed_input_bufs) const;
 #endif  // ifdef CATAMARI_OPENMP
 
   // Performs the trapezoidal solve associated with a particular supernode.
-  void LowerTransposeSupernodalTrapezoidalSolve(Int supernode,
-                                                BlasMatrixView<Field>* matrix,
-                                                Buffer<Field>* workspace) const;
+  void LowerTransposeSupernodalTrapezoidalSolve(
+      Int supernode, BlasMatrixView<Field>* right_hand_sides,
+      Buffer<Field>* workspace) const;
 };
 
 }  // namespace supernodal_ldl

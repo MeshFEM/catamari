@@ -153,16 +153,17 @@ class Factorization {
   void PrintLowerFactor(const std::string& label, std::ostream& os) const;
 
   // Solves a linear system using the factorization.
-  void Solve(BlasMatrixView<Field>* matrix) const;
+  void Solve(BlasMatrixView<Field>* right_hand_sides) const;
 
   // Solves against the lower-triangular factor.
-  void LowerTriangularSolve(BlasMatrixView<Field>* matrix) const;
+  void LowerTriangularSolve(BlasMatrixView<Field>* right_hand_sides) const;
 
   // Solves against the diagonal factor.
-  void DiagonalSolve(BlasMatrixView<Field>* matrix) const;
+  void DiagonalSolve(BlasMatrixView<Field>* right_hand_sides) const;
 
   // Solves against the transpose (or adjoint) of the lower factor.
-  void LowerTransposeTriangularSolve(BlasMatrixView<Field>* matrix) const;
+  void LowerTransposeTriangularSolve(
+      BlasMatrixView<Field>* right_hand_sides) const;
 
  private:
   // The temporary state used by the left-looking factorization.

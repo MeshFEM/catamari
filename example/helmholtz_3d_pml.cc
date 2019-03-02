@@ -836,6 +836,9 @@ struct Experiment {
 
   // The number of seconds that elapsed during the solve.
   double solve_seconds = 0;
+
+  // The number of seconds that elapsed during the refined solve.
+  double refined_solve_seconds = 0;
 };
 
 // Pretty prints the Experiment structure.
@@ -847,6 +850,8 @@ void PrintExperiment(const Experiment& experiment) {
   std::cout << "  factorization_seconds: " << experiment.factorization_seconds
             << "\n";
   std::cout << "  solve_seconds:         " << experiment.solve_seconds << "\n";
+  std::cout << "  refined_solve_seconds: " << experiment.refined_solve_seconds
+            << "\n";
   std::cout << std::endl;
 }
 
@@ -903,32 +908,69 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   experiment.num_nonzeros = result.num_factorization_entries;
   experiment.num_flops = result.num_factorization_flops;
 
-  // Solve a random linear system.
-  if (print_progress) {
-    std::cout << "  Running solve..." << std::endl;
-  }
-  BlasMatrix<Field> solution = right_hand_sides;
-  timer.Start();
-  ldl_factorization.Solve(&solution.view);
-  experiment.solve_seconds = timer.Stop();
-
-  if (print_progress) {
-    // Print the solution.
-    std::cout << "X: \n";
-    for (Int row = 0; row < num_rows; ++row) {
-      const Complex<Real> entry = solution(row, 0);
-      std::cout << entry.real() << " + " << entry.imag() << "i\n";
+  // Solve the linear system.
+  {
+    if (print_progress) {
+      std::cout << "  Running solve..." << std::endl;
     }
-    std::cout << std::endl;
+    BlasMatrix<Field> solution = right_hand_sides;
+    timer.Start();
+    ldl_factorization.Solve(&solution.view);
+    experiment.solve_seconds = timer.Stop();
+
+    if (print_progress) {
+      // Print the solution.
+      std::cout << "X: \n";
+      for (Int row = 0; row < num_rows; ++row) {
+        const Complex<Real> entry = solution(row, 0);
+        std::cout << entry.real() << " + " << entry.imag() << "i\n";
+      }
+      std::cout << std::endl;
+    }
+
+    // Compute the residual.
+    BlasMatrix<Field> residual = right_hand_sides;
+    catamari::ApplySparse(Field{-1}, matrix, solution.ConstView(), Field{1},
+                          &residual.view);
+    const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
+    std::cout << "  || B - A X ||_F / || B ||_F = "
+              << residual_norm / right_hand_side_norm << std::endl;
   }
 
-  // Compute the residual.
-  BlasMatrix<Field> residual = right_hand_sides;
-  catamari::ApplySparse(Field{-1}, matrix, solution.ConstView(), Field{1},
-                        &residual.view);
-  const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
-  std::cout << "  || B - A X ||_F / || B ||_F = "
-            << residual_norm / right_hand_side_norm << std::endl;
+  // Solve the linear system using iterative refinement.
+  {
+    // TODO(Jack Poulson): Make these parameters configurable.
+    const Real relative_tol = 1e-12;
+    const Int max_refine_iters = 3;
+    const bool verbose = true;
+
+    if (print_progress) {
+      std::cout << "  Running iteratively-refined solve..." << std::endl;
+    }
+    BlasMatrix<Field> solution = right_hand_sides;
+    timer.Start();
+    ldl_factorization.RefinedSolve(matrix, relative_tol, max_refine_iters,
+                                   verbose, &solution.view);
+    experiment.refined_solve_seconds = timer.Stop();
+
+    if (print_progress) {
+      // Print the solution.
+      std::cout << "XRefined: \n";
+      for (Int row = 0; row < num_rows; ++row) {
+        const Complex<Real> entry = solution(row, 0);
+        std::cout << entry.real() << " + " << entry.imag() << "i\n";
+      }
+      std::cout << std::endl;
+    }
+
+    // Compute the residual.
+    BlasMatrix<Field> residual = right_hand_sides;
+    catamari::ApplySparse(Field{-1}, matrix, solution.ConstView(), Field{1},
+                          &residual.view);
+    const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
+    std::cout << "  Refined || B - A X ||_F / || B ||_F = "
+              << residual_norm / right_hand_side_norm << std::endl;
+  }
 
   return experiment;
 }

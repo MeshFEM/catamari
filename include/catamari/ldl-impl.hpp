@@ -10,6 +10,8 @@
 
 #include <memory>
 
+#include "catamari/apply_sparse.hpp"
+#include "catamari/blas_matrix.hpp"
 #include "catamari/ldl.hpp"
 
 namespace catamari {
@@ -103,41 +105,137 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-void LDLFactorization<Field>::Solve(BlasMatrixView<Field>* matrix) const {
+void LDLFactorization<Field>::Solve(
+    BlasMatrixView<Field>* right_hand_sides) const {
   if (is_supernodal) {
-    supernodal_factorization->Solve(matrix);
+    supernodal_factorization->Solve(right_hand_sides);
   } else {
-    scalar_factorization->Solve(matrix);
+    scalar_factorization->Solve(right_hand_sides);
   }
 }
 
 template <class Field>
+Int LDLFactorization<Field>::RefinedSolve(
+    const CoordinateMatrix<Field>& matrix, ComplexBase<Field> relative_tol,
+    Int max_refine_iters, bool verbose,
+    BlasMatrixView<Field>* right_hand_sides) const {
+  typedef ComplexBase<Field> Real;
+  const Int num_rows = matrix.NumRows();
+
+  if (right_hand_sides->width != 1) {
+    std::cerr << "Only single right-hand sides are currently supported."
+              << std::endl;
+    Solve(right_hand_sides);
+    return 0;
+  }
+  if (max_refine_iters <= 0) {
+    Solve(right_hand_sides);
+    return 0;
+  }
+
+  const BlasMatrix<Field> b_orig = *right_hand_sides;
+  const Real b_norm = MaxNorm(b_orig.ConstView());
+
+  // Compute the initial guess
+  BlasMatrix<Field> x = b_orig;
+  Solve(&x.view);
+
+  BlasMatrix<Field> dx, x_cand, y;
+  y.Resize(x.view.height, 1, Field{0});
+  ApplySparse(Field{1}, matrix, x.ConstView(), Field{1}, &y.view);
+
+  // b -= y
+  for (Int i = 0; i < num_rows; ++i) {
+    right_hand_sides->Entry(i, 0) -= y(i, 0);
+  }
+
+  Real error_norm = MaxNorm(right_hand_sides->ToConst());
+  if (verbose) {
+    std::cout << "Original relative error: " << error_norm << std::endl;
+  }
+
+  Int refine_iter = 0;
+  while (true) {
+    const Real relative_error = error_norm / b_norm;
+    if (relative_error <= relative_tol) {
+      if (verbose) {
+        std::cout << "Relative error: " << relative_error
+                  << " <= " << relative_tol << std::endl;
+      }
+      break;
+    }
+
+    // Compute the proposed update to the solution.
+    dx = *right_hand_sides;
+    Solve(&dx.view);
+    x_cand = x;
+
+    // x_cand += dx
+    for (Int i = 0; i < num_rows; ++i) {
+      x_cand(i, 0) += dx(i, 0);
+    }
+
+    // Check the new residual.
+    ApplySparse(Field{1}, matrix, x_cand.ConstView(), Field{0}, &y.view);
+
+    // *right_hand_sides := b_orig - y
+    for (Int i = 0; i < num_rows; ++i) {
+      right_hand_sides->Entry(i, 0) = b_orig(i, 0) - y(i, 0);
+    }
+    const Real new_error_norm = MaxNorm(right_hand_sides->ToConst());
+    if (verbose) {
+      std::cout << "Refined relative error: " << new_error_norm / b_norm
+                << std::endl;
+    }
+
+    if (new_error_norm < error_norm) {
+      x = x_cand;
+    } else {
+      break;
+    }
+
+    error_norm = new_error_norm;
+    ++refine_iter;
+    if (refine_iter >= max_refine_iters) {
+      break;
+    }
+  }
+
+  // *right_hand_sides := x
+  for (Int i = 0; i < num_rows; ++i) {
+    right_hand_sides->Entry(i, 0) = x(i, 0);
+  }
+
+  return refine_iter;
+}
+
+template <class Field>
 void LDLFactorization<Field>::LowerTriangularSolve(
-    BlasMatrixView<Field>* matrix) const {
+    BlasMatrixView<Field>* right_hand_sides) const {
   if (is_supernodal) {
-    supernodal_factorization->LowerTriangularSolve(matrix);
+    supernodal_factorization->LowerTriangularSolve(right_hand_sides);
   } else {
-    scalar_factorization->LowerTriangularSolve(matrix);
+    scalar_factorization->LowerTriangularSolve(right_hand_sides);
   }
 }
 
 template <class Field>
 void LDLFactorization<Field>::DiagonalSolve(
-    BlasMatrixView<Field>* matrix) const {
+    BlasMatrixView<Field>* right_hand_sides) const {
   if (is_supernodal) {
-    supernodal_factorization->DiagonalSolve(matrix);
+    supernodal_factorization->DiagonalSolve(right_hand_sides);
   } else {
-    scalar_factorization->DiagonalSolve(matrix);
+    scalar_factorization->DiagonalSolve(right_hand_sides);
   }
 }
 
 template <class Field>
 void LDLFactorization<Field>::LowerTransposeTriangularSolve(
-    BlasMatrixView<Field>* matrix) const {
+    BlasMatrixView<Field>* right_hand_sides) const {
   if (is_supernodal) {
-    supernodal_factorization->LowerTransposeTriangularSolve(matrix);
+    supernodal_factorization->LowerTransposeTriangularSolve(right_hand_sides);
   } else {
-    scalar_factorization->LowerTransposeTriangularSolve(matrix);
+    scalar_factorization->LowerTransposeTriangularSolve(right_hand_sides);
   }
 }
 
