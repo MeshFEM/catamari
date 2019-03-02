@@ -761,8 +761,7 @@ void Factorization<Field>::OpenMPLowerSupernodalTrapezoidalSolve(
   const Int supernode_size = ordering_.supernode_sizes[supernode];
   const Int supernode_start = ordering_.supernode_offsets[supernode];
   BlasMatrixView<Field> right_hand_sides_supernode =
-      right_hand_sides->Subright_hand_sides(supernode_start, 0, supernode_size,
-                                            num_rhs);
+      right_hand_sides->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
   // Solve against the diagonal block of the supernode.
   if (is_cholesky) {
@@ -901,8 +900,8 @@ void Factorization<Field>::OpenMPDiagonalSolve(
       const Int supernode_size = ordering_ptr->supernode_sizes[supernode];
       const Int supernode_start = ordering_ptr->supernode_offsets[supernode];
       BlasMatrixView<Field> right_hand_sides_supernode =
-          right_hand_sides->Subright_hand_sides(supernode_start, 0,
-                                                supernode_size, num_rhs);
+          right_hand_sides->Submatrix(supernode_start, 0, supernode_size,
+                                      num_rhs);
 
       // Handle the diagonal-block portion of the supernode.
       for (Int j = 0; j < num_rhs; ++j) {
