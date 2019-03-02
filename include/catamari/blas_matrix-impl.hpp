@@ -39,11 +39,61 @@ BlasMatrix<Field>::BlasMatrix(const BlasMatrix<Field>& matrix) {
 }
 
 template <typename Field>
+BlasMatrix<Field>::BlasMatrix(const BlasMatrixView<Field>& matrix)
+    : BlasMatrix<Field>(matrix.ToConst()) {}
+
+template <typename Field>
+BlasMatrix<Field>::BlasMatrix(const ConstBlasMatrixView<Field>& matrix) {
+  const Int height = matrix.height;
+  const Int width = matrix.width;
+
+  data.Resize(height * width);
+  view.height = height;
+  view.width = width;
+  view.leading_dim = height;
+  view.data = data.Data();
+
+  // Copy each individual column so that the leading dimension does not
+  // impact the copy time.
+  for (Int j = 0; j < width; ++j) {
+    std::copy(&matrix(0, j), &matrix(height, j), &view(0, j));
+  }
+}
+
+template <typename Field>
 BlasMatrix<Field>& BlasMatrix<Field>::operator=(
     const BlasMatrix<Field>& matrix) {
   if (this != &matrix) {
     const Int height = matrix.view.height;
     const Int width = matrix.view.width;
+
+    data.Resize(height * width);
+    view.height = height;
+    view.width = width;
+    view.leading_dim = height;
+    view.data = data.Data();
+
+    // Copy each individual column so that the leading dimension does not
+    // impact the copy time.
+    for (Int j = 0; j < width; ++j) {
+      std::copy(&matrix(0, j), &matrix(height, j), &view(0, j));
+    }
+  }
+  return *this;
+}
+
+template <typename Field>
+BlasMatrix<Field>& BlasMatrix<Field>::operator=(
+    const BlasMatrixView<Field>& matrix) {
+  *this = matrix.ToConst();
+}
+
+template <typename Field>
+BlasMatrix<Field>& BlasMatrix<Field>::operator=(
+    const ConstBlasMatrixView<Field>& matrix) {
+  if (this != &matrix) {
+    const Int height = matrix.height;
+    const Int width = matrix.width;
 
     data.Resize(height * width);
     view.height = height;

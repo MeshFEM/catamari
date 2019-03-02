@@ -29,8 +29,22 @@ struct BlasMatrix {
   // height.
   BlasMatrix(const BlasMatrix<Field>& matrix);
 
+  // Copy constructs a BLAS matrix view by reducing the leading dimension to the
+  // height.
+  BlasMatrix(const BlasMatrixView<Field>& matrix);
+
+  // Copy constructs a BLAS matrix view by reducing the leading dimension to the
+  // height.
+  BlasMatrix(const ConstBlasMatrixView<Field>& matrix);
+
   // Copies a BLAS matrix by reducing the leading dimension to the height.
   BlasMatrix<Field>& operator=(const BlasMatrix<Field>& matrix);
+
+  // Copies a BLAS matrix view by reducing the leading dimension to the height.
+  BlasMatrix<Field>& operator=(const BlasMatrixView<Field>& matrix);
+
+  // Copies a BLAS matrix view by reducing the leading dimension to the height.
+  BlasMatrix<Field>& operator=(const ConstBlasMatrixView<Field>& matrix);
 
   // Resizes the matrix without initialization.
   void Resize(const Int& height, const Int& width);
