@@ -52,6 +52,7 @@ struct Point {
 template <typename Real>
 struct GaussianSource {
   Point<Real> point;
+  Real scale;
   Real stddev;
 };
 
@@ -790,19 +791,18 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
   for (Int s = 0; s < num_sources; ++s) {
     const GaussianSource<Real>& source = sources[s];
 
-    const std::function<Complex<Real>(const Point<Real>&)> point_source = [&](
-        const Point<Real>& point) {
-      const Real scale = 1000;
-
-      const Real variance = source.stddev * source.stddev;
-      const Real x_diff = point.x - source.point.x;
-      const Real y_diff = point.y - source.point.y;
-      const Real z_diff = point.z - source.point.z;
-      const Real dist_squared =
-          x_diff * x_diff + y_diff * y_diff + z_diff * z_diff;
-      const Real gaussian = scale * std::exp(-dist_squared / (2 * variance));
-      return Complex<Real>(gaussian);
-    };
+    const std::function<Complex<Real>(const Point<Real>&)> point_source =
+        [&](const Point<Real>& point) {
+          const Real variance = source.stddev * source.stddev;
+          const Real x_diff = point.x - source.point.x;
+          const Real y_diff = point.y - source.point.y;
+          const Real z_diff = point.z - source.point.z;
+          const Real dist_squared =
+              x_diff * x_diff + y_diff * y_diff + z_diff * z_diff;
+          const Real gaussian =
+              source.scale * std::exp(-dist_squared / (2 * variance));
+          return Complex<Real>(gaussian);
+        };
 
     for (Int z_element = 0; z_element < num_z_elements; ++z_element) {
       for (Int y_element = 0; y_element < num_y_elements; ++y_element) {
@@ -1049,6 +1049,8 @@ int main(int argc, char** argv) {
       "source_y0", "The y location of the first point source.", 0.5);
   const double source_z0 = parser.OptionalInput<double>(
       "source_z0", "The z location of the first point source.", 0.5);
+  const double source_scale0 = parser.OptionalInput<double>(
+      "source_scale0", "The amplitude of the first point source.", 1000.);
   const double source_stddev0 = parser.OptionalInput<double>(
       "source_stddev0", "The standard deviation of the first point source.",
       1e-2);
@@ -1058,6 +1060,8 @@ int main(int argc, char** argv) {
       "source_y1", "The y location of the second point source.", 0.4);
   const double source_z1 = parser.OptionalInput<double>(
       "source_z1", "The z location of the second point source.", 0.4);
+  const double source_scale1 = parser.OptionalInput<double>(
+      "source_scale1", "The amplitude of the second point source.", 1000.);
   const double source_stddev1 = parser.OptionalInput<double>(
       "source_stddev1", "The standard deviation of the second point source.",
       1e-2);
@@ -1124,9 +1128,9 @@ int main(int argc, char** argv) {
 
   const Buffer<GaussianSource<double>> sources{
       GaussianSource<double>{Point<double>{source_x0, source_y0, source_z0},
-                             source_stddev0},
+                             source_scale0, source_stddev0},
       GaussianSource<double>{Point<double>{source_x1, source_y1, source_z1},
-                             source_stddev1},
+                             source_scale1, source_stddev1},
   };
 
   catamari::LDLControl ldl_control;

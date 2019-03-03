@@ -51,6 +51,7 @@ struct Point {
 template <typename Real>
 struct GaussianSource {
   Point<Real> point;
+  Real scale;
   Real stddev;
 };
 
@@ -632,17 +633,16 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
   Buffer<Complex<Real>> element_right_hand_side(4);
   for (Int s = 0; s < num_sources; ++s) {
     const GaussianSource<Real>& source = sources[s];
-    const std::function<Complex<Real>(const Point<Real>&)> point_source = [&](
-        const Point<Real>& point) {
-      const Real scale = 1000;
-      const Real variance = source.stddev * source.stddev;
-
-      const Real x_diff = point.x - source.point.x;
-      const Real y_diff = point.y - source.point.y;
-      const Real dist_squared = x_diff * x_diff + y_diff * y_diff;
-      const Real gaussian = scale * std::exp(-dist_squared / (2 * variance));
-      return Complex<Real>(gaussian);
-    };
+    const std::function<Complex<Real>(const Point<Real>&)> point_source =
+        [&](const Point<Real>& point) {
+          const Real variance = source.stddev * source.stddev;
+          const Real x_diff = point.x - source.point.x;
+          const Real y_diff = point.y - source.point.y;
+          const Real dist_squared = x_diff * x_diff + y_diff * y_diff;
+          const Real gaussian =
+              source.scale * std::exp(-dist_squared / (2 * variance));
+          return Complex<Real>(gaussian);
+        };
 
     for (Int y_element = 0; y_element < num_y_elements; ++y_element) {
       for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
@@ -878,6 +878,8 @@ int main(int argc, char** argv) {
       "source_x0", "The x location of the first point source.", 0.5);
   const double source_y0 = parser.OptionalInput<double>(
       "source_y0", "The y location of the first point source.", 0.125);
+  const double source_scale0 = parser.OptionalInput<double>(
+      "source_scale0", "The amplitude of the first point source.", 1000.);
   const double source_stddev0 = parser.OptionalInput<double>(
       "source_stddev0", "The standard deviation of the first point source.",
       1e-3);
@@ -885,6 +887,8 @@ int main(int argc, char** argv) {
       "source_x1", "The x location of the second point source.", 0.4);
   const double source_y1 = parser.OptionalInput<double>(
       "source_y1", "The y location of the second point source.", 0.4);
+  const double source_scale1 = parser.OptionalInput<double>(
+      "source_scale1", "The amplitude of the second point source.", 1000.);
   const double source_stddev1 = parser.OptionalInput<double>(
       "source_stddev1", "The standard deviation of the second point source.",
       1e-3);
@@ -937,9 +941,9 @@ int main(int argc, char** argv) {
   const SpeedProfile profile = static_cast<SpeedProfile>(speed_profile_int);
 
   const Buffer<GaussianSource<double>> sources{
-      GaussianSource<double>{Point<double>{source_x0, source_y0},
+      GaussianSource<double>{Point<double>{source_x0, source_y0}, source_scale0,
                              source_stddev0},
-      GaussianSource<double>{Point<double>{source_x1, source_y1},
+      GaussianSource<double>{Point<double>{source_x1, source_y1}, source_scale1,
                              source_stddev1},
   };
 
