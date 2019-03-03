@@ -121,89 +121,146 @@ Int LDLFactorization<Field>::RefinedSolve(
     BlasMatrixView<Field>* right_hand_sides) const {
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
-
-  if (right_hand_sides->width != 1) {
-    std::cerr << "Only single right-hand sides are currently supported."
-              << std::endl;
-    Solve(right_hand_sides);
-    return 0;
-  }
+  const Int num_rhs = right_hand_sides->width;
   if (max_refine_iters <= 0) {
     Solve(right_hand_sides);
     return 0;
   }
 
-  const BlasMatrix<Field> b_orig = *right_hand_sides;
-  const Real b_norm = MaxNorm(b_orig.ConstView());
-
-  // Compute the initial guess
-  BlasMatrix<Field> x = b_orig;
-  Solve(&x.view);
-
-  BlasMatrix<Field> dx, x_cand, y;
-  y.Resize(x.view.height, 1, Field{0});
-  ApplySparse(Field{1}, matrix, x.ConstView(), Field{1}, &y.view);
-
-  // b -= y
-  for (Int i = 0; i < num_rows; ++i) {
-    right_hand_sides->Entry(i, 0) -= y(i, 0);
+  const BlasMatrix<Field> rhs_orig = *right_hand_sides;
+  Buffer<Real> rhs_orig_norms(num_rhs);
+  for (Int j = 0; j < num_rhs; ++j) {
+    const ConstBlasMatrixView<Field> column =
+        rhs_orig.view.Submatrix(0, j, num_rows, 1);
+    rhs_orig_norms[j] = MaxNorm(column);
   }
 
-  Real error_norm = MaxNorm(right_hand_sides->ToConst());
-  if (verbose) {
-    std::cout << "Original relative error: " << error_norm << std::endl;
+  // Compute the initial guesses.
+  BlasMatrix<Field> solution = rhs_orig;
+  Solve(&solution.view);
+
+  // image := matrix * solution
+  BlasMatrix<Field> image;
+  image.Resize(num_rows, num_rhs, Field{0});
+  ApplySparse(Field{1}, matrix, solution.ConstView(), Field{1}, &image.view);
+
+  // Compute the original residuals and their max norms.
+  Buffer<Real> error_norms(num_rhs);
+  for (Int j = 0; j < num_rhs; ++j) {
+    BlasMatrixView<Field> column =
+        right_hand_sides->Submatrix(0, j, num_rows, 1);
+
+    for (Int i = 0; i < num_rows; ++i) {
+      column(i, 0) -= image(i, j);
+    }
+
+    error_norms[j] = MaxNorm(column.ToConst());
+    if (verbose) {
+      std::cout << "Original relative error " << j << ": "
+                << error_norms[j] / rhs_orig_norms[j] << std::endl;
+    }
+  }
+
+  // We will begin with each right-hand side being 'active' and deflate out
+  // each that has converged (or diverged) during iterative refinement.
+  Buffer<Int> active_indices(num_rhs);
+  for (Int j = 0; j < num_rhs; ++j) {
+    active_indices[j] = j;
   }
 
   Int refine_iter = 0;
+  BlasMatrix<Field> update, candidate_solution;
   while (true) {
-    const Real relative_error = error_norm / b_norm;
-    if (relative_error <= relative_tol) {
-      if (verbose) {
-        std::cout << "Relative error: " << relative_error
-                  << " <= " << relative_tol << std::endl;
+    // Deflate any converged active right-hand sides.
+    {
+      const Int num_active = active_indices.Size();
+      Int num_remaining = 0;
+      for (Int j_active = 0; j_active < num_active; ++j_active) {
+        const Int j = active_indices[j_active];
+        const Real error_norm = error_norms[j];
+        const Real rhs_orig_norm = rhs_orig_norms[j];
+        const Real relative_error = error_norm / rhs_orig_norm;
+        if (relative_error <= relative_tol) {
+          if (verbose) {
+            std::cout << "Relative error " << j << " (" << j_active
+                      << "): " << relative_error << " <= " << relative_tol
+                      << std::endl;
+          }
+        } else {
+          active_indices[num_remaining++] = j;
+        }
       }
+      active_indices.Resize(num_remaining);
+    }
+    const Int num_active = active_indices.Size();
+    if (!num_active) {
       break;
     }
 
-    // Compute the proposed update to the solution.
-    dx = *right_hand_sides;
-    Solve(&dx.view);
-    x_cand = x;
+    // update := inv(matrix) * right_hand_sides.
+    update.Resize(num_rows, num_active);
+    for (Int j_active = 0; j_active < num_active; ++j_active) {
+      const Int j = active_indices[j_active];
+      for (Int i = 0; i < num_rows; ++i) {
+        update(i, j_active) = right_hand_sides->Entry(i, j);
+      }
+    }
+    Solve(&update.view);
 
-    // x_cand += dx
-    for (Int i = 0; i < num_rows; ++i) {
-      x_cand(i, 0) += dx(i, 0);
+    // candidate_solution = solution + update
+    candidate_solution.Resize(num_rows, num_active);
+    for (Int j_active = 0; j_active < num_active; ++j_active) {
+      const Int j = active_indices[j_active];
+      for (Int i = 0; i < num_rows; ++i) {
+        candidate_solution(i, j_active) = solution(i, j) + update(i, j_active);
+      }
     }
 
-    // Check the new residual.
-    ApplySparse(Field{1}, matrix, x_cand.ConstView(), Field{0}, &y.view);
+    // Compute the image of the proposed solution.
+    image.Resize(num_rows, num_active);
+    ApplySparse(Field{1}, matrix, candidate_solution.ConstView(), Field{0},
+                &image.view);
 
-    // *right_hand_sides := b_orig - y
-    for (Int i = 0; i < num_rows; ++i) {
-      right_hand_sides->Entry(i, 0) = b_orig(i, 0) - y(i, 0);
+    // Overwrite the right_hand_sides matrix with the proposed residual:
+    //   right_hand_sides := rhs_orig - image
+    // Also, compute the max norms of each column.
+    Int num_remaining = 0;
+    for (Int j_active = 0; j_active < num_active; ++j_active) {
+      const Int j = active_indices[j_active];
+      BlasMatrixView<Field> column =
+          right_hand_sides->Submatrix(0, j, num_rows, 1);
+      for (Int i = 0; i < num_rows; ++i) {
+        column(i, 0) = rhs_orig(i, j) - image(i, j_active);
+      }
+      const Real new_error_norm = MaxNorm(column.ToConst());
+      if (verbose) {
+        std::cout << "Refined relative error " << j << ": "
+                  << new_error_norm / rhs_orig_norms[j] << std::endl;
+      }
+      if (new_error_norm < error_norms[j]) {
+        for (Int i = 0; i < num_rows; ++i) {
+          solution(i, j) = candidate_solution(i, j_active);
+        }
+        error_norms[j] = new_error_norm;
+        active_indices[num_remaining++] = j;
+      } else if (verbose) {
+        std::cout << "Right-hand side " << j << "(" << j_active << ") diverged."
+                  << std::endl;
+      }
     }
-    const Real new_error_norm = MaxNorm(right_hand_sides->ToConst());
-    if (verbose) {
-      std::cout << "Refined relative error: " << new_error_norm / b_norm
-                << std::endl;
-    }
+    active_indices.Resize(num_remaining);
 
-    if (new_error_norm < error_norm) {
-      x = x_cand;
-    } else {
-      break;
-    }
-
-    error_norm = new_error_norm;
     ++refine_iter;
-    if (refine_iter >= max_refine_iters) {
+    if (refine_iter >= max_refine_iters || active_indices.Empty()) {
       break;
     }
   }
 
-  // *right_hand_sides := x
-  for (Int i = 0; i < num_rows; ++i) {
-    right_hand_sides->Entry(i, 0) = x(i, 0);
+  // *right_hand_sides := solution
+  for (Int j = 0; j < num_rhs; ++j) {
+    for (Int i = 0; i < num_rows; ++i) {
+      right_hand_sides->Entry(i, j) = solution(i, j);
+    }
   }
 
   return refine_iter;

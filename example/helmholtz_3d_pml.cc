@@ -48,6 +48,13 @@ struct Point {
   Real z;
 };
 
+// A Gaussian point source in the 2D domain.
+template <typename Real>
+struct GaussianSource {
+  Point<Real> point;
+  Real stddev;
+};
+
 enum SpeedProfile {
   kFreeSpace,
   kConvergingLens,
@@ -706,8 +713,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
                       Int num_x_elements, Int num_y_elements,
                       Int num_z_elements, const Real& pml_scale,
                       const Real& pml_exponent, Int num_pml_elements,
-                      const Point<Real>& source_point,
-                      const Real& source_stddev,
+                      const Buffer<GaussianSource<Real>>& sources,
                       catamari::CoordinateMatrix<Complex<Real>>* matrix,
                       BlasMatrix<Complex<Real>>* right_hand_sides) {
   const Speed<Real> speed(profile);
@@ -773,44 +779,48 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
   }
   matrix->FlushEntryQueues();
 
-  // Form the right-hand side.
-  right_hand_sides->Resize(num_rows, 1, Complex<Real>{0});
-
-  const std::function<Complex<Real>(const Point<Real>&)> point_source =
-      [&](const Point<Real>& point) {
-        const Real scale = 1000;
-
-        const Real variance = source_stddev * source_stddev;
-        const Real x_diff = point.x - source_point.x;
-        const Real y_diff = point.y - source_point.y;
-        const Real z_diff = point.z - source_point.z;
-        const Real dist_squared =
-            x_diff * x_diff + y_diff * y_diff + z_diff * z_diff;
-        const Real gaussian = scale * std::exp(-dist_squared / (2 * variance));
-        return Complex<Real>(gaussian);
-      };
-
+  // Form the right-hand sides.
+  const Int num_sources = sources.Size();
+  right_hand_sides->Resize(num_rows, num_sources, Complex<Real>{0});
   Buffer<Complex<Real>> element_right_hand_side(8);
-  for (Int z_element = 0; z_element < num_z_elements; ++z_element) {
-    for (Int y_element = 0; y_element < num_y_elements; ++y_element) {
-      for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
-        // Form the batch of updates.
-        discretization.ElementRightHandSide(x_element, y_element, z_element,
-                                            point_source,
-                                            &element_right_hand_side);
+  for (Int s = 0; s < num_sources; ++s) {
+    const GaussianSource<Real>& source = sources[s];
 
-        // Insert the updates into the matrix.
-        const Int offset =
-            x_element + y_element * y_stride + z_element * z_stride;
+    const std::function<Complex<Real>(const Point<Real>&)> point_source = [&](
+        const Point<Real>& point) {
+      const Real scale = 1000;
 
-        for (int k_test = 0; k_test <= 1; ++k_test) {
-          for (int j_test = 0; j_test <= 1; ++j_test) {
-            for (int i_test = 0; i_test <= 1; ++i_test) {
-              const int element_row = i_test + j_test * 2 + k_test * 4;
-              const Int row =
-                  offset + i_test + j_test * y_stride + k_test * z_stride;
-              right_hand_sides->Entry(row, 0) +=
-                  element_right_hand_side[element_row];
+      const Real variance = source.stddev * source.stddev;
+      const Real x_diff = point.x - source.point.x;
+      const Real y_diff = point.y - source.point.y;
+      const Real z_diff = point.z - source.point.z;
+      const Real dist_squared =
+          x_diff * x_diff + y_diff * y_diff + z_diff * z_diff;
+      const Real gaussian = scale * std::exp(-dist_squared / (2 * variance));
+      return Complex<Real>(gaussian);
+    };
+
+    for (Int z_element = 0; z_element < num_z_elements; ++z_element) {
+      for (Int y_element = 0; y_element < num_y_elements; ++y_element) {
+        for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
+          // Form the batch of updates.
+          discretization.ElementRightHandSide(x_element, y_element, z_element,
+                                              point_source,
+                                              &element_right_hand_side);
+
+          // Insert the updates into the matrix.
+          const Int offset =
+              x_element + y_element * y_stride + z_element * z_stride;
+
+          for (int k_test = 0; k_test <= 1; ++k_test) {
+            for (int j_test = 0; j_test <= 1; ++j_test) {
+              for (int i_test = 0; i_test <= 1; ++i_test) {
+                const int element_row = i_test + j_test * 2 + k_test * 4;
+                const Int row =
+                    offset + i_test + j_test * y_stride + k_test * z_stride;
+                right_hand_sides->Entry(row, s) +=
+                    element_right_hand_side[element_row];
+              }
             }
           }
         }
@@ -859,8 +869,9 @@ void PrintExperiment(const Experiment& experiment) {
 Experiment RunTest(SpeedProfile profile, const double& omega,
                    Int num_x_elements, Int num_y_elements, Int num_z_elements,
                    const double& pml_scale, const double& pml_exponent,
-                   int num_pml_elements, const Point<double>& source_point,
-                   const double& source_stddev, bool analytical_ordering,
+                   int num_pml_elements,
+                   const Buffer<GaussianSource<double>>& sources,
+                   bool analytical_ordering,
                    const catamari::LDLControl& ldl_control,
                    bool print_progress) {
   typedef Complex<double> Field;
@@ -874,14 +885,13 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   catamari::CoordinateMatrix<Field> matrix;
   HelmholtzWithPML<Real>(profile, omega, num_x_elements, num_y_elements,
                          num_z_elements, pml_scale, pml_exponent,
-                         num_pml_elements, source_point, source_stddev, &matrix,
-                         &right_hand_sides);
+                         num_pml_elements, sources, &matrix, &right_hand_sides);
   experiment.construction_seconds = timer.Stop();
   const Int num_rows = matrix.NumRows();
   const Real right_hand_side_norm =
       catamari::EuclideanNorm(right_hand_sides.ConstView());
   if (print_progress) {
-    std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
+    std::cout << "  || B ||_F = " << right_hand_side_norm << std::endl;
   }
 
   // Factor the matrix.
@@ -908,7 +918,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   experiment.num_nonzeros = result.num_factorization_entries;
   experiment.num_flops = result.num_factorization_flops;
 
-  // Solve the linear system.
+  // Solve the linear systems.
   {
     if (print_progress) {
       std::cout << "  Running solve..." << std::endl;
@@ -921,9 +931,13 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     if (print_progress) {
       // Print the solution.
       std::cout << "X: \n";
+      const Int num_rhs = sources.Size();
       for (Int row = 0; row < num_rows; ++row) {
-        const Complex<Real> entry = solution(row, 0);
-        std::cout << entry.real() << " + " << entry.imag() << "i\n";
+        for (Int j = 0; j < num_rhs; ++j) {
+          const Complex<Real> entry = solution(row, j);
+          std::cout << entry.real() << " + " << entry.imag() << "i ";
+        }
+        std::cout << "\n";
       }
       std::cout << std::endl;
     }
@@ -937,10 +951,10 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
               << residual_norm / right_hand_side_norm << std::endl;
   }
 
-  // Solve the linear system using iterative refinement.
+  // Solve the linear systems using iterative refinement.
   {
     // TODO(Jack Poulson): Make these parameters configurable.
-    const Real relative_tol = 1e-12;
+    const Real relative_tol = 1e-15;
     const Int max_refine_iters = 3;
     const bool verbose = true;
 
@@ -956,9 +970,13 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     if (print_progress) {
       // Print the solution.
       std::cout << "XRefined: \n";
+      const Int num_rhs = sources.Size();
       for (Int row = 0; row < num_rows; ++row) {
-        const Complex<Real> entry = solution(row, 0);
-        std::cout << entry.real() << " + " << entry.imag() << "i\n";
+        for (Int j = 0; j < num_rhs; ++j) {
+          const Complex<Real> entry = solution(row, j);
+          std::cout << entry.real() << " + " << entry.imag() << "i ";
+        }
+        std::cout << "\n";
       }
       std::cout << std::endl;
     }
@@ -998,14 +1016,24 @@ int main(int argc, char** argv) {
       "pml_exponent", "The exponent of the PML profile.", 3.);
   const Int num_pml_elements = parser.OptionalInput<Int>(
       "num_pml_elements", "The number of elements the PML should span.", 8);
-  const double source_x = parser.OptionalInput<double>(
-      "source_x", "The x location of the point source.", 0.5);
-  const double source_y = parser.OptionalInput<double>(
-      "source_y", "The y location of the point source.", 0.5);
-  const double source_z = parser.OptionalInput<double>(
-      "source_z", "The z location of the point source.", 0.5);
-  const double source_stddev = parser.OptionalInput<double>(
-      "source_stddev", "The standard deviation of the point source.", 1e-2);
+  const double source_x0 = parser.OptionalInput<double>(
+      "source_x", "The x location of the first point source.", 0.5);
+  const double source_y0 = parser.OptionalInput<double>(
+      "source_y", "The y location of the first point source.", 0.5);
+  const double source_z0 = parser.OptionalInput<double>(
+      "source_z", "The z location of the first point source.", 0.5);
+  const double source_stddev0 = parser.OptionalInput<double>(
+      "source_stddev", "The standard deviation of the first point source.",
+      1e-2);
+  const double source_x1 = parser.OptionalInput<double>(
+      "source_x", "The x location of the second point source.", 0.5);
+  const double source_y1 = parser.OptionalInput<double>(
+      "source_y", "The y location of the second point source.", 0.5);
+  const double source_z1 = parser.OptionalInput<double>(
+      "source_z", "The z location of the second point source.", 0.5);
+  const double source_stddev1 = parser.OptionalInput<double>(
+      "source_stddev", "The standard deviation of the second point source.",
+      1e-2);
   const bool analytical_ordering = parser.OptionalInput<bool>(
       "analytical_ordering", "Use an analytical reordering?", true);
   const int degree_type_int =
@@ -1067,7 +1095,12 @@ int main(int argc, char** argv) {
 
   const SpeedProfile profile = static_cast<SpeedProfile>(speed_profile_int);
 
-  const Point<double> source_point{source_x, source_y, source_z};
+  const Buffer<GaussianSource<double>> sources{
+      GaussianSource<double>{Point<double>{source_x0, source_y0, source_z0},
+                             source_stddev0},
+      GaussianSource<double>{Point<double>{source_x1, source_y1, source_z1},
+                             source_stddev1},
+  };
 
   catamari::LDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLTransposeFactorization);
@@ -1108,8 +1141,8 @@ int main(int argc, char** argv) {
 
   const Experiment experiment =
       RunTest(profile, omega, num_x_elements, num_y_elements, num_z_elements,
-              pml_scale, pml_exponent, num_pml_elements, source_point,
-              source_stddev, analytical_ordering, ldl_control, print_progress);
+              pml_scale, pml_exponent, num_pml_elements, sources,
+              analytical_ordering, ldl_control, print_progress);
   PrintExperiment(experiment);
 
   return 0;
