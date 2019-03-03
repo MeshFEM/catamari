@@ -589,12 +589,8 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
                                                 num_pml_elements, speed);
 
   const Int num_element_members = 16;
-  Buffer<Complex<Real>> element_update_buffer(num_element_members);
-  BlasMatrixView<Complex<Real>> element_updates;
-  element_updates.height = 4;
-  element_updates.width = 4;
-  element_updates.leading_dim = 4;
-  element_updates.data = element_update_buffer.Data();
+  BlasMatrix<Complex<Real>> element_updates;
+  element_updates.Resize(4, 4);
 
   // TODO(Jack Poulson): Decide how to parallelize this formation.
   const Int num_rows = (num_x_elements + 1) * (num_y_elements + 1);
@@ -607,7 +603,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
     for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
       // Form the batch of updates.
       discretization.ElementBilinearForms(x_element, y_element,
-                                          &element_updates);
+                                          &element_updates.view);
 
       // Insert the updates into the matrix.
       const Int offset = x_element + y_element * y_stride;

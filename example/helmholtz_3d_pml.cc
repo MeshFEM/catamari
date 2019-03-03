@@ -515,7 +515,8 @@ class HelmholtzWithPMLTrilinearHexahedra {
           const Point<Real> point{x, y, z};
           const Complex<Real> gamma_product = gamma_x * gamma_y * gamma_z;
           const int quadrature_index =
-              i + j * quadrature_1d_order + k * quadrature_1d_order;
+              i + j * quadrature_1d_order +
+              k * quadrature_1d_order * quadrature_1d_order;
 
           const Real rel_omega = omega_ / speed_(point);
           scalar_evals_[quadrature_index] =
@@ -723,12 +724,8 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
       pml_exponent, num_pml_elements, speed);
 
   const Int num_element_members = 64;
-  Buffer<Complex<Real>> element_update_buffer(num_element_members);
-  BlasMatrixView<Complex<Real>> element_updates;
-  element_updates.height = 8;
-  element_updates.width = 8;
-  element_updates.leading_dim = 8;
-  element_updates.data = element_update_buffer.Data();
+  BlasMatrix<Complex<Real>> element_updates;
+  element_updates.Resize(8, 8);
 
   const Int num_rows =
       (num_x_elements + 1) * (num_y_elements + 1) * (num_z_elements + 1);
@@ -746,7 +743,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
       for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
         // Form the batch of updates.
         discretization.ElementBilinearForms(x_element, y_element, z_element,
-                                            &element_updates);
+                                            &element_updates.view);
 
         // Insert the updates into the matrix.
         const Int offset =
@@ -756,15 +753,22 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
           for (int j_test = 0; j_test <= 1; ++j_test) {
             for (int i_test = 0; i_test <= 1; ++i_test) {
               const int element_row = i_test + j_test * 2 + k_test * 4;
+              CATAMARI_ASSERT(element_row >= 0 && element_row < 8,
+                              "Invalid element row.");
               const Int row =
                   offset + i_test + j_test * y_stride + k_test * z_stride;
+              CATAMARI_ASSERT(row >= 0 && row < num_rows, "Invalid row.");
               for (int k_trial = 0; k_trial <= 1; ++k_trial) {
                 for (int j_trial = 0; j_trial <= 1; ++j_trial) {
                   for (int i_trial = 0; i_trial <= 1; ++i_trial) {
                     const int element_column =
                         i_trial + j_trial * 2 + k_trial * 4;
+                    CATAMARI_ASSERT(element_column >= 0 && element_column < 8,
+                                    "Invalid element column.");
                     const Int column = offset + i_trial + j_trial * y_stride +
                                        k_trial * z_stride;
+                    CATAMARI_ASSERT(column >= 0 && column < num_rows,
+                                    "Invalid column.");
                     matrix->QueueEntryAddition(
                         row, column,
                         element_updates(element_row, element_column));
