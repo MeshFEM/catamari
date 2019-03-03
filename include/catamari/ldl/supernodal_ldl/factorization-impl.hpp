@@ -27,9 +27,25 @@ void Factorization<Field>::IncorporateSupernodeIntoLDLResult(
   result->num_factorization_entries +=
       (supernode_size * (supernode_size + 1)) / 2 + supernode_size * degree;
 
-  // Add the approximate number of flops for the diagonal block factorization.
-  result->num_factorization_flops += std::pow(1. * supernode_size, 3.) / 3. +
-                                     std::pow(1. * supernode_size, 2.) / 2.;
+  // Compute the number of flops for factoring the diagonal block.
+  const double diagonal_flops = (IsComplex<Field>::value ? 4. : 1.) *
+                                    std::pow(1. * supernode_size, 3.) / 3. +
+                                std::pow(1. * supernode_size, 2.) / 2.;
+
+  // Compute the number of flops to update the subdiagonal block.
+  const double solve_flops = (IsComplex<Field>::value ? 4. : 1.) * degree *
+                             std::pow(1. * supernode_size, 2.);
+
+  // Compute the number of flops for forming the Schur complement.
+  const double schur_complement_flops = (IsComplex<Field>::value ? 4. : 1.) *
+                                        supernode_size *
+                                        std::pow(1. * degree, 2.);
+
+  result->num_diagonal_flops += diagonal_flops;
+  result->num_solve_flops += solve_flops;
+  result->num_schur_complement_flops += schur_complement_flops;
+  result->num_factorization_flops +=
+      diagonal_flops + solve_flops + schur_complement_flops;
 }
 
 template <class Field>
@@ -39,6 +55,10 @@ void Factorization<Field>::MergeContribution(const LDLResult& contribution,
   result->largest_supernode =
       std::max(result->largest_supernode, contribution.largest_supernode);
   result->num_factorization_entries += contribution.num_factorization_entries;
+
+  result->num_diagonal_flops += contribution.num_diagonal_flops;
+  result->num_solve_flops += contribution.num_solve_flops;
+  result->num_schur_complement_flops += contribution.num_schur_complement_flops;
   result->num_factorization_flops += contribution.num_factorization_flops;
 }
 

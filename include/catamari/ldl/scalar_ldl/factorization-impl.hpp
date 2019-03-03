@@ -303,7 +303,16 @@ LDLResult Factorization<Field>::LeftLooking(
     // Update the result structure.
     const Int degree = lower_structure.Degree(column);
     result.num_factorization_entries += 1 + degree;
-    result.num_factorization_flops += std::pow(1. * degree, 2.);
+
+    const double solve_flops = (IsComplex<Field>::value ? 6. : 1.) * degree;
+
+    const double schur_complement_flops =
+        (IsComplex<Field>::value ? 4. : 1.) * std::pow(1. * degree, 2.);
+
+    result.num_solve_flops += solve_flops;
+    result.num_schur_complement_flops += schur_complement_flops;
+    result.num_factorization_flops += solve_flops + schur_complement_flops;
+
     ++result.num_successful_pivots;
   }
 
@@ -370,7 +379,16 @@ LDLResult Factorization<Field>::UpLooking(
     // Update the result structure.
     const Int degree = lower_structure.Degree(row);
     result.num_factorization_entries += 1 + degree;
-    result.num_factorization_flops += std::pow(1. * degree, 2.);
+
+    const double solve_flops = (IsComplex<Field>::value ? 6. : 1.) * degree;
+
+    const double schur_complement_flops =
+        (IsComplex<Field>::value ? 4. : 1.) * std::pow(1. * degree, 2.);
+
+    result.num_solve_flops += solve_flops;
+    result.num_schur_complement_flops += schur_complement_flops;
+    result.num_factorization_flops += solve_flops + schur_complement_flops;
+
     ++result.num_successful_pivots;
   }
 

@@ -55,8 +55,30 @@ struct LDLResult {
   // The number of explicit entries in the factor.
   Int num_factorization_entries = 0;
 
+  // The rough number of flops required to factorize the diagonal blocks.
+  //
+  // In the case of complex factorizations, this is in terms of the number of
+  // real flops.
+  double num_diagonal_flops = 0;
+
+  // The rough number of flops required to solve against the diagonal blocks
+  // to update the subdiagonals.
+  //
+  // In the case of complex factorizations, this is in terms of the number of
+  // real flops.
+  double num_solve_flops = 0;
+
+  // The rough number of flops required to form the Schur complements.
+  //
+  // In the case of complex factorizations, this is in terms of the number of
+  // real flops.
+  double num_schur_complement_flops = 0;
+
   // The rough number of floating-point operations required for the
   // factorization.
+  //
+  // In the case of complex factorizations, this is in terms of the number of
+  // real flops.
   double num_factorization_flops = 0;
 };
 
