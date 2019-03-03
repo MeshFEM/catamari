@@ -1026,11 +1026,11 @@ int main(int argc, char** argv) {
       "source_stddev", "The standard deviation of the first point source.",
       1e-2);
   const double source_x1 = parser.OptionalInput<double>(
-      "source_x", "The x location of the second point source.", 0.5);
+      "source_x", "The x location of the second point source.", 0.4);
   const double source_y1 = parser.OptionalInput<double>(
-      "source_y", "The y location of the second point source.", 0.5);
+      "source_y", "The y location of the second point source.", 0.4);
   const double source_z1 = parser.OptionalInput<double>(
-      "source_z", "The z location of the second point source.", 0.5);
+      "source_z", "The z location of the second point source.", 0.4);
   const double source_stddev1 = parser.OptionalInput<double>(
       "source_stddev", "The standard deviation of the second point source.",
       1e-2);
