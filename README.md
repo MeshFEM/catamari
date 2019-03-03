@@ -76,7 +76,7 @@ factorization.Solve(&right_hand_sides.view);
 
 // Alternatively, one can solve using iterative-refinement, e.g., using:
 const Int max_refine_iters = 3;
-const double relative_tol = 1e-12;
+const double relative_tol = 1e-15;
 const bool verbose = true;
 factorization.RefinedSolve(
     matrix, relative_tol, max_refine_iters, verbose, &right_hand_sides.view);
