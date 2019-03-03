@@ -1021,22 +1021,22 @@ int main(int argc, char** argv) {
   const Int num_pml_elements = parser.OptionalInput<Int>(
       "num_pml_elements", "The number of elements the PML should span.", 8);
   const double source_x0 = parser.OptionalInput<double>(
-      "source_x", "The x location of the first point source.", 0.5);
+      "source_x0", "The x location of the first point source.", 0.5);
   const double source_y0 = parser.OptionalInput<double>(
-      "source_y", "The y location of the first point source.", 0.5);
+      "source_y0", "The y location of the first point source.", 0.5);
   const double source_z0 = parser.OptionalInput<double>(
-      "source_z", "The z location of the first point source.", 0.5);
+      "source_z0", "The z location of the first point source.", 0.5);
   const double source_stddev0 = parser.OptionalInput<double>(
-      "source_stddev", "The standard deviation of the first point source.",
+      "source_stddev0", "The standard deviation of the first point source.",
       1e-2);
   const double source_x1 = parser.OptionalInput<double>(
-      "source_x", "The x location of the second point source.", 0.4);
+      "source_x1", "The x location of the second point source.", 0.4);
   const double source_y1 = parser.OptionalInput<double>(
-      "source_y", "The y location of the second point source.", 0.4);
+      "source_y1", "The y location of the second point source.", 0.4);
   const double source_z1 = parser.OptionalInput<double>(
-      "source_z", "The z location of the second point source.", 0.4);
+      "source_z1", "The z location of the second point source.", 0.4);
   const double source_stddev1 = parser.OptionalInput<double>(
-      "source_stddev", "The standard deviation of the second point source.",
+      "source_stddev1", "The standard deviation of the second point source.",
       1e-2);
   const bool analytical_ordering = parser.OptionalInput<bool>(
       "analytical_ordering", "Use an analytical reordering?", true);
