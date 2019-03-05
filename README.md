@@ -1,10 +1,15 @@
 ![](./images/rainbow_lhr34.png)
 
-**catamari** is a C++14, header-only implementations of sequential and
-DAG-scheduled, real and complex, supernodal sparse-direct Cholesky, LDL^T, and
+[**catamari**](https://hodgestar.com/catamari/) is a
+[C++14](https://en.wikipedia.org/wiki/C%2B%2B14), header-only implementations of
+sequential and
+[DAG-scheduled](https://en.wikipedia.org/wiki/Directed_acyclic_graph), real and
+complex, supernodal sparse-direct
+[Cholesky](https://en.wikipedia.org/wiki/Cholesky_decomposition), LDL^T, and
 LDL^H factorizations. It similarly contains sequential and DAG-scheduled,
-dense and sparse-direct, real and complex, Determinantal Point Process sampling
-through modified LDL^H factorizations.
+dense and sparse-direct, real and complex,
+[Determinantal Point Process](https://en.wikipedia.org/wiki/Determinantal_point_process)
+sampling through modified LDL^H factorizations.
 
 [![Join the chat at https://gitter.im/hodge_star/community](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/hodge_star/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
