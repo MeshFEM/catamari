@@ -187,6 +187,12 @@ class HelmholtzWithPMLQ4 {
     const Real pml_width_;
   };
 
+  // The dimension of the domain.
+  constexpr static Int kDimension = 2;
+
+  // The number of quadrature points per dimension.
+  constexpr static Int kQuadratureOrder = 3;
+
   // Returns \psi_{i, j} evaluated at the given point.
   Real Basis(int i, int j, const Box& extent, const Point<Real>& point) const {
     CATAMARI_ASSERT(i == 0 || i == 1, "Invalid choice of i basis index.");
@@ -281,9 +287,7 @@ class HelmholtzWithPMLQ4 {
         element_y_size_(Real{1} / num_y_elements),
         omega_(omega),
         speed_(speed) {
-    const Int num_dimensions = 2;
-    const Int quadrature_1d_order = 3;
-    const Int num_quadrature_points = quadrature_1d_order * quadrature_1d_order;
+    const Int num_quadrature_points = kQuadratureOrder * kQuadratureOrder;
     const Int num_basis_functions = 4;
     const Real x_pml_width = num_pml_elements * element_x_size_;
     const Real y_pml_width = num_pml_elements * element_y_size_;
@@ -303,21 +307,21 @@ class HelmholtzWithPMLQ4 {
     const PMLDifferential gamma_x(omega, pml_scale, pml_exponent, x_pml_width);
     const PMLDifferential gamma_y(omega, pml_scale, pml_exponent, y_pml_width);
 
-    pml_x_points_.Resize(num_x_elements * quadrature_1d_order);
+    pml_x_points_.Resize(num_x_elements * kQuadratureOrder);
     for (Int x_element = 0; x_element < num_x_elements; ++x_element) {
-      const Int x_offset = x_element * quadrature_1d_order;
+      const Int x_offset = x_element * kQuadratureOrder;
       const Real x_beg = x_element * element_x_size_;
-      for (Int i = 0; i < quadrature_1d_order; ++i) {
+      for (Int i = 0; i < kQuadratureOrder; ++i) {
         const Real& x_point = quadrature_x_points_[i];
         pml_x_points_[x_offset + i] = gamma_x(x_beg + x_point);
       }
     }
 
-    pml_y_points_.Resize(num_y_elements * quadrature_1d_order);
+    pml_y_points_.Resize(num_y_elements * kQuadratureOrder);
     for (Int y_element = 0; y_element < num_y_elements; ++y_element) {
-      const Int y_offset = y_element * quadrature_1d_order;
+      const Int y_offset = y_element * kQuadratureOrder;
       const Real y_beg = y_element * element_y_size_;
-      for (Int i = 0; i < quadrature_1d_order; ++i) {
+      for (Int i = 0; i < kQuadratureOrder; ++i) {
         const Real& y_point = quadrature_y_points_[i];
         pml_y_points_[y_offset + i] = gamma_y(y_beg + y_point);
       }
@@ -325,23 +329,23 @@ class HelmholtzWithPMLQ4 {
 
     // Store the quadrature weights over the tensor product grid.
     quadrature_weights_.Resize(num_quadrature_points);
-    for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
+    for (int y_quad = 0; y_quad < kQuadratureOrder; ++y_quad) {
       const Real& y_weight = quadrature_y_weights_[y_quad];
-      for (int x_quad = 0; x_quad < quadrature_1d_order; ++x_quad) {
+      for (int x_quad = 0; x_quad < kQuadratureOrder; ++x_quad) {
         const Real& x_weight = quadrature_x_weights_[x_quad];
-        const int row = x_quad + y_quad * quadrature_1d_order;
+        const int row = x_quad + y_quad * kQuadratureOrder;
         quadrature_weights_[row] = x_weight * y_weight;
       }
     }
 
     // Store the evaluations of the basis functions.
     basis_evals_.Resize(num_quadrature_points, num_basis_functions);
-    for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
+    for (int y_quad = 0; y_quad < kQuadratureOrder; ++y_quad) {
       const Real& y_point = quadrature_y_points_[y_quad];
-      for (int x_quad = 0; x_quad < quadrature_1d_order; ++x_quad) {
+      for (int x_quad = 0; x_quad < kQuadratureOrder; ++x_quad) {
         const Real& x_point = quadrature_x_points_[x_quad];
         const Point<Real> point{x_point, y_point};
-        const int row = x_quad + y_quad * quadrature_1d_order;
+        const int row = x_quad + y_quad * kQuadratureOrder;
         for (int j = 0; j <= 1; ++j) {
           for (int i = 0; i <= 1; ++i) {
             const int column = i + j * 2;
@@ -353,14 +357,14 @@ class HelmholtzWithPMLQ4 {
 
     // Store the evaluations of the basis function gradients.
     basis_grad_evals_.Resize(num_quadrature_points,
-                             num_basis_functions * num_dimensions);
-    for (int y_quad = 0; y_quad < quadrature_1d_order; ++y_quad) {
+                             num_basis_functions * kDimension);
+    for (int y_quad = 0; y_quad < kQuadratureOrder; ++y_quad) {
       const Real& y_point = quadrature_y_points_[y_quad];
-      for (int x_quad = 0; x_quad < quadrature_1d_order; ++x_quad) {
+      for (int x_quad = 0; x_quad < kQuadratureOrder; ++x_quad) {
         const Real& x_point = quadrature_x_points_[x_quad];
         const Point<Real> point{x_point, y_point};
-        const int row = x_quad + y_quad * quadrature_1d_order;
-        for (int l = 0; l < num_dimensions; ++l) {
+        const int row = x_quad + y_quad * kQuadratureOrder;
+        for (int l = 0; l < kDimension; ++l) {
           for (int j = 0; j <= 1; ++j) {
             for (int i = 0; i <= 1; ++i) {
               const int column = i + j * 2 + l * num_basis_functions;
@@ -373,7 +377,7 @@ class HelmholtzWithPMLQ4 {
     }
 
     // Initialize the weight tensor evaluation matrix.
-    gradient_evals_.Resize(num_quadrature_points, num_dimensions);
+    gradient_evals_.Resize(num_quadrature_points, kDimension);
 
     // Initialize the diagonal shift evaluation vector.
     scalar_evals_.Resize(num_quadrature_points);
@@ -383,21 +387,19 @@ class HelmholtzWithPMLQ4 {
   void ElementBilinearForms(
       Int x_element, Int y_element,
       BlasMatrixView<Complex<Real>>* element_updates) const {
-    const int quadrature_1d_order = 3;
-    const int num_dimensions = 2;
     const int num_basis_functions = 4;
-    const Int x_offset = x_element * quadrature_1d_order;
-    const Int y_offset = y_element * quadrature_1d_order;
+    const Int x_offset = x_element * kQuadratureOrder;
+    const Int y_offset = y_element * kQuadratureOrder;
     const Real x_beg = x_element * element_x_size_;
     const Real y_beg = y_element * element_y_size_;
 
     // Evaluate the weight tensor over the element.
-    for (int l = 0; l < num_dimensions; ++l) {
-      for (int j = 0; j < quadrature_1d_order; ++j) {
+    for (int l = 0; l < kDimension; ++l) {
+      for (int j = 0; j < kQuadratureOrder; ++j) {
         const Complex<Real>& gamma_y = pml_y_points_[y_offset + j];
-        for (int i = 0; i < quadrature_1d_order; ++i) {
+        for (int i = 0; i < kQuadratureOrder; ++i) {
           const Complex<Real>& gamma_x = pml_x_points_[x_offset + i];
-          const int quadrature_index = i + j * quadrature_1d_order;
+          const int quadrature_index = i + j * kQuadratureOrder;
 
           const Complex<Real> gamma_product = gamma_x * gamma_y;
           if (l == 0) {
@@ -412,16 +414,16 @@ class HelmholtzWithPMLQ4 {
     }
 
     // Evaluate the diagonal shifts over the element.
-    for (int j = 0; j < quadrature_1d_order; ++j) {
+    for (int j = 0; j < kQuadratureOrder; ++j) {
       const Real y = y_beg + quadrature_y_points_[j];
       const Complex<Real>& gamma_y = pml_y_points_[y_offset + j];
-      for (int i = 0; i < quadrature_1d_order; ++i) {
+      for (int i = 0; i < kQuadratureOrder; ++i) {
         const Real x = x_beg + quadrature_x_points_[i];
         const Complex<Real>& gamma_x = pml_x_points_[x_offset + i];
 
         const Point<Real> point{x, y};
         const Complex<Real> gamma_product = gamma_x * gamma_y;
-        const int quadrature_index = i + j * quadrature_1d_order;
+        const int quadrature_index = i + j * kQuadratureOrder;
 
         const Real rel_omega = omega_ / speed_(point);
         scalar_evals_[quadrature_index] = rel_omega * rel_omega * gamma_product;
@@ -438,14 +440,14 @@ class HelmholtzWithPMLQ4 {
             const int element_column = i_trial + j_trial * 2;
 
             Complex<Real> result = 0;
-            for (int j = 0; j < quadrature_1d_order; ++j) {
-              for (int i = 0; i < quadrature_1d_order; ++i) {
-                const int quadrature_index = i + j * quadrature_1d_order;
+            for (int j = 0; j < kQuadratureOrder; ++j) {
+              for (int i = 0; i < kQuadratureOrder; ++i) {
+                const int quadrature_index = i + j * kQuadratureOrder;
                 Complex<Real> update = 0;
 
                 // Add in the (grad v)' (A grad u) contribution. Recall
                 // that A is diagonal.
-                for (int l = 0; l < num_dimensions; ++l) {
+                for (int l = 0; l < kDimension; ++l) {
                   const Real test_grad_entry = basis_grad_evals_(
                       quadrature_index, element_row + num_basis_functions * l);
                   const Real trial_grad_entry = basis_grad_evals_(
@@ -487,16 +489,15 @@ class HelmholtzWithPMLQ4 {
                             Buffer<Complex<Real>>* element_updates) const {
     const Real x_beg = x_element * element_x_size_;
     const Real y_beg = y_element * element_y_size_;
-    const int quadrature_1d_order = 3;
     const int num_basis_functions = 4;
 
     // Evaluate the right-hand side over the element.
-    for (int j = 0; j < quadrature_1d_order; ++j) {
+    for (int j = 0; j < kQuadratureOrder; ++j) {
       const Real y = y_beg + quadrature_y_points_[j];
-      for (int i = 0; i < quadrature_1d_order; ++i) {
+      for (int i = 0; i < kQuadratureOrder; ++i) {
         const Real x = x_beg + quadrature_x_points_[i];
         const Point<Real> point{x, y};
-        const int quadrature_index = i + j * quadrature_1d_order;
+        const int quadrature_index = i + j * kQuadratureOrder;
         scalar_evals_[quadrature_index] = rhs_function(point);
       }
     }
@@ -508,9 +509,9 @@ class HelmholtzWithPMLQ4 {
       for (int i_test = 0; i_test <= 1; ++i_test) {
         const int element_row = i_test + j_test * 2;
         Complex<Real> result = 0;
-        for (int j = 0; j < quadrature_1d_order; ++j) {
-          for (int i = 0; i < quadrature_1d_order; ++i) {
-            const int quadrature_index = i + j * quadrature_1d_order;
+        for (int j = 0; j < kQuadratureOrder; ++j) {
+          for (int i = 0; i < kQuadratureOrder; ++i) {
+            const int quadrature_index = i + j * kQuadratureOrder;
 
             // Add in the f conj(v) contribution.
             // Again, we explicitly call 'Conjugate' even though the
@@ -555,12 +556,12 @@ class HelmholtzWithPMLQ4 {
   Buffer<Complex<Real>> pml_y_points_;
 
   // The locations of quadrature points in each of the two dimensions.
-  Real quadrature_x_points_[3];
-  Real quadrature_y_points_[3];
+  Real quadrature_x_points_[kQuadratureOrder];
+  Real quadrature_y_points_[kQuadratureOrder];
 
   // The weights of quadrature points in each of the two dimensions.
-  Real quadrature_x_weights_[3];
-  Real quadrature_y_weights_[3];
+  Real quadrature_x_weights_[kQuadratureOrder];
+  Real quadrature_y_weights_[kQuadratureOrder];
 
   Buffer<Real> quadrature_weights_;
 
@@ -572,6 +573,12 @@ class HelmholtzWithPMLQ4 {
 
   mutable Buffer<Complex<Real>> scalar_evals_;
 };
+
+template <class Real>
+constexpr Int HelmholtzWithPMLQ4<Real>::kDimension;
+
+template <class Real>
+constexpr Int HelmholtzWithPMLQ4<Real>::kQuadratureOrder;
 
 // Generates a Q4 discretization of the 2D Helmholtz equation over [0, 1]^2
 // with inserted PML.

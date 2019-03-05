@@ -12,6 +12,7 @@ dense and sparse-direct, real and complex,
 sampling through modified LDL^H factorizations.
 
 [![Join the chat at https://gitter.im/hodge_star/community](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/hodge_star/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Documentation](https://readthedocs.org/projects/catamari/badge/?version=latest)](https://hodgestar.com/catamari/docs/master/)
 
 ### Dependencies
 The only strict dependency for manually including the headers in your project
@@ -38,10 +39,10 @@ the Basic Linear Algebra Subprograms (BLAS) and the Linear Algebra PACKage
 [BLIS](https://github.com/flame/blis), or a proprietary alternative such as
 [Intel MKL](https://software.intel.com/en-us/mkl).
 
-### Example usage
+### Sparse-direct factorization quickstart
 
-Usage through the `catamari::CoordinateMatrix` template class is fairly
-straight-forward:
+Usage of catamari's sparse-direct solver through the
+`catamari::CoordinateMatrix` template class is fairly straight-forward:
 ```c++
 #include "catamari.hpp"
 
@@ -74,7 +75,7 @@ const catamari::LDLResult result = factorization.Factor(matrix, ldl_control);
 
 // Solve a linear system using the factorization.
 catamari::BlasMatrix<double> right_hand_sides;
-right_hand_sides.Resize(height, width);
+right_hand_sides.Resize(num_rows, num_rhs);
 // The (i, j) entry of the right-hand side can easily be read or modified, e.g.:
 //   right_hand_sides(i, j) = 1.;
 factorization.Solve(&right_hand_sides.view);
@@ -87,6 +88,46 @@ factorization.RefinedSolve(
     matrix, relative_tol, max_refine_iters, verbose, &right_hand_sides.view);
 
 ```
+
+One can also browse the [example/](https://gitlab.com/hodge_star/catamari/tree/master/example) folder for complete examples (e.g., for [solving 3D Helmholtz equations](https://gitlab.com/hodge_star/catamari/blob/master/example/helmholtz_3d_pml.cc) with PML boundary conditions discretized using trilinear hexahedral elements using a complex LDL^T factorization).
+
+### Dense Determinantal Point Process sampling quickstart
+TODO
+
+### Sparse Determinantal Point Process sampling quickstart
+Usage of catamari's sparse-direct DPP sampler via `catamari::CoordinateMatrix`
+is similar to usage of the library's sparse-direct solver.
+```c++
+#include "catamari.hpp"
+
+[...]
+
+// Build a real or complex symmetric input matrix.
+//
+// Alternatively, one could use
+// catamari::CoordinateMatrix<Field>::FromMatrixMarket to read the matrix from
+// a Matrix Market file (e.g., from the Davis sparse matrix collection). But
+// keep in mind that one often needs to enforce explicit symmetry.
+catamari::CoordinateMatrix<double> matrix;
+matrix.Resize(num_rows, num_rows);
+matrix.ReserveEntryAdditions(num_entries_upper_bound);
+// Queue updates of entries in the sparse matrix using commands of the form:
+//   matrix.QueueEdgeAddition(row, column, value);
+matrix.FlushEntryQueues();
+
+// Construct the sampler.
+catamari::DPPControl dpp_control;
+catamari::DPP<double> dpp(matrix, dpp_control);
+
+// Extract samples (which can either be maximum-likelihood or not).
+const bool maximum_likelihood = false;
+std::vector<std::vector<catamari::Int>> samples;
+for (int sample_index = 0; sample_index < num_samples; ++sample_index) {
+  samples[sample_index] = dpp.Sample(maximum_likelihood);
+}
+```
+An example of sampling a DPP from a scaled negative 2D Laplacian is given at
+[example/dpp_shifted_2d_negative_laplacian.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/dpp_shifted_2d_negative_laplacian.cc).
 
 ### Running the unit tests
 [meson](http://mesonbuild.com) defaults to debug builds. One might start by
