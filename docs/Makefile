@@ -17,3 +17,7 @@ help:
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
 %: Makefile
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+publish:
+	chmod +x $(BUILDDIR)/html/index.html
+	rsync -avz $(BUILDDIR)/html/ ${WEBSITE_USER}@${WEBSITE}:/var/www/hodgestar.com/html/catamari/docs/master/
