@@ -238,6 +238,14 @@ dense_dpp_exe = executable(
     dependencies : deps + example_deps,
     cpp_args : cxx_args)
 
+# A DPP which uniformly samples spanning trees from a graph.
+uniform_spanning_tree_exe = executable(
+    'uniform_spanning_tree',
+    ['example/uniform_spanning_tree.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps + example_deps,
+    cpp_args : cxx_args)
+
 # A performance test for factoring a dense matrix.
 dense_factorization_exe = executable(
     'dense_factorization',
