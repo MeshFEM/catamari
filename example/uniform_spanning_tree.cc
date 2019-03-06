@@ -25,13 +25,21 @@
 // thin Q factor, and sampling from the resulting SPSD kernel matrix.
 //
 #include <algorithm>
+#include <cstring>
 #include <iostream>
+#include <string>
+#include <typeinfo>
+#include <vector>
 
 #include "catamari/blas_matrix.hpp"
 #include "catamari/dense_factorizations.hpp"
 #include "catamari/ldl.hpp"
 #include "quotient/timer.hpp"
 #include "specify.hpp"
+
+#ifdef CATAMARI_HAVE_LIBTIFF
+#include <tiffio.h>
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
 using catamari::BlasMatrix;
 using catamari::BlasMatrixView;
@@ -68,6 +76,119 @@ void LAPACK_SYMBOL(sorgqr)(const BlasInt* height, const BlasInt* width,
 
 namespace {
 
+#ifdef CATAMARI_HAVE_LIBTIFF
+void WriteTIFF(const std::string& filename, std::size_t height,
+               std::size_t width, const std::size_t samples_per_pixel,
+               const std::vector<char>& image) {
+  TIFF* tiff_img = TIFFOpen(filename.c_str(), "w");
+
+  TIFFSetField(tiff_img, TIFFTAG_IMAGEWIDTH, width);
+  TIFFSetField(tiff_img, TIFFTAG_IMAGELENGTH, height);
+  TIFFSetField(tiff_img, TIFFTAG_SAMPLESPERPIXEL, samples_per_pixel);
+  TIFFSetField(tiff_img, TIFFTAG_BITSPERSAMPLE, 8);
+  TIFFSetField(tiff_img, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+  TIFFSetField(tiff_img, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+  TIFFSetField(tiff_img, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+
+  const std::size_t line_size = samples_per_pixel * width;
+  const std::size_t scanline_size = TIFFScanlineSize(tiff_img);
+  const std::size_t row_size = std::max(line_size, scanline_size);
+  unsigned char* row_buf = (unsigned char*)_TIFFmalloc(row_size);
+
+  for (uint32 row = 0; row < height; ++row) {
+    std::memcpy(row_buf, &image[(height - row - 1) * line_size], line_size);
+    if (TIFFWriteScanline(tiff_img, row_buf, row, 0) < 0) {
+      std::cout << "Could not write row." << std::endl;
+      break;
+    }
+  }
+
+  TIFFClose(tiff_img);
+  if (row_buf) {
+    _TIFFfree(row_buf);
+  }
+}
+
+// A representation of a TIFF pixel (without alpha).
+struct Pixel {
+  char red;
+  char green;
+  char blue;
+};
+
+// Prints the 2D spanning tree.
+inline void WriteSampleToTIFF(const std::string& filename, Int x_size,
+                              Int y_size, const std::vector<Int>& sample,
+                              const Int box_size, const Pixel& background_pixel,
+                              const Pixel& active_pixel) {
+  const Int num_horizontal_edges = (x_size - 1) * y_size;
+
+  const auto horizontal_beg = sample.begin();
+  const auto horizontal_end =
+      std::lower_bound(sample.begin(), sample.end(), num_horizontal_edges);
+  const auto vertical_beg = horizontal_end;
+  const auto vertical_end = sample.end();
+
+  const Int height = box_size * (y_size - 1) + 1;
+  const Int width = box_size * (x_size - 1) + 1;
+  const Int samples_per_pixel = 3;
+  std::vector<char> image(width * width * samples_per_pixel);
+
+  // Fill the background pixels.
+  for (Int i = 0; i < height; ++i) {
+    for (Int j = 0; j < width; ++j) {
+      Int offset = samples_per_pixel * (j + i * width);
+      image[offset++] = background_pixel.red;
+      image[offset++] = background_pixel.green;
+      image[offset++] = background_pixel.blue;
+    }
+  }
+
+  for (Int y = 0; y < y_size; ++y) {
+    // Write any horizontal connections in row 'y'.
+    for (Int x = 0; x < x_size - 1; ++x) {
+      const Int horizontal_ind = x + y * (x_size - 1);
+      auto iter =
+          std::lower_bound(horizontal_beg, horizontal_end, horizontal_ind);
+      const bool found = iter != horizontal_end && *iter == horizontal_ind;
+
+      if (found) {
+        const Int i = y * box_size;
+        const Int j_offset = x * box_size;
+        for (Int j = j_offset; j < j_offset + box_size; ++j) {
+          Int offset = samples_per_pixel * (j + i * width);
+          image[offset++] = active_pixel.red;
+          image[offset++] = active_pixel.green;
+          image[offset++] = active_pixel.blue;
+        }
+      }
+    }
+
+    if (y < y_size - 1) {
+      // Write any vertical edges from this row.
+      for (Int x = 0; x < x_size; ++x) {
+        const Int vertical_ind = num_horizontal_edges + x + y * x_size;
+        auto iter = std::lower_bound(vertical_beg, vertical_end, vertical_ind);
+        const bool found = iter != vertical_end && *iter == vertical_ind;
+
+        if (found) {
+          const Int j = x * box_size;
+          const Int i_offset = y * box_size;
+          for (Int i = i_offset; i < i_offset + box_size; ++i) {
+            Int offset = samples_per_pixel * (j + i * width);
+            image[offset++] = active_pixel.red;
+            image[offset++] = active_pixel.green;
+            image[offset++] = active_pixel.blue;
+          }
+        }
+      }
+    }
+  }
+
+  WriteTIFF(filename, height, width, samples_per_pixel, image);
+}
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
+
 // Prints the 2D spanning tree.
 inline void AsciiDisplaySample(Int x_size, Int y_size,
                                const std::vector<Int>& sample,
@@ -75,16 +196,22 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
                                char vertical_sampled_char) {
   const Int num_horizontal_edges = (x_size - 1) * y_size;
 
-  // TODO(Jack Poulson): Search within the separate sections.
+  const auto horizontal_beg = sample.begin();
+  const auto horizontal_end =
+      std::lower_bound(sample.begin(), sample.end(), num_horizontal_edges);
+  const auto vertical_beg = horizontal_end;
+  const auto vertical_end = sample.end();
 
   for (Int y = 0; y < y_size; ++y) {
     // Print the horizontal edges which exist.
     for (Int x = 0; x < x_size - 1; ++x) {
       const Int horizontal_ind = x + y * (x_size - 1);
       auto iter =
-          std::lower_bound(sample.begin(), sample.end(), horizontal_ind);
+          std::lower_bound(horizontal_beg, horizontal_end, horizontal_ind);
+      const bool found = iter != horizontal_end && *iter == horizontal_ind;
+
       std::cout << missing_char;
-      if (iter != sample.end() && *iter == horizontal_ind) {
+      if (found) {
         std::cout << horizontal_sampled_char;
       } else {
         std::cout << missing_char;
@@ -96,9 +223,10 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
       // Print the vertical edges which exist.
       for (Int x = 0; x < x_size; ++x) {
         const Int vertical_ind = num_horizontal_edges + x + y * x_size;
-        auto iter =
-            std::lower_bound(sample.begin(), sample.end(), vertical_ind);
-        if (iter != sample.end() && *iter == vertical_ind) {
+        auto iter = std::lower_bound(vertical_beg, vertical_end, vertical_ind);
+        const bool found = iter != vertical_end && *iter == vertical_ind;
+
+        if (found) {
           std::cout << vertical_sampled_char;
         } else {
           std::cout << missing_char;
@@ -307,15 +435,23 @@ std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
 template <typename Field>
 void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
                  Int block_size, Int CATAMARI_UNUSED tile_size, Int num_rounds,
-                 unsigned int random_seed) {
+                 unsigned int random_seed, bool ascii_display,
+                 bool CATAMARI_UNUSED write_tiff) {
   const Int matrix_size = x_size * y_size;
   BlasMatrix<Field> matrix;
   Buffer<Field> extra_buffer(matrix_size * matrix_size);
 
-  const bool verbose = true;
+  // ASCII display configuration.
   const char missing_char = ' ';
   const char horizontal_sampled_char = '-';
   const char vertical_sampled_char = '|';
+
+#ifdef CATAMARI_HAVE_LIBTIFF
+  // TIFF configuration.
+  const Pixel background_pixel{char(255), char(255), char(255)};
+  const Pixel active_pixel{char(255), char(0), char(0)};
+  const Int box_size = 10;
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
   std::mt19937 generator(random_seed);
   for (Int round = 0; round < num_rounds; ++round) {
@@ -324,7 +460,15 @@ void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
     const std::vector<Int> omp_sample =
         OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
                         &generator, &extra_buffer);
-    if (verbose) {
+#ifdef CATAMARI_HAVE_LIBTIFF
+    if (write_tiff) {
+      const std::string omp_filename = "sample-omp-" + std::to_string(round) +
+                                       "-" + typeid(Field).name() + ".tif";
+      WriteSampleToTIFF(omp_filename, x_size, y_size, sample, box_size,
+                        background_pixel, active_pixel);
+    }
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
+    if (ascii_display) {
       AsciiDisplaySample(x_size, y_size, omp_sample, missing_char,
                          horizontal_sampled_char, vertical_sampled_char);
     }
@@ -333,7 +477,15 @@ void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
     InitializeMatrix(x_size, y_size, &matrix);
     const std::vector<Int> sample =
         SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
-    if (verbose) {
+#ifdef CATAMARI_HAVE_LIBTIFF
+    if (write_tiff) {
+      const std::string filename = "sample-" + std::to_string(round) + "-" +
+                                   typeid(Field).name() + ".tif";
+      WriteSampleToTIFF(filename, x_size, y_size, sample, box_size,
+                        background_pixel, active_pixel);
+    }
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
+    if (ascii_display) {
       AsciiDisplaySample(x_size, y_size, sample, missing_char,
                          horizontal_sampled_char, vertical_sampled_char);
     }
@@ -358,18 +510,22 @@ int main(int argc, char** argv) {
       "random_seed", "The random seed for the DPP.", 17u);
   const bool maximum_likelihood = parser.OptionalInput<bool>(
       "maximum_likelihood", "Take a maximum likelihood DPP sample?", true);
+  const bool ascii_display = parser.OptionalInput<bool>(
+      "ascii_display", "Display the results in ASCII?", true);
+  const bool write_tiff = parser.OptionalInput<bool>(
+      "write_tiff", "Write out the results into a TIFF file?", true);
   if (!parser.OK()) {
     return 0;
   }
 
   std::cout << "Single-precision:" << std::endl;
   RunDPPTests<float>(maximum_likelihood, x_size, y_size, block_size, tile_size,
-                     num_rounds, random_seed);
+                     num_rounds, random_seed, ascii_display, write_tiff);
   std::cout << std::endl;
 
   std::cout << "Double-precision:" << std::endl;
   RunDPPTests<double>(maximum_likelihood, x_size, y_size, block_size, tile_size,
-                      num_rounds, random_seed);
+                      num_rounds, random_seed, ascii_display, write_tiff);
 
   return 0;
 }

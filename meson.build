@@ -141,6 +141,13 @@ if not get_option('disable_blas')
   endif
 endif
 
+# Look for libtiff
+libtiff = cxx.find_library('libtiff', required : false)
+if libtiff.found()
+  cxx_args += '-DCATAMARI_HAVE_LIBTIFF'
+  example_deps += libtiff
+endif
+
 # Test if quotient is installed.
 found_quotient = cxx.has_header('quotient.hpp')
 if not found_quotient
