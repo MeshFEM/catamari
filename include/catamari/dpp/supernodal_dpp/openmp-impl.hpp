@@ -302,8 +302,7 @@ void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeSample(
     Buffer<Field>* buffer = &private_state.ldl_state.scaled_transpose_buffer;
     supernode_sample = OpenMPLowerFactorAndSampleDPP(
         control_.factor_tile_size, control_.block_size, maximum_likelihood,
-        &main_diagonal_block, &private_state.generator,
-        &private_state.unit_uniform, buffer);
+        &main_diagonal_block, &private_state.generator, buffer);
   }
   AppendSupernodeSample(main_supernode, supernode_sample, sample);
 
@@ -508,8 +507,7 @@ void SupernodalDPP<Field>::OpenMPRightLookingSupernodeSample(
     Buffer<Field>* buffer = &private_state.ldl_state.scaled_transpose_buffer;
     supernode_sample = OpenMPLowerFactorAndSampleDPP(
         control_.factor_tile_size, control_.block_size, maximum_likelihood,
-        &diagonal_block, &private_state.generator, &private_state.unit_uniform,
-        buffer);
+        &diagonal_block, &private_state.generator, buffer);
   }
   AppendSupernodeSample(supernode, supernode_sample, sample);
 

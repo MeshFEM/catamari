@@ -20,7 +20,7 @@
 //
 // These references are useful for introducing the star space and the definition
 // of the transfer current matrix in terms of an orthogonal projector onto the
-// star space. We build our DPP by computing a column-pivoted QR factorization 
+// star space. We build our DPP by computing a column-pivoted QR factorization
 // of a basis for the star space, explicitly computing the Gramian of the
 // thin Q factor, and sampling from the resulting SPSD kernel matrix.
 //
@@ -285,9 +285,10 @@ std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
   const int old_max_threads = catamari::GetMaxBlasThreads();
   catamari::SetNumBlasThreads(1);
 
+  std::vector<Int> sample;
   #pragma omp parallel
   #pragma omp single
-  const std::vector<Int> sample =
+  sample =
       OpenMPLowerFactorAndSampleDPP(tile_size, block_size, maximum_likelihood,
                                     matrix, generator, extra_buffer);
 
