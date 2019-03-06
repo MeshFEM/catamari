@@ -34,17 +34,14 @@ void InitializeMatrix(Int matrix_size, BlasMatrix<Field>* matrix) {
 }
 
 template <typename Field>
-void SampleDPP(
-    Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
-    std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
+void SampleDPP(Int block_size, bool maximum_likelihood,
+               BlasMatrixView<Field>* matrix, std::mt19937* generator) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   const Int matrix_size = matrix->height;
   quotient::Timer timer;
   timer.Start();
 
-  LowerFactorAndSampleDPP(block_size, maximum_likelihood, matrix, generator,
-                          uniform_dist);
+  LowerFactorAndSampleDPP(block_size, maximum_likelihood, matrix, generator);
 
   const double runtime = timer.Stop();
   const double flops =
@@ -55,11 +52,9 @@ void SampleDPP(
 
 #ifdef CATAMARI_OPENMP
 template <typename Field>
-void OpenMPSampleDPP(
-    Int tile_size, Int block_size, bool maximum_likelihood,
-    BlasMatrixView<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
-    Buffer<Field>* extra_buffer) {
+void OpenMPSampleDPP(Int tile_size, Int block_size, bool maximum_likelihood,
+                     BlasMatrixView<Field>* matrix, std::mt19937* generator,
+                     Buffer<Field>* extra_buffer) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   const Int matrix_size = matrix->height;
   quotient::Timer timer;
@@ -71,7 +66,7 @@ void OpenMPSampleDPP(
   #pragma omp parallel
   #pragma omp single
   OpenMPLowerFactorAndSampleDPP(tile_size, block_size, maximum_likelihood,
-                                matrix, generator, uniform_dist, extra_buffer);
+                                matrix, generator, extra_buffer);
 
   catamari::SetNumBlasThreads(old_max_threads);
 
@@ -87,23 +82,19 @@ template <typename Field>
 void RunDPPTests(bool maximum_likelihood, Int matrix_size, Int block_size,
                  Int CATAMARI_UNUSED tile_size, Int num_rounds,
                  unsigned int random_seed) {
-  typedef catamari::ComplexBase<Field> Real;
   BlasMatrix<Field> matrix;
   Buffer<Field> extra_buffer(matrix_size * matrix_size);
 
   std::mt19937 generator(random_seed);
-  std::uniform_real_distribution<Real> uniform_dist(Real{0}, Real{1});
-
   for (Int round = 0; round < num_rounds; ++round) {
 #ifdef CATAMARI_OPENMP
     InitializeMatrix(matrix_size, &matrix);
     OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
-                    &generator, &uniform_dist, &extra_buffer);
+                    &generator, &extra_buffer);
 #endif  // ifdef CATAMARI_OPENMP
 
     InitializeMatrix(matrix_size, &matrix);
-    SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator,
-              &uniform_dist);
+    SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
   }
 }
 

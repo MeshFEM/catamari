@@ -70,18 +70,18 @@ Int OpenMPLowerLDLTransposeFactorization(Int tile_size, Int block_size,
 // L D L^H factorization of the modified kernel (each diagonal pivot with a
 // failed coin-flip is decremented by one).
 template <class Field>
-std::vector<Int> LowerFactorAndSampleDPP(
-    Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
-    std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist);
+std::vector<Int> LowerFactorAndSampleDPP(Int block_size,
+                                         bool maximum_likelihood,
+                                         BlasMatrixView<Field>* matrix,
+                                         std::mt19937* generator);
 
 #ifdef CATAMARI_OPENMP
 template <class Field>
-std::vector<Int> OpenMPLowerFactorAndSampleDPP(
-    Int tile_size, Int block_size, bool maximum_likelihood,
-    BlasMatrixView<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
-    std::vector<Field>* buffer);
+std::vector<Int> OpenMPLowerFactorAndSampleDPP(Int tile_size, Int block_size,
+                                               bool maximum_likelihood,
+                                               BlasMatrixView<Field>* matrix,
+                                               std::mt19937* generator,
+                                               std::vector<Field>* buffer);
 #endif  // ifdef CATAMARI_OPENMP
 
 }  // namespace catamari

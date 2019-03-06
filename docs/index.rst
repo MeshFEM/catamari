@@ -27,9 +27,6 @@ Usage of the sparse-direct solver through the
 .. code-block:: cpp
 
   #include "catamari.hpp"
-
-  // [...]
-
   // Build a real or complex symmetric input matrix.
   //
   // Alternatively, one could use
@@ -76,19 +73,73 @@ Determinantal Point Process sampling
 
 Dense DPP sampling
 """"""""""""""""""
-TODO
-
-Sparse DPP sampling
-"""""""""""""""""""
-Usage of catamari's sparse-direct DPP sampler via `catamari::CoordinateMatrix`
-is similar to usage of the library's sparse-direct solver.
+A dense DPP can be sampled from its kernel matrix (in a sequential manner,
+perhaps using multithreaded BLAS calls) using the routine
+:samp:`catamari::LowerFactorAndSampleDPP`:
 
 .. code-block:: cpp
 
   #include "catamari.hpp"
+  catamari::BlasMatrix<catamari::Complex<double>> matrix;
+  matrix.Resize(num_rows, num_rows);
+  // Fill the matrix with calls of the form: matrix(i, j) = value;
 
-  // [...] 
+  std::random_device random_device;
+  std::mt19937 generator(random_device());
+  const catamari::Int block_size = 64;
+  const bool maximum_likelihood = false;
+  const int num_samples = 10;
+  std::vector<std::vector<catamari::Int>> samples(num_samples);
+  for (int sample_index = 0; sample_index < num_samples; ++sample_index) {
+    auto matrix_copy = matrix;
+    samples[sample_index] = catamari::LowerFactorAndSampleDPP(
+        block_size, maximum_likelihood, &matrix_copy, &generator);
+  }
 
+The DPP can be sampled using a DAG-scheduler by instead calling
+:samp:`catamari::OpenMPLowerFactorAndSampleSPP`:
+
+.. code-block:: cpp
+
+  #include "catamari.hpp"
+  catamari::BlasMatrix<catamari::Complex<double>> matrix;
+  matrix.Resize(num_rows, num_rows);
+  // Fill the matrix with calls of the form: matrix(i, j) = value;
+
+  // Ensure that the DAG-scheduled routine will use single-threaded BLAS calls.
+  const int old_max_threads = catamari::GetMaxBlasThreads();
+  catamari::SetNumBlasThreads(1);
+
+  std::random_device random_device;
+  std::mt19937 generator(random_device());
+  const catamari::Int block_size = 64;
+  const catamari::Int tile_size = 128;
+  const bool maximum_likelihood = false;
+  const int num_samples = 10;
+  std::vector<std::vector<catamari::Int>> samples(num_samples);
+  for (int sample_index = 0; sample_index < num_samples; ++sample_index) {
+    auto matrix_copy = matrix;
+    #pragma omp parallel
+    #pragma omp single
+    samples[sample_index] = catamari::OpenMPLowerFactorAndSampleDPP(
+        tile_size, block_size, maximum_likelihood, &matrix_copy, &generator);
+  }
+
+  // Revert to the original number of BLAS threads.
+  catamari::SetNumBlasThreads(old_max_threads);
+
+An example of calling each of these routines can be found in
+`example/dense_dpp.cc <https://gitlab.com/hodge_star/catamari/blob/master/example/dense_dpp.cc>`_.
+
+Sparse DPP sampling
+"""""""""""""""""""
+Usage of catamari's sparse-direct DPP sampler via
+:samp:`catamari::CoordinateMatrix` is similar to usage of the library's
+sparse-direct solver.
+
+.. code-block:: cpp
+
+  #include "catamari.hpp"
   // Build a real or complex symmetric input matrix.
   //
   // Alternatively, one could use

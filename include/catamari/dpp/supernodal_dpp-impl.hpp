@@ -279,9 +279,9 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
   BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
 
   // Sample and factor the diagonal block.
-  const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
-      control_.block_size, maximum_likelihood, &diagonal_block,
-      &private_state->generator, &private_state->unit_uniform);
+  const std::vector<Int> supernode_sample =
+      LowerFactorAndSampleDPP(control_.block_size, maximum_likelihood,
+                              &diagonal_block, &private_state->generator);
   AppendSupernodeSample(supernode, supernode_sample, sample);
 
   supernodal_ldl::SolveAgainstDiagonalBlock(
@@ -356,9 +356,9 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
       shared_state);
 
   // Sample and factor the diagonal block.
-  const std::vector<Int> supernode_sample = LowerFactorAndSampleDPP(
-      control_.block_size, maximum_likelihood, &diagonal_block,
-      &private_state->generator, &private_state->unit_uniform);
+  const std::vector<Int> supernode_sample =
+      LowerFactorAndSampleDPP(control_.block_size, maximum_likelihood,
+                              &diagonal_block, &private_state->generator);
   AppendSupernodeSample(supernode, supernode_sample, sample);
 
   if (!degree) {

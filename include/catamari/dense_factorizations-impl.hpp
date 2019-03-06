@@ -417,14 +417,15 @@ Int LowerLDLTransposeFactorization(Int block_size,
 }
 
 template <class Field>
-std::vector<Int> LowerUnblockedFactorAndSampleDPP(
-    bool maximum_likelihood, BlasMatrixView<Field>* matrix,
-    std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
+std::vector<Int> LowerUnblockedFactorAndSampleDPP(bool maximum_likelihood,
+                                                  BlasMatrixView<Field>* matrix,
+                                                  std::mt19937* generator) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
   std::vector<Int> sample;
   sample.reserve(height);
+
+  std::uniform_real_distribution<Real> uniform_dist{Real{0}, Real{1}};
 
   for (Int i = 0; i < height; ++i) {
     Real delta = RealPart(matrix->Entry(i, i));
@@ -432,7 +433,7 @@ std::vector<Int> LowerUnblockedFactorAndSampleDPP(
                     "Diagonal value was outside of [0, 1].");
     const bool keep_index = maximum_likelihood
                                 ? delta >= Real(1) / Real(2)
-                                : (*uniform_dist)(*generator) <= delta;
+                                : uniform_dist(*generator) <= delta;
     if (keep_index) {
       sample.push_back(i);
     } else {
@@ -458,10 +459,10 @@ std::vector<Int> LowerUnblockedFactorAndSampleDPP(
 }
 
 template <class Field>
-std::vector<Int> LowerBlockedFactorAndSampleDPP(
-    Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
-    std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
+std::vector<Int> LowerBlockedFactorAndSampleDPP(Int block_size,
+                                                bool maximum_likelihood,
+                                                BlasMatrixView<Field>* matrix,
+                                                std::mt19937* generator) {
   const Int height = matrix->height;
 
   std::vector<Int> sample;
@@ -478,7 +479,7 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
     BlasMatrixView<Field> diagonal_block =
         matrix->Submatrix(i, i, bsize, bsize);
     std::vector<Int> block_sample = LowerUnblockedFactorAndSampleDPP(
-        maximum_likelihood, &diagonal_block, generator, uniform_dist);
+        maximum_likelihood, &diagonal_block, generator);
     for (const Int& index : block_sample) {
       sample.push_back(i + index);
     }
@@ -520,12 +521,12 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(
 }
 
 template <class Field>
-std::vector<Int> LowerFactorAndSampleDPP(
-    Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
-    std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist) {
+std::vector<Int> LowerFactorAndSampleDPP(Int block_size,
+                                         bool maximum_likelihood,
+                                         BlasMatrixView<Field>* matrix,
+                                         std::mt19937* generator) {
   return LowerBlockedFactorAndSampleDPP(block_size, maximum_likelihood, matrix,
-                                        generator, uniform_dist);
+                                        generator);
 }
 
 }  // namespace catamari

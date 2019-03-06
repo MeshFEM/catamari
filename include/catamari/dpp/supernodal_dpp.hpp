@@ -66,9 +66,6 @@ class SupernodalDPP {
 
     // A random number generator.
     std::mt19937 generator;
-
-    // A random number generator over
-    std::uniform_real_distribution<Real> unit_uniform{Real{0}, Real{1}};
   };
 
   // A copy of the input matrix.

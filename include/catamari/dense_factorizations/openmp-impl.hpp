@@ -351,7 +351,6 @@ template <class Field>
 std::vector<Int> OpenMPLowerBlockedFactorAndSampleDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
     Buffer<Field>* buffer) {
   const Int height = matrix->height;
   if (buffer->Size() < static_cast<std::size_t>(height * height)) {
@@ -388,12 +387,11 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleDPP(
     #pragma omp taskgroup
     #pragma omp task default(none)                                      \
         firstprivate(block_size, i, diagonal_block, maximum_likelihood, \
-            generator, uniform_dist, sample_ptr, block_sample_ptr)      \
+            generator, sample_ptr, block_sample_ptr)                    \
         depend(inout: matrix_data[i + i * leading_dim])
     {
       *block_sample_ptr = LowerBlockedFactorAndSampleDPP(
-          block_size, maximum_likelihood, &diagonal_block, generator,
-          uniform_dist);
+          block_size, maximum_likelihood, &diagonal_block, generator);
       for (const Int& index : *block_sample_ptr) {
         sample_ptr->push_back(i + index);
       }
@@ -475,14 +473,13 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleDPP(
 }
 
 template <class Field>
-std::vector<Int> OpenMPLowerFactorAndSampleDPP(
-    Int tile_size, Int block_size, bool maximum_likelihood,
-    BlasMatrixView<Field>* matrix, std::mt19937* generator,
-    std::uniform_real_distribution<ComplexBase<Field>>* uniform_dist,
-    Buffer<Field>* buffer) {
-  return OpenMPLowerBlockedFactorAndSampleDPP(tile_size, block_size,
-                                              maximum_likelihood, matrix,
-                                              generator, uniform_dist, buffer);
+std::vector<Int> OpenMPLowerFactorAndSampleDPP(Int tile_size, Int block_size,
+                                               bool maximum_likelihood,
+                                               BlasMatrixView<Field>* matrix,
+                                               std::mt19937* generator,
+                                               Buffer<Field>* buffer) {
+  return OpenMPLowerBlockedFactorAndSampleDPP(
+      tile_size, block_size, maximum_likelihood, matrix, generator, buffer);
 }
 
 }  // namespace catamari
