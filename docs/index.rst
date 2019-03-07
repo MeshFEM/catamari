@@ -14,7 +14,9 @@ Catamari's development documentation
 
 `catamari <https://hodgestar.com/catamari/>`_ is a `C++14 <https://en.wikipedia.org/wiki/C%2B%2B14>`_, header-only implementations of sequential and
 `DAG-scheduled <https://en.wikipedia.org/wiki/Directed_acyclic_graph>`_, real
-and complex, supernodal sparse-direct `Cholesky <https://en.wikipedia.org/wiki/Cholesky_decomposition>`_, LDL^T, and LDL^H factorizations. It similarly
-contains sequential and DAG-scheduled, dense and sparse-direct, real and
-complex, `Determinantal Point Process <https://en.wikipedia.org/wiki/Determinantal_point_process>`_ sampling through modified LDL^H factorizations.
+and complex, supernodal sparse-direct `Cholesky <https://en.wikipedia.org/wiki/Cholesky_decomposition>`_, :math:`LDL^T`, and :math:`LDL^H` factorizations. It
+similarly contains sequential and DAG-scheduled, dense and sparse-direct, real
+and complex,
+`Determinantal Point Process <https://en.wikipedia.org/wiki/Determinantal_point_process>`_
+sampling through modified :math:`LDL^H` factorizations.
 

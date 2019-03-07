@@ -17,7 +17,7 @@ of the major functionality.
 
 Building the examples and tests
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-While `Catamari <https://hodgestar.com/catamari/>`_ is a header-only library,
+While `catamari <https://hodgestar.com/catamari/>`_ is a header-only library,
 there are a number of configuration options (e.g., which BLAS library to use,
 and whether OpenMP is enabled) which are handled through preprocessor directives
 and compiler/linker options determined during a configuration stage. Catamari
@@ -26,7 +26,7 @@ uses `meson <https://mesonbuild.com>`_, a modern alternative to
 
 One might start with a debug (the default :samp:`buildtype` in
 `meson <https://mesonbuild.com>`_). Assuming that the
-`Ninja build system <https://ninja-build.com>`_ was installed alongside
+`Ninja build system <https://ninja-build.org>`_ was installed alongside
 meson (it typically is), one can configure, build, and test catamari with its
 default options via:
 
@@ -53,8 +53,8 @@ OpenMP task parallelism will be used by default if support for OpenMP was
 detected; shared-memory parallelism can be disabled with the
 :samp:`-Ddisable_openmp=true` configuration option.
 
-And MKL support can be enabled by configuring with
-:samp:`-Dmkl_lib=/PATH/TO/MKL/LIB`.
+And `Intel MKL <https://software.intel.com/en-us/mkl>`_ support can be enabled
+by configuring with :samp:`-Dmkl_lib=/PATH/TO/MKL/LIB`.
 
 
 Symmetric and Hermitian direct linear solvers
@@ -69,11 +69,77 @@ components [Higham-1998]_.
 
 Dense factorizations
 """"""""""""""""""""
-Lorem ipsum.
+Beyond their intrinsic usefulness, high-performance dense factorizations are a
+core component of supernodal sparse-direct solvers. Catamari therefore provides
+sequential and multithreaded (via OpenMP's task scheduler) implementations of
+dense Cholesky, :math:`LDL^T`, and :math:`LDL^H` factorizations (as one might
+infer, for both real and complex scalars).
+
+Sequential (perhaps using multithreaded BLAS calls) dense Cholesky
+factorizations can be easily performed using a call to 
+:samp:`catamari::LowerCholeskyFactorization` on a
+:samp:`catamari::BlasMatrixView`, which is essentially a pointer and dense
+matrix metadata. One can either manually handle the memory allocation and
+manipulation of a :samp:`catamari::BlasMatrixView` or have it automatically
+maintained as a member of a :samp:`catamari::BlasMatrix`, which handles
+resource allocation and destruction.
+
+.. code-block:: cpp
+
+  #include "catamari.hpp"
+  // Build a dense Hermitian positive-definite matrix.
+  catamari::BlasMatrix<catamari::Complex<double>> matrix;
+  matrix.Resize(num_rows, num_rows);
+  // Fill the matrix using commands of the form:
+  //   matrix(row, column) = value;
+  
+  // Perform the sequential, dense Cholesky factorization using a
+  // user-determined algorithmic blocksize.
+  const catamari::Int block_size = 64;
+  catamari::LowerCholeskyFactorization(block_size, &matrix.view);
+
+Multithreaded dense Cholesky factorization can similarly be performed with a
+call to :samp:`catamari::OpenMPLowerCholeskyFactorization`, though care must be
+taken to avoid thread oversubscription by ensuring that only a single thread is
+used for each BLAS call. Each OpenMP routine in Catamari assumes that it is
+within a :samp:`#pragma omp single` section of an :samp:`#pragma omp parallel`
+region.
+
+.. code-block:: cpp
+
+  #include "catamari.hpp"
+  // Build a dense Hermitian positive-definite matrix.
+  catamari::BlasMatrix<catamari::Complex<double>> matrix;
+  matrix.Resize(num_rows, num_rows);
+  // Fill the matrix using commands of the form:
+  //   matrix(row, column) = value;
+
+  // Avoid BLAS thread oversubscription.
+  const int old_max_threads = catamari::GetMaxBlasThreads();
+  catamari::SetNumBlasThreads(1);
+  
+  // Perform the sequential, dense Cholesky factorization using a
+  // user-determined algorithmic blocksize.
+  const catamari::Int tile_size = 128;
+  const catamari::Int block_size = 64;
+  #pragma omp parallel
+  #pragma omp single
+  catamari::OpenMPLowerCholeskyFactorization(
+      tile_size, block_size, &matrix.view);
+
+  // Restore the number of BLAS threads.
+  catamari::SetNumBlasThreads(old_max_threads);
+
+Real and complex :math:`LDL^T` and :math:`LDL^H` can be executed with nearly
+identical code by instead calling
+:samp:`catamari::LowerLDLTransposeFactorization`, 
+:samp:`catamari::OpenMPLowerLDLTransposeFactorization`, 
+:samp:`catamari::LowerLDLAdjointFactorization`,  or
+:samp:`catamari::OpenMPLowerLDLAdjointFactorization`.
 
 Sparse-direct solver
 """"""""""""""""""""
-Usage of Catamari's sparse-direct solver through the
+Usage of catamari's sparse-direct solver through the
 :samp:`catamari::CoordinateMatrix` template class is fairly straight-forward
 and has an identical interface in sequential and multithreaded contexts
 (the multithreaded solver is called if more the maximum number of OpenMP threads
@@ -148,6 +214,15 @@ the vast majority of cases (Cf. [Soshnikov-2000]_), including all of those relev
 marginal kernel matrices are assumed to be Hermitian. Thus, we will henceforth
 assume all marginal kernel matrices Hermitian Positive Semi-Definite with
 two-norm bounded from above by 1.
+
+Essentially all of the high-performance techniques for performing a dense or
+sparse-direct :math:`LDL^H` factorization can be carried over to directly
+sampling a DPP from its marginal kernel matrix by exploiting the relationship
+between Schur complements and conditional DPP sampling (by sequentially flipping
+a Bernoulli coin based upon the value of each pivot to determine whether its
+corresponding index should be in the sample).
+
+TODO(Jack Poulson): Explain the mathematics behind this relationship.
 
 
 Dense DPP sampling
