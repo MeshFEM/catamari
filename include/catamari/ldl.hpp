@@ -59,7 +59,7 @@ struct RefinedSolveControl {
   // The maximum number of iterations of iterative refinement to perform.
   Int max_iters = 3;
 
-  // Whether 
+  // Whether
   bool verbose = false;
 };
 

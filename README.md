@@ -144,7 +144,9 @@ catamari::SetNumBlasThreads(old_max_threads);
 ```
 
 Examples of calling each of these routines can be found in
-[example/dense_dpp.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/dense_dpp.cc).
+[example/dense_dpp.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/dense_dpp.cc). A more interest example, which builds and samples from a
+dense DPP that uniformly samples spanning trees over a 2D grid graph, is given
+in [example/uniform_spanning_tree.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/uniform_spanning_tree.cc).
 
 ### Sparse Determinantal Point Process sampling quickstart
 Usage of catamari's sparse-direct DPP sampler via `catamari::CoordinateMatrix`

@@ -130,7 +130,9 @@ The DPP can be sampled using a DAG-scheduler by instead calling
   catamari::SetNumBlasThreads(old_max_threads);
 
 An example of calling each of these routines can be found in
-`example/dense_dpp.cc <https://gitlab.com/hodge_star/catamari/blob/master/example/dense_dpp.cc>`_.
+`example/dense_dpp.cc <https://gitlab.com/hodge_star/catamari/blob/master/example/dense_dpp.cc>`_. A more interest example, which builds and samples from a
+dense DPP that uniformly samples spanning trees over a 2D grid graph, is given
+in `example/uniform_spanning_tree.cc <https://gitlab.com/hodge_star/catamari/blob/master/example/uniform_spanning_tree.cc>`_.
 
 Sparse DPP sampling
 """""""""""""""""""

@@ -42,7 +42,7 @@ void Factorization<Field>::IncorporateSupernodeIntoLDLResult(
                                         std::pow(1. * degree, 2.);
 
   result->num_diagonal_flops += diagonal_flops;
-  result->num_solve_flops += solve_flops;
+  result->num_subdiag_solve_flops += solve_flops;
   result->num_schur_complement_flops += schur_complement_flops;
   result->num_factorization_flops +=
       diagonal_flops + solve_flops + schur_complement_flops;
@@ -57,7 +57,7 @@ void Factorization<Field>::MergeContribution(const LDLResult& contribution,
   result->num_factorization_entries += contribution.num_factorization_entries;
 
   result->num_diagonal_flops += contribution.num_diagonal_flops;
-  result->num_solve_flops += contribution.num_solve_flops;
+  result->num_subdiag_solve_flops += contribution.num_subdiag_solve_flops;
   result->num_schur_complement_flops += contribution.num_schur_complement_flops;
   result->num_factorization_flops += contribution.num_factorization_flops;
 }

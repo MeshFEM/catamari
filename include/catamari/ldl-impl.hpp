@@ -182,8 +182,8 @@ Int LDLFactorization<Field>::RefinedSolve(
         if (relative_error <= control.relative_tol) {
           if (control.verbose) {
             std::cout << "Relative error " << j << " (" << j_active
-                      << "): " << relative_error << " <= "
-                      << control.relative_tol << std::endl;
+                      << "): " << relative_error
+                      << " <= " << control.relative_tol << std::endl;
           }
         } else {
           active_indices[num_remaining++] = j;

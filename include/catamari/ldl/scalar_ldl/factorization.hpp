@@ -66,7 +66,7 @@ struct LDLResult {
   //
   // In the case of complex factorizations, this is in terms of the number of
   // real flops.
-  double num_solve_flops = 0;
+  double num_subdiag_solve_flops = 0;
 
   // The rough number of flops required to form the Schur complements.
   //

@@ -309,7 +309,7 @@ LDLResult Factorization<Field>::LeftLooking(
     const double schur_complement_flops =
         (IsComplex<Field>::value ? 4. : 1.) * std::pow(1. * degree, 2.);
 
-    result.num_solve_flops += solve_flops;
+    result.num_subdiag_solve_flops += solve_flops;
     result.num_schur_complement_flops += schur_complement_flops;
     result.num_factorization_flops += solve_flops + schur_complement_flops;
 
@@ -385,7 +385,7 @@ LDLResult Factorization<Field>::UpLooking(
     const double schur_complement_flops =
         (IsComplex<Field>::value ? 4. : 1.) * std::pow(1. * degree, 2.);
 
-    result.num_solve_flops += solve_flops;
+    result.num_subdiag_solve_flops += solve_flops;
     result.num_schur_complement_flops += schur_complement_flops;
     result.num_factorization_flops += solve_flops + schur_complement_flops;
 

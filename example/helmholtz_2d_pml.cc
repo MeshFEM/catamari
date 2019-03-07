@@ -687,7 +687,7 @@ struct Experiment {
 
   // The rough number of floating-point operations required to solve against the
   // diagonal blocks to update the subdiagonals.
-  double num_solve_flops = 0;
+  double num_subdiag_solve_flops = 0;
 
   // The rough number of floating-point operations required to form the Schur
   // complements.
@@ -709,19 +709,24 @@ struct Experiment {
 
 // Pretty prints the Experiment structure.
 void PrintExperiment(const Experiment& experiment) {
+  const double factorization_gflops_per_sec =
+      experiment.num_flops / (1.e9 * experiment.factorization_seconds);
+
   std::cout << "  construction_seconds:       "
             << experiment.construction_seconds << "\n"
             << "  num_nonzeros:               " << experiment.num_nonzeros
             << "\n"
             << "  num_diagonal_flops:         " << experiment.num_diagonal_flops
             << "\n"
-            << "  num_solve_flops:            " << experiment.num_solve_flops
-            << "\n"
+            << "  num_subdiag_solve_flops:    "
+            << experiment.num_subdiag_solve_flops << "\n"
             << "  num_schur_complement_flops: "
             << experiment.num_schur_complement_flops << "\n"
             << "  num_flops:                  " << experiment.num_flops << "\n"
             << "  factorization_seconds:      "
             << experiment.factorization_seconds << "\n"
+            << "  factorization gflops/sec:   " << factorization_gflops_per_sec
+            << "\n"
             << "  solve_seconds:              " << experiment.solve_seconds
             << "\n"
             << "  refined_solve_seconds:      "
@@ -781,7 +786,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   }
   experiment.num_nonzeros = result.num_factorization_entries;
   experiment.num_diagonal_flops = result.num_diagonal_flops;
-  experiment.num_solve_flops = result.num_solve_flops;
+  experiment.num_subdiag_solve_flops = result.num_subdiag_solve_flops;
   experiment.num_schur_complement_flops = result.num_schur_complement_flops;
   experiment.num_flops = result.num_factorization_flops;
 
@@ -829,8 +834,8 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     }
     BlasMatrix<Field> solution = right_hand_sides;
     timer.Start();
-    ldl_factorization.RefinedSolve(
-        matrix, refined_solve_control, &solution.view);
+    ldl_factorization.RefinedSolve(matrix, refined_solve_control,
+                                   &solution.view);
     experiment.refined_solve_seconds = timer.Stop();
 
     if (print_progress) {
