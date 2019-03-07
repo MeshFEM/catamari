@@ -464,7 +464,7 @@ void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
     if (write_tiff) {
       const std::string omp_filename = "sample-omp-" + std::to_string(round) +
                                        "-" + typeid(Field).name() + ".tif";
-      WriteSampleToTIFF(omp_filename, x_size, y_size, sample, box_size,
+      WriteSampleToTIFF(omp_filename, x_size, y_size, omp_sample, box_size,
                         background_pixel, active_pixel);
     }
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
