@@ -216,6 +216,7 @@ or
 An example plane from running the 3D Helmholtz solve using 120 x 120 x 120
 trilinear hexahedral elements with a converging lens model spanning 14
 wavelengths is shown below:
+
 ![](./images/helmholtz_3d_lens_14w.png)
 
 Examples of running the DPP sampler to generate uniform samples from the space
@@ -226,6 +227,7 @@ A (lexicographically greedy) maximum likelihood 60x60 result might look like:
 ![](./images/uniform_spanning_tree_greedy-60x60.png)
 
 while a random rexample might look like:
+
 ![](./images/uniform_spanning_tree_60x60.png)
 
 ### License
