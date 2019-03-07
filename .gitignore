@@ -1,4 +1,5 @@
 *.swp
 build*/
+docs/_build/*
 subprojects/*
 !subprojects/*.wrap

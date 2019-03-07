@@ -78,11 +78,12 @@ right_hand_sides.Resize(num_rows, num_rhs);
 factorization.Solve(&right_hand_sides.view);
 
 // Alternatively, one can solve using iterative-refinement, e.g., using:
-const Int max_refine_iters = 3;
-const double relative_tol = 1e-15;
-const bool verbose = true;
+catamari::RefinedSolveControl<double> refined_solve_control;
+refined_solve_control.relative_tol = 1e-15;
+refined_solve_control.max_iters = 3;
+refined_solve_control.verbose = true;
 factorization.RefinedSolve(
-    matrix, relative_tol, max_refine_iters, verbose, &right_hand_sides.view);
+    matrix, refined_solve_control, &right_hand_sides.view);
 ```
 
 One can also browse the [example/](https://gitlab.com/hodge_star/catamari/tree/master/example) folder for complete examples (e.g., for [solving 3D Helmholtz equations](https://gitlab.com/hodge_star/catamari/blob/master/example/helmholtz_3d_pml.cc) with PML boundary conditions discretized using trilinear hexahedral elements using a complex LDL^T factorization).

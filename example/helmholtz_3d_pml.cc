@@ -988,17 +988,16 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   // Solve the linear systems using iterative refinement.
   {
     // TODO(Jack Poulson): Make these parameters configurable.
-    const Real relative_tol = 1e-15;
-    const Int max_refine_iters = 3;
-    const bool verbose = true;
+    catamari::RefinedSolveControl<Real> refined_solve_control;
+    refined_solve_control.verbose = true;
 
     if (print_progress) {
       std::cout << "  Running iteratively-refined solve..." << std::endl;
     }
     BlasMatrix<Field> solution = right_hand_sides;
     timer.Start();
-    ldl_factorization.RefinedSolve(matrix, relative_tol, max_refine_iters,
-                                   verbose, &solution.view);
+    ldl_factorization.RefinedSolve(
+        matrix, refined_solve_control, &solution.view);
     experiment.refined_solve_seconds = timer.Stop();
 
     if (print_progress) {

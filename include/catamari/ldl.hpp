@@ -8,6 +8,7 @@
 #ifndef CATAMARI_LDL_H_
 #define CATAMARI_LDL_H_
 
+#include <limits>
 #include <memory>
 
 #include "catamari/ldl/scalar_ldl.hpp"
@@ -48,10 +49,27 @@ struct LDLControl {
   }
 };
 
+// Configuration options for solving linear systems with iterative refinement.
+template <typename Real>
+struct RefinedSolveControl {
+  // The desired relative error (in the max norm) of the solution. Iteration
+  // stops early if this tolerance is achieved.
+  Real relative_tol = 10 * std::numeric_limits<Real>::epsilon();
+
+  // The maximum number of iterations of iterative refinement to perform.
+  Int max_iters = 3;
+
+  // Whether 
+  bool verbose = false;
+};
+
 // A wrapper for the scalar and supernodal factorization data structures.
 template <class Field>
 class LDLFactorization {
  public:
+  // The underlying real datatype of the scalar type.
+  typedef ComplexBase<Field> Real;
+
   // Whether or not a supernodal factorization was used. If it is true, only
   // 'supernodal_factorization' should be non-null, and vice versa.
   bool is_supernodal;
@@ -77,8 +95,8 @@ class LDLFactorization {
 
   // Solves a set of linear systems using iterative refinement.
   Int RefinedSolve(const CoordinateMatrix<Field>& matrix,
-                   ComplexBase<Field> relative_tol, Int max_refine_iters,
-                   bool verbose, BlasMatrixView<Field>* right_hand_sides) const;
+                   const RefinedSolveControl<Real>& control,
+                   BlasMatrixView<Field>* right_hand_sides) const;
 
   // Solves a set of linear systems using the lower-triangular factor.
   void LowerTriangularSolve(BlasMatrixView<Field>* right_hand_sides) const;

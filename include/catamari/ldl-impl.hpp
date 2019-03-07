@@ -116,13 +116,12 @@ void LDLFactorization<Field>::Solve(
 
 template <class Field>
 Int LDLFactorization<Field>::RefinedSolve(
-    const CoordinateMatrix<Field>& matrix, ComplexBase<Field> relative_tol,
-    Int max_refine_iters, bool verbose,
+    const CoordinateMatrix<Field>& matrix,
+    const RefinedSolveControl<Real>& control,
     BlasMatrixView<Field>* right_hand_sides) const {
-  typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
   const Int num_rhs = right_hand_sides->width;
-  if (max_refine_iters <= 0) {
+  if (control.max_iters <= 0) {
     Solve(right_hand_sides);
     return 0;
   }
@@ -155,7 +154,7 @@ Int LDLFactorization<Field>::RefinedSolve(
     }
 
     error_norms[j] = MaxNorm(column.ToConst());
-    if (verbose) {
+    if (control.verbose) {
       std::cout << "Original relative error " << j << ": "
                 << error_norms[j] / rhs_orig_norms[j] << std::endl;
     }
@@ -180,11 +179,11 @@ Int LDLFactorization<Field>::RefinedSolve(
         const Real error_norm = error_norms[j];
         const Real rhs_orig_norm = rhs_orig_norms[j];
         const Real relative_error = error_norm / rhs_orig_norm;
-        if (relative_error <= relative_tol) {
-          if (verbose) {
+        if (relative_error <= control.relative_tol) {
+          if (control.verbose) {
             std::cout << "Relative error " << j << " (" << j_active
-                      << "): " << relative_error << " <= " << relative_tol
-                      << std::endl;
+                      << "): " << relative_error << " <= "
+                      << control.relative_tol << std::endl;
           }
         } else {
           active_indices[num_remaining++] = j;
@@ -233,7 +232,7 @@ Int LDLFactorization<Field>::RefinedSolve(
         column(i, 0) = rhs_orig(i, j) - image(i, j_active);
       }
       const Real new_error_norm = MaxNorm(column.ToConst());
-      if (verbose) {
+      if (control.verbose) {
         std::cout << "Refined relative error " << j << ": "
                   << new_error_norm / rhs_orig_norms[j] << std::endl;
       }
@@ -243,7 +242,7 @@ Int LDLFactorization<Field>::RefinedSolve(
         }
         error_norms[j] = new_error_norm;
         active_indices[num_remaining++] = j;
-      } else if (verbose) {
+      } else if (control.verbose) {
         std::cout << "Right-hand side " << j << "(" << j_active << ") diverged."
                   << std::endl;
       }
@@ -251,7 +250,7 @@ Int LDLFactorization<Field>::RefinedSolve(
     active_indices.Resize(num_remaining);
 
     ++refine_iter;
-    if (refine_iter >= max_refine_iters || active_indices.Empty()) {
+    if (refine_iter >= control.max_iters || active_indices.Empty()) {
       break;
     }
   }
