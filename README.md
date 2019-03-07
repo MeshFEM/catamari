@@ -205,14 +205,30 @@ And MKL support can be enabled by configuring with `-Dmkl_lib=/PATH/TO/MKL/LIB`.
 
 ### Running the example drivers
 One can factor Matrix Market examples from the Davis sparse matrix collection
-via `examples/factor_matrix_market.cc`, sample a Determinantal Point Process
-via `examples/dpp_matrix_market.cc`, or factor 2D or 3D Helmholtz Finite
-Element Method discretizations (with Perfectly Matched Layer boundary
-conditions) using `examples/helmholtz_2d_pml.cc` and
-`examples/helmholtz_3d_pml.cc`. An example plane from running the 3D Helmholtz
-solve using 120 x 120 x 120 trilinear hexahedral elements with a converging
-lens model spanning 14 wavelengths is shown below:
+via [example/factor_matrix_market.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/factor_matrix_market.cc),
+sample a Determinantal Point Process via
+[example/dpp_matrix_market.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/dpp_matrix_market.cc),
+or factor 2D or 3D Helmholtz Finite Element Method discretizations (with
+Perfectly Matched Layer boundary conditions) using
+[example/helmholtz_2d_pml.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/helmholtz_2d_pml.cc)
+or
+[example/helmholtz_3d_pml.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/helmholtz_3d_pml.cc).
+An example plane from running the 3D Helmholtz solve using 120 x 120 x 120
+trilinear hexahedral elements with a converging lens model spanning 14
+wavelengths is shown below:
+
 ![](./images/helmholtz_3d_lens_14w.png)
+
+Examples of running the DPP sampler to generate uniform samples from the space
+of spanning trees of a 2D grid graph are given in
+[example/uniform_spanning_tree.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/uniform_spanning_tree.cc).
+A (lexicographically greedy) maximum likelihood 60x60 result might look like:
+
+![](./images/uniform_spanning_tree_greedy-60x60.png)
+
+while a random rexample might look like:
+
+![](./images/uniform_spanning_tree_60x60.png)
 
 ### License
 `catamari` is distributed under the
