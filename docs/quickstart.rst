@@ -137,6 +137,10 @@ identical code by instead calling
 :samp:`catamari::LowerLDLAdjointFactorization`,  or
 :samp:`catamari::OpenMPLowerLDLAdjointFactorization`.
 
+Please see
+`example/dense_factorization.cc <https://gitlab.com/hodge_star/catamari/blob/master/example/dense_factorization.cc>`_
+for full examples of using the sequential and multithreaded dense factorizations.
+
 Sparse-direct solver
 """"""""""""""""""""
 Usage of catamari's sparse-direct solver through the
@@ -188,7 +192,12 @@ is detected as greater than one).
   factorization.RefinedSolve(
       matrix, refined_solve_control, &right_hand_sides.view);
 
-One can also browse the `example/ <https://gitlab.com/hodge_star/catamari/tree/master/example>`_ folder for complete examples (e.g., for `solving 3D Helmholtz equations <https://gitlab.com/hodge_star/catamari/blob/master/example/helmholtz_3d_pml.cc>`_ with PML boundary conditions discretized using trilinear hexahedral elements using a complex LDL^T factorization).
+One can also browse the
+`example/ <https://gitlab.com/hodge_star/catamari/tree/master/example>`_ folder
+for complete examples (e.g., for
+`solving 3D Helmholtz equations <https://gitlab.com/hodge_star/catamari/blob/master/example/helmholtz_3d_pml.cc>`_
+with PML boundary conditions discretized using trilinear hexahedral elements
+using a complex :math:`LDL^T` factorization).
 
 Determinantal Point Process sampling
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
