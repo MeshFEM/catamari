@@ -36,7 +36,7 @@ LowerFactor<Field>::LowerFactor(const Buffer<Int>& supernode_sizes,
   lower_value_offsets[num_supernodes] = num_entries;
 
   structure_indices_.Resize(degree_sum);
-  values_.Resize(num_entries, Field{0});
+  values_.Resize(num_entries);
 
   blocks.Resize(num_supernodes);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {

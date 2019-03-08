@@ -25,7 +25,7 @@ DiagonalFactor<Field>::DiagonalFactor(const Buffer<Int>& supernode_sizes) {
     num_diagonal_entries += supernode_size * supernode_size;
   }
   diag_value_offsets[num_supernodes] = num_diagonal_entries;
-  values_.Resize(num_diagonal_entries, Field{0});
+  values_.Resize(num_diagonal_entries);
 
   blocks.Resize(num_supernodes);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {

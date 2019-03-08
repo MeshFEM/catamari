@@ -120,7 +120,7 @@ void Factorization<Field>::FormSupernodes(
 template <class Field>
 void Factorization<Field>::InitializeFactors(
     const CoordinateMatrix<Field>& matrix, const AssemblyForest& forest,
-    const Buffer<Int>& supernode_degrees) {
+    const Buffer<Int>& supernode_degrees, const Control& control) {
   lower_factor_.reset(
       new LowerFactor<Field>(ordering_.supernode_sizes, supernode_degrees));
   diagonal_factor_.reset(new DiagonalFactor<Field>(ordering_.supernode_sizes));
@@ -148,11 +148,12 @@ void Factorization<Field>::InitializeFactors(
 
   FillStructureIndices(matrix, ordering_, forest, supernode_member_to_index_,
                        lower_factor_.get());
-  if (algorithm_ == kLeftLookingLDL) {
+  if (control.algorithm == kLeftLookingLDL) {
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                          supernode_member_to_index_);
   }
 
+  FillZeros(ordering_, lower_factor_.get(), diagonal_factor_.get());
   FillNonzeros(matrix, ordering_, supernode_member_to_index_,
                lower_factor_.get(), diagonal_factor_.get());
 }
@@ -303,6 +304,16 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(Int main_supernode,
 }
 
 template <class Field>
+void Factorization<Field>::InitialFactorizationSetup(
+    const CoordinateMatrix<Field>& matrix, const Control& control) {
+  AssemblyForest forest;
+  Buffer<Int> supernode_degrees;
+  FormSupernodes(matrix, control.relaxation_control, &forest,
+                 &supernode_degrees);
+  InitializeFactors(matrix, forest, supernode_degrees, control);
+}
+
+template <class Field>
 LDLResult Factorization<Field>::LeftLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
 #ifdef CATAMARI_OPENMP
@@ -310,15 +321,6 @@ LDLResult Factorization<Field>::LeftLooking(
     return OpenMPLeftLooking(matrix, control);
   }
 #endif
-  algorithm_ = kLeftLookingLDL;
-
-  {
-    AssemblyForest forest;
-    Buffer<Int> supernode_degrees;
-    FormSupernodes(matrix, control.relaxation_control, &forest,
-                   &supernode_degrees);
-    InitializeFactors(matrix, forest, supernode_degrees);
-  }
   const Int num_supernodes = ordering_.supernode_sizes.Size();
 
   LeftLookingSharedState shared_state;
@@ -471,15 +473,6 @@ LDLResult Factorization<Field>::RightLooking(
     return OpenMPRightLooking(matrix, control);
   }
 #endif
-  algorithm_ = kRightLookingLDL;
-
-  {
-    AssemblyForest forest;
-    Buffer<Int> supernode_degrees;
-    FormSupernodes(matrix, control.relaxation_control, &forest,
-                   &supernode_degrees);
-    InitializeFactors(matrix, forest, supernode_degrees);
-  }
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
 
@@ -578,8 +571,19 @@ LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   backward_solve_out_of_place_supernode_threshold_ =
       control.backward_solve_out_of_place_supernode_threshold;
 
-  const bool use_leftlooking = control.algorithm == kLeftLookingLDL;
-  if (use_leftlooking) {
+#ifdef CATAMARI_OPENMP
+  if (omp_get_max_threads() > 1) {
+    #pragma omp parallel
+    #pragma omp single
+    OpenMPInitialFactorizationSetup(matrix, control);
+  } else {
+    InitialFactorizationSetup(matrix, control);
+  }
+#else
+  InitialFactorizationSetup(matrix, control);
+#endif
+
+  if (control.algorithm == kLeftLookingLDL) {
     return LeftLooking(matrix, control);
   } else {
     return RightLooking(matrix, control);

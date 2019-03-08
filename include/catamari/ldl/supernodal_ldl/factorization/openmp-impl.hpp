@@ -20,6 +20,20 @@ namespace catamari {
 namespace supernodal_ldl {
 
 template <class Field>
+void Factorization<Field>::OpenMPInitialFactorizationSetup(
+    const CoordinateMatrix<Field>& matrix, const Control& control) {
+  AssemblyForest forest;
+  Buffer<Int> supernode_degrees;
+
+  #pragma omp taskgroup
+  OpenMPFormSupernodes(matrix, control.relaxation_control, &forest,
+                       &supernode_degrees);
+
+  #pragma omp taskgroup
+  OpenMPInitializeFactors(matrix, forest, supernode_degrees, control);
+}
+
+template <class Field>
 void Factorization<Field>::OpenMPFormSupernodes(
     const CoordinateMatrix<Field>& matrix,
     const SupernodalRelaxationControl& control, AssemblyForest* forest,
@@ -82,7 +96,7 @@ void Factorization<Field>::OpenMPFormSupernodes(
 template <class Field>
 void Factorization<Field>::OpenMPInitializeFactors(
     const CoordinateMatrix<Field>& matrix, const AssemblyForest& forest,
-    const Buffer<Int>& supernode_degrees) {
+    const Buffer<Int>& supernode_degrees, const Control& control) {
   lower_factor_.reset(
       new LowerFactor<Field>(ordering_.supernode_sizes, supernode_degrees));
   diagonal_factor_.reset(new DiagonalFactor<Field>(ordering_.supernode_sizes));
@@ -110,12 +124,13 @@ void Factorization<Field>::OpenMPInitializeFactors(
 
   OpenMPFillStructureIndices(sort_grain_size_, matrix, ordering_, forest,
                              supernode_member_to_index_, lower_factor_.get());
-  if (algorithm_ == kLeftLookingLDL) {
+  if (control.algorithm == kLeftLookingLDL) {
     // TODO(Jack Poulson): Switch to a multithreaded equivalent.
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                          supernode_member_to_index_);
   }
 
+  OpenMPFillZeros(ordering_, lower_factor_.get(), diagonal_factor_.get());
   OpenMPFillNonzeros(matrix, ordering_, supernode_member_to_index_,
                      lower_factor_.get(), diagonal_factor_.get());
 }
@@ -543,23 +558,6 @@ bool Factorization<Field>::OpenMPLeftLookingSubtree(
 template <class Field>
 LDLResult Factorization<Field>::OpenMPLeftLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
-  algorithm_ = kLeftLookingLDL;
-
-  {
-    AssemblyForest forest;
-    Buffer<Int> supernode_degrees;
-
-    #pragma omp parallel
-    #pragma omp single
-    {
-      #pragma omp taskgroup
-      OpenMPFormSupernodes(matrix, control.relaxation_control, &forest,
-                           &supernode_degrees);
-
-      #pragma omp taskgroup
-      OpenMPInitializeFactors(matrix, forest, supernode_degrees);
-    }
-  }
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   const int max_threads = omp_get_max_threads();
@@ -615,7 +613,6 @@ LDLResult Factorization<Field>::OpenMPLeftLooking(
 
     #pragma omp parallel
     #pragma omp single
-    #pragma omp taskgroup
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
       #pragma omp task default(none) firstprivate(root_index, root, level) \
@@ -645,24 +642,6 @@ LDLResult Factorization<Field>::OpenMPLeftLooking(
 template <class Field>
 LDLResult Factorization<Field>::OpenMPRightLooking(
     const CoordinateMatrix<Field>& matrix, const Control& control) {
-  algorithm_ = kRightLookingLDL;
-
-  {
-    AssemblyForest forest;
-    Buffer<Int> supernode_degrees;
-
-    #pragma omp parallel
-    #pragma omp single
-    {
-      #pragma omp taskgroup
-      OpenMPFormSupernodes(matrix, control.relaxation_control, &forest,
-                           &supernode_degrees);
-
-      #pragma omp taskgroup
-      OpenMPInitializeFactors(matrix, forest, supernode_degrees);
-    }
-  }
-
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   const Int max_threads = omp_get_max_threads();
@@ -715,7 +694,6 @@ LDLResult Factorization<Field>::OpenMPRightLooking(
 
     #pragma omp parallel
     #pragma omp single
-    #pragma omp taskgroup
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
 

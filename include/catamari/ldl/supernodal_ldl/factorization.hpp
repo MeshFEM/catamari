@@ -117,9 +117,6 @@ class Factorization {
   // Marks the type of factorization employed.
   SymmetricFactorizationType factorization_type_;
 
-  // Whether a left-looking or right-looking factorization is to be used.
-  LDLAlgorithm algorithm_;
-
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.
   Buffer<Int> supernode_member_to_index_;
@@ -166,6 +163,18 @@ class Factorization {
   // The block-diagonal factor.
   std::unique_ptr<DiagonalFactor<Field>> diagonal_factor_;
 
+  // Performs the initial analysis (and factorization initialization) for a
+  // particular sparisty pattern. Subsequent factorizations with the same
+  // sparsity pattern can reuse the symbolic analysis.
+  void InitialFactorizationSetup(const CoordinateMatrix<Field>& matrix,
+                                 const Control& control);
+#ifdef CATAMARI_OPENMP
+  void OpenMPInitialFactorizationSetup(const CoordinateMatrix<Field>& matrix,
+                                       const Control& control);
+#endif  // ifdef CATAMARI_OPENMP
+
+  // TODO(Jack Poulson): Add ReinitializeFactorization.
+
   // Form the (possibly relaxed) supernodes for the factorization.
   void FormSupernodes(const CoordinateMatrix<Field>& matrix,
                       const SupernodalRelaxationControl& control,
@@ -179,11 +188,13 @@ class Factorization {
 
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
                          const AssemblyForest& forest,
-                         const Buffer<Int>& supernode_degrees);
+                         const Buffer<Int>& supernode_degrees,
+                         const Control& control);
 #ifdef CATAMARI_OPENMP
   void OpenMPInitializeFactors(const CoordinateMatrix<Field>& matrix,
                                const AssemblyForest& forest,
-                               const Buffer<Int>& supernode_degrees);
+                               const Buffer<Int>& supernode_degrees,
+                               const Control& control);
 #endif  // ifdef CATAMARI_OPENMP
 
   LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
