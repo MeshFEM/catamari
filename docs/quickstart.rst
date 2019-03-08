@@ -61,6 +61,60 @@ In any build configuration, the library's unit tests can be run via:
   ninja test
 
 
+Manipulating dense matrices with :samp:`BlasMatrix`
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The `Basic Linear Algebra Subprograms (BLAS) <https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms>`_
+established a standard format for representing dense matrices: column-major
+storage with metadata indicating the height, width, *leading dimension*, and
+pointer to the underlying buffer. The *leading dimension*, or *row-stride*, of
+a matrix stored in column-major format is such that the :math:`(i, j)` entry
+is stored at position :samp:`i + j * leading_dim` in the buffer.
+
+`Catamari <https://hodgestar.com/catamari>`__ thus implements a minimal
+description of such a matrix format in its :samp:`catamari::BlasMatrixView`
+template structure. The data structure is meant to be a low-level, minimal
+interface to BLAS-like APIs and should typically be avoided by users in favor
+of the higher-level :samp:`catamari::BlasMatrix` class, which handles
+resource allocation and deallocation.
+
+:samp:`catamari::BlasMatrixView` should typically only be used when there is a
+predefined buffer holding the column-major matrix data. For example:
+
+.. code-block:: cpp
+
+  #include "catamari.hpp"
+  const std::size_t height = 500;
+  const std::size_t width = 600;
+  const std::size_t leading_dim = 1000;
+  std::vector<double> buffer(leading_dim * width);
+  catamari::BlasMatrixView<double> matrix_view;
+  matrix_view.height = height;
+  matrix_view.width = width;
+  matrix_view.leading_dim = leading_dim;
+  matrix_view.data = buffer.data();
+  // One can now manipulate references to the (i, j) entry of the matrix
+  // using operator()(catamari::Int, catamari::Int). For example:
+  matrix_view(10, 20) = 42.;
+
+However, a typical user should not need to manually allocate and attach a
+data buffer and could instead use :samp:`catamari::BlasMatrix`:
+
+.. code-block:: cpp
+
+  #include "catamari.hpp"
+  catamari::BlasMatrix<double> matrix;
+  matrix.Resize(height, width);
+  // One could alternatively have resized and initialized each entry with a
+  // particular value (e.g., 0) via matrix.Resize(height, width, 0.);
+  matrix(10, 20) = 42.;
+
+The :samp:`catmari::BlasMatrixView` interface is exposed via the :samp:`view`
+member of the :samp:`catamari::BlasMatrix` class.
+
+Manipulating sparse matrices with :samp:`CoordinateMatrix`
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lorem ipsum.
+
 Symmetric and Hermitian direct linear solvers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Catamari's linear system solvers are targeted to the class of matrices which
@@ -82,11 +136,7 @@ infer, for both real and complex scalars).
 Sequential (perhaps using multithreaded BLAS calls) dense Cholesky
 factorizations can be easily performed using a call to 
 :samp:`catamari::LowerCholeskyFactorization` on a
-:samp:`catamari::BlasMatrixView`, which is essentially a pointer and dense
-matrix metadata. One can either manually handle the memory allocation and
-manipulation of a :samp:`catamari::BlasMatrixView` or have it automatically
-maintained as a member of a :samp:`catamari::BlasMatrix`, which handles
-resource allocation and destruction.
+:samp:`catamari::BlasMatrixView`.
 
 .. code-block:: cpp
 
