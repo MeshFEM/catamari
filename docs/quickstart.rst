@@ -192,6 +192,13 @@ is detected as greater than one).
   factorization.RefinedSolve(
       matrix, refined_solve_control, &right_hand_sides.view);
 
+There is also support for efficiently factoring sequences of matrices with
+identical sparsity patterns, but different numerical values, via the member
+function
+:samp:`catamari::LDLFactorization<Field>::RefactorWithFixedSparsityPattern(const catamari::CoordinateMatrix<Field>& matrix)`.
+Such a technique is important for an efficient implementation of an Interior
+Point Method.
+
 One can also browse the
 `example/ <https://gitlab.com/hodge_star/catamari/tree/master/example>`_ folder
 for complete examples (e.g., for
