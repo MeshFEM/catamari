@@ -232,8 +232,16 @@ can be (reasonably stably) factored with either Cholesky, :math:`LDL^T`, or
 :math:`LDL^H` factorizations, where :math:`D` is diagonal and :math:`L` is
 unit lower-triangular. This class is a strict (but large) subset of symmetric
 and Hermitian systems that contains Hermitian Quasi-Definite [GeorgeEtAl-2006]_
-and a complex-symmetric matrices with positive-definite real and imaginary
-components [Higham-1998]_.
+and complex-symmetric matrices with positive-definite real and imaginary
+components [Higham-1998]_. The simplest counter-example of an invertible
+symmetric matrix that cannot be factored with such techniques is:
+
+.. math::
+
+   \begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix},
+
+which is better-handled with Bunch-Kaufman type techniques (which use either
+1x1 or 2x2 diagonal pivots). Catamari does not currently support 2x2 pivots.
 
 Dense factorizations
 """"""""""""""""""""
