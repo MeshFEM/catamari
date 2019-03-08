@@ -25,11 +25,11 @@ and compiler/linker options determined during a configuration stage. Catamari
 uses `meson <https://mesonbuild.com>`_, a modern alternative to
 `CMake <https://cmake.org/>`_, for this configuration.
 
-One might start with a debug (the default :samp:`buildtype` in
+One might start with a debug build (the default :samp:`buildtype` in
 `meson <https://mesonbuild.com>`_). Assuming that the
 `Ninja build system <https://ninja-build.org>`_ was installed alongside
-meson (it typically is), one can configure, build, and test catamari with its
-default options via:
+meson (it typically is), one can configure and build catamari with its default
+options via:
 
 .. code-block:: bash
 
@@ -72,11 +72,12 @@ multithreaded sparse-direct solver, sequential default initialization overhead
 was seen to be a significant bottleneck when running on 16 cores. For this
 reason, catamari makes use of `quotient <https://hodgestar.com/quotient>`_'s
 :samp:`quotient::Buffer<T>` template class as an alternative buffer allocation
-mechanism. It is imported into catamari as :samp:`catamari::Buffer`. Both have
-the same :samp:`operator[]` entry access semantics.
+mechanism. It is imported into catamari as :samp:`catamari::Buffer<T>`. Both
+:samp:`std::vector<T>` and :samp:`catamari::Buffer<T>` have the same
+:samp:`operator[]` entry access semantics.
 
 The function :samp:`catamari::Buffer<T>::Resize(std::size_t)` is
-an alternative to :samp:`std::vector<T>::Resize(std::size_t)` which does not
+an alternative to :samp:`std::vector<T>::resize(std::size_t)` which does not
 default-initialize members. Likewise,
 :samp:`catamari::Buffer<T>::Resize(std::size_t, const T& value)` is an
 analogue for :samp:`std::vector<T>::resize(std::size_t, const T& value)`, but
@@ -166,7 +167,7 @@ data buffer and could instead use :samp:`catamari::BlasMatrix<Field>`:
   // particular value (e.g., 0) via matrix.Resize(height, width, 0.);
   matrix(10, 20) = 42.;
 
-The :samp:`catmari::BlasMatrixView<Field>` interface is exposed via the
+The :samp:`catamari::BlasMatrixView<Field>` interface is exposed via the
 :samp:`view` member of the :samp:`catamari::BlasMatrix<Field>` class.
 
 Manipulating sparse matrices with :samp:`CoordinateMatrix<Field>`
@@ -182,7 +183,7 @@ column indices for each entry.
 
 The :samp:`catamari::MatrixEntry<Field>` template struct is essentially a tuple
 of the :samp:`catamari::Int` :samp:`row` and :samp:`column` indices and a scalar
-:samp:`value`.
+(of type :samp:`Field`) :samp:`value`.
 
 The class is designed so that the sorting and offset computation overhead
 can be amortized over batches of entry additions and removals.
