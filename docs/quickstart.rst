@@ -54,15 +54,72 @@ detected; shared-memory parallelism can be disabled with the
 And `Intel MKL <https://software.intel.com/en-us/mkl>`_ support can be enabled
 by configuring with :samp:`-Dmkl_lib=/PATH/TO/MKL/LIB`.
 
+By default, catamari is configured with :samp:`catamari::Int` equal to a
+64-bit signed integer. But the library can be configured with 32-bit integer
+support via the :samp:`-Duse_64bit=false` option.
+
 In any build configuration, the library's unit tests can be run via:
 
 .. code-block:: bash
 
   ninja test
 
+Using :samp:`catamari::Buffer<T>` instead of :samp:`std::vector<T>`
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+A well-known issue with :samp:`std::vector<T>` is that it cannot be readily used
+to allocate data without initializing each entry. In the case of catamari's
+multithreaded sparse-direct solver, sequential default initialization overhead
+was seen to be a significant bottleneck when running on 16 cores. For this
+reason, catamari makes use of `quotient <https://hodgestar.com/quotient>`_'s
+:samp:`quotient::Buffer<T>` template class as an alternative buffer allocation
+mechanism. It is imported into catamari as :samp:`catamari::Buffer`. Both have
+the same :samp:`operator[]` entry access semantics.
 
-Manipulating dense matrices with :samp:`BlasMatrix`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The function :samp:`catamari::Buffer<T>::Resize(std::size_t)` is
+an alternative to :samp:`std::vector<T>::Resize(std::size_t)` which does not
+default-initialize members. Likewise,
+:samp:`catamari::Buffer<T>::Resize(std::size_t, const T& value)` is an
+analogue for :samp:`std::vector<T>::resize(std::size_t, const T& value)`, but
+it differs in that it will ensure that **all** members of the result are equal
+to the specified value (not just newly allocated ones).
+
+Lastly, the underlying data pointer can be accessed via
+:samp:`catamari::Buffer<T>::Data()` instead of
+:samp:`std::vector<T>::data()` (the :samp:`begin()` and :samp:`end()` member
+functions exist so that range-based for loops function over
+:samp:`catamari::Buffer<T>`).
+
+A simple example combining all of these features is:
+
+.. code-block:: cpp
+
+  #include <iostream>
+  #include "catamari.hpp"
+  const std::size_t num_entries = 5;
+  catamari::Buffer<float> entries;
+  entries.Resize(num_entries);
+  // The five entries are not yet initialized.
+
+  // Initialize the i'th entry as i^2.
+  for (std::size_t i = 0; i < num_entries; ++i) {
+    entries[i] = i * i;
+  }
+
+  // Print the entries.
+  std::cout << "entries: ";
+  for (const float& entry : entries) { 
+    std::cout << entry << " ";
+  }
+  std::cout << std::endl;
+
+  // Double the length of the buffer and zero-initialize.
+  entries.Resize(2 * num_entries, 0.f);
+
+  // Extract a mutable pointer to the entries.
+  float* entries_ptr = entries.Data();
+
+Manipulating dense matrices with :samp:`BlasMatrix<Field>`
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 The `Basic Linear Algebra Subprograms (BLAS) <https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms>`_
 established a standard format for representing dense matrices: column-major
 storage with metadata indicating the height, width, *leading dimension*, and
@@ -71,14 +128,15 @@ a matrix stored in column-major format is such that the :math:`(i, j)` entry
 is stored at position :samp:`i + j * leading_dim` in the buffer.
 
 `Catamari <https://hodgestar.com/catamari>`__ thus implements a minimal
-description of such a matrix format in its :samp:`catamari::BlasMatrixView`
-template structure. The data structure is meant to be a low-level, minimal
-interface to BLAS-like APIs and should typically be avoided by users in favor
-of the higher-level :samp:`catamari::BlasMatrix` class, which handles
-resource allocation and deallocation.
+description of such a matrix format in its
+:samp:`catamari::BlasMatrixView<Field>` template structure. The data structure
+is meant to be a low-level, minimal interface to BLAS-like APIs and should
+typically be avoided by users in favor of the higher-level
+:samp:`catamari::BlasMatrix<Field>` class, which handles resource allocation
+and deallocation.
 
-:samp:`catamari::BlasMatrixView` should typically only be used when there is a
-predefined buffer holding the column-major matrix data. For example:
+:samp:`catamari::BlasMatrixView<Field>` should typically only be used when there
+is a predefined buffer holding the column-major matrix data. For example:
 
 .. code-block:: cpp
 
@@ -97,7 +155,7 @@ predefined buffer holding the column-major matrix data. For example:
   matrix_view(10, 20) = 42.;
 
 However, a typical user should not need to manually allocate and attach a
-data buffer and could instead use :samp:`catamari::BlasMatrix`:
+data buffer and could instead use :samp:`catamari::BlasMatrix<Field>`:
 
 .. code-block:: cpp
 
@@ -108,12 +166,64 @@ data buffer and could instead use :samp:`catamari::BlasMatrix`:
   // particular value (e.g., 0) via matrix.Resize(height, width, 0.);
   matrix(10, 20) = 42.;
 
-The :samp:`catmari::BlasMatrixView` interface is exposed via the :samp:`view`
-member of the :samp:`catamari::BlasMatrix` class.
+The :samp:`catmari::BlasMatrixView<Field>` interface is exposed via the
+:samp:`view` member of the :samp:`catamari::BlasMatrix<Field>` class.
 
-Manipulating sparse matrices with :samp:`CoordinateMatrix`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Lorem ipsum.
+Manipulating sparse matrices with :samp:`CoordinateMatrix<Field>`
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The current user-level interface for manipulating sparse matrices is via the
+coordinate-format class :samp:`catamari::CoordinateMatrix<Field>`. Its primary
+underlying data is a lexicographically sorted
+:samp:`catamari::Buffer<catamari::MatrixEntry<Field>>`
+and an associated :samp:`catamari::Buffer<Int>` of row offsets (which serve the
+same role as in a Compressed Sparse Row (CSR) format). Thus, this storage
+scheme is a superset of the CSR format that explicitly stores both row and
+column indices for each entry.
+
+The :samp:`catamari::MatrixEntry<Field>` template struct is essentially a tuple
+of the :samp:`catamari::Int` :samp:`row` and :samp:`column` indices and a scalar
+:samp:`value`.
+
+The class is designed so that the sorting and offset computation overhead
+can be amortized over batches of entry additions and removals.
+
+For example, the code block:
+
+.. code-block:: cpp
+
+  #include "catamari.hpp"
+  catamari::CoordinateMatrix<double> matrix;
+  matrix.Resize(5, 5);
+  matrix.ReserveEntryAdditions(6);
+  matrix.QueueEntryAddition(3, 4, 1.);
+  matrix.QueueEntryAddition(2, 3, 2.);
+  matrix.QueueEntryAddition(2, 0, -1.);
+  matrix.QueueEntryAddition(4, 2, -2.);
+  matrix.QueueEntryAddition(4, 4, 3.);
+  matrix.QueueEntryAddition(3, 2, 4.);
+  matrix.FlushEntryQueues();
+  const catamari::Buffer<catamari::MatrixEntry<double>>& entries =
+      matrix.Entries();
+
+would return a reference to the underlying
+:samp:`catamari::Buffer<catamari::MatrixEntry<double>>` of :samp:`matrix`,
+which should contain the entry sequence:
+
+:samp:`(2, 0, -1.), (2, 3, 2.), (3, 2, 4.), (3, 4, 1.), (4, 2, -2.), (4, 4, 3.)`.
+
+Similarly, subsequently running the code block:
+
+.. code-block:: cpp
+
+  matrix.ReserveEntryRemovals(2);
+  matrix.QueueEntryRemoval(2, 3);
+  matrix.QueueEntryRemoval(0, 4);
+  matrix.FlushEntryQueues();
+
+would modify the Buffer underlying the :samp:`edges` reference to now
+contain the entry sequence:
+
+:samp:`(2, 0, -1.), (3, 2, 4.), (3, 4, 1.), (4, 2, -2.), (4, 4, 3.)`.
 
 Symmetric and Hermitian direct linear solvers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -136,7 +246,7 @@ infer, for both real and complex scalars).
 Sequential (perhaps using multithreaded BLAS calls) dense Cholesky
 factorizations can be easily performed using a call to 
 :samp:`catamari::LowerCholeskyFactorization` on a
-:samp:`catamari::BlasMatrixView`.
+:samp:`catamari::BlasMatrixView<Field>`.
 
 .. code-block:: cpp
 
@@ -198,10 +308,10 @@ for full examples of using the sequential and multithreaded dense factorizations
 Sparse-direct solver
 """"""""""""""""""""
 Usage of catamari's sparse-direct solver through the
-:samp:`catamari::CoordinateMatrix` template class is fairly straight-forward
-and has an identical interface in sequential and multithreaded contexts
-(the multithreaded solver is called if more the maximum number of OpenMP threads
-is detected as greater than one).
+:samp:`catamari::CoordinateMatrix<Field>` template class is fairly
+straight-forward and has an identical interface in sequential and multithreaded
+contexts (the multithreaded solver is called if more the maximum number of
+OpenMP threads is detected as greater than one).
 
 .. code-block:: cpp
 

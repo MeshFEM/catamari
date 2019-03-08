@@ -59,7 +59,7 @@ struct MatrixEntry {
 
 // A coordinate-format sparse matrix data structure. The primary storage is a
 // lexicographically sorted Buffer<MatrixEntry<Field>> and an associated
-// Buffer<Int> of row offsets (which serve the same role as in Compressed
+// Buffer<Int> of row offsets (which serve the same role as in a Compressed
 // Sparse Row (CSR) format). Thus, this storage scheme is a superset of the CSR
 // format that explicitly stores both row and column indices for each entry.
 //
