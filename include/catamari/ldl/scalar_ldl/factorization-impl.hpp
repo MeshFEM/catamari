@@ -105,33 +105,32 @@ void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
 
 template <class Field>
 void Factorization<Field>::LeftLookingSetup(
-    const CoordinateMatrix<Field>& matrix, Buffer<Int>* parents) {
+    const CoordinateMatrix<Field>& matrix) {
   Buffer<Int> degrees;
-  EliminationForestAndDegrees(matrix, ordering, parents, &degrees);
+  EliminationForestAndDegrees(matrix, ordering,
+                              &ordering.assembly_forest.parents, &degrees);
 
-  AssemblyForest forest;
-  forest.parents = *parents;
-  forest.FillFromParents();
-  FillStructureIndices(matrix, ordering, forest, degrees,
+  ordering.assembly_forest.FillFromParents();
+  FillStructureIndices(matrix, ordering, ordering.assembly_forest, degrees,
                        &lower_factor.structure);
 
   FillNonzeros(matrix);
 }
 
 template <class Field>
-void Factorization<Field>::UpLookingSetup(const CoordinateMatrix<Field>& matrix,
-                                          Buffer<Int>* parents) {
-  LowerStructure& lower_structure = lower_factor.structure;
-
+void Factorization<Field>::UpLookingSetup(
+    const CoordinateMatrix<Field>& matrix) {
   Buffer<Int> degrees;
-  EliminationForestAndDegrees(matrix, ordering, parents, &degrees);
+  EliminationForestAndDegrees(matrix, ordering,
+                              &ordering.assembly_forest.parents, &degrees);
+
+  LowerStructure& lower_structure = lower_factor.structure;
+  OffsetScan(degrees, &lower_structure.column_offsets);
 
   const Int num_rows = matrix.NumRows();
   diagonal_factor.values.Resize(num_rows);
 
-  OffsetScan(degrees, &lower_structure.column_offsets);
   const Int num_entries = lower_structure.column_offsets.Back();
-
   lower_structure.indices.Resize(num_entries);
   lower_factor.values.Resize(num_entries);
 }
@@ -195,9 +194,7 @@ LDLResult Factorization<Field>::LeftLooking(
     const CoordinateMatrix<Field>& matrix) {
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
-
-  Buffer<Int> parents;
-  LeftLookingSetup(matrix, &parents);
+  const Buffer<Int>& parents = ordering.assembly_forest.parents;
   const LowerStructure& lower_structure = lower_factor.structure;
 
   LeftLookingState state;
@@ -324,9 +321,7 @@ LDLResult Factorization<Field>::UpLooking(
     const CoordinateMatrix<Field>& matrix) {
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
-
-  Buffer<Int> parents;
-  UpLookingSetup(matrix, &parents);
+  const Buffer<Int>& parents = ordering.assembly_forest.parents;
   const LowerStructure& lower_structure = lower_factor.structure;
 
   UpLookingState state;
@@ -510,7 +505,21 @@ LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
                                        const Control& control) {
   ordering = manual_ordering;
   factorization_type = control.factorization_type;
-  if (control.algorithm == kLeftLookingLDL) {
+  algorithm = control.algorithm;
+  if (algorithm == kLeftLookingLDL) {
+    LeftLookingSetup(matrix);
+    return LeftLooking(matrix);
+  } else {
+    UpLookingSetup(matrix);
+    return UpLooking(matrix);
+  }
+}
+
+template <class Field>
+LDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
+    const CoordinateMatrix<Field>& matrix) {
+  if (algorithm == kLeftLookingLDL) {
+    FillNonzeros(matrix);
     return LeftLooking(matrix);
   } else {
     return UpLooking(matrix);

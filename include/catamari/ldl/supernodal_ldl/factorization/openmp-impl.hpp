@@ -122,8 +122,9 @@ void Factorization<Field>::OpenMPInitializeFactors(
     max_lower_block_size_ = std::max(max_lower_block_size_, lower_block_size);
   }
 
-  OpenMPFillStructureIndices(sort_grain_size_, matrix, ordering_, forest,
-                             supernode_member_to_index_, lower_factor_.get());
+  OpenMPFillStructureIndices(control_.sort_grain_size, matrix, ordering_,
+                             forest, supernode_member_to_index_,
+                             lower_factor_.get());
   if (control.algorithm == kLeftLookingLDL) {
     // TODO(Jack Poulson): Switch to a multithreaded equivalent.
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
@@ -163,9 +164,9 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
   BlasMatrixView<Field> schur_complement =
       shared_state->schur_complements[supernode];
 
-  OpenMPMergeChildSchurComplements(merge_grain_size_, supernode, ordering_,
-                                   lower_factor_.get(), diagonal_factor_.get(),
-                                   shared_state);
+  OpenMPMergeChildSchurComplements(control_.merge_grain_size, supernode,
+                                   ordering_, lower_factor_.get(),
+                                   diagonal_factor_.get(), shared_state);
 
   Int num_supernode_pivots;
   {
@@ -174,8 +175,8 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     #pragma omp taskgroup
     {
       num_supernode_pivots = OpenMPFactorDiagonalBlock(
-          factor_tile_size_, block_size_, factorization_type_, &diagonal_block,
-          &multithreaded_buffer);
+          control_.factor_tile_size, control_.block_size,
+          control_.factorization_type, &diagonal_block, &multithreaded_buffer);
       result->num_successful_pivots += num_supernode_pivots;
     }
   }
@@ -191,14 +192,15 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
 
   CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
   #pragma omp taskgroup
-  OpenMPSolveAgainstDiagonalBlock(outer_product_tile_size_, factorization_type_,
+  OpenMPSolveAgainstDiagonalBlock(control_.outer_product_tile_size,
+                                  control_.factorization_type,
                                   diagonal_block.ToConst(), &lower_block);
 
-  if (factorization_type_ == kCholeskyFactorization) {
+  if (control_.factorization_type == kCholeskyFactorization) {
     #pragma omp taskgroup
-    OpenMPLowerNormalHermitianOuterProduct(outer_product_tile_size_, Real{-1},
-                                           lower_block.ToConst(), Real{1},
-                                           &schur_complement);
+    OpenMPLowerNormalHermitianOuterProduct(control_.outer_product_tile_size,
+                                           Real{-1}, lower_block.ToConst(),
+                                           Real{1}, &schur_complement);
   } else {
     BlasMatrixView<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;
@@ -207,14 +209,14 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
 
     #pragma omp taskgroup
-    OpenMPFormScaledTranspose(outer_product_tile_size_, factorization_type_,
-                              diagonal_block.ToConst(), lower_block.ToConst(),
-                              &scaled_transpose);
+    OpenMPFormScaledTranspose(
+        control_.outer_product_tile_size, control_.factorization_type,
+        diagonal_block.ToConst(), lower_block.ToConst(), &scaled_transpose);
 
     // Perform the multi-threaded MatrixMultiplyLowerNormalNormal.
     #pragma omp taskgroup
     OpenMPMatrixMultiplyLowerNormalNormal(
-        outer_product_tile_size_, Field{-1}, lower_block.ToConst(),
+        control_.outer_product_tile_size, Field{-1}, lower_block.ToConst(),
         scaled_transpose.ToConst(), Field{1}, &schur_complement);
   }
 
@@ -319,7 +321,7 @@ void Factorization<Field>::OpenMPLeftLookingSupernodeUpdate(
 
   // OpenMP pragmas cannot operate on object members or function results.
   const SymmetricFactorizationType factorization_type_copy =
-      factorization_type_;
+      control_.factorization_type;
   const Buffer<Int>& supernode_offsets_ref = ordering_.supernode_offsets;
   const Buffer<Int>& supernode_member_to_index_ref = supernode_member_to_index_;
   LowerFactor<Field>* const lower_factor_ptr = lower_factor_.get();
@@ -477,9 +479,9 @@ bool Factorization<Field>::OpenMPLeftLookingSupernodeFinalize(
     const int thread = omp_get_thread_num();
     Buffer<Field>* buffer = &(*private_states)[thread].scaled_transpose_buffer;
 
-    num_supernode_pivots =
-        OpenMPFactorDiagonalBlock(factor_tile_size_, block_size_,
-                                  factorization_type_, &diagonal_block, buffer);
+    num_supernode_pivots = OpenMPFactorDiagonalBlock(
+        control_.factor_tile_size, control_.block_size,
+        control_.factorization_type, &diagonal_block, buffer);
     result->num_successful_pivots += num_supernode_pivots;
   }
   if (num_supernode_pivots < supernode_size) {
@@ -492,7 +494,8 @@ bool Factorization<Field>::OpenMPLeftLookingSupernodeFinalize(
 
   CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
   #pragma omp taskgroup
-  OpenMPSolveAgainstDiagonalBlock(outer_product_tile_size_, factorization_type_,
+  OpenMPSolveAgainstDiagonalBlock(control_.outer_product_tile_size,
+                                  control_.factorization_type,
                                   diagonal_block.ToConst(), &lower_block);
 
   return true;
@@ -651,7 +654,7 @@ LDLResult Factorization<Field>::OpenMPRightLooking(
   shared_state.schur_complements.Resize(num_supernodes);
 
   Buffer<PrivateState<Field>> private_states(max_threads);
-  if (factorization_type_ != kCholeskyFactorization) {
+  if (control_.factorization_type != kCholeskyFactorization) {
     const Int workspace_size = max_lower_block_size_;
     #pragma omp taskgroup
     for (int t = 0; t < max_threads; ++t) {
@@ -732,7 +735,8 @@ void Factorization<Field>::OpenMPLowerSupernodalTrapezoidalSolve(
     RightLookingSharedState<Field>* shared_state) const {
   // Eliminate this supernode.
   const Int num_rhs = right_hand_sides->width;
-  const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
+  const bool is_cholesky =
+      control_.factorization_type == kCholeskyFactorization;
   const ConstBlasMatrixView<Field> triangular_right_hand_sides =
       diagonal_factor_->blocks[supernode];
 
@@ -857,7 +861,7 @@ void Factorization<Field>::OpenMPLowerTriangularSolve(
 template <class Field>
 void Factorization<Field>::OpenMPDiagonalSolve(
     BlasMatrixView<Field>* right_hand_sides) const {
-  if (factorization_type_ == kCholeskyFactorization) {
+  if (control_.factorization_type == kCholeskyFactorization) {
     // D is the identity.
     return;
   }

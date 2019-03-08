@@ -90,6 +90,11 @@ class LDLFactorization {
                    const SymmetricOrdering& ordering,
                    const LDLControl& control);
 
+  // Factors a new matrix with the same sparsity pattern as a previous
+  // factorization.
+  LDLResult RefactorWithFixedSparsityPattern(
+      const CoordinateMatrix<Field>& matrix);
+
   // Solves a set of linear systems using the factorization.
   void Solve(BlasMatrixView<Field>* right_hand_sides) const;
 

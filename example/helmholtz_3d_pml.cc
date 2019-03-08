@@ -742,6 +742,7 @@ void HelmholtzWithPML(SpeedProfile profile, const Real& omega,
 
   // Form the FEM matrix.
   // TODO(Jack Poulson): Decide how to parallelize this formation.
+  matrix->Empty();
   matrix->Resize(num_rows, num_rows);
   const Int queue_upper_bound =
       num_element_members * num_x_elements * num_y_elements * num_z_elements;
@@ -867,6 +868,9 @@ struct Experiment {
   // The number of seconds that elapsed during the factorization.
   double factorization_seconds = 0;
 
+  // The number of seconds that elapsed during the refactorization.
+  double refactorization_seconds = 0;
+
   // The number of seconds that elapsed during the solve.
   double solve_seconds = 0;
 
@@ -878,27 +882,32 @@ struct Experiment {
 void PrintExperiment(const Experiment& experiment) {
   const double factorization_gflops_per_sec =
       experiment.num_flops / (1.e9 * experiment.factorization_seconds);
+  const double refactorization_gflops_per_sec =
+      experiment.num_flops / (1.e9 * experiment.refactorization_seconds);
 
-  std::cout << "  construction_seconds:       "
-            << experiment.construction_seconds << "\n"
-            << "  num_nonzeros:               " << experiment.num_nonzeros
-            << "\n"
-            << "  num_diagonal_flops:         " << experiment.num_diagonal_flops
-            << "\n"
-            << "  num_subdiag_solve_flops:    "
-            << experiment.num_subdiag_solve_flops << "\n"
-            << "  num_schur_complement_flops: "
-            << experiment.num_schur_complement_flops << "\n"
-            << "  num_flops:                  " << experiment.num_flops << "\n"
-            << "  factorization_seconds:      "
-            << experiment.factorization_seconds << "\n"
-            << "  factorization gflops/sec:   " << factorization_gflops_per_sec
-            << "\n"
-            << "  solve_seconds:              " << experiment.solve_seconds
-            << "\n"
-            << "  refined_solve_seconds:      "
-            << experiment.refined_solve_seconds << "\n"
-            << std::endl;
+  std::cout
+      << "  construction_seconds:       " << experiment.construction_seconds
+      << "\n"
+      << "  num_nonzeros:               " << experiment.num_nonzeros << "\n"
+      << "  num_diagonal_flops:         " << experiment.num_diagonal_flops
+      << "\n"
+      << "  num_subdiag_solve_flops:    " << experiment.num_subdiag_solve_flops
+      << "\n"
+      << "  num_schur_complement_flops: "
+      << experiment.num_schur_complement_flops << "\n"
+      << "  num_flops:                  " << experiment.num_flops << "\n"
+      << "  factorization_seconds:      " << experiment.factorization_seconds
+      << "\n"
+      << "  factorization gflops/sec:   " << factorization_gflops_per_sec
+      << "\n"
+      << "  refactorization_seconds:    " << experiment.refactorization_seconds
+      << "\n"
+      << "  refactorization gflops/sec: " << refactorization_gflops_per_sec
+      << "\n"
+      << "  solve_seconds:              " << experiment.solve_seconds << "\n"
+      << "  refined_solve_seconds:      " << experiment.refined_solve_seconds
+      << "\n"
+      << std::endl;
 }
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
@@ -1026,6 +1035,98 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
     std::cout << "  Refined || B - A X ||_F / || B ||_F = "
               << residual_norm / right_hand_side_norm << std::endl;
+  }
+
+  // Reconstruct the problem with a frequency 1.5 times higher.
+  const double higher_omega = 1.5 * omega;
+  HelmholtzWithPML<Real>(profile, higher_omega, num_x_elements, num_y_elements,
+                         num_z_elements, pml_scale, pml_exponent,
+                         num_pml_elements, sources, &matrix, &right_hand_sides);
+  const Real higher_right_hand_side_norm =
+      catamari::EuclideanNorm(right_hand_sides.ConstView());
+  if (print_progress) {
+    std::cout << "  || BHigher ||_F = " << higher_right_hand_side_norm
+              << std::endl;
+  }
+
+  // Factor the matrix.
+  if (print_progress) {
+    std::cout << "  Running (re)factorization..." << std::endl;
+  }
+  timer.Start();
+  result = ldl_factorization.RefactorWithFixedSparsityPattern(matrix);
+  experiment.refactorization_seconds = timer.Stop();
+  if (result.num_successful_pivots < num_rows) {
+    std::cout << "  Failed refactorization after "
+              << result.num_successful_pivots << " pivots." << std::endl;
+    return experiment;
+  }
+
+  // Solve the linear systems.
+  {
+    if (print_progress) {
+      std::cout << "  Running solve..." << std::endl;
+    }
+    BlasMatrix<Field> solution = right_hand_sides;
+    ldl_factorization.Solve(&solution.view);
+
+    if (print_progress) {
+      // Print the solution.
+      std::cout << "XHigher: \n";
+      const Int num_rhs = sources.Size();
+      for (Int row = 0; row < num_rows; ++row) {
+        for (Int j = 0; j < num_rhs; ++j) {
+          const Complex<Real> entry = solution(row, j);
+          std::cout << entry.real() << " + " << entry.imag() << "i ";
+        }
+        std::cout << "\n";
+      }
+      std::cout << std::endl;
+    }
+
+    // Compute the residual.
+    BlasMatrix<Field> residual = right_hand_sides;
+    catamari::ApplySparse(Field{-1}, matrix, solution.ConstView(), Field{1},
+                          &residual.view);
+    const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
+    std::cout << "  || B - A X ||_F / || B ||_F = "
+              << residual_norm / higher_right_hand_side_norm << std::endl;
+  }
+
+  // Solve the linear systems using iterative refinement.
+  {
+    // TODO(Jack Poulson): Make these parameters configurable.
+    catamari::RefinedSolveControl<Real> refined_solve_control;
+    refined_solve_control.verbose = true;
+
+    if (print_progress) {
+      std::cout << "  Running iteratively-refined solve..." << std::endl;
+    }
+    BlasMatrix<Field> solution = right_hand_sides;
+    ldl_factorization.RefinedSolve(matrix, refined_solve_control,
+                                   &solution.view);
+
+    if (print_progress) {
+      // Print the solution.
+      std::cout << "XHigherRefined: \n";
+      const Int num_rhs = sources.Size();
+      for (Int row = 0; row < num_rows; ++row) {
+        for (Int j = 0; j < num_rhs; ++j) {
+          const Complex<Real> entry = solution(row, j);
+          std::cout << entry.real() << " + " << entry.imag() << "i ";
+        }
+        std::cout << "\n";
+      }
+      std::cout << std::endl;
+    }
+
+    // Compute the residual.
+    BlasMatrix<Field> residual = right_hand_sides;
+    catamari::ApplySparse(Field{-1}, matrix, solution.ConstView(), Field{1},
+                          &residual.view);
+    const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
+    std::cout << "  Refined || B - A X ||_F / || B ||_F = "
+              << residual_norm / higher_right_hand_side_norm << std::endl;
   }
 
   return experiment;

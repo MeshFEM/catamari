@@ -65,6 +65,11 @@ class Factorization {
                    const SymmetricOrdering& manual_ordering,
                    const Control& control);
 
+  // Factors the given matrix after having previously factored another matrix
+  // with the same sparsity pattern.
+  LDLResult RefactorWithFixedSparsityPattern(
+      const CoordinateMatrix<Field>& matrix);
+
   // Solve a set of linear systems using the factorization.
   void Solve(BlasMatrixView<Field>* right_hand_sides) const;
 
@@ -109,13 +114,13 @@ class Factorization {
                                 LDLResult* result);
 
  private:
+  // The control structure for the factorization.
+  Control control_;
+
   // The representation of the permutation matrix P so that P A P' should be
   // factored. Typically, this permutation is the composition of a
   // fill-reducing ordering and a supernodal relaxation permutation.
   SymmetricOrdering ordering_;
-
-  // Marks the type of factorization employed.
-  SymmetricFactorizationType factorization_type_;
 
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.
@@ -129,33 +134,6 @@ class Factorization {
 
   // The largest number of entries in any supernode's lower block.
   Int max_lower_block_size_;
-
-  // The algorithmic block size for diagonal block factorizations.
-  Int block_size_;
-
-#ifdef CATAMARI_OPENMP
-  // The size of the matrix tiles for factorization OpenMP tasks.
-  Int factor_tile_size_;
-
-  // The size of the matrix tiles for dense outer product OpenMP tasks.
-  Int outer_product_tile_size_;
-
-  // The number of columns to group into a single task when multithreading
-  // the addition of child Schur complement updates onto the parent.
-  Int merge_grain_size_;
-
-  // The number of columns to group into a single task when multithreading
-  // the scalar structure formation.
-  Int sort_grain_size_;
-#endif  // ifdef CATAMARI_OPENMP
-
-  // The minimal supernode size for an out-of-place trapezoidal solve to be
-  // used.
-  Int forward_solve_out_of_place_supernode_threshold_;
-
-  // The minimal supernode size for an out-of-place trapezoidal solve to be
-  // used.
-  Int backward_solve_out_of_place_supernode_threshold_;
 
   // The subdiagonal-block portion of the lower-triangular factor.
   std::unique_ptr<LowerFactor<Field>> lower_factor_;

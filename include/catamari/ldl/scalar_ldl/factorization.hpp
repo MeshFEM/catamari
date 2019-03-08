@@ -154,6 +154,9 @@ class Factorization {
   // Marks the type of factorization employed.
   SymmetricFactorizationType factorization_type;
 
+  // The algorithm used for the factorization.
+  LDLAlgorithm algorithm;
+
   // The unit lower-triangular factor, L.
   LowerFactor<Field> lower_factor;
 
@@ -167,6 +170,11 @@ class Factorization {
   // permutation of the given matrix.
   LDLResult Factor(const CoordinateMatrix<Field>& matrix,
                    const SymmetricOrdering& ordering, const Control& control);
+
+  // Factors a matrix which has the same sparsity pattern as the previously
+  // factored matrix.
+  LDLResult RefactorWithFixedSparsityPattern(
+      const CoordinateMatrix<Field>& matrix);
 
   // Pretty-prints the diagonal matrix.
   void PrintDiagonalFactor(const std::string& label, std::ostream& os) const;
@@ -239,12 +247,10 @@ class Factorization {
   void FillNonzeros(const CoordinateMatrix<Field>& matrix);
 
   // Initializes for running a left-looking factorization.
-  void LeftLookingSetup(const CoordinateMatrix<Field>& matrix,
-                        Buffer<Int>* parents);
+  void LeftLookingSetup(const CoordinateMatrix<Field>& matrix);
 
   // Initializes for running an up-looking factorization.
-  void UpLookingSetup(const CoordinateMatrix<Field>& matrix,
-                      Buffer<Int>* parents);
+  void UpLookingSetup(const CoordinateMatrix<Field>& matrix);
 
   // For each index 'i' in the structure of column 'column' of L formed so far:
   //   L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).

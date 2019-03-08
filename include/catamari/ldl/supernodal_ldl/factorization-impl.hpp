@@ -210,7 +210,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
 
     FormScaledTranspose(
-        factorization_type_,
+        control_.factorization_type,
         diagonal_factor_->blocks[descendant_supernode].ToConst(),
         descendant_main_matrix, &scaled_transpose);
 
@@ -220,11 +220,11 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     workspace_matrix.leading_dim = descendant_main_intersect_size;
     workspace_matrix.data = private_state->workspace_buffer.Data();
 
-    UpdateDiagonalBlock(factorization_type_, ordering_.supernode_offsets,
-                        *lower_factor_, main_supernode, descendant_supernode,
-                        descendant_main_rel_row, descendant_main_matrix,
-                        scaled_transpose.ToConst(), &main_diagonal_block,
-                        &workspace_matrix);
+    UpdateDiagonalBlock(
+        control_.factorization_type, ordering_.supernode_offsets,
+        *lower_factor_, main_supernode, descendant_supernode,
+        descendant_main_rel_row, descendant_main_matrix,
+        scaled_transpose.ToConst(), &main_diagonal_block, &workspace_matrix);
 
     shared_state->intersect_ptrs[descendant_supernode]++;
     shared_state->rel_rows[descendant_supernode] +=
@@ -286,7 +286,7 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(Int main_supernode,
   const Int main_supernode_size = main_lower_block.width;
 
   const Int num_supernode_pivots = FactorDiagonalBlock(
-      block_size_, factorization_type_, &main_diagonal_block);
+      control_.block_size, control_.factorization_type, &main_diagonal_block);
   result->num_successful_pivots += num_supernode_pivots;
   if (num_supernode_pivots < main_supernode_size) {
     return false;
@@ -297,8 +297,8 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(Int main_supernode,
   }
 
   CATAMARI_ASSERT(main_supernode_size > 0, "Supernode size was non-positive.");
-  SolveAgainstDiagonalBlock(factorization_type_, main_diagonal_block.ToConst(),
-                            &main_lower_block);
+  SolveAgainstDiagonalBlock(control_.factorization_type,
+                            main_diagonal_block.ToConst(), &main_lower_block);
 
   return true;
 }
@@ -374,8 +374,8 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   MergeChildSchurComplements(supernode, ordering_, lower_factor_.get(),
                              diagonal_factor_.get(), shared_state);
 
-  const Int num_supernode_pivots =
-      FactorDiagonalBlock(block_size_, factorization_type_, &diagonal_block);
+  const Int num_supernode_pivots = FactorDiagonalBlock(
+      control_.block_size, control_.factorization_type, &diagonal_block);
   result->num_successful_pivots += num_supernode_pivots;
   if (num_supernode_pivots < supernode_size) {
     return false;
@@ -388,10 +388,10 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   }
 
   CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
-  SolveAgainstDiagonalBlock(factorization_type_, diagonal_block.ToConst(),
-                            &lower_block);
+  SolveAgainstDiagonalBlock(control_.factorization_type,
+                            diagonal_block.ToConst(), &lower_block);
 
-  if (factorization_type_ == kCholeskyFactorization) {
+  if (control_.factorization_type == kCholeskyFactorization) {
     LowerNormalHermitianOuterProduct(Real{-1}, lower_block.ToConst(), Real{1},
                                      &schur_complement);
   } else {
@@ -400,7 +400,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
     scaled_transpose.width = degree;
     scaled_transpose.leading_dim = supernode_size;
     scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
-    FormScaledTranspose(factorization_type_, diagonal_block.ToConst(),
+    FormScaledTranspose(control_.factorization_type, diagonal_block.ToConst(),
                         lower_block.ToConst(), &scaled_transpose);
     MatrixMultiplyLowerNormalNormal(Field{-1}, lower_block.ToConst(),
                                     scaled_transpose.ToConst(), Field{1},
@@ -481,7 +481,7 @@ LDLResult Factorization<Field>::RightLooking(
   shared_state.schur_complements.Resize(num_supernodes);
 
   PrivateState<Field> private_state;
-  if (factorization_type_ != kCholeskyFactorization) {
+  if (control_.factorization_type != kCholeskyFactorization) {
     private_state.scaled_transpose_buffer.Resize(max_lower_block_size_);
   }
 
@@ -555,21 +555,8 @@ template <class Field>
 LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
                                        const SymmetricOrdering& manual_ordering,
                                        const Control& control) {
+  control_ = control;
   ordering_ = manual_ordering;
-  factorization_type_ = control.factorization_type;
-  block_size_ = control.block_size;
-
-#ifdef CATAMARI_OPENMP
-  factor_tile_size_ = control.factor_tile_size;
-  outer_product_tile_size_ = control.outer_product_tile_size;
-  merge_grain_size_ = control.merge_grain_size;
-  sort_grain_size_ = control.sort_grain_size;
-#endif  // ifdef CATAMARI_OPENMP
-
-  forward_solve_out_of_place_supernode_threshold_ =
-      control.forward_solve_out_of_place_supernode_threshold;
-  backward_solve_out_of_place_supernode_threshold_ =
-      control.backward_solve_out_of_place_supernode_threshold;
 
 #ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {
@@ -587,6 +574,39 @@ LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
     return LeftLooking(matrix, control);
   } else {
     return RightLooking(matrix, control);
+  }
+}
+
+template <class Field>
+LDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
+    const CoordinateMatrix<Field>& matrix) {
+  // TODO(Jack Poulson): Check that the previous factorization had an identical
+  // sparsity pattern.
+
+#ifdef CATAMARI_OPENMP
+  if (omp_get_max_threads() > 1) {
+    #pragma omp parallel
+    #pragma omp single
+    {
+      OpenMPFillZeros(ordering_, lower_factor_.get(), diagonal_factor_.get());
+      OpenMPFillNonzeros(matrix, ordering_, supernode_member_to_index_,
+                         lower_factor_.get(), diagonal_factor_.get());
+    }
+  } else {
+    FillZeros(ordering_, lower_factor_.get(), diagonal_factor_.get());
+    FillNonzeros(matrix, ordering_, supernode_member_to_index_,
+                 lower_factor_.get(), diagonal_factor_.get());
+  }
+#else
+  FillZeros(ordering_, lower_factor_.get(), diagonal_factor_.get());
+  FillNonzeros(matrix, ordering_, supernode_member_to_index_,
+               lower_factor_.get(), diagonal_factor_.get());
+#endif
+
+  if (control_.algorithm == kLeftLookingLDL) {
+    return LeftLooking(matrix, control_);
+  } else {
+    return RightLooking(matrix, control_);
   }
 }
 
@@ -636,7 +656,8 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
     Buffer<Field>* workspace) const {
   // Eliminate this supernode.
   const Int num_rhs = right_hand_sides->width;
-  const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
+  const bool is_cholesky =
+      control_.factorization_type == kCholeskyFactorization;
   const ConstBlasMatrixView<Field> triangular_right_hand_sides =
       diagonal_factor_->blocks[supernode];
 
@@ -662,7 +683,8 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
 
   // Handle the external updates for this supernode.
   const Int* indices = lower_factor_->StructureBeg(supernode);
-  if (supernode_size >= forward_solve_out_of_place_supernode_threshold_) {
+  if (supernode_size >=
+      control_.forward_solve_out_of_place_supernode_threshold) {
     // Perform an out-of-place GEMM.
     BlasMatrixView<Field> work_right_hand_sides;
     work_right_hand_sides.height = subdiagonal.height;
@@ -733,7 +755,8 @@ void Factorization<Field>::DiagonalSolve(
     BlasMatrixView<Field>* right_hand_sides) const {
   const Int num_rhs = right_hand_sides->width;
   const Int num_supernodes = ordering_.supernode_sizes.Size();
-  const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
+  const bool is_cholesky =
+      control_.factorization_type == kCholeskyFactorization;
   if (is_cholesky) {
     // D is the identity.
     return;
@@ -763,7 +786,8 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
     Int supernode, BlasMatrixView<Field>* right_hand_sides,
     Buffer<Field>* packed_input_buf) const {
   const Int num_rhs = right_hand_sides->width;
-  const bool is_selfadjoint = factorization_type_ != kLDLTransposeFactorization;
+  const bool is_selfadjoint =
+      control_.factorization_type != kLDLTransposeFactorization;
   const Int supernode_size = ordering_.supernode_sizes[supernode];
   const Int supernode_start = ordering_.supernode_offsets[supernode];
   const Int* indices = lower_factor_->StructureBeg(supernode);
@@ -775,7 +799,8 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
       lower_factor_->blocks[supernode];
   if (subdiagonal.height) {
     // Handle the external updates for this supernode.
-    if (supernode_size >= backward_solve_out_of_place_supernode_threshold_) {
+    if (supernode_size >=
+        control_.backward_solve_out_of_place_supernode_threshold) {
       // Fill the work right_hand_sides.
       BlasMatrixView<Field> work_right_hand_sides;
       work_right_hand_sides.height = subdiagonal.height;
@@ -820,10 +845,10 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
   // Solve against the diagonal block of this supernode.
   const ConstBlasMatrixView<Field> triangular_right_hand_sides =
       diagonal_factor_->blocks[supernode];
-  if (factorization_type_ == kCholeskyFactorization) {
+  if (control_.factorization_type == kCholeskyFactorization) {
     LeftLowerAdjointTriangularSolves(triangular_right_hand_sides,
                                      &right_hand_sides_supernode);
-  } else if (factorization_type_ == kLDLAdjointFactorization) {
+  } else if (control_.factorization_type == kLDLAdjointFactorization) {
     LeftLowerAdjointUnitTriangularSolves(triangular_right_hand_sides,
                                          &right_hand_sides_supernode);
   } else {
@@ -876,7 +901,7 @@ void Factorization<Field>::PrintDiagonalFactor(const std::string& label,
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const ConstBlasMatrixView<Field>& diag_matrix =
         diagonal_factor_->blocks[supernode];
-    if (factorization_type_ == kCholeskyFactorization) {
+    if (control_.factorization_type == kCholeskyFactorization) {
       for (Int j = 0; j < diag_matrix.height; ++j) {
         os << "1 ";
       }
@@ -892,7 +917,8 @@ void Factorization<Field>::PrintDiagonalFactor(const std::string& label,
 template <class Field>
 void Factorization<Field>::PrintLowerFactor(const std::string& label,
                                             std::ostream& os) const {
-  const bool is_cholesky = factorization_type_ == kCholeskyFactorization;
+  const bool is_cholesky =
+      control_.factorization_type == kCholeskyFactorization;
 
   auto print_entry = [&](const Int& row, const Int& column,
                          const Field& value) {

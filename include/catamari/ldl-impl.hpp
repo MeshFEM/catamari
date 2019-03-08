@@ -19,6 +19,9 @@ namespace catamari {
 template <class Field>
 LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
                                           const LDLControl& control) {
+  scalar_factorization.reset();
+  supernodal_factorization.reset();
+
   std::unique_ptr<quotient::CoordinateGraph> graph = matrix.CoordinateGraph();
   const quotient::MinimumDegreeResult analysis =
       quotient::MinimumDegree(*graph, control.md_control);
@@ -82,6 +85,9 @@ template <class Field>
 LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
                                           const SymmetricOrdering& ordering,
                                           const LDLControl& control) {
+  scalar_factorization.reset();
+  supernodal_factorization.reset();
+
   bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {
     use_supernodal = false;
@@ -101,6 +107,16 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
     return scalar_factorization->Factor(matrix, ordering,
                                         control.scalar_control);
+  }
+}
+
+template <class Field>
+LDLResult LDLFactorization<Field>::RefactorWithFixedSparsityPattern(
+    const CoordinateMatrix<Field>& matrix) {
+  if (is_supernodal) {
+    return supernodal_factorization->RefactorWithFixedSparsityPattern(matrix);
+  } else {
+    return scalar_factorization->RefactorWithFixedSparsityPattern(matrix);
   }
 }
 
