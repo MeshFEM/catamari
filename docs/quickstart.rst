@@ -8,8 +8,9 @@ Quickstart
 The primary functionality of the library consists of dual implementations of
 a statically-ordered sparse-direct solver for symmetric/Hermitian matrices and
 a sparse-direct Determinantal Point Process sampler. Both support real and
-complex matrices and have sequential and multithreaded (via OpenMP's task
-scheduler) implementations built on top of custom dense kernels.
+complex matrices and have sequential and multithreaded (via OpenMP's
+`task scheduler <https://www.openmp.org/uncategorized/openmp-40/>`_)
+implementations built on top of custom dense kernels.
 
 This brief quickstart guide walks through building the examples and tests using
 the `meson <https://mesonbuild.com>`_ build system and provides short overviews
@@ -36,7 +37,6 @@ default options via:
   meson build-debug
   cd build-debug
   ninja
-  ninja test
 
 A release version can be built by specifying the :samp:`buildtype` option as
 :samp:`release`:
@@ -47,14 +47,18 @@ A release version can be built by specifying the :samp:`buildtype` option as
   meson build-release -Dbuild-type=release
   cd build-release
   ninja
-  ninja test
 
 OpenMP task parallelism will be used by default if support for OpenMP was
 detected; shared-memory parallelism can be disabled with the
 :samp:`-Ddisable_openmp=true` configuration option.
-
 And `Intel MKL <https://software.intel.com/en-us/mkl>`_ support can be enabled
 by configuring with :samp:`-Dmkl_lib=/PATH/TO/MKL/LIB`.
+
+In any build configuration, the library's unit tests can be run via:
+
+.. code-block:: bash
+
+  ninja test
 
 
 Symmetric and Hermitian direct linear solvers
@@ -238,7 +242,58 @@ between Schur complements and conditional DPP sampling (by sequentially flipping
 a Bernoulli coin based upon the value of each pivot to determine whether its
 corresponding index should be in the sample).
 
-TODO(Jack Poulson): Explain the mathematics behind this relationship.
+**Proposition (DPP Schur complements).** Given disjoint subsets
+:math:`A, B \subseteq \mathcal{Y}` of the ground set :math:`\mathcal{Y}` of a
+Determinantal Point Process with marginal kernel :math:`K`, the probability of
+:math:`B` being in the sample :math:`\mathbf{Y}`, respectively conditioned on
+:math:`A` being either in or outside of the sample, are:
+
+.. math::
+   :nowrap:
+
+   \begin{align*}
+   P[B \subseteq \mathbf{Y} | A \subseteq \mathbf{Y}] &=
+       \text{det}(K_B - K_{B, A} K_A^{-1} K_{A, B}), \\
+   P[B \subseteq \mathbf{Y} | A \subseteq \mathbf{Y}^c] &=
+       \text{det}(K_B + K_{B, A} (I - K_A)^{-1} K_{A, B}).
+   \end{align*},
+
+where :math:`K_{A, B}` denotes the restriction of the marginal kernel :math:`K`
+to the rows with indices in :math:`A` and columns with indices in :math:`B`.
+
+**Proof:** The first claim follows from
+
+.. math::
+   \text{det}(K_{A \cup B}) = \text{det}(K_A) \text{det}(K_B - K_{B, A} K_{A}^{-1} K_{A, B})
+
+and
+
+.. math::
+   P[B \subseteq \mathbf{Y} | A \subseteq \mathbf{Y}] =
+       \frac{\text{det}(K_{A \cup B})}{\text{det}(K_A)}.
+
+The second claim follows from applying the first result to the complementary
+DPP (:math:`\hat{K} = I - K`) to find:
+
+.. math::
+   P[B \subseteq \mathbf{Y}^c | A \subseteq \mathbf{Y}^c] =
+       \text{det}((I - K)_B - K_{B, A} (I - K)_A^{-1} K_{A, B}).
+
+Taking the complement of said Schur complement shows the second result.
+:math:`\qedsymbol`.
+
+As a corollary, given that the probability of a particular index being included
+in a DPP sample is equivalent to its (conditioned) diagonal value, we may
+modify a traditional :math:`LDL^H` factorization of the Hermitian Positive
+Semi-Definite marginal kernel to sample a DPP: when a classical :math:`LDL^H`
+factorization reaches a pivot value, we flip a Bernoulli coin with heads
+probability equal to the pivot value (which lies in :math:`[0, 1]`) to decide
+if the pivot index will be in the sample. If the coin comes up heads, we keep
+the sample and procede as usual (as the conditional DPP with the pivot index
+kept will equal a traditional Schur complement); otherwise, we can subtract
+one from the pivot (making the value non-positive, and negative almost surely),
+and procede as usual. It is an exercise for the reader to verify that the
+resulting Schur complement is equal to the second equation from our proposition.
 
 
 Dense DPP sampling
