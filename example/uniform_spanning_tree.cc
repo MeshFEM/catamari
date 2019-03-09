@@ -6,7 +6,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 // Generates a (maximum-likelihood) sample from a Determinantal Point Process
-// which generates a uniform sample from the set of spanning trees of a 2D
+// which generates a uniform sample from the set of spanning trees of a 2D or 3D
 // grid graph.
 //
 // Please see
@@ -615,7 +615,6 @@ std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
 }
 #endif  // ifdef CATAMARI_OPENMP
 
-// TODO(Jack Poulson): Add configurable support for 3D spanning trees.
 template <typename Field>
 void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size, Int z_size,
                  Int block_size, Int CATAMARI_UNUSED tile_size, Int num_rounds,
