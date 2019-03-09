@@ -116,23 +116,27 @@ struct Pixel {
   char blue;
 };
 
-// Prints the 2D spanning tree.
-inline void WriteSampleToTIFF(const std::string& filename, Int x_size,
-                              Int y_size, const std::vector<Int>& sample,
-                              const Int box_size, const Pixel& background_pixel,
-                              const Pixel& active_pixel) {
-  const Int num_horizontal_edges = (x_size - 1) * y_size;
+// Prints out an (x, y) slice of a 3D spanning tree.
+inline void WriteXYSliceToTIFF(const std::string& filename, Int x_size,
+                               Int y_size, Int z_size, Int z,
+                               const std::vector<Int>& sample,
+                               const Int box_size,
+                               const Pixel& background_pixel,
+                               const Pixel& active_pixel) {
+  const Int num_x_edges = (x_size - 1) * y_size * z_size;
+  const Int num_y_edges = x_size * (y_size - 1) * z_size;
 
-  const auto horizontal_beg = sample.begin();
-  const auto horizontal_end =
-      std::lower_bound(sample.begin(), sample.end(), num_horizontal_edges);
-  const auto vertical_beg = horizontal_end;
-  const auto vertical_end = sample.end();
+  const auto x_beg = sample.begin();
+  const auto x_end =
+      std::lower_bound(sample.begin(), sample.end(), num_x_edges);
+  const auto y_beg = x_end;
+  const auto y_end =
+      std::lower_bound(y_beg, sample.end(), num_x_edges + num_y_edges);
 
   const Int height = box_size * (y_size - 1) + 1;
   const Int width = box_size * (x_size - 1) + 1;
   const Int samples_per_pixel = 3;
-  std::vector<char> image(width * width * samples_per_pixel);
+  std::vector<char> image(width * height * samples_per_pixel);
 
   // Fill the background pixels.
   for (Int i = 0; i < height; ++i) {
@@ -145,12 +149,11 @@ inline void WriteSampleToTIFF(const std::string& filename, Int x_size,
   }
 
   for (Int y = 0; y < y_size; ++y) {
-    // Write any horizontal connections in row 'y'.
+    // Write any horizontal connections in row 'y' and depth 'z'.
     for (Int x = 0; x < x_size - 1; ++x) {
-      const Int horizontal_ind = x + y * (x_size - 1);
-      auto iter =
-          std::lower_bound(horizontal_beg, horizontal_end, horizontal_ind);
-      const bool found = iter != horizontal_end && *iter == horizontal_ind;
+      const Int x_ind = x + y * (x_size - 1) + z * (x_size - 1) * y_size;
+      auto iter = std::lower_bound(x_beg, x_end, x_ind);
+      const bool found = iter != x_end && *iter == x_ind;
 
       if (found) {
         const Int i = y * box_size;
@@ -167,13 +170,170 @@ inline void WriteSampleToTIFF(const std::string& filename, Int x_size,
     if (y < y_size - 1) {
       // Write any vertical edges from this row.
       for (Int x = 0; x < x_size; ++x) {
-        const Int vertical_ind = num_horizontal_edges + x + y * x_size;
-        auto iter = std::lower_bound(vertical_beg, vertical_end, vertical_ind);
-        const bool found = iter != vertical_end && *iter == vertical_ind;
+        const Int y_ind =
+            num_x_edges + x + y * x_size + z * x_size * (y_size - 1);
+        auto iter = std::lower_bound(y_beg, y_end, y_ind);
+        const bool found = iter != y_end && *iter == y_ind;
 
         if (found) {
           const Int j = x * box_size;
           const Int i_offset = y * box_size;
+          for (Int i = i_offset; i < i_offset + box_size; ++i) {
+            Int offset = samples_per_pixel * (j + i * width);
+            image[offset++] = active_pixel.red;
+            image[offset++] = active_pixel.green;
+            image[offset++] = active_pixel.blue;
+          }
+        }
+      }
+    }
+  }
+
+  WriteTIFF(filename, height, width, samples_per_pixel, image);
+}
+
+// Prints out an (x, z) slice of a 3D spanning tree.
+inline void WriteXZSliceToTIFF(const std::string& filename, Int x_size,
+                               Int y_size, Int z_size, Int y,
+                               const std::vector<Int>& sample,
+                               const Int box_size,
+                               const Pixel& background_pixel,
+                               const Pixel& active_pixel) {
+  const Int num_x_edges = (x_size - 1) * y_size * z_size;
+  const Int num_y_edges = x_size * (y_size - 1) * z_size;
+
+  const auto x_beg = sample.begin();
+  const auto x_end =
+      std::lower_bound(sample.begin(), sample.end(), num_x_edges);
+  const auto y_beg = x_end;
+  const auto y_end =
+      std::lower_bound(y_beg, sample.end(), num_x_edges + num_y_edges);
+  const auto z_beg = y_end;
+  const auto z_end = sample.end();
+
+  const Int height = box_size * (z_size - 1) + 1;
+  const Int width = box_size * (x_size - 1) + 1;
+  const Int samples_per_pixel = 3;
+  std::vector<char> image(width * height * samples_per_pixel);
+
+  // Fill the background pixels.
+  for (Int i = 0; i < height; ++i) {
+    for (Int j = 0; j < width; ++j) {
+      Int offset = samples_per_pixel * (j + i * width);
+      image[offset++] = background_pixel.red;
+      image[offset++] = background_pixel.green;
+      image[offset++] = background_pixel.blue;
+    }
+  }
+
+  for (Int z = 0; z < z_size; ++z) {
+    // Write any horizontal connections in row 'y' and depth 'z'.
+    for (Int x = 0; x < x_size - 1; ++x) {
+      const Int x_ind = x + y * (x_size - 1) + z * (x_size - 1) * y_size;
+      auto iter = std::lower_bound(x_beg, x_end, x_ind);
+      const bool found = iter != x_end && *iter == x_ind;
+
+      if (found) {
+        const Int i = z * box_size;
+        const Int j_offset = x * box_size;
+        for (Int j = j_offset; j < j_offset + box_size; ++j) {
+          Int offset = samples_per_pixel * (j + i * width);
+          image[offset++] = active_pixel.red;
+          image[offset++] = active_pixel.green;
+          image[offset++] = active_pixel.blue;
+        }
+      }
+    }
+
+    if (z < z_size - 1) {
+      // Write any depth edges from this location.
+      for (Int x = 0; x < x_size; ++x) {
+        const Int z_ind =
+            num_x_edges + num_y_edges + x + y * x_size + z * x_size * y_size;
+        auto iter = std::lower_bound(z_beg, z_end, z_ind);
+        const bool found = iter != z_end && *iter == z_ind;
+
+        if (found) {
+          const Int j = x * box_size;
+          const Int i_offset = z * box_size;
+          for (Int i = i_offset; i < i_offset + box_size; ++i) {
+            Int offset = samples_per_pixel * (j + i * width);
+            image[offset++] = active_pixel.red;
+            image[offset++] = active_pixel.green;
+            image[offset++] = active_pixel.blue;
+          }
+        }
+      }
+    }
+  }
+
+  WriteTIFF(filename, height, width, samples_per_pixel, image);
+}
+
+// Prints out an (y, z) slice of a 3D spanning tree.
+inline void WriteYZSliceToTIFF(const std::string& filename, Int x_size,
+                               Int y_size, Int z_size, Int x,
+                               const std::vector<Int>& sample,
+                               const Int box_size,
+                               const Pixel& background_pixel,
+                               const Pixel& active_pixel) {
+  const Int num_x_edges = (x_size - 1) * y_size * z_size;
+  const Int num_y_edges = x_size * (y_size - 1) * z_size;
+
+  const auto x_end =
+      std::lower_bound(sample.begin(), sample.end(), num_x_edges);
+  const auto y_beg = x_end;
+  const auto y_end =
+      std::lower_bound(y_beg, sample.end(), num_x_edges + num_y_edges);
+  const auto z_beg = y_end;
+  const auto z_end = sample.end();
+
+  const Int height = box_size * (z_size - 1) + 1;
+  const Int width = box_size * (y_size - 1) + 1;
+  const Int samples_per_pixel = 3;
+  std::vector<char> image(width * height * samples_per_pixel);
+
+  // Fill the background pixels.
+  for (Int i = 0; i < height; ++i) {
+    for (Int j = 0; j < width; ++j) {
+      Int offset = samples_per_pixel * (j + i * width);
+      image[offset++] = background_pixel.red;
+      image[offset++] = background_pixel.green;
+      image[offset++] = background_pixel.blue;
+    }
+  }
+
+  for (Int z = 0; z < z_size; ++z) {
+    // Write out the vertical edges.
+    for (Int y = 0; y < y_size - 1; ++y) {
+      const Int y_ind =
+          num_x_edges + x + y * x_size + z * x_size * (y_size - 1);
+      auto iter = std::lower_bound(y_beg, y_end, y_ind);
+      const bool found = iter != y_end && *iter == y_ind;
+
+      if (found) {
+        const Int i = z * box_size;
+        const Int j_offset = y * box_size;
+        for (Int j = j_offset; j < j_offset + box_size; ++j) {
+          Int offset = samples_per_pixel * (j + i * width);
+          image[offset++] = active_pixel.red;
+          image[offset++] = active_pixel.green;
+          image[offset++] = active_pixel.blue;
+        }
+      }
+    }
+
+    if (z < z_size - 1) {
+      // Write any depth edges from this location.
+      for (Int y = 0; y < y_size; ++y) {
+        const Int z_ind =
+            num_x_edges + num_y_edges + x + y * x_size + z * x_size * y_size;
+        auto iter = std::lower_bound(z_beg, z_end, z_ind);
+        const bool found = iter != z_end && *iter == z_ind;
+
+        if (found) {
+          const Int j = y * box_size;
+          const Int i_offset = z * box_size;
           for (Int i = i_offset; i < i_offset + box_size; ++i) {
             Int offset = samples_per_pixel * (j + i * width);
             image[offset++] = active_pixel.red;
@@ -327,43 +487,66 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<double>* matrix) {
 }
 
 template <typename Field>
-void InitializeMatrix(Int x_size, Int y_size, BlasMatrix<Field>* matrix) {
-  const Int num_vertices = x_size * y_size;
+void InitializeMatrix(Int x_size, Int y_size, Int z_size,
+                      BlasMatrix<Field>* matrix) {
+  const Int num_vertices = x_size * y_size * z_size;
 
-  // We order the edges horizontally first, then vertically, each
-  // lexicographically by their (x, y) coordinates. The orientations are
-  // lexicographic as well.
-  const Int num_horizontal_edges = (x_size - 1) * y_size;
-  const Int num_vertical_edges = x_size * (y_size - 1);
-  const Int num_edges = num_horizontal_edges + num_vertical_edges;
+  // We order the x edges first, then the y edges, then the z edges, each
+  // lexicographically by its coordinates. The orientations are lexicographic as
+  // well.
+  const Int num_x_edges = (x_size - 1) * y_size * z_size;
+  const Int num_y_edges = x_size * (y_size - 1) * z_size;
+  const Int num_z_edges = x_size * y_size * (z_size - 1);
+  const Int num_edges = num_x_edges + num_y_edges + num_z_edges;
 
   // Build an (overcomplete) basis for the star space.
   BlasMatrix<Field> star_space_basis;
   star_space_basis.Resize(num_edges, num_vertices, Field{0});
   for (Int x = 0; x < x_size; ++x) {
     for (Int y = 0; y < y_size; ++y) {
-      const Int vertex = x + y * x_size;
+      for (Int z = 0; z < z_size; ++z) {
+        const Int vertex = x + y * x_size + z * x_size * y_size;
 
-      const Int horizontal_ind = x + y * (x_size - 1);
-      if (x > 0) {
-        // Receive from the edge to our left.
-        const Int left_ind = horizontal_ind - 1;
-        star_space_basis(left_ind, vertex) = 1;
-      }
-      if (x < x_size - 1) {
-        // This edge pushes to the right.
-        star_space_basis(horizontal_ind, vertex) = -1;
-      }
+        const Int x_ind_y_stride = x_size - 1;
+        const Int x_ind_z_stride = x_ind_y_stride * y_size;
+        const Int x_ind = x + y * x_ind_y_stride + z * x_ind_z_stride;
+        if (x > 0) {
+          // Receive from the edge to our left.
+          const Int left_ind = x_ind - 1;
+          star_space_basis(left_ind, vertex) = 1;
+        }
+        if (x < x_size - 1) {
+          // This edge pushes to the right.
+          star_space_basis(x_ind, vertex) = -1;
+        }
 
-      const Int vertical_ind = num_horizontal_edges + x + y * x_size;
-      if (y > 0) {
-        // Receive from the edge below us.
-        const Int down_ind = vertical_ind - x_size;
-        star_space_basis(down_ind, vertex) = 1;
-      }
-      if (y < y_size - 1) {
-        // This edge pushes upward.
-        star_space_basis(vertical_ind, vertex) = -1;
+        const Int y_ind_y_stride = x_size;
+        const Int y_ind_z_stride = y_ind_y_stride * (y_size - 1);
+        const Int y_ind =
+            num_x_edges + x + y * y_ind_y_stride + z * y_ind_z_stride;
+        if (y > 0) {
+          // Receive from the edge below us.
+          const Int down_ind = y_ind - y_ind_y_stride;
+          star_space_basis(down_ind, vertex) = 1;
+        }
+        if (y < y_size - 1) {
+          // This edge pushes upward.
+          star_space_basis(y_ind, vertex) = -1;
+        }
+
+        const Int z_ind_y_stride = x_size;
+        const Int z_ind_z_stride = z_ind_y_stride * y_size;
+        const Int z_ind = num_x_edges + num_y_edges + x + y * z_ind_y_stride +
+                          z * z_ind_z_stride;
+        if (z > 0) {
+          // Receive from the edge out of the plane.
+          const Int out_ind = z_ind - z_ind_z_stride;
+          star_space_basis(out_ind, vertex) = 1;
+        }
+        if (z < z_size - 1) {
+          // This edge pushes into the plane.
+          star_space_basis(z_ind, vertex) = -1;
+        }
       }
     }
   }
@@ -432,8 +615,9 @@ std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
 }
 #endif  // ifdef CATAMARI_OPENMP
 
+// TODO(Jack Poulson): Add configurable support for 3D spanning trees.
 template <typename Field>
-void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
+void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size, Int z_size,
                  Int block_size, Int CATAMARI_UNUSED tile_size, Int num_rounds,
                  unsigned int random_seed, bool ascii_display,
                  bool CATAMARI_UNUSED write_tiff) {
@@ -456,36 +640,74 @@ void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
   std::mt19937 generator(random_seed);
   for (Int round = 0; round < num_rounds; ++round) {
 #ifdef CATAMARI_OPENMP
-    InitializeMatrix(x_size, y_size, &matrix);
+    InitializeMatrix(x_size, y_size, z_size, &matrix);
     const std::vector<Int> omp_sample =
         OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
                         &generator, &extra_buffer);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string omp_filename = "sample-omp-" + std::to_string(round) +
-                                       "-" + typeid(Field).name() + ".tif";
-      WriteSampleToTIFF(omp_filename, x_size, y_size, omp_sample, box_size,
-                        background_pixel, active_pixel);
+      for (Int z = 0; z < z_size; ++z) {
+        const std::string filename = "sample-omp-xy-" + std::to_string(z) +
+                                     "-" + std::to_string(round) + "-" +
+                                     typeid(Field).name() + ".tif";
+        WriteXYSliceToTIFF(filename, x_size, y_size, z_size, z, omp_sample,
+                           box_size, background_pixel, active_pixel);
+      }
+      if (z_size > 1) {
+        for (Int y = 0; y < y_size; ++y) {
+          const std::string filename = "sample-omp-xz-" + std::to_string(y) +
+                                       "-" + std::to_string(round) + "-" +
+                                       typeid(Field).name() + ".tif";
+          WriteXZSliceToTIFF(filename, x_size, y_size, z_size, y, omp_sample,
+                             box_size, background_pixel, active_pixel);
+        }
+        for (Int x = 0; x < x_size; ++x) {
+          const std::string filename = "sample-omp-yz-" + std::to_string(x) +
+                                       "-" + std::to_string(round) + "-" +
+                                       typeid(Field).name() + ".tif";
+          WriteYZSliceToTIFF(filename, x_size, y_size, z_size, x, omp_sample,
+                             box_size, background_pixel, active_pixel);
+        }
+      }
     }
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
-    if (ascii_display) {
+    if (z_size == 1 && ascii_display) {
       AsciiDisplaySample(x_size, y_size, omp_sample, missing_char,
                          horizontal_sampled_char, vertical_sampled_char);
     }
 #endif  // ifdef CATAMARI_OPENMP
 
-    InitializeMatrix(x_size, y_size, &matrix);
+    InitializeMatrix(x_size, y_size, z_size, &matrix);
     const std::vector<Int> sample =
         SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string filename = "sample-" + std::to_string(round) + "-" +
-                                   typeid(Field).name() + ".tif";
-      WriteSampleToTIFF(filename, x_size, y_size, sample, box_size,
-                        background_pixel, active_pixel);
+      for (Int z = 0; z < z_size; ++z) {
+        const std::string filename = "sample-xy-" + std::to_string(z) + "-" +
+                                     std::to_string(round) + "-" +
+                                     typeid(Field).name() + ".tif";
+        WriteXYSliceToTIFF(filename, x_size, y_size, z_size, z, sample,
+                           box_size, background_pixel, active_pixel);
+      }
+      if (z_size > 1) {
+        for (Int y = 0; y < y_size; ++y) {
+          const std::string filename = "sample-xz-" + std::to_string(y) + "-" +
+                                       std::to_string(round) + "-" +
+                                       typeid(Field).name() + ".tif";
+          WriteXZSliceToTIFF(filename, x_size, y_size, z_size, y, sample,
+                             box_size, background_pixel, active_pixel);
+        }
+        for (Int x = 0; x < x_size; ++x) {
+          const std::string filename = "sample-yz-" + std::to_string(x) + "-" +
+                                       std::to_string(round) + "-" +
+                                       typeid(Field).name() + ".tif";
+          WriteYZSliceToTIFF(filename, x_size, y_size, z_size, x, sample,
+                             box_size, background_pixel, active_pixel);
+        }
+      }
     }
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
-    if (ascii_display) {
+    if (z_size == 1 && ascii_display) {
       AsciiDisplaySample(x_size, y_size, sample, missing_char,
                          horizontal_sampled_char, vertical_sampled_char);
     }
@@ -496,10 +718,15 @@ void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 
 int main(int argc, char** argv) {
   specify::ArgumentParser parser(argc, argv);
-  const Int x_size = parser.OptionalInput<Int>(
-      "x_size", "The x dimension of the 2D graph.", 50);
-  const Int y_size = parser.OptionalInput<Int>(
-      "y_size", "The y dimension of the 2D graph.", 50);
+  const Int x_size =
+      parser.OptionalInput<Int>("x_size", "The x dimension of the graph.", 50);
+  const Int y_size =
+      parser.OptionalInput<Int>("y_size", "The y dimension of the graph.", 50);
+  const Int z_size = parser.OptionalInput<Int>(
+      "z_size",
+      "The z dimension of the graph. If it is equal to one, the graph is "
+      "treated as 2D.",
+      1);
   const Int tile_size = parser.OptionalInput<Int>(
       "tile_size", "The tile size for multithreaded factorization.", 128);
   const Int block_size = parser.OptionalInput<Int>(
@@ -519,13 +746,15 @@ int main(int argc, char** argv) {
   }
 
   std::cout << "Single-precision:" << std::endl;
-  RunDPPTests<float>(maximum_likelihood, x_size, y_size, block_size, tile_size,
-                     num_rounds, random_seed, ascii_display, write_tiff);
+  RunDPPTests<float>(maximum_likelihood, x_size, y_size, z_size, block_size,
+                     tile_size, num_rounds, random_seed, ascii_display,
+                     write_tiff);
   std::cout << std::endl;
 
   std::cout << "Double-precision:" << std::endl;
-  RunDPPTests<double>(maximum_likelihood, x_size, y_size, block_size, tile_size,
-                      num_rounds, random_seed, ascii_display, write_tiff);
+  RunDPPTests<double>(maximum_likelihood, x_size, y_size, z_size, block_size,
+                      tile_size, num_rounds, random_seed, ascii_display,
+                      write_tiff);
 
   return 0;
 }
