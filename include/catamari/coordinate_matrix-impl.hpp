@@ -153,7 +153,7 @@ CoordinateMatrix<Field>::FromMatrixMarket(const std::string& filename,
   result->FlushEntryQueues();
 
   if (num_skipped_entries) {
-    std::cout << "Skipped " << num_skipped_entries << " explicitly zeros."
+    std::cout << "Skipped " << num_skipped_entries << " explicit zeros."
               << std::endl;
   }
 

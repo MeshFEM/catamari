@@ -328,7 +328,7 @@ LDLResult Factorization<Field>::UpLooking(
   state.column_update_ptrs.Resize(num_rows);
   state.pattern_flags.Resize(num_rows);
   state.row_structure.Resize(num_rows);
-  state.row_workspace.Resize(num_rows, Field{0});
+  state.row_workspace.Resize(num_rows);
 
   LDLResult result;
   for (Int row = 0; row < num_rows; ++row) {
@@ -378,7 +378,7 @@ LDLResult Factorization<Field>::UpLooking(
     const double solve_flops = (IsComplex<Field>::value ? 6. : 1.) * degree;
 
     const double schur_complement_flops =
-        (IsComplex<Field>::value ? 4. : 1.) * std::pow(1. * degree, 2.);
+        (IsComplex<Field>::value ? 4. : 1.) * (1. * degree) * (1. * degree);
 
     result.num_subdiag_solve_flops += solve_flops;
     result.num_schur_complement_flops += schur_complement_flops;
