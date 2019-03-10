@@ -68,9 +68,15 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   } else if (control.supernodal_strategy == kSupernodalFactorization) {
     use_supernodal = true;
   } else {
-    // TODO(Jack Poulson): Use a more intelligent means of selecting based upon
-    // the floating-point count.
-    use_supernodal = true;
+    const double intensity =
+        analysis.num_cholesky_flops / analysis.num_cholesky_nonzeros;
+
+    // TODO(Jack Poulson): Make these configurable.
+    const double flop_threshold = 1e5;
+    const double intensity_threshold = 40;
+
+    use_supernodal = analysis.num_cholesky_flops >= flop_threshold &&
+                     intensity >= intensity_threshold;
   }
 
   is_supernodal = use_supernodal;
@@ -99,6 +105,7 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
     use_supernodal = true;
   } else {
     // TODO(Jack Poulson): Use a more intelligent means of selecting.
+    // This routine should likely take in a flop count analysis.
     use_supernodal = true;
   }
 
