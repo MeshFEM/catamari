@@ -22,10 +22,14 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   scalar_factorization.reset();
   supernodal_factorization.reset();
 
-  std::unique_ptr<quotient::CoordinateGraph> graph = matrix.CoordinateGraph();
-  const quotient::MinimumDegreeResult analysis =
-      quotient::MinimumDegree(*graph, control.md_control);
-  graph.reset();
+  const quotient::MinimumDegreeResult analysis = quotient::MinimumDegree<Field>(
+      matrix.NumRows(), matrix.Entries(), control.md_control);
+
+#ifdef QUOTIENT_ENABLE_TIMERS
+  for (const std::pair<std::string, double>& time : analysis.elapsed_seconds) {
+    std::cout << "  " << time.first << ": " << time.second << std::endl;
+  }
+#endif  // ifdef QUOTIENT_TIMERS
 
   SymmetricOrdering ordering;
   ordering.permutation = analysis.permutation;

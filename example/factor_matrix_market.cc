@@ -251,6 +251,8 @@ int main(int argc, char** argv) {
                                 "The quotient::EntryMask integer.\n"
                                 "0:full, 1:lower-triangle, 2:upper-triangle",
                                 0);
+  const bool allow_supernodes = parser.OptionalInput<bool>(
+      "allow_supernodes", "Allow Minimum Degree supernodes?", true);
   const int degree_type_int =
       parser.OptionalInput<int>("degree_type_int",
                                 "The degree approximation type.\n"
@@ -328,6 +330,7 @@ int main(int argc, char** argv) {
   // Set the minimum degree control options.
   {
     auto& md_control = ldl_control.md_control;
+    md_control.allow_supernodes = allow_supernodes;
     md_control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
     md_control.aggressive_absorption = aggressive_absorption;
     md_control.min_dense_threshold = min_dense_threshold;

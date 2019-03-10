@@ -17,45 +17,8 @@ namespace catamari {
 
 using quotient::EntryMask;
 using quotient::GraphEdge;
+using quotient::MatrixEntry;
 using quotient::SwapClearVector;
-
-// A tuple of the row, column, and value of a nonzero in a sparse matrix.
-template <class Field>
-struct MatrixEntry {
-  // The row index of the entry.
-  Int row;
-
-  // The column index of the entry.
-  Int column;
-
-  // The numerical value of the entry.
-  Field value;
-
-  // A trivial constructor (required for STL sorting).
-  MatrixEntry() = default;
-
-  // A standard constructor (required for emplacement).
-  MatrixEntry(Int row_, Int column_, const Field& value_)
-      : row(row_), column(column_), value(value_) {}
-
-  // A copy constructor.
-  MatrixEntry(const MatrixEntry<Field>& other) = default;
-
-  // A partial ordering that ignores the floating-point value in comparisons.
-  bool operator<(const MatrixEntry<Field>& other) const {
-    return row < other.row || (row == other.row && column < other.column);
-  }
-
-  // An equality test that requires all members being equal.
-  bool operator==(const MatrixEntry<Field>& other) const {
-    return row == other.row && column == other.column && value == other.value;
-  }
-
-  // An inequality test that requires all members being equal.
-  bool operator!=(const MatrixEntry<Field>& other) const {
-    return !operator==(other);
-  }
-};
 
 // A coordinate-format sparse matrix data structure. The primary storage is a
 // lexicographically sorted Buffer<MatrixEntry<Field>> and an associated
