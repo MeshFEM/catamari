@@ -182,8 +182,6 @@ TEST_CASE("2D right transpose", "2D right transpose") {
   RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
-// HERE
-
 TEST_CASE("2D left Cholesky [analytical]", "2D left chol [analyt]") {
   const Int num_x_elements = 400;
   const Int num_y_elements = 400;

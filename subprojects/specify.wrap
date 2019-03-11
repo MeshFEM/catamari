@@ -1,4 +1,4 @@
 [wrap-git]
 directory = specify
 url = https://gitlab.com/hodge_star/specify.git
-revision = head
+revision = 522c8929bbf8420b159d299c34fe01e5476fb6a0

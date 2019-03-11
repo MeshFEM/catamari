@@ -22,18 +22,22 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   scalar_factorization.reset();
   supernodal_factorization.reset();
 
-  const quotient::MinimumDegreeResult analysis = quotient::MinimumDegree<Field>(
-      matrix.NumRows(), matrix.Entries(), control.md_control);
-
+  std::unique_ptr<quotient::QuotientGraph> quotient_graph(
+      new quotient::QuotientGraph(matrix.NumRows(), matrix.Entries(),
+                                  control.md_control));
+  const quotient::MinimumDegreeResult analysis =
+      quotient::MinimumDegree(quotient_graph.get());
 #ifdef QUOTIENT_ENABLE_TIMERS
-  for (const std::pair<std::string, double>& time : analysis.elapsed_seconds) {
+  for (const std::pair<std::string, double>& time :
+       quotient_graph.ComponentSeconds()) {
     std::cout << "  " << time.first << ": " << time.second << std::endl;
   }
 #endif  // ifdef QUOTIENT_TIMERS
 
   SymmetricOrdering ordering;
-  ordering.permutation = analysis.permutation;
-  ordering.inverse_permutation = analysis.inverse_permutation;
+  quotient_graph->ComputePostorder(&ordering.inverse_permutation);
+  quotient::InvertPermutation(ordering.inverse_permutation,
+                              &ordering.permutation);
 
   bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {
@@ -54,18 +58,28 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 
   is_supernodal = use_supernodal;
   if (use_supernodal) {
-    ordering.assembly_forest.parents = analysis.permuted_assembly_parents;
+    std::cout << "  using supernodal" << std::endl;
+    Buffer<Int> member_to_supernode;
+    quotient_graph->PermutedMemberToSupernode(ordering.inverse_permutation,
+                                              &member_to_supernode);
+    quotient_graph->PermutedAssemblyParents(ordering.permutation,
+                                            member_to_supernode,
+                                            &ordering.assembly_forest.parents);
 
     // TODO(Jack Poulson): Only compute the children and/or roots when needed.
     ordering.assembly_forest.FillFromParents();
 
-    ordering.supernode_sizes = analysis.permuted_supernode_sizes;
+    quotient_graph->PermutedSupernodeSizes(ordering.inverse_permutation,
+                                           &ordering.supernode_sizes);
     OffsetScan(ordering.supernode_sizes, &ordering.supernode_offsets);
 
+    quotient_graph.release();
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
     return supernodal_factorization->Factor(matrix, ordering,
                                             control.supernodal_control);
   } else {
+    std::cout << "  using scalar" << std::endl;
+    quotient_graph.release();
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
     return scalar_factorization->Factor(matrix, ordering,
                                         control.scalar_control);

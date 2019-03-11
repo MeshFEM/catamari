@@ -15,41 +15,30 @@ namespace catamari {
 template <class Field>
 DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
                 const DPPControl& control) {
-  std::unique_ptr<quotient::CoordinateGraph> graph = matrix.CoordinateGraph();
+  std::unique_ptr<quotient::QuotientGraph> quotient_graph(
+      new quotient::QuotientGraph(matrix.NumRows(), matrix.Entries(),
+                                  control.md_control));
   const quotient::MinimumDegreeResult analysis =
-      quotient::MinimumDegree(*graph, control.md_control);
+      quotient::MinimumDegree(quotient_graph.get());
 
   SymmetricOrdering ordering;
-  ordering.permutation = analysis.permutation;
-  ordering.inverse_permutation = analysis.inverse_permutation;
-  ordering.supernode_sizes = analysis.permuted_supernode_sizes;
-  ordering.assembly_forest.parents = analysis.permuted_assembly_parents;
-  quotient::ChildrenFromParents(ordering.assembly_forest.parents,
-                                &ordering.assembly_forest.children,
-                                &ordering.assembly_forest.child_offsets);
+  quotient_graph->ComputePostorder(&ordering.inverse_permutation);
+  quotient::InvertPermutation(ordering.inverse_permutation,
+                              &ordering.permutation);
 
+  quotient_graph->PermutedSupernodeSizes(ordering.inverse_permutation,
+                                         &ordering.supernode_sizes);
   OffsetScan(ordering.supernode_sizes, &ordering.supernode_offsets);
 
-  // Fill the list of supernodal ordering roots.
-  // TODO(Jack Poulson): Encapsulate this into a utility function.
-  {
-    const Int num_supernodes = ordering.supernode_sizes.Size();
+  Buffer<Int> member_to_supernode;
+  quotient_graph->PermutedMemberToSupernode(ordering.inverse_permutation,
+                                            &member_to_supernode);
+  quotient_graph->PermutedAssemblyParents(ordering.permutation,
+                                          member_to_supernode,
+                                          &ordering.assembly_forest.parents);
+  ordering.assembly_forest.FillFromParents();
 
-    Int num_roots = 0;
-    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-      if (ordering.assembly_forest.parents[supernode] < 0) {
-        ++num_roots;
-      }
-    }
-    ordering.assembly_forest.roots.Resize(num_roots);
-    num_roots = 0;
-    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-      if (ordering.assembly_forest.parents[supernode] < 0) {
-        ordering.assembly_forest.roots[num_roots++] = supernode;
-      }
-    }
-  }
-
+  quotient_graph.release();
   supernodal_dpp_.reset(
       new SupernodalDPP<Field>(matrix, ordering, control.supernodal_control));
 }
