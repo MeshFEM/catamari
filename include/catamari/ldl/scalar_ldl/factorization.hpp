@@ -252,12 +252,13 @@ class Factorization {
   // Initializes for running an up-looking factorization.
   void UpLookingSetup(const CoordinateMatrix<Field>& matrix);
 
-  // For each index 'i' in the structure of column 'column' of L formed so far:
+  // For each index 'i' in the structure of each column 'column' of L formed
+  // so far:
   //   L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
   // L(row, row) is similarly updated, within d, then L(row, column) is
   // finalized.
-  void UpLookingRowUpdate(Int row, Int column, Int* column_update_ptrs,
-                          Field* row_workspace);
+  void UpLookingRowUpdate(Int row, const Int* column_beg, const Int* column_end,
+                          Int* column_update_ptrs, Field* row_workspace);
 };
 
 }  // namespace scalar_ldl

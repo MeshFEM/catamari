@@ -144,57 +144,63 @@ void Factorization<Field>::UpLookingSetup(
 }
 
 template <class Field>
-void Factorization<Field>::UpLookingRowUpdate(Int row, Int column,
+void Factorization<Field>::UpLookingRowUpdate(Int row, const Int* column_beg,
+                                              const Int* column_end,
                                               Int* column_update_ptrs,
                                               Field* row_workspace) {
   LowerStructure& lower_structure = lower_factor.structure;
   const bool is_cholesky = factorization_type == kCholeskyFactorization;
   const bool is_selfadjoint = factorization_type != kLDLTransposeFactorization;
-  const Field pivot = is_selfadjoint ? RealPart(diagonal_factor.values[column])
-                                     : diagonal_factor.values[column];
 
-  // Load eta := L(row, column) * d(column) from the workspace.
-  const Field eta =
-      is_cholesky ? row_workspace[column] / pivot : row_workspace[column];
-  row_workspace[column] = Field{0};
+  for (const Int* iter = column_beg; iter != column_end; ++iter) {
+    const Int column = *iter;
+    const Field pivot = is_selfadjoint
+                            ? RealPart(diagonal_factor.values[column])
+                            : diagonal_factor.values[column];
 
-  // Update
-  //
-  //   L(row, I) -= (L(row, column) * d(column)) * conj(L(I, column)),
-  //
-  // where I is the set of already-formed entries in the structure of column
-  // 'column' of L.
-  //
-  // Rothberg and Gupta refer to this as a 'scatter kernel' in:
-  //   "An Evaluation of Left-Looking, Right-Looking and Multifrontal
-  //   Approaches to Sparse Cholesky Factorization on Hierarchical-Memory
-  //   Machines".
-  const Int factor_column_beg = lower_structure.ColumnOffset(column);
-  const Int factor_column_end = column_update_ptrs[column]++;
-  for (Int index = factor_column_beg; index < factor_column_end; ++index) {
-    // Update L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
-    const Int i = lower_structure.indices[index];
-    const Field& value = lower_factor.values[index];
-    if (is_selfadjoint) {
-      row_workspace[i] -= eta * Conjugate(value);
-    } else {
-      row_workspace[i] -= eta * value;
+    // Load eta := L(row, column) * d(column) from the workspace.
+    const Field eta =
+        is_cholesky ? row_workspace[column] / pivot : row_workspace[column];
+    row_workspace[column] = Field{0};
+
+    // Update
+    //
+    //   L(row, I) -= (L(row, column) * d(column)) * conj(L(I, column)),
+    //
+    // where I is the set of already-formed entries in the structure of column
+    // 'column' of L.
+    //
+    // Rothberg and Gupta refer to this as a 'scatter kernel' in:
+    //   "An Evaluation of Left-Looking, Right-Looking and Multifrontal
+    //   Approaches to Sparse Cholesky Factorization on Hierarchical-Memory
+    //   Machines".
+    const Int factor_column_beg = lower_structure.ColumnOffset(column);
+    const Int factor_column_end = column_update_ptrs[column]++;
+    for (Int index = factor_column_beg; index < factor_column_end; ++index) {
+      // L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column))
+      const Int i = lower_structure.indices[index];
+      const Field& value = lower_factor.values[index];
+      if (is_selfadjoint) {
+        row_workspace[i] -= eta * Conjugate(value);
+      } else {
+        row_workspace[i] -= eta * value;
+      }
     }
+
+    // Compute L(row, column) from eta = L(row, column) * d(column).
+    const Field lambda = is_cholesky ? eta : eta / pivot;
+
+    // L(row, row) -= (L(row, column) * d(column)) * conj(L(row, column))
+    if (is_selfadjoint) {
+      diagonal_factor.values[row] -= eta * Conjugate(lambda);
+    } else {
+      diagonal_factor.values[row] -= eta * lambda;
+    }
+
+    // Append L(row, column) into the structure of column 'column'.
+    lower_structure.indices[factor_column_end] = row;
+    lower_factor.values[factor_column_end] = lambda;
   }
-
-  // Compute L(row, column) from eta = L(row, column) * d(column).
-  const Field lambda = is_cholesky ? eta : eta / pivot;
-
-  // Update L(row, row) -= (L(row, column) * d(column)) * conj(L(row, column)).
-  if (is_selfadjoint) {
-    diagonal_factor.values[row] -= eta * Conjugate(lambda);
-  } else {
-    diagonal_factor.values[row] -= eta * lambda;
-  }
-
-  // Append L(row, column) into the structure of column 'column'.
-  lower_structure.indices[factor_column_end] = row;
-  lower_factor.values[factor_column_end] = lambda;
 }
 
 template <class Field>
@@ -355,11 +361,10 @@ LDLResult Factorization<Field>::UpLooking(
 
     // Compute L(row, :) using a sparse triangular solve. In particular,
     //   L(row, :) := matrix(row, :) / L(0 : row - 1, 0 : row - 1)'.
-    for (Int index = start; index < num_rows; ++index) {
-      const Int column = state.row_structure[index];
-      UpLookingRowUpdate(row, column, state.column_update_ptrs.Data(),
-                         state.row_workspace.Data());
-    }
+    UpLookingRowUpdate(row, state.row_structure.Data() + start,
+                       state.row_structure.Data() + num_rows,
+                       state.column_update_ptrs.Data(),
+                       state.row_workspace.Data());
 
     // Early exit if solving would involve division by zero.
     const Field pivot = diagonal_factor.values[row];
