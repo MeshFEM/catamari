@@ -144,49 +144,39 @@ class Factorization {
   // Performs the initial analysis (and factorization initialization) for a
   // particular sparisty pattern. Subsequent factorizations with the same
   // sparsity pattern can reuse the symbolic analysis.
-  void InitialFactorizationSetup(const CoordinateMatrix<Field>& matrix,
-                                 const Control& control);
+  void InitialFactorizationSetup(const CoordinateMatrix<Field>& matrix);
 #ifdef CATAMARI_OPENMP
-  void OpenMPInitialFactorizationSetup(const CoordinateMatrix<Field>& matrix,
-                                       const Control& control);
+  void OpenMPInitialFactorizationSetup(const CoordinateMatrix<Field>& matrix);
 #endif  // ifdef CATAMARI_OPENMP
 
   // TODO(Jack Poulson): Add ReinitializeFactorization.
 
   // Form the (possibly relaxed) supernodes for the factorization.
   void FormSupernodes(const CoordinateMatrix<Field>& matrix,
-                      const SupernodalRelaxationControl& control,
                       AssemblyForest* forest, Buffer<Int>* supernode_degrees);
 #ifdef CATAMARI_OPENMP
   void OpenMPFormSupernodes(const CoordinateMatrix<Field>& matrix,
-                            const SupernodalRelaxationControl& control,
                             AssemblyForest* forest,
                             Buffer<Int>* supernode_degrees);
 #endif  // ifdef CATAMARI_OPENMP
 
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
                          const AssemblyForest& forest,
-                         const Buffer<Int>& supernode_degrees,
-                         const Control& control);
+                         const Buffer<Int>& supernode_degrees);
 #ifdef CATAMARI_OPENMP
   void OpenMPInitializeFactors(const CoordinateMatrix<Field>& matrix,
                                const AssemblyForest& forest,
-                               const Buffer<Int>& supernode_degrees,
-                               const Control& control);
+                               const Buffer<Int>& supernode_degrees);
 #endif  // ifdef CATAMARI_OPENMP
 
-  LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix,
-                        const Control& control);
+  LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix);
 #ifdef CATAMARI_OPENMP
-  LDLResult OpenMPLeftLooking(const CoordinateMatrix<Field>& matrix,
-                              const Control& control);
+  LDLResult OpenMPLeftLooking(const CoordinateMatrix<Field>& matrix);
 #endif  // ifdef CATAMARI_OPENMP
 
-  LDLResult RightLooking(const CoordinateMatrix<Field>& matrix,
-                         const Control& control);
+  LDLResult RightLooking(const CoordinateMatrix<Field>& matrix);
 #ifdef CATAMARI_OPENMP
-  LDLResult OpenMPRightLooking(const CoordinateMatrix<Field>& matrix,
-                               const Control& control);
+  LDLResult OpenMPRightLooking(const CoordinateMatrix<Field>& matrix);
 #endif  // ifdef CATAMARI_OPENMP
 
   bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,

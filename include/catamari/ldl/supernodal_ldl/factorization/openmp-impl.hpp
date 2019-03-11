@@ -21,22 +21,20 @@ namespace supernodal_ldl {
 
 template <class Field>
 void Factorization<Field>::OpenMPInitialFactorizationSetup(
-    const CoordinateMatrix<Field>& matrix, const Control& control) {
+    const CoordinateMatrix<Field>& matrix) {
   AssemblyForest forest;
   Buffer<Int> supernode_degrees;
 
   #pragma omp taskgroup
-  OpenMPFormSupernodes(matrix, control.relaxation_control, &forest,
-                       &supernode_degrees);
+  OpenMPFormSupernodes(matrix, &forest, &supernode_degrees);
 
   #pragma omp taskgroup
-  OpenMPInitializeFactors(matrix, forest, supernode_degrees, control);
+  OpenMPInitializeFactors(matrix, forest, supernode_degrees);
 }
 
 template <class Field>
 void Factorization<Field>::OpenMPFormSupernodes(
-    const CoordinateMatrix<Field>& matrix,
-    const SupernodalRelaxationControl& control, AssemblyForest* forest,
+    const CoordinateMatrix<Field>& matrix, AssemblyForest* forest,
     Buffer<Int>* supernode_degrees) {
   // Greedily compute a supernodal partition using the original ordering.
   AssemblyForest orig_scalar_forest;
@@ -68,13 +66,15 @@ void Factorization<Field>::OpenMPFormSupernodes(
   OpenMPSupernodalDegrees(matrix, fund_ordering, orig_scalar_forest,
                           fund_member_to_index, &fund_supernode_degrees);
 
-  if (control.relax_supernodes) {
+  const SupernodalRelaxationControl& relax_control =
+      control_.relaxation_control;
+  if (relax_control.relax_supernodes) {
     // TODO(Jack Poulson): Parallelize RelaxSupernodes.
     RelaxSupernodes(
         orig_scalar_forest.parents, fund_ordering.supernode_sizes,
         fund_ordering.supernode_offsets, fund_ordering.assembly_forest.parents,
-        fund_supernode_degrees, fund_member_to_index, scalar_structure, control,
-        &ordering_.permutation, &ordering_.inverse_permutation,
+        fund_supernode_degrees, fund_member_to_index, scalar_structure,
+        relax_control, &ordering_.permutation, &ordering_.inverse_permutation,
         &forest->parents, &ordering_.assembly_forest.parents, supernode_degrees,
         &ordering_.supernode_sizes, &ordering_.supernode_offsets,
         &supernode_member_to_index_);
@@ -96,7 +96,7 @@ void Factorization<Field>::OpenMPFormSupernodes(
 template <class Field>
 void Factorization<Field>::OpenMPInitializeFactors(
     const CoordinateMatrix<Field>& matrix, const AssemblyForest& forest,
-    const Buffer<Int>& supernode_degrees, const Control& control) {
+    const Buffer<Int>& supernode_degrees) {
   lower_factor_.reset(
       new LowerFactor<Field>(ordering_.supernode_sizes, supernode_degrees));
   diagonal_factor_.reset(new DiagonalFactor<Field>(ordering_.supernode_sizes));
@@ -125,7 +125,7 @@ void Factorization<Field>::OpenMPInitializeFactors(
   OpenMPFillStructureIndices(control_.sort_grain_size, matrix, ordering_,
                              forest, supernode_member_to_index_,
                              lower_factor_.get());
-  if (control.algorithm == kLeftLookingLDL) {
+  if (control_.algorithm == kLeftLookingLDL) {
     // TODO(Jack Poulson): Switch to a multithreaded equivalent.
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                          supernode_member_to_index_);
@@ -560,7 +560,7 @@ bool Factorization<Field>::OpenMPLeftLookingSubtree(
 
 template <class Field>
 LDLResult Factorization<Field>::OpenMPLeftLooking(
-    const CoordinateMatrix<Field>& matrix, const Control& control) {
+    const CoordinateMatrix<Field>& matrix) {
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   const int max_threads = omp_get_max_threads();
@@ -644,7 +644,7 @@ LDLResult Factorization<Field>::OpenMPLeftLooking(
 
 template <class Field>
 LDLResult Factorization<Field>::OpenMPRightLooking(
-    const CoordinateMatrix<Field>& matrix, const Control& control) {
+    const CoordinateMatrix<Field>& matrix) {
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   const Int max_threads = omp_get_max_threads();
