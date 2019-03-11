@@ -106,6 +106,10 @@ void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
 template <class Field>
 void Factorization<Field>::LeftLookingSetup(
     const CoordinateMatrix<Field>& matrix) {
+  // TODO(Jack Poulson): Decide if/when the following should be parallelized.
+  // The main cost tradeoffs are the need for the creation of the children in
+  // the supernodal assembly forest and the additional memory allocations.
+
   Buffer<Int> degrees;
   EliminationForestAndDegrees(matrix, ordering,
                               &ordering.assembly_forest.parents, &degrees);
@@ -120,6 +124,10 @@ void Factorization<Field>::LeftLookingSetup(
 template <class Field>
 void Factorization<Field>::UpLookingSetup(
     const CoordinateMatrix<Field>& matrix) {
+  // TODO(Jack Poulson): Decide if/when the following should be parallelized.
+  // The main cost tradeoffs are the need for the creation of the children in
+  // the supernodal assembly forest and the additional memory allocations.
+
   Buffer<Int> degrees;
   EliminationForestAndDegrees(matrix, ordering,
                               &ordering.assembly_forest.parents, &degrees);
