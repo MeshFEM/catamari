@@ -34,33 +34,7 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   SymmetricOrdering ordering;
   ordering.permutation = analysis.permutation;
   ordering.inverse_permutation = analysis.inverse_permutation;
-  ordering.supernode_sizes = analysis.permuted_supernode_sizes;
   ordering.assembly_forest.parents = analysis.permuted_assembly_parents;
-  quotient::ChildrenFromParents(ordering.assembly_forest.parents,
-                                &ordering.assembly_forest.children,
-                                &ordering.assembly_forest.child_offsets);
-
-  OffsetScan(ordering.supernode_sizes, &ordering.supernode_offsets);
-
-  // Fill the list of supernodal ordering roots.
-  // TODO(Jack Poulson): Encapsulate this into a utility function.
-  {
-    const Int num_supernodes = ordering.supernode_sizes.Size();
-
-    Int num_roots = 0;
-    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-      if (ordering.assembly_forest.parents[supernode] < 0) {
-        ++num_roots;
-      }
-    }
-    ordering.assembly_forest.roots.Resize(num_roots);
-    Int counter = 0;
-    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-      if (ordering.assembly_forest.parents[supernode] < 0) {
-        ordering.assembly_forest.roots[counter++] = supernode;
-      }
-    }
-  }
 
   bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {
@@ -81,6 +55,34 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 
   is_supernodal = use_supernodal;
   if (use_supernodal) {
+    // TODO(Jack Poulson): Only compute the childrenwhen needed.
+    quotient::ChildrenFromParents(ordering.assembly_forest.parents,
+                                  &ordering.assembly_forest.children,
+                                  &ordering.assembly_forest.child_offsets);
+
+    ordering.supernode_sizes = analysis.permuted_supernode_sizes;
+    OffsetScan(ordering.supernode_sizes, &ordering.supernode_offsets);
+
+    // Fill the list of supernodal ordering roots.
+    // TODO(Jack Poulson): Encapsulate this into a utility function.
+    {
+      const Int num_supernodes = ordering.supernode_sizes.Size();
+
+      Int num_roots = 0;
+      for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+        if (ordering.assembly_forest.parents[supernode] < 0) {
+          ++num_roots;
+        }
+      }
+      ordering.assembly_forest.roots.Resize(num_roots);
+      Int counter = 0;
+      for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+        if (ordering.assembly_forest.parents[supernode] < 0) {
+          ordering.assembly_forest.roots[counter++] = supernode;
+        }
+      }
+    }
+
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
     return supernodal_factorization->Factor(matrix, ordering,
                                             control.supernodal_control);
