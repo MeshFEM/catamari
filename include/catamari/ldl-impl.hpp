@@ -58,7 +58,6 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 
   is_supernodal = use_supernodal;
   if (use_supernodal) {
-    std::cout << "  using supernodal" << std::endl;
     Buffer<Int> member_to_supernode;
     quotient_graph->PermutedMemberToSupernode(ordering.inverse_permutation,
                                               &member_to_supernode);
@@ -78,7 +77,6 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
     return supernodal_factorization->Factor(matrix, ordering,
                                             control.supernodal_control);
   } else {
-    std::cout << "  using scalar" << std::endl;
     quotient_graph.release();
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
     return scalar_factorization->Factor(matrix, ordering,
