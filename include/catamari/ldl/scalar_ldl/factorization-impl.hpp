@@ -60,7 +60,8 @@ void Factorization<Field>::PrintDiagonalFactor(const std::string& label,
 }
 
 template <class Field>
-void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
+void Factorization<Field>::FillNonzeros(
+    const CoordinateMatrix<Field>& matrix) CATAMARI_NOEXCEPT {
   LowerStructure& lower_structure = lower_factor.structure;
   const Int num_rows = matrix.NumRows();
   const Int num_entries = lower_structure.indices.Size();
@@ -105,7 +106,7 @@ void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix) {
 
 template <class Field>
 void Factorization<Field>::LeftLookingSetup(
-    const CoordinateMatrix<Field>& matrix) {
+    const CoordinateMatrix<Field>& matrix) CATAMARI_NOEXCEPT {
   // TODO(Jack Poulson): Decide if/when the following should be parallelized.
   // The main cost tradeoffs are the need for the creation of the children in
   // the supernodal assembly forest and the additional memory allocations.
@@ -123,7 +124,7 @@ void Factorization<Field>::LeftLookingSetup(
 
 template <class Field>
 void Factorization<Field>::UpLookingSetup(
-    const CoordinateMatrix<Field>& matrix) {
+    const CoordinateMatrix<Field>& matrix) CATAMARI_NOEXCEPT {
   // TODO(Jack Poulson): Decide if/when the following should be parallelized.
   // The main cost tradeoffs are the need for the creation of the children in
   // the supernodal assembly forest and the additional memory allocations.
@@ -144,10 +145,9 @@ void Factorization<Field>::UpLookingSetup(
 }
 
 template <class Field>
-void Factorization<Field>::UpLookingRowUpdate(Int row, const Int* column_beg,
-                                              const Int* column_end,
-                                              Int* column_update_ptrs,
-                                              Field* row_workspace) {
+void Factorization<Field>::UpLookingRowUpdate(
+    Int row, const Int* column_beg, const Int* column_end,
+    Int* column_update_ptrs, Field* row_workspace) CATAMARI_NOEXCEPT{
   LowerStructure& lower_structure = lower_factor.structure;
   const bool is_cholesky = factorization_type == kCholeskyFactorization;
   const bool is_selfadjoint = factorization_type != kLDLTransposeFactorization;
@@ -187,8 +187,12 @@ void Factorization<Field>::UpLookingRowUpdate(Int row, const Int* column_beg,
       }
     }
 
-    // Compute L(row, column) from eta = L(row, column) * d(column).
+   // Compute L(row, column) from eta = L(row, column) * d(column).
     const Field lambda = is_cholesky ? eta : eta / pivot;
+
+    // Append L(row, column) into the structure of column 'column'.
+    lower_structure.indices[factor_column_end] = row;
+    lower_factor.values[factor_column_end] = lambda;
 
     // L(row, row) -= (L(row, column) * d(column)) * conj(L(row, column))
     if (is_selfadjoint) {
@@ -196,16 +200,12 @@ void Factorization<Field>::UpLookingRowUpdate(Int row, const Int* column_beg,
     } else {
       diagonal_factor.values[row] -= eta * lambda;
     }
-
-    // Append L(row, column) into the structure of column 'column'.
-    lower_structure.indices[factor_column_end] = row;
-    lower_factor.values[factor_column_end] = lambda;
   }
 }
 
 template <class Field>
 LDLResult Factorization<Field>::LeftLooking(
-    const CoordinateMatrix<Field>& matrix) {
+    const CoordinateMatrix<Field>& matrix) CATAMARI_NOEXCEPT {
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
   const Buffer<Int>& parents = ordering.assembly_forest.parents;
@@ -332,7 +332,7 @@ LDLResult Factorization<Field>::LeftLooking(
 
 template <class Field>
 LDLResult Factorization<Field>::UpLooking(
-    const CoordinateMatrix<Field>& matrix) {
+    const CoordinateMatrix<Field>& matrix) CATAMARI_NOEXCEPT {
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
   const Buffer<Int>& parents = ordering.assembly_forest.parents;

@@ -105,26 +105,32 @@ struct LowerStructure {
   Buffer<Int> indices;
 
   // Returns the starting index of a column's structure in 'indices'.
-  Int ColumnOffset(Int column) const { return column_offsets[column]; }
+  Int ColumnOffset(Int column) const CATAMARI_NOEXCEPT {
+      return column_offsets[column];
+  }
 
   // Returns the external degree of the given column vertex.
-  Int Degree(Int column) const {
+  Int Degree(Int column) const CATAMARI_NOEXCEPT {
     return ColumnOffset(column + 1) - ColumnOffset(column);
   }
 
   // Returns a pointer to a column's structure.
-  Int* ColumnBeg(Int column) { return &indices[column_offsets[column]]; }
+  Int* ColumnBeg(Int column) CATAMARI_NOEXCEPT {
+      return &indices[column_offsets[column]];
+  }
 
   // Returns an immutable pointer to a column's structure.
-  const Int* ColumnBeg(Int column) const {
+  const Int* ColumnBeg(Int column) const CATAMARI_NOEXCEPT {
     return &indices[column_offsets[column]];
   }
 
   // Returns a pointer to the end of a column's structure.
-  Int* ColumnEnd(Int column) { return &indices[column_offsets[column + 1]]; }
+  Int* ColumnEnd(Int column) CATAMARI_NOEXCEPT {
+      return &indices[column_offsets[column + 1]];
+  }
 
   // Returns an immutable pointer to the end of a column's structure.
-  const Int* ColumnEnd(Int column) const {
+  const Int* ColumnEnd(Int column) const CATAMARI_NOEXCEPT {
     return &indices[column_offsets[column + 1]];
   }
 };
@@ -237,28 +243,31 @@ class Factorization {
   //     L(k, k) = sqrt(A(k, k) - L(k, 1:k-1) * L(k, 1:k-1)');
   //     L(k+1:n, k) = (A(k+1:n, k) - L(k+1:n, 1:k-1) * L(k, 1:k-1)') / L(k, k);
   //   end
-  LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix);
+  LDLResult LeftLooking(const CoordinateMatrix<Field>& matrix)
+      CATAMARI_NOEXCEPT;
 
   // Performs a non-supernodal up-looking LDL' factorization.
   // Cf. Section 4.7 of Tim Davis, "Direct Methods for Sparse Linear Systems".
-  LDLResult UpLooking(const CoordinateMatrix<Field>& matrix);
+  LDLResult UpLooking(const CoordinateMatrix<Field>& matrix) CATAMARI_NOEXCEPT;
 
   // Fill the factorization with the nonzeros from the (permuted) input matrix.
-  void FillNonzeros(const CoordinateMatrix<Field>& matrix);
+  void FillNonzeros(const CoordinateMatrix<Field>& matrix) CATAMARI_NOEXCEPT;
 
   // Initializes for running a left-looking factorization.
-  void LeftLookingSetup(const CoordinateMatrix<Field>& matrix);
+  void LeftLookingSetup(const CoordinateMatrix<Field>& matrix)
+      CATAMARI_NOEXCEPT;
 
   // Initializes for running an up-looking factorization.
-  void UpLookingSetup(const CoordinateMatrix<Field>& matrix);
+  void UpLookingSetup(const CoordinateMatrix<Field>& matrix) CATAMARI_NOEXCEPT;
 
   // For each index 'i' in the structure of each column 'column' of L formed
   // so far:
   //   L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
   // L(row, row) is similarly updated, within d, then L(row, column) is
   // finalized.
-  void UpLookingRowUpdate(Int row, const Int* column_beg, const Int* column_end,
-                          Int* column_update_ptrs, Field* row_workspace);
+  void UpLookingRowUpdate(
+      Int row, const Int* column_beg, const Int* column_end,
+      Int* column_update_ptrs, Field* row_workspace) CATAMARI_NOEXCEPT;
 };
 
 }  // namespace scalar_ldl

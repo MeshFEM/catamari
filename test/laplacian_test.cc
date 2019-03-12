@@ -87,8 +87,8 @@ void RunTest(Int num_x_elements, Int num_y_elements, bool analytical_ordering,
 }  // anonymous namespace
 
 TEST_CASE("2D right Cholesky [analytical]", "2D right chol [analyt]") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 2;
 
@@ -103,8 +103,8 @@ TEST_CASE("2D right Cholesky [analytical]", "2D right chol [analyt]") {
 }
 
 TEST_CASE("2D right adjoint [analytical]", "2D right adjoint [analyt]") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 2;
 
@@ -119,8 +119,8 @@ TEST_CASE("2D right adjoint [analytical]", "2D right adjoint [analyt]") {
 }
 
 TEST_CASE("2D right transpose [analytical]", "2D right transpose [analyt]") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 2;
 
@@ -135,8 +135,8 @@ TEST_CASE("2D right transpose [analytical]", "2D right transpose [analyt]") {
 }
 
 TEST_CASE("2D right Cholesky", "2D right chol") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 2;
 
@@ -151,8 +151,8 @@ TEST_CASE("2D right Cholesky", "2D right chol") {
 }
 
 TEST_CASE("2D right adjoint", "2D right adjoint") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 2;
 
@@ -167,8 +167,8 @@ TEST_CASE("2D right adjoint", "2D right adjoint") {
 }
 
 TEST_CASE("2D right transpose", "2D right transpose") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 2;
 
@@ -183,8 +183,8 @@ TEST_CASE("2D right transpose", "2D right transpose") {
 }
 
 TEST_CASE("2D left Cholesky [analytical]", "2D left chol [analyt]") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 0;
 
@@ -199,8 +199,8 @@ TEST_CASE("2D left Cholesky [analytical]", "2D left chol [analyt]") {
 }
 
 TEST_CASE("2D left adjoint [analytical]", "2D left adjoint [analyt]") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 0;
 
@@ -215,8 +215,8 @@ TEST_CASE("2D left adjoint [analytical]", "2D left adjoint [analyt]") {
 }
 
 TEST_CASE("2D left transpose [analytical]", "2D left transpose [analyt]") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 0;
 
@@ -231,8 +231,8 @@ TEST_CASE("2D left transpose [analytical]", "2D left transpose [analyt]") {
 }
 
 TEST_CASE("2D left Cholesky", "2D left chol") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 0;
 
@@ -247,8 +247,8 @@ TEST_CASE("2D left Cholesky", "2D left chol") {
 }
 
 TEST_CASE("2D left adjoint", "2D left adjoint") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 0;
 
@@ -263,8 +263,8 @@ TEST_CASE("2D left adjoint", "2D left adjoint") {
 }
 
 TEST_CASE("2D left transpose", "2D left transpose") {
-  const Int num_x_elements = 400;
-  const Int num_y_elements = 400;
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 0;
 
