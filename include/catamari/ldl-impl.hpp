@@ -29,7 +29,7 @@ LDLResult LDLFactorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
       quotient::MinimumDegree(quotient_graph.get());
 #ifdef QUOTIENT_ENABLE_TIMERS
   for (const std::pair<std::string, double>& time :
-       quotient_graph.ComponentSeconds()) {
+       quotient_graph->ComponentSeconds()) {
     std::cout << "  " << time.first << ": " << time.second << std::endl;
   }
 #endif  // ifdef QUOTIENT_TIMERS
