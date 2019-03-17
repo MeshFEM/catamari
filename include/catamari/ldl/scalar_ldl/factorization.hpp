@@ -106,7 +106,7 @@ struct LowerStructure {
 
   // Returns the starting index of a column's structure in 'indices'.
   Int ColumnOffset(Int column) const CATAMARI_NOEXCEPT {
-      return column_offsets[column];
+    return column_offsets[column];
   }
 
   // Returns the external degree of the given column vertex.
@@ -116,7 +116,7 @@ struct LowerStructure {
 
   // Returns a pointer to a column's structure.
   Int* ColumnBeg(Int column) CATAMARI_NOEXCEPT {
-      return &indices[column_offsets[column]];
+    return &indices[column_offsets[column]];
   }
 
   // Returns an immutable pointer to a column's structure.
@@ -126,7 +126,7 @@ struct LowerStructure {
 
   // Returns a pointer to the end of a column's structure.
   Int* ColumnEnd(Int column) CATAMARI_NOEXCEPT {
-      return &indices[column_offsets[column + 1]];
+    return &indices[column_offsets[column + 1]];
   }
 
   // Returns an immutable pointer to the end of a column's structure.
@@ -265,9 +265,9 @@ class Factorization {
   //   L(row, i) -= (L(row, column) * d(column)) * conj(L(i, column)).
   // L(row, row) is similarly updated, within d, then L(row, column) is
   // finalized.
-  void UpLookingRowUpdate(
-      Int row, const Int* column_beg, const Int* column_end,
-      Int* column_update_ptrs, Field* row_workspace) CATAMARI_NOEXCEPT;
+  void UpLookingRowUpdate(Int row, const Int* column_beg, const Int* column_end,
+                          Int* column_update_ptrs,
+                          Field* row_workspace) CATAMARI_NOEXCEPT;
 };
 
 }  // namespace scalar_ldl

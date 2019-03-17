@@ -37,6 +37,11 @@
 #include "quotient/timer.hpp"
 #include "specify.hpp"
 
+// Column-pivoted QR factorization is an integral portion of this example
+// driver, and so the entire driver is disabled if LAPACK support was not
+// detected.
+#ifdef CATAMARI_HAVE_LAPACK
+
 #ifdef CATAMARI_HAVE_LIBTIFF
 #include <tiffio.h>
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
@@ -414,8 +419,9 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<float>* matrix) {
   quotient::Buffer<float> work(work_size);
   BlasInt info;
   std::cout << "Calling sgeqpf..." << std::endl;
-  sgeqpf(&height, &width, matrix->view.data, &leading_dim, column_pivots.Data(),
-         reflector_scalars.Data(), work.Data(), &info);
+  LAPACK_SYMBOL(sgeqpf)
+  (&height, &width, matrix->view.data, &leading_dim, column_pivots.Data(),
+   reflector_scalars.Data(), work.Data(), &info);
   if (info != 0) {
     std::cerr << "sgeqpf info: " << info << std::endl;
   }
@@ -437,8 +443,9 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<float>* matrix) {
             << ", rank: " << rank << std::endl;
   matrix->Resize(height, rank);
 
-  sorgqr(&height, &rank, &rank, matrix->view.data, &leading_dim,
-         reflector_scalars.Data(), work.Data(), &work_size, &info);
+  LAPACK_SYMBOL(sorgqr)
+  (&height, &rank, &rank, matrix->view.data, &leading_dim,
+   reflector_scalars.Data(), work.Data(), &work_size, &info);
   if (info != 0) {
     std::cerr << "sorgqr info: " << info << std::endl;
   }
@@ -456,8 +463,9 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<double>* matrix) {
   quotient::Buffer<double> reflector_scalars(min_dim);
   quotient::Buffer<double> work(work_size);
   BlasInt info;
-  dgeqpf(&height, &width, matrix->view.data, &leading_dim, column_pivots.Data(),
-         reflector_scalars.Data(), work.Data(), &info);
+  LAPACK_SYMBOL(dgeqpf)
+  (&height, &width, matrix->view.data, &leading_dim, column_pivots.Data(),
+   reflector_scalars.Data(), work.Data(), &info);
   if (info != 0) {
     std::cerr << "dgeqpf info: " << info << std::endl;
   }
@@ -479,8 +487,9 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<double>* matrix) {
             << ", rank: " << rank << std::endl;
   matrix->Resize(height, rank);
 
-  dorgqr(&height, &rank, &rank, matrix->view.data, &leading_dim,
-         reflector_scalars.Data(), work.Data(), &work_size, &info);
+  LAPACK_SYMBOL(dorgqr)
+  (&height, &rank, &rank, matrix->view.data, &leading_dim,
+   reflector_scalars.Data(), work.Data(), &work_size, &info);
   if (info != 0) {
     std::cerr << "dorgqr info: " << info << std::endl;
   }
@@ -757,3 +766,6 @@ int main(int argc, char** argv) {
 
   return 0;
 }
+#else
+int main(int CATAMARI_UNUSED argc, char* CATAMARI_UNUSED argv[]) { return 0; }
+#endif  // ifdef CATAMARI_HAVE_LAPACK
