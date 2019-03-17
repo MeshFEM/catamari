@@ -273,6 +273,10 @@ class Factorization {
 }  // namespace scalar_ldl
 }  // namespace catamari
 
-#include "catamari/ldl/scalar_ldl/factorization-impl.hpp"
+#include "catamari/ldl/scalar_ldl/factorization/common-impl.hpp"
+#include "catamari/ldl/scalar_ldl/factorization/io-impl.hpp"
+#include "catamari/ldl/scalar_ldl/factorization/left_looking-impl.hpp"
+#include "catamari/ldl/scalar_ldl/factorization/solve-impl.hpp"
+#include "catamari/ldl/scalar_ldl/factorization/up_looking-impl.hpp"
 
 #endif  // ifndef CATAMARI_LDL_SCALAR_LDL_FACTORIZATION_H_

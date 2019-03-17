@@ -277,6 +277,14 @@ class Factorization {
 }  // namespace supernodal_ldl
 }  // namespace catamari
 
-#include "catamari/ldl/supernodal_ldl/factorization-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization/common-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization/common_openmp-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization/io-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization/left_looking-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization/left_looking_openmp-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization/right_looking-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization/right_looking_openmp-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization/solve-impl.hpp"
+#include "catamari/ldl/supernodal_ldl/factorization/solve_openmp-impl.hpp"
 
 #endif  // ifndef CATAMARI_LDL_SUPERNODAL_LDL_FACTORIZATION_H_
