@@ -218,7 +218,7 @@ dense_factorization_test_exe = executable(
     include_directories : include_dir,
     dependencies : deps + test_deps,
     cpp_args : cxx_args)
-test('Dense factorization tests', dense_factorization_test_exe)
+test('Dense factorization tests', dense_factorization_test_exe, timeout : 120)
 
 # An test of factoring and solving against a 2D negative Laplacian.
 laplacian_test_exe = executable(
