@@ -192,6 +192,11 @@ class SupernodalDPP {
 
 }  // namespace catamari
 
-#include "catamari/dpp/supernodal_dpp-impl.hpp"
+#include "catamari/dpp/supernodal_dpp/common-impl.hpp"
+#include "catamari/dpp/supernodal_dpp/common_openmp-impl.hpp"
+#include "catamari/dpp/supernodal_dpp/left_looking-impl.hpp"
+#include "catamari/dpp/supernodal_dpp/left_looking_openmp-impl.hpp"
+#include "catamari/dpp/supernodal_dpp/right_looking-impl.hpp"
+#include "catamari/dpp/supernodal_dpp/right_looking_openmp-impl.hpp"
 
 #endif  // ifndef CATAMARI_SUPERNODAL_DPP_H_
