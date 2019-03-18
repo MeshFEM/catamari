@@ -45,8 +45,6 @@ struct SupernodalDPPControl {
 
 // The user-facing data structure for storing a supernodal LDL'-based DPP
 // sampler.
-//
-// TODO(Jack Poulson): Add support for a right-looking supernodal factorization.
 template <class Field>
 class SupernodalDPP {
  public:

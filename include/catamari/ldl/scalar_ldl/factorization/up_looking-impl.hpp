@@ -108,7 +108,7 @@ LDLResult Factorization<Field>::UpLooking(const CoordinateMatrix<Field>& matrix)
   const Buffer<Int>& parents = ordering.assembly_forest.parents;
   const LowerStructure& lower_structure = lower_factor.structure;
 
-  UpLookingState state;
+  UpLookingState<Field> state;
   state.column_update_ptrs.Resize(num_rows);
   state.pattern_flags.Resize(num_rows);
   state.row_structure.Resize(num_rows);

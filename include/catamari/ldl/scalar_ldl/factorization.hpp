@@ -153,6 +153,40 @@ struct DiagonalFactor {
   Buffer<Field> values;
 };
 
+// The temporary state used by the left-looking factorization.
+struct LeftLookingState {
+  // Since we will sequentially access each of the entries in each column of
+  // L during the updates of the active column, we can avoid the need for
+  // binary search by maintaining a separate counter for each column.
+  Buffer<Int> column_update_ptrs;
+
+  // An integer workspace for storing the indices in the current row pattern.
+  Buffer<Int> row_structure;
+
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  Buffer<Int> pattern_flags;
+};
+
+// The temporary state used by the up-looking factorization.
+template <class Field>
+struct UpLookingState {
+  // An array for holding the active index to insert the new entry of each
+  // column into.
+  Buffer<Int> column_update_ptrs;
+
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  Buffer<Int> pattern_flags;
+
+  // Set up an integer workspace that could hold any row nonzero pattern.
+  Buffer<Int> row_structure;
+
+  // Set up a workspace for performing a triangular solve against a row of the
+  // input matrix.
+  Buffer<Field> row_workspace;
+};
+
 // A representation of a non-supernodal LDL' factorization.
 template <class Field>
 class Factorization {
@@ -202,39 +236,6 @@ class Factorization {
       BlasMatrixView<Field>* right_hand_sides) const;
 
  private:
-  // The temporary state used by the left-looking factorization.
-  struct LeftLookingState {
-    // Since we will sequentially access each of the entries in each column of
-    // L during the updates of the active column, we can avoid the need for
-    // binary search by maintaining a separate counter for each column.
-    Buffer<Int> column_update_ptrs;
-
-    // An integer workspace for storing the indices in the current row pattern.
-    Buffer<Int> row_structure;
-
-    // A data structure for marking whether or not an index is in the pattern
-    // of the active row of the lower-triangular factor.
-    Buffer<Int> pattern_flags;
-  };
-
-  // The temporary state used by the up-looking factorization.
-  struct UpLookingState {
-    // An array for holding the active index to insert the new entry of each
-    // column into.
-    Buffer<Int> column_update_ptrs;
-
-    // A data structure for marking whether or not an index is in the pattern
-    // of the active row of the lower-triangular factor.
-    Buffer<Int> pattern_flags;
-
-    // Set up an integer workspace that could hold any row nonzero pattern.
-    Buffer<Int> row_structure;
-
-    // Set up a workspace for performing a triangular solve against a row of the
-    // input matrix.
-    Buffer<Field> row_workspace;
-  };
-
   // Performs a non-supernodal left-looking LDL' factorization.
   // Cf. Section 4.8 of Tim Davis, "Direct Methods for Sparse Linear Systems".
   //

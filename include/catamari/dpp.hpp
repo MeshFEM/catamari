@@ -8,13 +8,23 @@
 #ifndef CATAMARI_DPP_H_
 #define CATAMARI_DPP_H_
 
+#include "catamari/dpp/scalar_dpp.hpp"
 #include "catamari/dpp/supernodal_dpp.hpp"
 #include "quotient/minimum_degree.hpp"
 
 namespace catamari {
 
 struct DPPControl {
+  // The configuration options for the Minimum Degree reordering.
   quotient::MinimumDegreeControl md_control;
+
+  // Whether or not a supernodal factorization should be used.
+  SupernodalStrategy supernodal_strategy = kAdaptiveSupernodalStrategy;
+
+  // The configuration options for the scalar DPP sampler.
+  ScalarDPPControl scalar_control;
+
+  // The configuration options for the supernodal DPP sampler.
   SupernodalDPPControl supernodal_control;
 };
 
@@ -35,6 +45,14 @@ class DPP {
   std::vector<Int> Sample(bool maximum_likelihood) const;
 
  private:
+  // Whether or not a supernodal sampler was used. If it is true, only
+  // 'supernodal_dpp_' should be non-null, and vice versa.
+  bool is_supernodal_;
+
+  // The scalar DPP sampling structure.
+  std::unique_ptr<ScalarDPP<Field>> scalar_dpp_;
+
+  // The supernodal DPP sampling structure.
   std::unique_ptr<SupernodalDPP<Field>> supernodal_dpp_;
 };
 

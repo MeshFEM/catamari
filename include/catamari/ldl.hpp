@@ -30,6 +30,7 @@ enum SupernodalStrategy {
 
 // Configuration options for LDL' factorization.
 struct LDLControl {
+  // The configuration options for the Minimum Degree reordering.
   quotient::MinimumDegreeControl md_control;
 
   // Whether or not a supernodal factorization should be used.
@@ -59,7 +60,7 @@ struct RefinedSolveControl {
   // The maximum number of iterations of iterative refinement to perform.
   Int max_iters = 3;
 
-  // Whether
+  // Whether convergence progress information should be printed.
   bool verbose = false;
 };
 

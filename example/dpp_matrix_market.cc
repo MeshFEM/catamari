@@ -236,6 +236,11 @@ int main(int argc, char** argv) {
       10.f);
   const bool force_symmetry = parser.OptionalInput<bool>(
       "force_symmetry", "Use the nonzero pattern of A + A'?", true);
+  const int supernodal_strategy_int =
+      parser.OptionalInput<int>("supernodal_strategy_int",
+                                "The SupernodalStrategy int.\n"
+                                "0:scalar, 1:supernodal, 2:adaptive",
+                                2);
   const bool relax_supernodes = parser.OptionalInput<bool>(
       "relax_supernodes", "Relax the supernodes?", true);
   const Int allowable_supernode_zeros =
@@ -246,6 +251,11 @@ int main(int argc, char** argv) {
       "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const double diagonal_shift = parser.OptionalInput<Real>(
       "diagonal_shift", "The value to add to the diagonal.", 1e6);
+  const int ldl_algorithm_int =
+      parser.OptionalInput<int>("ldl_algorithm_int",
+                                "The LDL algorithm type.\n"
+                                "0:left-looking, 1:up-looking, 2:right-looking",
+                                2);
   const bool maximum_likelihood = parser.OptionalInput<bool>(
       "maximum_likelihood", "Make the maximum-likelihood decisions?", false);
   const Int num_samples =
@@ -283,7 +293,13 @@ int main(int argc, char** argv) {
 
   // Set the supernodal control options.
   {
+    dpp_control.supernodal_strategy =
+        static_cast<catamari::SupernodalStrategy>(supernodal_strategy_int);
+    dpp_control.scalar_control.algorithm =
+        static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
     auto& sn_control = dpp_control.supernodal_control;
+    sn_control.algorithm =
+        static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
     sn_control.relaxation_control.relax_supernodes = relax_supernodes;
     sn_control.relaxation_control.allowable_supernode_zeros =
         allowable_supernode_zeros;
