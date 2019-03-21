@@ -221,7 +221,7 @@ Similarly, subsequently running the code block:
   matrix.QueueEntryRemoval(0, 4);
   matrix.FlushEntryQueues();
 
-would modify the Buffer underlying the :samp:`edges` reference to now
+would modify the Buffer underlying the :samp:`entries` reference to now
 contain the entry sequence:
 
 :samp:`(2, 0, -1.), (3, 2, 4.), (3, 4, 1.), (4, 2, -2.), (4, 4, 3.)`.

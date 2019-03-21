@@ -56,7 +56,7 @@ using quotient::SwapClearVector;
 //   matrix.QueueEntryRemoval(0, 4);
 //   matrix.FlushEntryQueues();
 //
-// would modify the Buffer underlying the 'edges' reference to now
+// would modify the Buffer underlying the 'entries' reference to now
 // contain the entry sequence:
 //   (2, 0, -1.), (3, 2, 4.), (3, 4, 1.), (4, 2, -2.), (4, 4, 3.).
 //
