@@ -365,6 +365,19 @@ OpenMP threads is detected as greater than one).
   factorization.RefinedSolve(
       matrix, refined_solve_control, &right_hand_sides.view);
 
+Catamari's sparse-direct solver (like CHOLMOD before it [ChenEtAl-2008]_),
+by default, dynamically chooses between a
+right-looking multifrontal method and an up-looking simplicial approach based
+upon the arithmetic intensity of the factorization. The former approach is
+used for sufficiently high arithmetic intensity (and operation count), while
+the latter is used for sufficiently small and/or sparse factorizations.
+This default strategy can be overridden by modifying the
+:samp:`catamari::LDLControl::supernodal_strategy` member variable of the control
+structure from its default value of
+:samp:`catamari::kAdaptiveSupernodalStrategy` to either
+:samp:`catamari::kSupernodalFactorization` or
+:samp:`catamari::kScalarFactorization`.
+
 There is also support for efficiently factoring sequences of matrices with
 identical sparsity patterns, but different numerical values, via the member
 function
@@ -560,8 +573,21 @@ sparse-direct solver.
     samples[sample_index] = dpp.Sample(maximum_likelihood);
   }
 
+Like Catamari's sparse-direct solver, by default, the DPP sampler dynamically
+chooses between a right-looking
+multifrontal method and an up-looking simplicial approach based upon the
+arithmetic intensity of the factorization.
+This default strategy can be overridden by modifying the
+:samp:`catamari::LDLControl::supernodal_strategy` member variable of the control
+structure from its default value of
+:samp:`catamari::kAdaptiveSupernodalStrategy` to either
+:samp:`catamari::kSupernodalFactorization` or
+:samp:`catamari::kScalarFactorization`.
+
 A full example of sampling a DPP from a scaled negative 2D Laplacian is given at
 `example/dpp_shifted_2d_negative_laplacian.cc <https://gitlab.com/hodge_star/catamari/blob/master/example/dpp_shifted_2d_negative_laplacian.cc>`_.
+
+.. [ChenEtAl-2008] Yanqing Chen, Timothy A. Davis, William W. Hager, and Sivasankaran Rajamanickam, Algorithm 887: CHOLMOD, Supernodal Sparse Cholesky Factorization and Update/Downdate, ACM Trans. Math. Softw., 35(3), Article 22, October 2008. DOI: http://10.1145/1391989.1391995
 
 .. [GeorgeEtAl-2006] Alan George, K.H. Irkamov, and A.B. Kucherov, Some properties of symmetric quasi-definite matrices, SIAM J. Matrix Anal. Appl., 21(4), pp. 1318--1323, 2006. DOI: https://epubs.siam.org/doi/10.1137/S0895479897329400
 
