@@ -587,6 +587,9 @@ structure from its default value of
 A full example of sampling a DPP from a scaled negative 2D Laplacian is given at
 `example/dpp_shifted_2d_negative_laplacian.cc <https://gitlab.com/hodge_star/catamari/blob/master/example/dpp_shifted_2d_negative_laplacian.cc>`_.
 
+References
+^^^^^^^^^^
+
 .. [ChenEtAl-2008] Yanqing Chen, Timothy A. Davis, William W. Hager, and Sivasankaran Rajamanickam, Algorithm 887: CHOLMOD, Supernodal Sparse Cholesky Factorization and Update/Downdate, ACM Trans. Math. Softw., 35(3), Article 22, October 2008. DOI: http://10.1145/1391989.1391995
 
 .. [GeorgeEtAl-2006] Alan George, K.H. Irkamov, and A.B. Kucherov, Some properties of symmetric quasi-definite matrices, SIAM J. Matrix Anal. Appl., 21(4), pp. 1318--1323, 2006. DOI: https://epubs.siam.org/doi/10.1137/S0895479897329400
