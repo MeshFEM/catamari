@@ -25,6 +25,18 @@ struct Experiment {
   // The number of (structural) nonzeros in the associated Cholesky factor.
   Int num_nonzeros = 0;
 
+  // The rough number of floating-point operations required to factor the
+  // supernodal diagonal blocks.
+  double num_diagonal_flops = 0;
+
+  // The rough number of floating-point operations required to solve against the
+  // diagonal blocks to update the subdiagonals.
+  double num_subdiag_solve_flops = 0;
+
+  // The rough number of floating-point operations required to form the Schur
+  // complements.
+  double num_schur_complement_flops = 0;
+
   // The number of floating-point operations required for a standard Cholesky
   // factorization using the returned ordering.
   double num_flops = 0;
@@ -37,14 +49,28 @@ struct Experiment {
 };
 
 // Pretty prints the Experiment structure.
-void PrintExperiment(const Experiment& experiment, const std::string& label) {
-  std::cout << label << ":\n";
-  std::cout << "  num_nonzeros:          " << experiment.num_nonzeros << "\n";
-  std::cout << "  num_flops:             " << experiment.num_flops << "\n";
-  std::cout << "  factorization_seconds: " << experiment.factorization_seconds
-            << "\n";
-  std::cout << "  solve_seconds:         " << experiment.solve_seconds << "\n";
-  std::cout << std::endl;
+void PrintExperiment(const Experiment& experiment, const std::string& title) {
+  const double factorization_gflops_per_sec =
+      experiment.num_flops / (1.e9 * experiment.factorization_seconds);
+
+  std::cout << title << ": \n"
+            << "  num_nonzeros:               " << experiment.num_nonzeros
+            << "\n"
+            << "  num_diagonal_flops:         " << experiment.num_diagonal_flops
+            << "\n"
+            << "  num_subdiag_solve_flops:    "
+            << experiment.num_subdiag_solve_flops << "\n"
+            << "  num_schur_complement_flops: "
+            << experiment.num_schur_complement_flops << "\n"
+            << "  num_flops:                  " << experiment.num_flops << "\n"
+            << "  factorization_seconds:      "
+            << experiment.factorization_seconds << "\n"
+            << "  factorization gflops/sec:   " << factorization_gflops_per_sec
+            << "\n"
+            << "  solve_seconds:              " << experiment.solve_seconds
+            << "\n"
+            << "\n"
+            << std::endl;
 }
 
 // Overwrites a matrix A with A + A' or A + A^T.
@@ -177,6 +203,9 @@ Experiment RunMatrixMarketTest(const std::string& filename,
     return experiment;
   }
   experiment.num_nonzeros = result.num_factorization_entries;
+  experiment.num_diagonal_flops = result.num_diagonal_flops;
+  experiment.num_subdiag_solve_flops = result.num_subdiag_solve_flops;
+  experiment.num_schur_complement_flops = result.num_schur_complement_flops;
   experiment.num_flops = result.num_factorization_flops;
 
   // Generate an arbitrary right-hand side.
@@ -209,29 +238,79 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   return experiment;
 }
 
-// Returns a map from the identifying string of each test matrix from the
-// Amestoy/Davis/Duff Approximate Minimum Degree reordering 1996 paper meant
-// to loosely reproduce Fig. 2.
-std::unordered_map<std::string, Experiment> RunADD96Tests(
+// Returns a map from the identifying string of each test matrix from a custom
+// suite of SPD Matrix Market matrices.
+std::unordered_map<std::string, Experiment> RunCustomTests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, double diagonal_shift,
     const catamari::LDLControl& ldl_control, bool print_progress) {
+  // TODO(Jack Poulson): Document why each of the commented out matrices was
+  // unable to be factored. In most, if not all, cases, this seems to be due
+  // to excessive memory usage. But std::bad_alloc errors are not being
+  // properly propagated/caught.
   const std::vector<std::string> matrix_names{
-      "appu",     "bbmat",    "bcsstk30", "bcsstk31", "bcsstk32", "bcsstk33",
-      "crystk02", "crystk03", "ct20stif", "ex11",     "ex19",     "ex40",
-      "finan512", "lhr34",    "lhr71",    "nasasrb",  "olafu",    "orani678",
-      "psmigr_1", "raefsky1", "raefsky3", "raefsky4", "rim",      "venkat01",
-      "wang3",    "wang4",
+      // "Queen_4147",
+      // "audikw_1",
+      // "Serena",
+      // "Geo_1438",
+      "Hook_1498",
+      "bone010",
+      "ldoor",
+      "boneS10",
+      // "Emilia_923",
+      "PFlow_742",
+      "inline_1",
+      "nd24k",
+      // "Fault_639",
+      // "StocF-1465",
+      "bundle_adj",
+      "msdoor",
+      "af_shell7",
+      "af_shell8",
+      "af_shell4",
+      "af_shell3",
+      "af_3_k101",
+      // ...
+      "ted_B",
+      "ted_B_unscaled",
+      "bodyy6",
+      "bodyy5",
+      "aft01",
+      "bodyy4",
+      "bcsstk15",
+      "crystm01",
+      "nasa4704",
+      "LF10000",
+      // ...
+      "mesh3e1",
+      "bcsstm09",
+      "bcsstm08",
+      "nos1",
+      "bcsstm19",
+      "bcsstk22",
+      "bcsstk03",
+      "nos4",
+      "bcsstm20",
+      "bcsstm06",
+      "bcsstk01",
+      "mesh1em6",
+      "mesh1em1",
+      "mesh1e1",
   };
   const bool force_symmetry = true;
 
   std::unordered_map<std::string, Experiment> experiments;
   for (const std::string& matrix_name : matrix_names) {
-    const std::string filename = matrix_market_directory + "/" + matrix_name +
-                                 "/" + matrix_name + ".mtx";
-    experiments[matrix_name] =
-        RunMatrixMarketTest(filename, skip_explicit_zeros, mask, force_symmetry,
-                            diagonal_shift, ldl_control, print_progress);
+    const std::string filename =
+        matrix_market_directory + "/" + matrix_name + ".mtx";
+    try {
+      experiments[matrix_name] = RunMatrixMarketTest(
+          filename, skip_explicit_zeros, mask, force_symmetry, diagonal_shift,
+          ldl_control, print_progress);
+      PrintExperiment(experiments[matrix_name], matrix_name);
+    } catch (std::exception& error) {
+      std::cerr << "Caught exception: " << error.what() << std::endl;
+    }
   }
 
   return experiments;
@@ -304,7 +383,7 @@ int main(int argc, char** argv) {
       "print_progress", "Print the progress of the experiments?", false);
   const std::string matrix_market_directory = parser.OptionalInput<std::string>(
       "matrix_market_directory",
-      "The directory where the ADD96 matrix market .tar.gz's were unpacked",
+      "The directory where the custom matrix market .tar.gz's were unpacked",
       "");
   if (!parser.OK()) {
     return 0;
@@ -355,8 +434,8 @@ int main(int argc, char** argv) {
 
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
-        RunADD96Tests(matrix_market_directory, skip_explicit_zeros, mask,
-                      diagonal_shift, ldl_control, print_progress);
+        RunCustomTests(matrix_market_directory, skip_explicit_zeros, mask,
+                       diagonal_shift, ldl_control, print_progress);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
     }
