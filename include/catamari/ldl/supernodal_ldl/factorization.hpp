@@ -184,9 +184,10 @@ class Factorization {
                           PrivateState<Field>* private_state,
                           LDLResult* result);
 #ifdef CATAMARI_OPENMP
-  bool OpenMPLeftLookingSubtree(Int level, Int max_parallel_levels,
-                                Int supernode,
+  bool OpenMPLeftLookingSubtree(Int supernode,
                                 const CoordinateMatrix<Field>& matrix,
+                                const Buffer<double>& work_estimates,
+                                double min_parallel_work,
                                 LeftLookingSharedState* shared_state,
                                 Buffer<PrivateState<Field>>* private_states,
                                 LDLResult* result);
@@ -197,10 +198,10 @@ class Factorization {
                            PrivateState<Field>* private_state,
                            LDLResult* result);
 #ifdef CATAMARI_OPENMP
-  bool OpenMPRightLookingSubtree(Int level, Int max_parallel_levels,
-                                 Int supernode,
+  bool OpenMPRightLookingSubtree(Int supernode,
                                  const CoordinateMatrix<Field>& matrix,
                                  const Buffer<double>& work_estimates,
+                                 double min_parallel_work,
                                  RightLookingSharedState<Field>* shared_state,
                                  Buffer<PrivateState<Field>>* private_states,
                                  LDLResult* result);

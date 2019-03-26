@@ -20,13 +20,35 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
                                     const SupernodalDPPControl& control)
     : matrix_(matrix), ordering_(ordering), control_(control) {
 #ifdef CATAMARI_OPENMP
-  if (omp_get_max_threads() > 1) {
+  const int max_threads = omp_get_max_threads();
+  if (max_threads > 1) {
     #pragma omp parallel
     #pragma omp single
     {
       OpenMPFormSupernodes();
       OpenMPFormStructure();
     }
+
+    // Compute flop-count estimates so that we may prioritize the expensive
+    // tasks before the cheaper ones.
+    const Int num_supernodes = ordering_.supernode_sizes.Size();
+    work_estimates_.Resize(num_supernodes);
+    for (const Int& root : ordering_.assembly_forest.roots) {
+      supernodal_ldl::FillSubtreeWorkEstimates(
+          root, ordering_.assembly_forest, *lower_factor_, &work_estimates_);
+    }
+    total_work_ =
+        std::accumulate(work_estimates_.begin(), work_estimates_.end(), 0.);
+
+    // TODO(Jack Poulson): Make these two parameters configurable.
+    const double kParallelRatioThreshold = 0.02;
+    const double kMinParallelThreshold = 1.e5;
+
+    const double min_parallel_ratio_work =
+        (total_work_ * kParallelRatioThreshold) / max_threads;
+    min_parallel_work_ =
+        std::max(kMinParallelThreshold, min_parallel_ratio_work);
+
     return;
   }
 #endif  // ifdef CATAMARI_OPENMP

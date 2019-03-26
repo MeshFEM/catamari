@@ -230,10 +230,12 @@ bool Factorization<Field>::OpenMPLeftLookingSupernodeFinalize(
 
 template <class Field>
 bool Factorization<Field>::OpenMPLeftLookingSubtree(
-    Int level, Int max_parallel_levels, Int supernode,
-    const CoordinateMatrix<Field>& matrix, LeftLookingSharedState* shared_state,
+    Int supernode, const CoordinateMatrix<Field>& matrix,
+    const Buffer<double>& work_estimates, double min_parallel_work,
+    LeftLookingSharedState* shared_state,
     Buffer<PrivateState<Field>>* private_states, LDLResult* result) {
-  if (level >= max_parallel_levels) {
+  const double work_estimate = work_estimates[supernode];
+  if (work_estimate < min_parallel_work) {
     const int thread = omp_get_thread_num();
     return LeftLookingSubtree(supernode, matrix, shared_state,
                               &(*private_states)[thread], result);
@@ -250,16 +252,13 @@ bool Factorization<Field>::OpenMPLeftLookingSubtree(
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
-    #pragma omp task default(none)                                       \
-        firstprivate(level, max_parallel_levels, supernode, child_index, \
-            child, shared_state, private_states)                         \
-        shared(successes, matrix, result_contributions)
-    {
-      LDLResult& result_contribution = result_contributions[child_index];
-      successes[child_index] = OpenMPLeftLookingSubtree(
-          level + 1, max_parallel_levels, child, matrix, shared_state,
-          private_states, &result_contribution);
-    }
+    #pragma omp task default(none)                                     \
+        firstprivate(supernode, child_index, child, min_parallel_work, \
+            shared_state, private_states)                              \
+        shared(successes, matrix, work_estimates, result_contributions)
+    successes[child_index] = OpenMPLeftLookingSubtree(
+        child, matrix, work_estimates, min_parallel_work, shared_state,
+        private_states, &result_contributions[child_index]);
   }
 
   bool succeeded = true;
@@ -321,15 +320,30 @@ LDLResult Factorization<Field>::OpenMPLeftLooking(
     }
   }
 
-  // TODO(Jack Poulson): Make this value configurable.
-  const Int max_parallel_levels = std::ceil(std::log2(max_threads)) + 3;
+  // Compute flop-count estimates so that we may prioritize the expensive
+  // tasks before the cheaper ones.
+  Buffer<double> work_estimates(num_supernodes);
+  for (const Int& root : ordering_.assembly_forest.roots) {
+    FillSubtreeWorkEstimates(root, ordering_.assembly_forest, *lower_factor_,
+                             &work_estimates);
+  }
+  const double total_work =
+      std::accumulate(work_estimates.begin(), work_estimates.end(), 0.);
+
+  // TODO(Jack Poulson): Make these two parameters configurable.
+  const double kParallelRatioThreshold = 0.02;
+  const double kMinParallelThreshold = 1.e5;
+
+  const double min_parallel_ratio_work =
+      (total_work * kParallelRatioThreshold) / max_threads;
+  const double min_parallel_work =
+      std::max(kMinParallelThreshold, min_parallel_ratio_work);
 
   LDLResult result;
   Buffer<int> successes(num_roots);
   Buffer<LDLResult> result_contributions(num_roots);
 
-  const Int level = 0;
-  if (max_parallel_levels == 0) {
+  if (total_work < min_parallel_work) {
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
       LDLResult& result_contribution = result_contributions[root_index];
@@ -345,15 +359,13 @@ LDLResult Factorization<Field>::OpenMPLeftLooking(
     #pragma omp single
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
-      #pragma omp task default(none) firstprivate(root_index, root, level) \
-          shared(successes, matrix, result_contributions, shared_state,    \
-              private_states)
-      {
-        LDLResult& result_contribution = result_contributions[root_index];
-        successes[root_index] = OpenMPLeftLookingSubtree(
-            level + 1, max_parallel_levels, root, matrix, &shared_state,
-            &private_states, &result_contribution);
-      }
+      #pragma omp task default(none)                                      \
+          firstprivate(root_index, root, min_parallel_work)               \
+          shared(successes, matrix, work_estimates, result_contributions, \
+              shared_state, private_states)
+      successes[root_index] = OpenMPLeftLookingSubtree(
+          root, matrix, work_estimates, min_parallel_work, &shared_state,
+          &private_states, &result_contributions[root_index]);
     }
 
     SetNumBlasThreads(old_max_threads);

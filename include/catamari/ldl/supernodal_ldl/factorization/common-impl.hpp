@@ -197,8 +197,8 @@ LDLResult Factorization<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 LDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
-// TODO(Jack Poulson): Check that the previous factorization had an identical
-// sparsity pattern.
+  // TODO(Jack Poulson): Check that the previous factorization had an identical
+  // sparsity pattern.
 
 #ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {

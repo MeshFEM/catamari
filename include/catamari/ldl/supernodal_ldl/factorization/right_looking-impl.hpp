@@ -12,6 +12,7 @@
 
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/dense_factorizations.hpp"
+#include "catamari/io_utils.hpp"
 
 #include "catamari/ldl/supernodal_ldl/factorization.hpp"
 
@@ -87,6 +88,10 @@ bool Factorization<Field>::RightLookingSubtree(
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
+#ifdef CATAMARI_ENABLE_TIMERS
+  shared_state->inclusive_timers[supernode].Start();
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
   Buffer<int> successes(num_children);
   Buffer<LDLResult> result_contributions(num_children);
 
@@ -100,6 +105,10 @@ bool Factorization<Field>::RightLookingSubtree(
     successes[child_index] = RightLookingSubtree(
         child, matrix, shared_state, private_state, &result_contribution);
   }
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  shared_state->exclusive_timers[supernode].Start();
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   // Merge the children's results (stopping if a failure is detected).
   bool succeeded = true;
@@ -130,6 +139,11 @@ bool Factorization<Field>::RightLookingSubtree(
     }
   }
 
+#ifdef CATAMARI_ENABLE_TIMERS
+  shared_state->inclusive_timers[supernode].Stop();
+  shared_state->exclusive_timers[supernode].Stop();
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
   return succeeded;
 }
 
@@ -147,6 +161,10 @@ LDLResult Factorization<Field>::RightLooking(
   RightLookingSharedState<Field> shared_state;
   shared_state.schur_complement_buffers.Resize(num_supernodes);
   shared_state.schur_complements.Resize(num_supernodes);
+#ifdef CATAMARI_ENABLE_TIMERS
+  shared_state.inclusive_timers.Resize(num_supernodes);
+  shared_state.exclusive_timers.Resize(num_supernodes);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   PrivateState<Field> private_state;
   if (control_.factorization_type != kCholeskyFactorization) {
@@ -173,6 +191,20 @@ LDLResult Factorization<Field>::RightLooking(
     }
     MergeContribution(result_contributions[index], &result);
   }
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  // TODO(Jack Poulson): Make these parameters configurable.
+  const Int max_levels = 4;
+  const bool avoid_isolated_roots = true;
+  const std::string inclusive_filename = "inclusive.gv";
+  const std::string exclusive_filename = "exclusive.gv";
+  TruncatedForestTimersToDot(inclusive_filename, shared_state.inclusive_timers,
+                             ordering_.assembly_forest, max_levels,
+                             avoid_isolated_roots);
+  TruncatedForestTimersToDot(exclusive_filename, shared_state.exclusive_timers,
+                             ordering_.assembly_forest, max_levels,
+                             avoid_isolated_roots);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   return result;
 }

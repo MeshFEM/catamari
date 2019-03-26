@@ -96,6 +96,15 @@ class SupernodalDPP {
   // The controls tructure for the DPP sampler.
   const SupernodalDPPControl control_;
 
+  // The estimates of the amount of work required in each supernode's subtree.
+  Buffer<double> work_estimates_;
+
+  // The total estimated amount of work.
+  double total_work_;
+
+  // The chosen minimum amount of work to deem worthy of parallelization.
+  double min_parallel_work_;
+
   void FormSupernodes();
 
 #ifdef CATAMARI_OPENMP
@@ -122,8 +131,7 @@ class SupernodalDPP {
                           std::vector<Int>* sample) const;
 
   void OpenMPLeftLookingSubtree(
-      Int level, Int max_parallel_levels, Int supernode,
-      bool maximum_likelihood,
+      Int supernode, bool maximum_likelihood,
       supernodal_ldl::LeftLookingSharedState* shared_state,
       Buffer<PrivateState>* private_states, std::vector<Int>* subsample) const;
 #endif  // ifdef CATAMARI_OPENMP
@@ -165,8 +173,7 @@ class SupernodalDPP {
 
 #ifdef CATAMARI_OPENMP
   void OpenMPRightLookingSubtree(
-      Int level, Int max_parallel_levels, Int supernode,
-      bool maximum_likelihood,
+      Int supernode, bool maximum_likelihood,
       supernodal_ldl::RightLookingSharedState<Field>* shared_state,
       Buffer<PrivateState>* private_states, std::vector<Int>* sample) const;
 #endif  // ifdef CATAMARI_OPENMP

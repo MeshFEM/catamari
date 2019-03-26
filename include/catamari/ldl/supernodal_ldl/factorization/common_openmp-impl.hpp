@@ -14,6 +14,10 @@
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/dense_factorizations.hpp"
 
+#ifdef CATAMARI_ENABLE_TIMERS
+#include "quotient/timer.hpp"
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
 #include "catamari/ldl/supernodal_ldl/factorization.hpp"
 
 namespace catamari {
@@ -25,11 +29,24 @@ void Factorization<Field>::OpenMPInitialFactorizationSetup(
   AssemblyForest forest;
   Buffer<Int> supernode_degrees;
 
+#ifdef CATAMARI_ENABLE_TIMERS
+  quotient::Timer timer;
+  timer.Start();
+  #pragma omp taskgroup
+  OpenMPFormSupernodes(matrix, &forest, &supernode_degrees);
+  std::cout << "OpenMPFormSupernodes: " << timer.Stop() << std::endl;
+
+  timer.Start();
+  #pragma omp taskgroup
+  OpenMPInitializeFactors(matrix, forest, supernode_degrees);
+  std::cout << "OpenMPInitializeFactors: " << timer.Stop() << std::endl;
+#else
   #pragma omp taskgroup
   OpenMPFormSupernodes(matrix, &forest, &supernode_degrees);
 
   #pragma omp taskgroup
   OpenMPInitializeFactors(matrix, forest, supernode_degrees);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 }
 
 template <class Field>

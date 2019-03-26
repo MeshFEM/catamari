@@ -256,10 +256,11 @@ void SupernodalDPP<Field>::LeftLookingSubtree(
 
 template <class Field>
 void SupernodalDPP<Field>::OpenMPLeftLookingSubtree(
-    Int level, Int max_parallel_levels, Int supernode, bool maximum_likelihood,
+    Int supernode, bool maximum_likelihood,
     supernodal_ldl::LeftLookingSharedState* shared_state,
     Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
-  if (level >= max_parallel_levels) {
+  const double work_estimate = work_estimates_[supernode];
+  if (work_estimate < min_parallel_work_) {
     const int thread = omp_get_thread_num();
     LeftLookingSubtree(supernode, maximum_likelihood, shared_state,
                        &(*private_states)[thread], sample);
@@ -280,13 +281,11 @@ void SupernodalDPP<Field>::OpenMPLeftLookingSubtree(
     const Int child =
         ordering_.assembly_forest.children[child_beg + child_index];
     std::vector<Int>* subsample = &subsamples[child_index];
-    #pragma omp task default(none)                                \
-        firstprivate(level, max_parallel_levels, supernode,       \
-            maximum_likelihood, child_index, child, shared_state, \
-            private_states, subsample)
-    OpenMPLeftLookingSubtree(level + 1, max_parallel_levels, child,
-                             maximum_likelihood, shared_state, private_states,
-                             subsample);
+    #pragma omp task default(none)                                      \
+        firstprivate(supernode, maximum_likelihood, child_index, child, \
+            shared_state, private_states, subsample)
+    OpenMPLeftLookingSubtree(child, maximum_likelihood, shared_state,
+                             private_states, subsample);
   }
 
   // Merge the subsamples into the current sample.
@@ -340,11 +339,7 @@ std::vector<Int> SupernodalDPP<Field>::OpenMPLeftLookingSample(
     private_state.generator.seed(random_device());
   }
 
-  // TODO(Jack Poulson): Make this value configurable.
-  const Int max_parallel_levels = std::ceil(std::log2(max_threads)) + 3;
-
-  const Int level = 0;
-  if (max_parallel_levels == 0) {
+  if (total_work_ < min_parallel_work_) {
     std::vector<Int> subsample;
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
@@ -365,11 +360,10 @@ std::vector<Int> SupernodalDPP<Field>::OpenMPLeftLookingSample(
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
       std::vector<Int>* subsample = &subsamples[root_index];
-      #pragma omp task default(none) firstprivate(level, max_parallel_levels, \
-          maximum_likelihood, root, subsample)                                \
+      #pragma omp task default(none)                        \
+          firstprivate(maximum_likelihood, root, subsample) \
           shared(shared_state, private_states)
-      OpenMPLeftLookingSubtree(level + 1, max_parallel_levels, root,
-                               maximum_likelihood, &shared_state,
+      OpenMPLeftLookingSubtree(root, maximum_likelihood, &shared_state,
                                &private_states, subsample);
     }
 

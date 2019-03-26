@@ -189,10 +189,10 @@ void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 
     // Test that the set sizes match.
     const Int column_beg = column_ptrs[column];
-    const Int structure_size = column_ptrs[column + 1] - column_beg;
+    const Int degree = column_ptrs[column + 1] - column_beg;
     const Int prev_column_ptr = column_ptrs[column - 1];
-    const Int prev_remaining_structure_size = column_beg - prev_column_ptr;
-    if (structure_size != prev_remaining_structure_size) {
+    const Int prev_remaining_degree = column_beg - prev_column_ptr;
+    if (degree != prev_remaining_degree) {
       // This column begins a new supernode.
       supernode_start = column;
       (*supernode_sizes)[num_supernodes++] = 1;
@@ -226,14 +226,14 @@ inline MergableStatus MergableSupernode(
   const Int parent_structure_beg = scalar_structure.column_offsets[parent_tail];
   const Int parent_structure_end =
       scalar_structure.column_offsets[parent_tail + 1];
-  const Int child_structure_size = child_structure_end - child_structure_beg;
-  const Int parent_structure_size = parent_structure_end - parent_structure_beg;
+  const Int child_degree = child_structure_end - child_structure_beg;
+  const Int parent_degree = parent_structure_end - parent_structure_beg;
 
   MergableStatus status;
 
   // Count the number of intersections of the child's structure with the
   // parent supernode (and then leave the child structure pointer after the
-  // parent supernode.
+  // parent supernode).
   //
   // We know that any intersections of the child with the parent occur at the
   // beginning of the child's structure.
@@ -260,10 +260,10 @@ inline MergableStatus MergableSupernode(
   // compare the sizes of the structure of the parent supernode to the
   // remaining structure size to know how many indices will need to be
   // introduced into L20.
-  const Int remaining_child_structure_size =
-      child_structure_size - num_child_parent_intersections;
+  const Int remaining_child_degree =
+      child_degree - num_child_parent_intersections;
   const Int num_missing_structure_indices =
-      parent_structure_size - remaining_child_structure_size;
+      parent_degree - remaining_child_degree;
 
   const Int num_new_zeros =
       (num_missing_parent_intersections + num_missing_structure_indices) *
@@ -286,11 +286,11 @@ inline MergableStatus MergableSupernode(
       /* num_nonzeros(L10) */
       parent_size * child_size +
       /* num_nonzeros(L20) */
-      remaining_child_structure_size * child_size +
+      remaining_child_degree * child_size +
       /* num_nonzeros(L11) */
       (parent_size + (parent_size + 1)) / 2 +
       /* num_nonzeros(L21) */
-      parent_structure_size * parent_size;
+      parent_degree * parent_size;
   if (num_zeros <=
       control.allowable_supernode_zero_ratio * num_expanded_entries) {
     status.mergable = true;

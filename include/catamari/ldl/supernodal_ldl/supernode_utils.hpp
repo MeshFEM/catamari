@@ -11,6 +11,10 @@
 #include "catamari/buffer.hpp"
 #include "catamari/ldl/scalar_ldl.hpp"
 
+#ifdef CATAMARI_ENABLE_TIMERS
+#include "quotient/timer.hpp"
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
 namespace catamari {
 
 struct SupernodalRelaxationControl {
@@ -65,6 +69,14 @@ struct RightLookingSharedState {
   // The underlying buffers for the Schur complement portions of the fronts.
   // They are allocated and deallocated as the factorization progresses.
   Buffer<Buffer<Field>> schur_complement_buffers;
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  // A separate timer for each supernode's inclusive processing time.
+  Buffer<quotient::Timer> inclusive_timers;
+
+  // A separate timer for each supernode's exclusive processing time.
+  Buffer<quotient::Timer> exclusive_timers;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 };
 
 template <typename Field>
