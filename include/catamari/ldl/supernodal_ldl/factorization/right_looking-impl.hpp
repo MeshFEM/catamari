@@ -88,9 +88,7 @@ bool Factorization<Field>::RightLookingSubtree(
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
-#ifdef CATAMARI_ENABLE_TIMERS
-  shared_state->inclusive_timers[supernode].Start();
-#endif  // ifdef CATAMARI_ENABLE_TIMERS
+  CATAMARI_START_TIMER(shared_state->inclusive_timers[supernode]);
 
   Buffer<int> successes(num_children);
   Buffer<LDLResult> result_contributions(num_children);
@@ -106,9 +104,7 @@ bool Factorization<Field>::RightLookingSubtree(
         child, matrix, shared_state, private_state, &result_contribution);
   }
 
-#ifdef CATAMARI_ENABLE_TIMERS
-  shared_state->exclusive_timers[supernode].Start();
-#endif  // ifdef CATAMARI_ENABLE_TIMERS
+  CATAMARI_START_TIMER(shared_state->exclusive_timers[supernode]);
 
   // Merge the children's results (stopping if a failure is detected).
   bool succeeded = true;
@@ -139,10 +135,8 @@ bool Factorization<Field>::RightLookingSubtree(
     }
   }
 
-#ifdef CATAMARI_ENABLE_TIMERS
-  shared_state->inclusive_timers[supernode].Stop();
-  shared_state->exclusive_timers[supernode].Stop();
-#endif  // ifdef CATAMARI_ENABLE_TIMERS
+  CATAMARI_STOP_TIMER(shared_state->inclusive_timers[supernode]);
+  CATAMARI_STOP_TIMER(shared_state->exclusive_timers[supernode]);
 
   return succeeded;
 }
@@ -154,7 +148,7 @@ LDLResult Factorization<Field>::RightLooking(
   if (omp_get_max_threads() > 1) {
     return OpenMPRightLooking(matrix);
   }
-#endif
+#endif  // ifdef CATAMARI_OPENMP
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
 
@@ -193,17 +187,14 @@ LDLResult Factorization<Field>::RightLooking(
   }
 
 #ifdef CATAMARI_ENABLE_TIMERS
-  // TODO(Jack Poulson): Make these parameters configurable.
-  const Int max_levels = 4;
-  const bool avoid_isolated_roots = true;
-  const std::string inclusive_filename = "inclusive.gv";
-  const std::string exclusive_filename = "exclusive.gv";
-  TruncatedForestTimersToDot(inclusive_filename, shared_state.inclusive_timers,
-                             ordering_.assembly_forest, max_levels,
-                             avoid_isolated_roots);
-  TruncatedForestTimersToDot(exclusive_filename, shared_state.exclusive_timers,
-                             ordering_.assembly_forest, max_levels,
-                             avoid_isolated_roots);
+  TruncatedForestTimersToDot(
+      control_.inclusive_timings_filename, shared_state.inclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
+  TruncatedForestTimersToDot(
+      control_.exclusive_timings_filename, shared_state.exclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   return result;

@@ -39,15 +39,10 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
     }
     total_work_ =
         std::accumulate(work_estimates_.begin(), work_estimates_.end(), 0.);
-
-    // TODO(Jack Poulson): Make these two parameters configurable.
-    const double kParallelRatioThreshold = 0.02;
-    const double kMinParallelThreshold = 1.e5;
-
     const double min_parallel_ratio_work =
-        (total_work_ * kParallelRatioThreshold) / max_threads;
+        (total_work_ * control_.parallel_ratio_threshold) / max_threads;
     min_parallel_work_ =
-        std::max(kMinParallelThreshold, min_parallel_ratio_work);
+        std::max(control_.min_parallel_threshold, min_parallel_ratio_work);
 
     return;
   }

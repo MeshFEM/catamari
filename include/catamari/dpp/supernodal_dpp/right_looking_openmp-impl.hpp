@@ -11,6 +11,8 @@
 
 #include <algorithm>
 
+#include "catamari/io_utils.hpp"
+
 #include "catamari/dpp/supernodal_dpp.hpp"
 
 namespace catamari {
@@ -103,6 +105,8 @@ void SupernodalDPP<Field>::OpenMPRightLookingSubtree(
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
+  CATAMARI_START_TIMER(shared_state->inclusive_timers[supernode]);
+
   // NOTE: We could alternatively avoid switch to maintaining a single, shared
   // boolean list of length 'num_rows' which flags each entry as 'in' or
   // 'out' of the sample.
@@ -123,6 +127,8 @@ void SupernodalDPP<Field>::OpenMPRightLookingSubtree(
                               private_states, subsample);
   }
 
+  CATAMARI_START_TIMER(shared_state->exclusive_timers[supernode]);
+
   // Merge the subsamples into the current sample.
   for (const std::vector<Int>& subsample : subsamples) {
     sample->insert(sample->end(), subsample.begin(), subsample.end());
@@ -133,6 +139,9 @@ void SupernodalDPP<Field>::OpenMPRightLookingSubtree(
   OpenMPRightLookingSupernodeSample(supernode, maximum_likelihood, shared_state,
                                     private_states, &subsample);
   sample->insert(sample->end(), subsample.begin(), subsample.end());
+
+  CATAMARI_STOP_TIMER(shared_state->inclusive_timers[supernode]);
+  CATAMARI_STOP_TIMER(shared_state->exclusive_timers[supernode]);
 }
 
 template <class Field>
@@ -156,6 +165,10 @@ std::vector<Int> SupernodalDPP<Field>::OpenMPRightLookingSample(
   supernodal_ldl::RightLookingSharedState<Field> shared_state;
   shared_state.schur_complement_buffers.Resize(num_supernodes);
   shared_state.schur_complements.Resize(num_supernodes);
+#ifdef CATAMARI_ENABLE_TIMERS
+  shared_state.inclusive_timers.Resize(num_supernodes);
+  shared_state.exclusive_timers.Resize(num_supernodes);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   const int max_threads = omp_get_max_threads();
 
@@ -212,6 +225,17 @@ std::vector<Int> SupernodalDPP<Field>::OpenMPRightLookingSample(
   }
 
   std::sort(sample.begin(), sample.end());
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  TruncatedForestTimersToDot(
+      control_.inclusive_timings_filename, shared_state.inclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
+  TruncatedForestTimersToDot(
+      control_.exclusive_timings_filename, shared_state.exclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   return sample;
 }

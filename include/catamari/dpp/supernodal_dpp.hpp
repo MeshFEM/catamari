@@ -40,7 +40,30 @@ struct SupernodalDPPControl {
   // The number of columns to group into a single task when multithreading
   // the scalar structure formation.
   Int sort_grain_size = 200;
+
+  // The minimum ratio of the amount of work in a subtree relative to the
+  // nominal amount of flops assigned to each thread (total_work / max_threads)
+  // before OpenMP subtasks are launched in the subtree.
+  double parallel_ratio_threshold = 0.02;
+
+  // The minimum number of flops in a subtree before OpenMP subtasks are
+  // generated.
+  double min_parallel_threshold = 1e5;
 #endif  // ifdef CATAMARI_OPENMP
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  // The max number of levels of the supernodal tree to visualize timings of.
+  Int max_timing_levels = 4;
+
+  // Whether isolated diagonal entries should have their timings visualized.
+  bool avoid_timing_isolated_roots = true;
+
+  // The name of the Graphviz file for the inclusive timing annotations.
+  std::string inclusive_timings_filename = "inclusive.gv";
+
+  // The name of the Graphviz file for the exclusive timing annotations.
+  std::string exclusive_timings_filename = "exclusive.gv";
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 };
 
 // The user-facing data structure for storing a supernodal LDL'-based DPP

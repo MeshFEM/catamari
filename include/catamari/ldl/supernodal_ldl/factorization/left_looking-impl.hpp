@@ -12,6 +12,7 @@
 
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/dense_factorizations.hpp"
+#include "catamari/io_utils.hpp"
 
 #include "catamari/ldl/supernodal_ldl/factorization.hpp"
 
@@ -164,6 +165,55 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(Int main_supernode,
 }
 
 template <class Field>
+bool Factorization<Field>::LeftLookingSubtree(
+    Int supernode, const CoordinateMatrix<Field>& matrix,
+    LeftLookingSharedState* shared_state, PrivateState<Field>* private_state,
+    LDLResult* result) {
+  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
+  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
+  const Int num_children = child_end - child_beg;
+
+  CATAMARI_START_TIMER(shared_state->inclusive_timers[supernode]);
+
+  Buffer<int> successes(num_children);
+  Buffer<LDLResult> result_contributions(num_children);
+
+  // Recurse on the children.
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child =
+        ordering_.assembly_forest.children[child_beg + child_index];
+    CATAMARI_ASSERT(ordering_.assembly_forest.parents[child] == supernode,
+                    "Incorrect child index");
+
+    successes[child_index] =
+        LeftLookingSubtree(child, matrix, shared_state, private_state,
+                           &result_contributions[child_index]);
+  }
+
+  CATAMARI_START_TIMER(shared_state->exclusive_timers[supernode]);
+
+  // Merge the child results (stopping if a failure is detected).
+  bool succeeded = true;
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    if (!successes[child_index]) {
+      succeeded = false;
+      break;
+    }
+    MergeContribution(result_contributions[child_index], result);
+  }
+
+  if (succeeded) {
+    LeftLookingSupernodeUpdate(supernode, matrix, shared_state, private_state);
+    succeeded = LeftLookingSupernodeFinalize(supernode, result);
+  }
+
+  CATAMARI_STOP_TIMER(shared_state->inclusive_timers[supernode]);
+  CATAMARI_STOP_TIMER(shared_state->exclusive_timers[supernode]);
+
+  return succeeded;
+}
+
+template <class Field>
 LDLResult Factorization<Field>::LeftLooking(
     const CoordinateMatrix<Field>& matrix) {
 #ifdef CATAMARI_OPENMP
@@ -176,6 +226,10 @@ LDLResult Factorization<Field>::LeftLooking(
   LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
+#ifdef CATAMARI_ENABLE_TIMERS
+  shared_state.inclusive_timers.Resize(num_supernodes);
+  shared_state.exclusive_timers.Resize(num_supernodes);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   PrivateState<Field> private_state;
   private_state.row_structure.Resize(num_supernodes);
@@ -197,49 +251,18 @@ LDLResult Factorization<Field>::LeftLooking(
     }
   }
 
+#ifdef CATAMARI_ENABLE_TIMERS
+  TruncatedForestTimersToDot(
+      control_.inclusive_timings_filename, shared_state.inclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
+  TruncatedForestTimersToDot(
+      control_.exclusive_timings_filename, shared_state.exclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
   return result;
-}
-
-template <class Field>
-bool Factorization<Field>::LeftLookingSubtree(
-    Int supernode, const CoordinateMatrix<Field>& matrix,
-    LeftLookingSharedState* shared_state, PrivateState<Field>* private_state,
-    LDLResult* result) {
-  const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
-  const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
-  const Int num_children = child_end - child_beg;
-
-  Buffer<int> successes(num_children);
-  Buffer<LDLResult> result_contributions(num_children);
-
-  // Recurse on the children.
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child =
-        ordering_.assembly_forest.children[child_beg + child_index];
-    CATAMARI_ASSERT(ordering_.assembly_forest.parents[child] == supernode,
-                    "Incorrect child index");
-
-    LDLResult& result_contribution = result_contributions[child_index];
-    successes[child_index] = LeftLookingSubtree(
-        child, matrix, shared_state, private_state, &result_contribution);
-  }
-
-  // Merge the child results (stopping if a failure is detected).
-  bool succeeded = true;
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    if (!successes[child_index]) {
-      succeeded = false;
-      break;
-    }
-    MergeContribution(result_contributions[child_index], result);
-  }
-
-  if (succeeded) {
-    LeftLookingSupernodeUpdate(supernode, matrix, shared_state, private_state);
-    succeeded = LeftLookingSupernodeFinalize(supernode, result);
-  }
-
-  return succeeded;
 }
 
 }  // namespace supernodal_ldl

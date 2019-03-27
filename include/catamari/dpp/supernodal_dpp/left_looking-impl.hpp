@@ -10,6 +10,8 @@
 
 #include <algorithm>
 
+#include "catamari/io_utils.hpp"
+
 #include "catamari/dpp/supernodal_dpp.hpp"
 
 namespace catamari {
@@ -176,6 +178,9 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
   supernodal_ldl::LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
+#ifdef CATAMARI_ENABLE_TIMERS
+  shared_state.exclusive_timers.Resize(num_supernodes);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   std::random_device random_device;
   PrivateState private_state;
@@ -189,12 +194,21 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
 
   // Note that any postordering of the supernodal elimination forest suffices.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    CATAMARI_START_TIMER(shared_state.exclusive_timers[supernode]);
     LeftLookingSupernodeUpdate(supernode, &shared_state, &private_state);
     LeftLookingSupernodeSample(supernode, maximum_likelihood, &private_state,
                                &sample);
+    CATAMARI_STOP_TIMER(shared_state.exclusive_timers[supernode]);
   }
 
   std::sort(sample.begin(), sample.end());
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  TruncatedForestTimersToDot(
+      control_.exclusive_timings_filename, shared_state.exclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   return sample;
 }

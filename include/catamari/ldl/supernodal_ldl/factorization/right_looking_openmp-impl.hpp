@@ -124,9 +124,7 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
-#ifdef CATAMARI_ENABLE_TIMERS
-  shared_state->inclusive_timers[supernode].Start();
-#endif  // ifdef CATAMARI_ENABLE_TIMERS
+  CATAMARI_START_TIMER(shared_state->inclusive_timers[supernode]);
 
   Buffer<int> successes(num_children);
   Buffer<LDLResult> result_contributions(num_children);
@@ -146,9 +144,7 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
         private_states, &result_contributions[child_index]);
   }
 
-#ifdef CATAMARI_ENABLE_TIMERS
-  shared_state->exclusive_timers[supernode].Start();
-#endif  // ifdef CATAMARI_ENABLE_TIMERS
+  CATAMARI_START_TIMER(shared_state->exclusive_timers[supernode]);
 
   // Merge the child results (stopping if a failure is detected).
   bool succeeded = true;
@@ -180,10 +176,8 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
     }
   }
 
-#ifdef CATAMARI_ENABLE_TIMERS
-  shared_state->inclusive_timers[supernode].Stop();
-  shared_state->exclusive_timers[supernode].Stop();
-#endif  // ifdef CATAMARI_ENABLE_TIMERS
+  CATAMARI_STOP_TIMER(shared_state->inclusive_timers[supernode]);
+  CATAMARI_STOP_TIMER(shared_state->exclusive_timers[supernode]);
 
   return succeeded;
 }
@@ -223,15 +217,10 @@ LDLResult Factorization<Field>::OpenMPRightLooking(
   }
   const double total_work =
       std::accumulate(work_estimates.begin(), work_estimates.end(), 0.);
-
-  // TODO(Jack Poulson): Make these two parameters configurable.
-  const double kParallelRatioThreshold = 0.02;
-  const double kMinParallelThreshold = 1.e5;
-
   const double min_parallel_ratio_work =
-      (total_work * kParallelRatioThreshold) / max_threads;
+      (total_work * control_.parallel_ratio_threshold) / max_threads;
   const double min_parallel_work =
-      std::max(kMinParallelThreshold, min_parallel_ratio_work);
+      std::max(control_.min_parallel_threshold, min_parallel_ratio_work);
 
   LDLResult result;
 
@@ -281,17 +270,14 @@ LDLResult Factorization<Field>::OpenMPRightLooking(
   }
 
 #ifdef CATAMARI_ENABLE_TIMERS
-  // TODO(Jack Poulson): Make these parameters configurable.
-  const Int max_levels = 4;
-  const bool avoid_isolated_roots = true;
-  const std::string inclusive_filename = "inclusive.gv";
-  const std::string exclusive_filename = "exclusive.gv";
-  TruncatedForestTimersToDot(inclusive_filename, shared_state.inclusive_timers,
-                             ordering_.assembly_forest, max_levels,
-                             avoid_isolated_roots);
-  TruncatedForestTimersToDot(exclusive_filename, shared_state.exclusive_timers,
-                             ordering_.assembly_forest, max_levels,
-                             avoid_isolated_roots);
+  TruncatedForestTimersToDot(
+      control_.inclusive_timings_filename, shared_state.inclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
+  TruncatedForestTimersToDot(
+      control_.exclusive_timings_filename, shared_state.exclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   return result;

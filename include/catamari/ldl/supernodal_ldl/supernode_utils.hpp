@@ -57,6 +57,14 @@ struct LeftLookingSharedState {
   // Pointers to the active supernode intersection size within each
   // supernode's structure.
   Buffer<const Int*> intersect_ptrs;
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  // A separate timer for each supernode's inclusive processing time.
+  Buffer<quotient::Timer> inclusive_timers;
+
+  // A separate timer for each supernode's exclusive processing time.
+  Buffer<quotient::Timer> exclusive_timers;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 };
 
 template <typename Field>

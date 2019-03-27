@@ -13,6 +13,7 @@
 
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/dense_factorizations.hpp"
+#include "catamari/io_utils.hpp"
 
 #include "catamari/ldl/supernodal_ldl/factorization.hpp"
 
@@ -245,6 +246,8 @@ bool Factorization<Field>::OpenMPLeftLookingSubtree(
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
+  CATAMARI_START_TIMER(shared_state->inclusive_timers[supernode]);
+
   Buffer<int> successes(num_children);
   Buffer<LDLResult> result_contributions(num_children);
 
@@ -260,6 +263,8 @@ bool Factorization<Field>::OpenMPLeftLookingSubtree(
         child, matrix, work_estimates, min_parallel_work, shared_state,
         private_states, &result_contributions[child_index]);
   }
+
+  CATAMARI_START_TIMER(shared_state->exclusive_timers[supernode]);
 
   bool succeeded = true;
   for (Int child_index = 0; child_index < num_children; ++child_index) {
@@ -281,6 +286,9 @@ bool Factorization<Field>::OpenMPLeftLookingSubtree(
         OpenMPLeftLookingSupernodeFinalize(supernode, private_states, result);
   }
 
+  CATAMARI_STOP_TIMER(shared_state->inclusive_timers[supernode]);
+  CATAMARI_STOP_TIMER(shared_state->exclusive_timers[supernode]);
+
   return succeeded;
 }
 
@@ -294,6 +302,10 @@ LDLResult Factorization<Field>::OpenMPLeftLooking(
   LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
+#ifdef CATAMARI_ENABLE_TIMERS
+  shared_state.inclusive_timers.Resize(num_supernodes);
+  shared_state.exclusive_timers.Resize(num_supernodes);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   Buffer<PrivateState<Field>> private_states(max_threads);
 
@@ -329,15 +341,10 @@ LDLResult Factorization<Field>::OpenMPLeftLooking(
   }
   const double total_work =
       std::accumulate(work_estimates.begin(), work_estimates.end(), 0.);
-
-  // TODO(Jack Poulson): Make these two parameters configurable.
-  const double kParallelRatioThreshold = 0.02;
-  const double kMinParallelThreshold = 1.e5;
-
   const double min_parallel_ratio_work =
-      (total_work * kParallelRatioThreshold) / max_threads;
+      (total_work * control_.parallel_ratio_threshold) / max_threads;
   const double min_parallel_work =
-      std::max(kMinParallelThreshold, min_parallel_ratio_work);
+      std::max(control_.min_parallel_threshold, min_parallel_ratio_work);
 
   LDLResult result;
   Buffer<int> successes(num_roots);
@@ -346,10 +353,9 @@ LDLResult Factorization<Field>::OpenMPLeftLooking(
   if (total_work < min_parallel_work) {
     for (Int root_index = 0; root_index < num_roots; ++root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
-      LDLResult& result_contribution = result_contributions[root_index];
       successes[root_index] =
           LeftLookingSubtree(root, matrix, &shared_state, &private_states[0],
-                             &result_contribution);
+                             &result_contributions[root_index]);
     }
   } else {
     const int old_max_threads = GetMaxBlasThreads();
@@ -377,6 +383,17 @@ LDLResult Factorization<Field>::OpenMPLeftLooking(
     }
     MergeContribution(result_contributions[index], &result);
   }
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  TruncatedForestTimersToDot(
+      control_.inclusive_timings_filename, shared_state.inclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
+  TruncatedForestTimersToDot(
+      control_.exclusive_timings_filename, shared_state.exclusive_timers,
+      ordering_.assembly_forest, control_.max_timing_levels,
+      control_.avoid_timing_isolated_roots);
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   return result;
 }
