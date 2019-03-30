@@ -6,8 +6,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 // Generates a (maximum-likelihood) sample from a Determinantal Point Process
-// which generates a uniform sample from the set of spanning trees of a 2D or 3D
-// grid graph.
+// which generates a uniform sample from the set of spanning trees of either
+// Z^2, Z^3, or a hexagonal tiling of the plane.
 //
 // Please see
 //
@@ -23,6 +23,13 @@
 // star space. We build our DPP by computing a column-pivoted QR factorization
 // of a basis for the star space, explicitly computing the Gramian of the
 // thin Q factor, and sampling from the resulting SPSD kernel matrix.
+//
+// Please also see the foundational paper:
+//
+//   Burton and Pemantle, Local Characteristics, Entropy and Limit Theorems for
+//   Spanning Trees and Domino Tilings Via Transfer-Impedances,
+//   The Annals of Probability, 21 (3) 1993.
+//   URL: https://projecteuclid.org/euclid.aop/1176989121.
 //
 #include <algorithm>
 #include <cstring>
@@ -82,6 +89,7 @@ void LAPACK_SYMBOL(sorgqr)(const BlasInt* height, const BlasInt* width,
 namespace {
 
 #ifdef CATAMARI_HAVE_LIBTIFF
+// Saves a row-major RGB pixel map into a TIFF image.
 void WriteTIFF(const std::string& filename, std::size_t height,
                std::size_t width, const std::size_t samples_per_pixel,
                const std::vector<char>& image) {
@@ -121,13 +129,13 @@ struct Pixel {
   char blue;
 };
 
-// Prints out an (x, y) slice of a 3D spanning tree.
-inline void WriteXYSliceToTIFF(const std::string& filename, Int x_size,
-                               Int y_size, Int z_size, Int z,
-                               const std::vector<Int>& sample,
-                               const Int box_size,
-                               const Pixel& background_pixel,
-                               const Pixel& active_pixel) {
+// Prints out an (x, y) slice of a Z^3 spanning tree.
+inline void WriteGridXYSliceToTIFF(const std::string& filename, Int x_size,
+                                   Int y_size, Int z_size, Int z,
+                                   const std::vector<Int>& sample,
+                                   const Int box_size,
+                                   const Pixel& background_pixel,
+                                   const Pixel& active_pixel) {
   const Int num_x_edges = (x_size - 1) * y_size * z_size;
   const Int num_y_edges = x_size * (y_size - 1) * z_size;
 
@@ -197,13 +205,13 @@ inline void WriteXYSliceToTIFF(const std::string& filename, Int x_size,
   WriteTIFF(filename, height, width, samples_per_pixel, image);
 }
 
-// Prints out an (x, z) slice of a 3D spanning tree.
-inline void WriteXZSliceToTIFF(const std::string& filename, Int x_size,
-                               Int y_size, Int z_size, Int y,
-                               const std::vector<Int>& sample,
-                               const Int box_size,
-                               const Pixel& background_pixel,
-                               const Pixel& active_pixel) {
+// Prints out an (x, z) slice of a Z^3 spanning tree.
+inline void WriteGridXZSliceToTIFF(const std::string& filename, Int x_size,
+                                   Int y_size, Int z_size, Int y,
+                                   const std::vector<Int>& sample,
+                                   const Int box_size,
+                                   const Pixel& background_pixel,
+                                   const Pixel& active_pixel) {
   const Int num_x_edges = (x_size - 1) * y_size * z_size;
   const Int num_y_edges = x_size * (y_size - 1) * z_size;
 
@@ -275,13 +283,13 @@ inline void WriteXZSliceToTIFF(const std::string& filename, Int x_size,
   WriteTIFF(filename, height, width, samples_per_pixel, image);
 }
 
-// Prints out an (y, z) slice of a 3D spanning tree.
-inline void WriteYZSliceToTIFF(const std::string& filename, Int x_size,
-                               Int y_size, Int z_size, Int x,
-                               const std::vector<Int>& sample,
-                               const Int box_size,
-                               const Pixel& background_pixel,
-                               const Pixel& active_pixel) {
+// Prints out an (y, z) slice of a Z^3 spanning tree.
+inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
+                                   Int y_size, Int z_size, Int x,
+                                   const std::vector<Int>& sample,
+                                   const Int box_size,
+                                   const Pixel& background_pixel,
+                                   const Pixel& active_pixel) {
   const Int num_x_edges = (x_size - 1) * y_size * z_size;
   const Int num_y_edges = x_size * (y_size - 1) * z_size;
 
@@ -352,9 +360,198 @@ inline void WriteYZSliceToTIFF(const std::string& filename, Int x_size,
 
   WriteTIFF(filename, height, width, samples_per_pixel, image);
 }
+
+// Prints out an (x, y) slice of a Z^3 spanning tree.
+inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
+                                 Int y_size, const std::vector<Int>& sample,
+                                 const Int cell_size,
+                                 const Pixel& background_pixel,
+                                 const Pixel& active_pixel) {
+  const Int num_horz_edges =
+      // Count the main set of horizontal connections for the grid of rings.
+      (2 * x_size - 1) * y_size +
+      // Count the caps for the x_size x y_size grid of rings.
+      x_size;
+
+  const auto horz_beg = sample.begin();
+  const auto horz_end =
+      std::lower_bound(sample.begin(), sample.end(), num_horz_edges);
+  const auto diag_beg = horz_end;
+  const auto diag_end = sample.end();
+
+  const Int vert_box_size = 2 * cell_size;
+  const Int horz_box_size = 4 * cell_size;
+
+  const Int height = vert_box_size * y_size + 1;
+  const Int width = horz_box_size * x_size + 1;
+  const Int samples_per_pixel = 3;
+  std::vector<char> image(width * height * samples_per_pixel);
+
+  // Fill the background pixels.
+  for (Int i = 0; i < height; ++i) {
+    for (Int j = 0; j < width; ++j) {
+      Int offset = samples_per_pixel * (j + i * width);
+      image[offset++] = background_pixel.red;
+      image[offset++] = background_pixel.green;
+      image[offset++] = background_pixel.blue;
+    }
+  }
+
+  for (Int x = 0; x < x_size; ++x) {
+    for (Int y = 0; y < y_size; ++y) {
+      /*
+      Given a horizontal edge offset of h and a diagonal edge offset of d,
+      the edge numbers are of the form:
+
+                 x     x
+                /       \
+              d+2       d+3
+              /           \
+             x             x -h+1- x
+              \           /
+               d        d+1
+                \       /
+                 x -h- x
+
+      */
+      const Int horz_offset = 2 * x + (2 * x_size - 1) * y;
+      const Int diag_offset = num_horz_edges + 4 * (x + y * x_size);
+
+      // Handle the 'h' edge if it exists.
+      {
+        const Int index = horz_offset;
+        auto iter = std::lower_bound(horz_beg, horz_end, index);
+        const bool found = iter != horz_end && *iter == index;
+        if (found) {
+          const Int j_offset = x * horz_box_size + cell_size;
+          const Int i = y * vert_box_size;
+          for (Int j = j_offset; j < j_offset + cell_size; ++j) {
+            Int offset = samples_per_pixel * (j + i * width);
+            image[offset++] = active_pixel.red;
+            image[offset++] = active_pixel.green;
+            image[offset++] = active_pixel.blue;
+          }
+        }
+      }
+
+      // Handle the 'h+1' edge if it exists.
+      if (x != x_size - 1) {
+        const Int index = horz_offset + 1;
+        auto iter = std::lower_bound(horz_beg, horz_end, index);
+        const bool found = iter != horz_end && *iter == index;
+        if (found) {
+          const Int j_offset = x * horz_box_size + 3 * cell_size;
+          const Int i = y * vert_box_size + cell_size;
+          for (Int j = j_offset; j < j_offset + cell_size; ++j) {
+            Int offset = samples_per_pixel * (j + i * width);
+            image[offset++] = active_pixel.red;
+            image[offset++] = active_pixel.green;
+            image[offset++] = active_pixel.blue;
+          }
+        }
+      }
+
+      // Handle the 'd' edge if it exists.
+      {
+        const Int index = diag_offset;
+        auto iter = std::lower_bound(diag_beg, diag_end, index);
+        const bool found = iter != diag_end && *iter == index;
+        if (found) {
+          const Int j_offset = x * horz_box_size;
+          const Int i_offset = y * vert_box_size + cell_size;
+          for (Int k = 0; k <= cell_size; ++k) {
+            const Int i = i_offset - k;
+            const Int j = j_offset + k;
+            Int offset = samples_per_pixel * (j + i * width);
+            image[offset++] = active_pixel.red;
+            image[offset++] = active_pixel.green;
+            image[offset++] = active_pixel.blue;
+          }
+        }
+      }
+
+      // Handle the 'd+1' edge if it exists.
+      {
+        const Int index = diag_offset + 1;
+        auto iter = std::lower_bound(diag_beg, diag_end, index);
+        const bool found = iter != diag_end && *iter == index;
+        if (found) {
+          const Int j_offset = x * horz_box_size + 2 * cell_size;
+          const Int i_offset = y * vert_box_size;
+          for (Int k = 0; k <= cell_size; ++k) {
+            const Int i = i_offset + k;
+            const Int j = j_offset + k;
+            Int offset = samples_per_pixel * (j + i * width);
+            image[offset++] = active_pixel.red;
+            image[offset++] = active_pixel.green;
+            image[offset++] = active_pixel.blue;
+          }
+        }
+      }
+
+      // Handle the 'd+2' edge if it exists.
+      {
+        const Int index = diag_offset + 2;
+        auto iter = std::lower_bound(diag_beg, diag_end, index);
+        const bool found = iter != diag_end && *iter == index;
+        if (found) {
+          const Int j_offset = x * horz_box_size;
+          const Int i_offset = y * vert_box_size + cell_size;
+          for (Int k = 0; k <= cell_size; ++k) {
+            const Int i = i_offset + k;
+            const Int j = j_offset + k;
+            Int offset = samples_per_pixel * (j + i * width);
+            image[offset++] = active_pixel.red;
+            image[offset++] = active_pixel.green;
+            image[offset++] = active_pixel.blue;
+          }
+        }
+      }
+
+      // Handle the 'd+3' edge if it exists.
+      {
+        const Int index = diag_offset + 3;
+        auto iter = std::lower_bound(diag_beg, diag_end, index);
+        const bool found = iter != diag_end && *iter == index;
+        if (found) {
+          const Int j_offset = x * horz_box_size + 2 * cell_size;
+          const Int i_offset = (y + 1) * vert_box_size;
+          for (Int k = 0; k <= cell_size; ++k) {
+            const Int i = i_offset - k;
+            const Int j = j_offset + k;
+            Int offset = samples_per_pixel * (j + i * width);
+            image[offset++] = active_pixel.red;
+            image[offset++] = active_pixel.green;
+            image[offset++] = active_pixel.blue;
+          }
+        }
+      }
+    }
+
+    // Fill the cap if it exists.
+    {
+      const Int index = (2 * x_size - 1) * y_size + x;
+      auto iter = std::lower_bound(horz_beg, horz_end, index);
+      const bool found = iter != horz_end && *iter == index;
+      if (found) {
+        const Int j_offset = x * horz_box_size + cell_size;
+        const Int i = y_size * vert_box_size;
+        for (Int k = 0; k < cell_size; ++k) {
+          const Int j = j_offset + k;
+          Int offset = samples_per_pixel * (j + i * width);
+          image[offset++] = active_pixel.red;
+          image[offset++] = active_pixel.green;
+          image[offset++] = active_pixel.blue;
+        }
+      }
+    }
+  }
+
+  WriteTIFF(filename, height, width, samples_per_pixel, image);
+}
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
-// Prints the 2D spanning tree.
+// Prints the Z^2 spanning tree to std::cout.
 inline void AsciiDisplaySample(Int x_size, Int y_size,
                                const std::vector<Int>& sample,
                                char missing_char, char horizontal_sampled_char,
@@ -406,6 +603,8 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
   std::cout << std::endl;
 }
 
+// Overwrites an overcomplete basis for the star space with a minimal orthogonal
+// basis. (This is the single-precision variant.)
 void OverwriteWithOrthogonalBasis(BlasMatrix<float>* matrix) {
   const BlasInt height = matrix->view.height;
   const BlasInt width = matrix->view.width;
@@ -451,6 +650,8 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<float>* matrix) {
   }
 }
 
+// Overwrites an overcomplete basis for the star space with a minimal orthogonal
+// basis. (This is the double-precision variant.)
 void OverwriteWithOrthogonalBasis(BlasMatrix<double>* matrix) {
   const BlasInt height = matrix->view.height;
   const BlasInt width = matrix->view.width;
@@ -495,14 +696,13 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<double>* matrix) {
   }
 }
 
+// We order the subset of Z^3 x edges first, then the y edges, then the z edges,
+// each lexicographically by its coordinates. The orientations are
+// lexicographic as well.
 template <typename Field>
-void InitializeMatrix(Int x_size, Int y_size, Int z_size,
-                      BlasMatrix<Field>* matrix) {
+void GridStarSpaceBasisGramian(Int x_size, Int y_size, Int z_size,
+                               BlasMatrix<Field>* matrix) {
   const Int num_vertices = x_size * y_size * z_size;
-
-  // We order the x edges first, then the y edges, then the z edges, each
-  // lexicographically by its coordinates. The orientations are lexicographic as
-  // well.
   const Int num_x_edges = (x_size - 1) * y_size * z_size;
   const Int num_y_edges = x_size * (y_size - 1) * z_size;
   const Int num_z_edges = x_size * y_size * (z_size - 1);
@@ -558,6 +758,132 @@ void InitializeMatrix(Int x_size, Int y_size, Int z_size,
         }
       }
     }
+  }
+
+  // Build an orthogonal basis for the star space via a QR factorization.
+  BlasMatrix<Field> star_space_orthog = star_space_basis;
+  OverwriteWithOrthogonalBasis(&star_space_orthog);
+
+  matrix->Resize(num_edges, num_edges, Field{0});
+  catamari::LowerNormalHermitianOuterProduct(
+      Field{1}, star_space_orthog.ConstView(), Field{1}, &matrix->view);
+}
+
+/*
+  We order the hexagonal edges in the following form, which corresponds to an
+  x_size of 3 and a y_size of 2:
+
+    24 - 25       26 - 27       28 - 29
+    /     \       /      \     /       \
+   14      15 - 18       19 - 22       23
+    \      /      \      /     \       /
+    12 - 13       16 - 17       20 - 21
+    /      \     /       \     /       \
+   2        3 - 6         7 - 10       11
+    \      /     \       /     \       /
+     0 - 1         4 - 5         8 - 9
+
+The horizontal edges are ordered first, then the diagonal edges.
+
+*/
+template <typename Field>
+void HexagonalStarSpaceBasisGramian(Int x_size, Int y_size,
+                                    BlasMatrix<Field>* matrix) {
+  const Int num_vertices =
+      // Count the bottom four vertices in the x_size x y_size grid of rings.
+      4 * x_size * y_size +
+      // Count the caps for the x_size x y_size grid of rings.
+      2 * x_size;
+
+  const Int num_horz_edges =
+      // Count the main set of horizontal connections for the grid of rings.
+      (2 * x_size - 1) * y_size +
+      // Count the caps for the x_size x y_size grid of rings.
+      x_size;
+
+  const Int num_diag_edges = 4 * x_size * y_size;
+
+  const Int num_edges = num_horz_edges + num_diag_edges;
+
+  // Build an (overcomplete) basis for the star space.
+  BlasMatrix<Field> star_space_basis;
+  star_space_basis.Resize(num_edges, num_vertices, Field{0});
+  for (Int x = 0; x < x_size; ++x) {
+    for (Int y = 0; y < y_size; ++y) {
+      const Int vertex_offset = 4 * (x + y * x_size);
+      const Int up_vertex_offset = y == y_size - 1 ? 4 * x_size * y_size + 2 * x
+                                                   : vertex_offset + 4 * x_size;
+
+      /*
+      For a vertex offset of 'v', and for w = v + 4 * x_size, we handle the
+      following snippet
+      (where the v+3 to v+6 edge may not exist):
+
+            w    w+1
+           /       \
+          v+2      v+3 - v+6
+           \       /
+            v - v+1
+
+      Given a horizontal edge offset of h and a diagonal edge offset of d,
+      the edge numbers are of the form:
+
+                 w      w+1
+                /         \
+              d+2         d+3
+              /             \
+            v+2             v+3 -h+1- v+6
+              \             /
+               d          d+1
+                \         /
+                 v  -h- v+1
+
+      and the orientations of the edges are:
+
+        h   = (v,   v+1),
+        h+1 = (v+3, v+6),
+        d   = (v,   v+2),
+        d+1 = (v+1, v+3),
+        d+2 = (v+2, w  ),
+        d+3 = (v+3, w+1).
+
+      */
+
+      const Int horz_offset = 2 * x + (2 * x_size - 1) * y;
+      const Int diag_offset = num_horz_edges + 4 * (x + y * x_size);
+
+      // Handle horizontal edge h = (v, v+1).
+      star_space_basis(horz_offset, vertex_offset) = -1;
+      star_space_basis(horz_offset, vertex_offset + 1) = 1;
+
+      if (x < x_size - 1) {
+        // Handle horizontal edge h+1 = (v+3, v+6).
+        star_space_basis(horz_offset + 1, vertex_offset + 3) = -1;
+        star_space_basis(horz_offset + 1, vertex_offset + 6) = 1;
+      }
+
+      // Handle edge d = (v, v+2).
+      star_space_basis(diag_offset, vertex_offset) = -1;
+      star_space_basis(diag_offset, vertex_offset + 2) = 1;
+
+      // Handle edge d+1 = (v+1, v+3).
+      star_space_basis(diag_offset + 1, vertex_offset + 1) = -1;
+      star_space_basis(diag_offset + 1, vertex_offset + 3) = 1;
+
+      // Handle edge d+2 = (v+2, w).
+      star_space_basis(diag_offset + 2, vertex_offset + 2) = -1;
+      star_space_basis(diag_offset + 2, up_vertex_offset) = 1;
+
+      // Handle edge d+3 = (v+3, w+1).
+      star_space_basis(diag_offset + 3, vertex_offset + 3) = -1;
+      star_space_basis(diag_offset + 3, up_vertex_offset + 1) = 1;
+    }
+
+    // We place a horizontal cap on the grid at (w, w+1).
+    const Int vertex_offset = 4 * x_size * y_size + 2 * x;
+    const Int cap_offset = (2 * x_size - 1) * y_size + x;
+    star_space_basis(cap_offset, vertex_offset) = -1;
+    star_space_basis(cap_offset, vertex_offset + 1) = 1;
   }
 
   // Build an orthogonal basis for the star space via a QR factorization.
@@ -625,13 +951,12 @@ std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
 #endif  // ifdef CATAMARI_OPENMP
 
 template <typename Field>
-void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size, Int z_size,
-                 Int block_size, Int CATAMARI_UNUSED tile_size, Int num_rounds,
-                 unsigned int random_seed, bool ascii_display,
-                 bool CATAMARI_UNUSED write_tiff) {
-  const Int matrix_size = x_size * y_size;
+void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
+                     Int z_size, Int block_size, Int CATAMARI_UNUSED tile_size,
+                     Int num_rounds, unsigned int random_seed,
+                     bool ascii_display, bool CATAMARI_UNUSED write_tiff) {
   BlasMatrix<Field> matrix;
-  Buffer<Field> extra_buffer(matrix_size * matrix_size);
+  Buffer<Field> extra_buffer;
 
   // ASCII display configuration.
   const char missing_char = ' ';
@@ -648,7 +973,8 @@ void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size, Int z_size,
   std::mt19937 generator(random_seed);
   for (Int round = 0; round < num_rounds; ++round) {
 #ifdef CATAMARI_OPENMP
-    InitializeMatrix(x_size, y_size, z_size, &matrix);
+    GridStarSpaceBasisGramian(x_size, y_size, z_size, &matrix);
+    extra_buffer.Resize(matrix.view.height * matrix.view.height);
     const std::vector<Int> omp_sample =
         OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
                         &generator, &extra_buffer);
@@ -658,23 +984,25 @@ void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size, Int z_size,
         const std::string filename = "sample-omp-xy-" + std::to_string(z) +
                                      "-" + std::to_string(round) + "-" +
                                      typeid(Field).name() + ".tif";
-        WriteXYSliceToTIFF(filename, x_size, y_size, z_size, z, omp_sample,
-                           box_size, background_pixel, active_pixel);
+        WriteGridXYSliceToTIFF(filename, x_size, y_size, z_size, z, omp_sample,
+                               box_size, background_pixel, active_pixel);
       }
       if (z_size > 1) {
         for (Int y = 0; y < y_size; ++y) {
           const std::string filename = "sample-omp-xz-" + std::to_string(y) +
                                        "-" + std::to_string(round) + "-" +
                                        typeid(Field).name() + ".tif";
-          WriteXZSliceToTIFF(filename, x_size, y_size, z_size, y, omp_sample,
-                             box_size, background_pixel, active_pixel);
+          WriteGridXZSliceToTIFF(filename, x_size, y_size, z_size, y,
+                                 omp_sample, box_size, background_pixel,
+                                 active_pixel);
         }
         for (Int x = 0; x < x_size; ++x) {
           const std::string filename = "sample-omp-yz-" + std::to_string(x) +
                                        "-" + std::to_string(round) + "-" +
                                        typeid(Field).name() + ".tif";
-          WriteYZSliceToTIFF(filename, x_size, y_size, z_size, x, omp_sample,
-                             box_size, background_pixel, active_pixel);
+          WriteGridYZSliceToTIFF(filename, x_size, y_size, z_size, x,
+                                 omp_sample, box_size, background_pixel,
+                                 active_pixel);
         }
       }
     }
@@ -685,7 +1013,7 @@ void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size, Int z_size,
     }
 #endif  // ifdef CATAMARI_OPENMP
 
-    InitializeMatrix(x_size, y_size, z_size, &matrix);
+    GridStarSpaceBasisGramian(x_size, y_size, z_size, &matrix);
     const std::vector<Int> sample =
         SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
 #ifdef CATAMARI_HAVE_LIBTIFF
@@ -694,23 +1022,23 @@ void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size, Int z_size,
         const std::string filename = "sample-xy-" + std::to_string(z) + "-" +
                                      std::to_string(round) + "-" +
                                      typeid(Field).name() + ".tif";
-        WriteXYSliceToTIFF(filename, x_size, y_size, z_size, z, sample,
-                           box_size, background_pixel, active_pixel);
+        WriteGridXYSliceToTIFF(filename, x_size, y_size, z_size, z, sample,
+                               box_size, background_pixel, active_pixel);
       }
       if (z_size > 1) {
         for (Int y = 0; y < y_size; ++y) {
           const std::string filename = "sample-xz-" + std::to_string(y) + "-" +
                                        std::to_string(round) + "-" +
                                        typeid(Field).name() + ".tif";
-          WriteXZSliceToTIFF(filename, x_size, y_size, z_size, y, sample,
-                             box_size, background_pixel, active_pixel);
+          WriteGridXZSliceToTIFF(filename, x_size, y_size, z_size, y, sample,
+                                 box_size, background_pixel, active_pixel);
         }
         for (Int x = 0; x < x_size; ++x) {
           const std::string filename = "sample-yz-" + std::to_string(x) + "-" +
                                        std::to_string(round) + "-" +
                                        typeid(Field).name() + ".tif";
-          WriteYZSliceToTIFF(filename, x_size, y_size, z_size, x, sample,
-                             box_size, background_pixel, active_pixel);
+          WriteGridYZSliceToTIFF(filename, x_size, y_size, z_size, x, sample,
+                                 box_size, background_pixel, active_pixel);
         }
       }
     }
@@ -722,10 +1050,60 @@ void RunDPPTests(bool maximum_likelihood, Int x_size, Int y_size, Int z_size,
   }
 }
 
+template <typename Field>
+void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
+                          Int block_size, Int CATAMARI_UNUSED tile_size,
+                          Int num_rounds, unsigned int random_seed,
+                          bool CATAMARI_UNUSED write_tiff) {
+  BlasMatrix<Field> matrix;
+  Buffer<Field> extra_buffer;
+
+#ifdef CATAMARI_HAVE_LIBTIFF
+  // TIFF configuration.
+  const Pixel background_pixel{char(255), char(255), char(255)};
+  const Pixel active_pixel{char(255), char(0), char(0)};
+  const Int cell_size = 5;
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
+
+  std::mt19937 generator(random_seed);
+  for (Int round = 0; round < num_rounds; ++round) {
+#ifdef CATAMARI_OPENMP
+    HexagonalStarSpaceBasisGramian(x_size, y_size, &matrix);
+    extra_buffer.Resize(matrix.view.height * matrix.view.height);
+    const std::vector<Int> omp_sample =
+        OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
+                        &generator, &extra_buffer);
+#ifdef CATAMARI_HAVE_LIBTIFF
+    if (write_tiff) {
+      const std::string filename = "sample-omp-xy-" + "-" +
+                                   std::to_string(round) + "-" +
+                                   typeid(Field).name() + ".tif";
+      WriteHexagonalToTIFF(filename, x_size, y_size, omp_sample, cell_size,
+                           background_pixel, active_pixel);
+    }
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
+#endif  // ifdef CATAMARI_OPENMP
+
+    HexagonalStarSpaceBasisGramian(x_size, y_size, &matrix);
+    const std::vector<Int> sample =
+        SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
+#ifdef CATAMARI_HAVE_LIBTIFF
+    if (write_tiff) {
+      const std::string filename = "sample-xy-" + std::to_string(round) + "-" +
+                                   typeid(Field).name() + ".tif";
+      WriteHexagonalToTIFF(filename, x_size, y_size, sample, cell_size,
+                           background_pixel, active_pixel);
+    }
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
+  }
+}
+
 }  // anonymous namespace
 
 int main(int argc, char** argv) {
   specify::ArgumentParser parser(argc, argv);
+  const bool hexagonal = parser.OptionalInput<bool>(
+      "hexagonal", "Use a hexagonal 2D tiling?", false);
   const Int x_size =
       parser.OptionalInput<Int>("x_size", "The x dimension of the graph.", 50);
   const Int y_size =
@@ -752,17 +1130,34 @@ int main(int argc, char** argv) {
   if (!parser.OK()) {
     return 0;
   }
+  if (hexagonal && z_size != 1) {
+    std::cerr << "Hexagonal tilings are only supported for 2D grids."
+              << std::endl;
+    return 0;
+  }
 
-  std::cout << "Single-precision:" << std::endl;
-  RunDPPTests<float>(maximum_likelihood, x_size, y_size, z_size, block_size,
-                     tile_size, num_rounds, random_seed, ascii_display,
-                     write_tiff);
-  std::cout << std::endl;
+  if (hexagonal) {
+    std::cout << "Single-precision hexagonal:" << std::endl;
+    RunHexagonalDPPTests<float>(maximum_likelihood, x_size, y_size, block_size,
+                                tile_size, num_rounds, random_seed, write_tiff);
+    std::cout << std::endl;
 
-  std::cout << "Double-precision:" << std::endl;
-  RunDPPTests<double>(maximum_likelihood, x_size, y_size, z_size, block_size,
-                      tile_size, num_rounds, random_seed, ascii_display,
-                      write_tiff);
+    std::cout << "Double-precision hexagonal:" << std::endl;
+    RunHexagonalDPPTests<double>(maximum_likelihood, x_size, y_size, block_size,
+                                 tile_size, num_rounds, random_seed,
+                                 write_tiff);
+  } else {
+    std::cout << "Single-precision grid:" << std::endl;
+    RunGridDPPTests<float>(maximum_likelihood, x_size, y_size, z_size,
+                           block_size, tile_size, num_rounds, random_seed,
+                           ascii_display, write_tiff);
+    std::cout << std::endl;
+
+    std::cout << "Double-precision grid:" << std::endl;
+    RunGridDPPTests<double>(maximum_likelihood, x_size, y_size, z_size,
+                            block_size, tile_size, num_rounds, random_seed,
+                            ascii_display, write_tiff);
+  }
 
   return 0;
 }

@@ -429,8 +429,9 @@ std::vector<Int> LowerUnblockedFactorAndSampleDPP(bool maximum_likelihood,
 
   for (Int i = 0; i < height; ++i) {
     Real delta = RealPart(matrix->Entry(i, i));
-    CATAMARI_ASSERT(delta >= Real{0} && delta <= Real{1},
-                    "Diagonal value was outside of [0, 1].");
+    CATAMARI_ASSERT(
+        delta >= Real{0} && delta <= Real{1},
+        "Diagonal value was outside of [0, 1]: " + std::to_string(delta));
     const bool keep_index = maximum_likelihood
                                 ? delta >= Real(1) / Real(2)
                                 : uniform_dist(*generator) <= delta;
