@@ -1075,9 +1075,8 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
                         &generator, &extra_buffer);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string filename = "sample-omp-xy-" + "-" +
-                                   std::to_string(round) + "-" +
-                                   typeid(Field).name() + ".tif";
+      const std::string filename = "sample-omp-xy-" + std::to_string(round) +
+                                   "-" + typeid(Field).name() + ".tif";
       WriteHexagonalToTIFF(filename, x_size, y_size, omp_sample, cell_size,
                            background_pixel, active_pixel);
     }
