@@ -954,7 +954,7 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
                         &generator, &extra_buffer);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string tag = "omp-" + typeid(Field).name();
+      const std::string tag = std::string("omp-") + typeid(Field).name();
       WriteGridSampleToTIFF(x_size, y_size, z_size, round, omp_sample, box_size,
                             negate, background_pixel, active_pixel, tag);
     }
@@ -1011,7 +1011,7 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
                         &generator, &extra_buffer);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string tag = "omp-" + typeid(Field).name();
+      const std::string tag = std::string("omp-") + typeid(Field).name();
       const std::string filename =
           "sample-xy-" + std::to_string(round) + "-" + tag + ".tif";
       WriteHexagonalToTIFF(filename, x_size, y_size, omp_sample, cell_size,
