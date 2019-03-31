@@ -65,11 +65,16 @@ of spanning trees of a 2D grid graph are given in
 [example/uniform_spanning_tree.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/uniform_spanning_tree.cc).
 A (lexicographically greedy) maximum likelihood 60x60 result might look like:
 
-![](./images/uniform_spanning_tree_greedy-60x60.png)
+![](./images/Z2_greedy-60x60.png)
 
 while a random example might look like:
 
-![](./images/uniform_spanning_tree_60x60.png)
+![](./images/Z2_60x60.png)
+
+An example of a uniform sample of a spanning tree for a hexagonal tiling graph
+is given by:
+
+![](./images/hexagonal_30x30.png)
 
 ### License
 `catamari` is distributed under the
