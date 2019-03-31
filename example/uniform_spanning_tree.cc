@@ -129,13 +129,29 @@ struct Pixel {
   char blue;
 };
 
+// Returns whether the given value exists within a sorted list.
+template <typename Iterator, typename T>
+bool IndexExists(Iterator beg, Iterator end, T value) {
+  auto iter = std::lower_bound(beg, end, value);
+  return iter != end && *iter == value;
+}
+
+// Packs a pixel into the given position in a TIFF image buffer.
+void PackPixel(Int i, Int j, Int width, Pixel pixel, std::vector<char>* image) {
+  const Int samples_per_pixel = 3;
+  Int offset = samples_per_pixel * (j + i * width);
+  (*image)[offset++] = pixel.red;
+  (*image)[offset++] = pixel.green;
+  (*image)[offset++] = pixel.blue;
+}
+
 // Prints out an (x, y) slice of a Z^3 spanning tree.
 inline void WriteGridXYSliceToTIFF(const std::string& filename, Int x_size,
                                    Int y_size, Int z_size, Int z,
                                    const std::vector<Int>& sample,
                                    const Int box_size,
                                    const Pixel& background_pixel,
-                                   const Pixel& active_pixel) {
+                                   const Pixel& active_pixel, bool negate) {
   const Int num_x_edges = (x_size - 1) * y_size * z_size;
   const Int num_y_edges = x_size * (y_size - 1) * z_size;
 
@@ -154,10 +170,7 @@ inline void WriteGridXYSliceToTIFF(const std::string& filename, Int x_size,
   // Fill the background pixels.
   for (Int i = 0; i < height; ++i) {
     for (Int j = 0; j < width; ++j) {
-      Int offset = samples_per_pixel * (j + i * width);
-      image[offset++] = background_pixel.red;
-      image[offset++] = background_pixel.green;
-      image[offset++] = background_pixel.blue;
+      PackPixel(i, j, width, background_pixel, &image);
     }
   }
 
@@ -165,17 +178,12 @@ inline void WriteGridXYSliceToTIFF(const std::string& filename, Int x_size,
     // Write any horizontal connections in row 'y' and depth 'z'.
     for (Int x = 0; x < x_size - 1; ++x) {
       const Int x_ind = x + y * (x_size - 1) + z * (x_size - 1) * y_size;
-      auto iter = std::lower_bound(x_beg, x_end, x_ind);
-      const bool found = iter != x_end && *iter == x_ind;
-
-      if (found) {
+      const bool found = IndexExists(x_beg, x_end, x_ind);
+      if (negate != found) {
         const Int i = y * box_size;
         const Int j_offset = x * box_size;
-        for (Int j = j_offset; j < j_offset + box_size; ++j) {
-          Int offset = samples_per_pixel * (j + i * width);
-          image[offset++] = active_pixel.red;
-          image[offset++] = active_pixel.green;
-          image[offset++] = active_pixel.blue;
+        for (Int j = j_offset; j <= j_offset + box_size; ++j) {
+          PackPixel(i, j, width, active_pixel, &image);
         }
       }
     }
@@ -185,17 +193,12 @@ inline void WriteGridXYSliceToTIFF(const std::string& filename, Int x_size,
       for (Int x = 0; x < x_size; ++x) {
         const Int y_ind =
             num_x_edges + x + y * x_size + z * x_size * (y_size - 1);
-        auto iter = std::lower_bound(y_beg, y_end, y_ind);
-        const bool found = iter != y_end && *iter == y_ind;
-
-        if (found) {
+        const bool found = IndexExists(y_beg, y_end, y_ind);
+        if (negate != found) {
           const Int j = x * box_size;
           const Int i_offset = y * box_size;
-          for (Int i = i_offset; i < i_offset + box_size; ++i) {
-            Int offset = samples_per_pixel * (j + i * width);
-            image[offset++] = active_pixel.red;
-            image[offset++] = active_pixel.green;
-            image[offset++] = active_pixel.blue;
+          for (Int i = i_offset; i <= i_offset + box_size; ++i) {
+            PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -211,7 +214,7 @@ inline void WriteGridXZSliceToTIFF(const std::string& filename, Int x_size,
                                    const std::vector<Int>& sample,
                                    const Int box_size,
                                    const Pixel& background_pixel,
-                                   const Pixel& active_pixel) {
+                                   const Pixel& active_pixel, bool negate) {
   const Int num_x_edges = (x_size - 1) * y_size * z_size;
   const Int num_y_edges = x_size * (y_size - 1) * z_size;
 
@@ -232,10 +235,7 @@ inline void WriteGridXZSliceToTIFF(const std::string& filename, Int x_size,
   // Fill the background pixels.
   for (Int i = 0; i < height; ++i) {
     for (Int j = 0; j < width; ++j) {
-      Int offset = samples_per_pixel * (j + i * width);
-      image[offset++] = background_pixel.red;
-      image[offset++] = background_pixel.green;
-      image[offset++] = background_pixel.blue;
+      PackPixel(i, j, width, background_pixel, &image);
     }
   }
 
@@ -243,17 +243,12 @@ inline void WriteGridXZSliceToTIFF(const std::string& filename, Int x_size,
     // Write any horizontal connections in row 'y' and depth 'z'.
     for (Int x = 0; x < x_size - 1; ++x) {
       const Int x_ind = x + y * (x_size - 1) + z * (x_size - 1) * y_size;
-      auto iter = std::lower_bound(x_beg, x_end, x_ind);
-      const bool found = iter != x_end && *iter == x_ind;
-
-      if (found) {
+      const bool found = IndexExists(x_beg, x_end, x_ind);
+      if (negate != found) {
         const Int i = z * box_size;
         const Int j_offset = x * box_size;
-        for (Int j = j_offset; j < j_offset + box_size; ++j) {
-          Int offset = samples_per_pixel * (j + i * width);
-          image[offset++] = active_pixel.red;
-          image[offset++] = active_pixel.green;
-          image[offset++] = active_pixel.blue;
+        for (Int j = j_offset; j <= j_offset + box_size; ++j) {
+          PackPixel(i, j, width, active_pixel, &image);
         }
       }
     }
@@ -263,17 +258,12 @@ inline void WriteGridXZSliceToTIFF(const std::string& filename, Int x_size,
       for (Int x = 0; x < x_size; ++x) {
         const Int z_ind =
             num_x_edges + num_y_edges + x + y * x_size + z * x_size * y_size;
-        auto iter = std::lower_bound(z_beg, z_end, z_ind);
-        const bool found = iter != z_end && *iter == z_ind;
-
-        if (found) {
+        const bool found = IndexExists(z_beg, z_end, z_ind);
+        if (negate != found) {
           const Int j = x * box_size;
           const Int i_offset = z * box_size;
-          for (Int i = i_offset; i < i_offset + box_size; ++i) {
-            Int offset = samples_per_pixel * (j + i * width);
-            image[offset++] = active_pixel.red;
-            image[offset++] = active_pixel.green;
-            image[offset++] = active_pixel.blue;
+          for (Int i = i_offset; i <= i_offset + box_size; ++i) {
+            PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -289,7 +279,7 @@ inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
                                    const std::vector<Int>& sample,
                                    const Int box_size,
                                    const Pixel& background_pixel,
-                                   const Pixel& active_pixel) {
+                                   const Pixel& active_pixel, bool negate) {
   const Int num_x_edges = (x_size - 1) * y_size * z_size;
   const Int num_y_edges = x_size * (y_size - 1) * z_size;
 
@@ -309,10 +299,7 @@ inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
   // Fill the background pixels.
   for (Int i = 0; i < height; ++i) {
     for (Int j = 0; j < width; ++j) {
-      Int offset = samples_per_pixel * (j + i * width);
-      image[offset++] = background_pixel.red;
-      image[offset++] = background_pixel.green;
-      image[offset++] = background_pixel.blue;
+      PackPixel(i, j, width, background_pixel, &image);
     }
   }
 
@@ -321,17 +308,12 @@ inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
     for (Int y = 0; y < y_size - 1; ++y) {
       const Int y_ind =
           num_x_edges + x + y * x_size + z * x_size * (y_size - 1);
-      auto iter = std::lower_bound(y_beg, y_end, y_ind);
-      const bool found = iter != y_end && *iter == y_ind;
-
-      if (found) {
+      const bool found = IndexExists(y_beg, y_end, y_ind);
+      if (negate != found) {
         const Int i = z * box_size;
         const Int j_offset = y * box_size;
-        for (Int j = j_offset; j < j_offset + box_size; ++j) {
-          Int offset = samples_per_pixel * (j + i * width);
-          image[offset++] = active_pixel.red;
-          image[offset++] = active_pixel.green;
-          image[offset++] = active_pixel.blue;
+        for (Int j = j_offset; j <= j_offset + box_size; ++j) {
+          PackPixel(i, j, width, active_pixel, &image);
         }
       }
     }
@@ -341,17 +323,12 @@ inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
       for (Int y = 0; y < y_size; ++y) {
         const Int z_ind =
             num_x_edges + num_y_edges + x + y * x_size + z * x_size * y_size;
-        auto iter = std::lower_bound(z_beg, z_end, z_ind);
-        const bool found = iter != z_end && *iter == z_ind;
-
-        if (found) {
+        const bool found = IndexExists(z_beg, z_end, z_ind);
+        if (negate != found) {
           const Int j = y * box_size;
           const Int i_offset = z * box_size;
-          for (Int i = i_offset; i < i_offset + box_size; ++i) {
-            Int offset = samples_per_pixel * (j + i * width);
-            image[offset++] = active_pixel.red;
-            image[offset++] = active_pixel.green;
-            image[offset++] = active_pixel.blue;
+          for (Int i = i_offset; i <= i_offset + box_size; ++i) {
+            PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -361,12 +338,39 @@ inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
   WriteTIFF(filename, height, width, samples_per_pixel, image);
 }
 
+// Writes out the Z^3 sample to TIFF.
+inline void WriteGridSampleToTIFF(Int x_size, Int y_size, Int z_size, Int round,
+                                  const std::vector<Int>& sample, Int box_size,
+                                  bool negate, Pixel background_pixel,
+                                  Pixel active_pixel, const std::string& tag) {
+  for (Int z = 0; z < z_size; ++z) {
+    const std::string filename = "sample-xy-" + std::to_string(z) + "-" +
+                                 std::to_string(round) + "-" + tag + ".tif";
+    WriteGridXYSliceToTIFF(filename, x_size, y_size, z_size, z, sample,
+                           box_size, background_pixel, active_pixel, negate);
+  }
+  if (z_size > 1) {
+    for (Int y = 0; y < y_size; ++y) {
+      const std::string filename = "sample-xz-" + std::to_string(y) + "-" +
+                                   std::to_string(round) + "-" + tag + ".tif";
+      WriteGridXZSliceToTIFF(filename, x_size, y_size, z_size, y, sample,
+                             box_size, background_pixel, active_pixel, negate);
+    }
+    for (Int x = 0; x < x_size; ++x) {
+      const std::string filename = "sample-yz-" + std::to_string(x) + "-" +
+                                   std::to_string(round) + "-" + tag + ".tif";
+      WriteGridYZSliceToTIFF(filename, x_size, y_size, z_size, x, sample,
+                             box_size, background_pixel, active_pixel, negate);
+    }
+  }
+}
+
 // Prints out an (x, y) slice of a Z^3 spanning tree.
 inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
                                  Int y_size, const std::vector<Int>& sample,
                                  const Int cell_size,
                                  const Pixel& background_pixel,
-                                 const Pixel& active_pixel) {
+                                 const Pixel& active_pixel, bool negate) {
   const Int num_horz_edges =
       // Count the main set of horizontal connections for the grid of rings.
       (2 * x_size - 1) * y_size +
@@ -390,10 +394,7 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
   // Fill the background pixels.
   for (Int i = 0; i < height; ++i) {
     for (Int j = 0; j < width; ++j) {
-      Int offset = samples_per_pixel * (j + i * width);
-      image[offset++] = background_pixel.red;
-      image[offset++] = background_pixel.green;
-      image[offset++] = background_pixel.blue;
+      PackPixel(i, j, width, background_pixel, &image);
     }
   }
 
@@ -420,16 +421,12 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
       // Handle the 'h' edge if it exists.
       {
         const Int index = horz_offset;
-        auto iter = std::lower_bound(horz_beg, horz_end, index);
-        const bool found = iter != horz_end && *iter == index;
-        if (found) {
+        const bool found = IndexExists(horz_beg, horz_end, index);
+        if (negate != found) {
           const Int j_offset = x * horz_box_size + cell_size;
           const Int i = y * vert_box_size;
-          for (Int j = j_offset; j < j_offset + cell_size; ++j) {
-            Int offset = samples_per_pixel * (j + i * width);
-            image[offset++] = active_pixel.red;
-            image[offset++] = active_pixel.green;
-            image[offset++] = active_pixel.blue;
+          for (Int j = j_offset; j <= j_offset + cell_size; ++j) {
+            PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -437,16 +434,12 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
       // Handle the 'h+1' edge if it exists.
       if (x != x_size - 1) {
         const Int index = horz_offset + 1;
-        auto iter = std::lower_bound(horz_beg, horz_end, index);
-        const bool found = iter != horz_end && *iter == index;
-        if (found) {
+        const bool found = IndexExists(horz_beg, horz_end, index);
+        if (negate != found) {
           const Int j_offset = x * horz_box_size + 3 * cell_size;
           const Int i = y * vert_box_size + cell_size;
-          for (Int j = j_offset; j < j_offset + cell_size; ++j) {
-            Int offset = samples_per_pixel * (j + i * width);
-            image[offset++] = active_pixel.red;
-            image[offset++] = active_pixel.green;
-            image[offset++] = active_pixel.blue;
+          for (Int j = j_offset; j <= j_offset + cell_size; ++j) {
+            PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -454,18 +447,14 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
       // Handle the 'd' edge if it exists.
       {
         const Int index = diag_offset;
-        auto iter = std::lower_bound(diag_beg, diag_end, index);
-        const bool found = iter != diag_end && *iter == index;
-        if (found) {
+        const bool found = IndexExists(diag_beg, diag_end, index);
+        if (negate != found) {
           const Int j_offset = x * horz_box_size;
           const Int i_offset = y * vert_box_size + cell_size;
           for (Int k = 0; k <= cell_size; ++k) {
             const Int i = i_offset - k;
             const Int j = j_offset + k;
-            Int offset = samples_per_pixel * (j + i * width);
-            image[offset++] = active_pixel.red;
-            image[offset++] = active_pixel.green;
-            image[offset++] = active_pixel.blue;
+            PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -473,18 +462,14 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
       // Handle the 'd+1' edge if it exists.
       {
         const Int index = diag_offset + 1;
-        auto iter = std::lower_bound(diag_beg, diag_end, index);
-        const bool found = iter != diag_end && *iter == index;
-        if (found) {
+        const bool found = IndexExists(diag_beg, diag_end, index);
+        if (negate != found) {
           const Int j_offset = x * horz_box_size + 2 * cell_size;
           const Int i_offset = y * vert_box_size;
           for (Int k = 0; k <= cell_size; ++k) {
             const Int i = i_offset + k;
             const Int j = j_offset + k;
-            Int offset = samples_per_pixel * (j + i * width);
-            image[offset++] = active_pixel.red;
-            image[offset++] = active_pixel.green;
-            image[offset++] = active_pixel.blue;
+            PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -492,18 +477,14 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
       // Handle the 'd+2' edge if it exists.
       {
         const Int index = diag_offset + 2;
-        auto iter = std::lower_bound(diag_beg, diag_end, index);
-        const bool found = iter != diag_end && *iter == index;
-        if (found) {
+        const bool found = IndexExists(diag_beg, diag_end, index);
+        if (negate != found) {
           const Int j_offset = x * horz_box_size;
           const Int i_offset = y * vert_box_size + cell_size;
           for (Int k = 0; k <= cell_size; ++k) {
             const Int i = i_offset + k;
             const Int j = j_offset + k;
-            Int offset = samples_per_pixel * (j + i * width);
-            image[offset++] = active_pixel.red;
-            image[offset++] = active_pixel.green;
-            image[offset++] = active_pixel.blue;
+            PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -511,18 +492,14 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
       // Handle the 'd+3' edge if it exists.
       {
         const Int index = diag_offset + 3;
-        auto iter = std::lower_bound(diag_beg, diag_end, index);
-        const bool found = iter != diag_end && *iter == index;
-        if (found) {
+        const bool found = IndexExists(diag_beg, diag_end, index);
+        if (negate != found) {
           const Int j_offset = x * horz_box_size + 2 * cell_size;
           const Int i_offset = (y + 1) * vert_box_size;
           for (Int k = 0; k <= cell_size; ++k) {
             const Int i = i_offset - k;
             const Int j = j_offset + k;
-            Int offset = samples_per_pixel * (j + i * width);
-            image[offset++] = active_pixel.red;
-            image[offset++] = active_pixel.green;
-            image[offset++] = active_pixel.blue;
+            PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -531,17 +508,13 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
     // Fill the cap if it exists.
     {
       const Int index = (2 * x_size - 1) * y_size + x;
-      auto iter = std::lower_bound(horz_beg, horz_end, index);
-      const bool found = iter != horz_end && *iter == index;
-      if (found) {
+      const bool found = IndexExists(horz_beg, horz_end, index);
+      if (negate != found) {
         const Int j_offset = x * horz_box_size + cell_size;
         const Int i = y_size * vert_box_size;
-        for (Int k = 0; k < cell_size; ++k) {
+        for (Int k = 0; k <= cell_size; ++k) {
           const Int j = j_offset + k;
-          Int offset = samples_per_pixel * (j + i * width);
-          image[offset++] = active_pixel.red;
-          image[offset++] = active_pixel.green;
-          image[offset++] = active_pixel.blue;
+          PackPixel(i, j, width, active_pixel, &image);
         }
       }
     }
@@ -555,7 +528,7 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
 inline void AsciiDisplaySample(Int x_size, Int y_size,
                                const std::vector<Int>& sample,
                                char missing_char, char horizontal_sampled_char,
-                               char vertical_sampled_char) {
+                               char vertical_sampled_char, bool negate) {
   const Int num_horizontal_edges = (x_size - 1) * y_size;
 
   const auto horizontal_beg = sample.begin();
@@ -568,12 +541,11 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
     // Print the horizontal edges which exist.
     for (Int x = 0; x < x_size - 1; ++x) {
       const Int horizontal_ind = x + y * (x_size - 1);
-      auto iter =
-          std::lower_bound(horizontal_beg, horizontal_end, horizontal_ind);
-      const bool found = iter != horizontal_end && *iter == horizontal_ind;
+      const bool found =
+          IndexExists(horizontal_beg, horizontal_end, horizontal_ind);
 
       std::cout << missing_char;
-      if (found) {
+      if (negate != found) {
         std::cout << horizontal_sampled_char;
       } else {
         std::cout << missing_char;
@@ -585,10 +557,10 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
       // Print the vertical edges which exist.
       for (Int x = 0; x < x_size; ++x) {
         const Int vertical_ind = num_horizontal_edges + x + y * x_size;
-        auto iter = std::lower_bound(vertical_beg, vertical_end, vertical_ind);
-        const bool found = iter != vertical_end && *iter == vertical_ind;
+        const bool found =
+            IndexExists(vertical_beg, vertical_end, vertical_ind);
 
-        if (found) {
+        if (negate != found) {
           std::cout << vertical_sampled_char;
         } else {
           std::cout << missing_char;
@@ -954,7 +926,8 @@ template <typename Field>
 void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
                      Int z_size, Int block_size, Int CATAMARI_UNUSED tile_size,
                      Int num_rounds, unsigned int random_seed,
-                     bool ascii_display, bool CATAMARI_UNUSED write_tiff) {
+                     bool ascii_display, bool CATAMARI_UNUSED write_tiff,
+                     bool negate) {
   BlasMatrix<Field> matrix;
   Buffer<Field> extra_buffer;
 
@@ -973,6 +946,7 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
   std::mt19937 generator(random_seed);
   for (Int round = 0; round < num_rounds; ++round) {
 #ifdef CATAMARI_OPENMP
+    // Sample using the OpenMP DPP sampler.
     GridStarSpaceBasisGramian(x_size, y_size, z_size, &matrix);
     extra_buffer.Resize(matrix.view.height * matrix.view.height);
     const std::vector<Int> omp_sample =
@@ -980,72 +954,33 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
                         &generator, &extra_buffer);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      for (Int z = 0; z < z_size; ++z) {
-        const std::string filename = "sample-omp-xy-" + std::to_string(z) +
-                                     "-" + std::to_string(round) + "-" +
-                                     typeid(Field).name() + ".tif";
-        WriteGridXYSliceToTIFF(filename, x_size, y_size, z_size, z, omp_sample,
-                               box_size, background_pixel, active_pixel);
-      }
-      if (z_size > 1) {
-        for (Int y = 0; y < y_size; ++y) {
-          const std::string filename = "sample-omp-xz-" + std::to_string(y) +
-                                       "-" + std::to_string(round) + "-" +
-                                       typeid(Field).name() + ".tif";
-          WriteGridXZSliceToTIFF(filename, x_size, y_size, z_size, y,
-                                 omp_sample, box_size, background_pixel,
-                                 active_pixel);
-        }
-        for (Int x = 0; x < x_size; ++x) {
-          const std::string filename = "sample-omp-yz-" + std::to_string(x) +
-                                       "-" + std::to_string(round) + "-" +
-                                       typeid(Field).name() + ".tif";
-          WriteGridYZSliceToTIFF(filename, x_size, y_size, z_size, x,
-                                 omp_sample, box_size, background_pixel,
-                                 active_pixel);
-        }
-      }
+      const std::string tag = "omp-" + typeid(Field).name();
+      WriteGridSampleToTIFF(x_size, y_size, z_size, round, omp_sample, box_size,
+                            negate, background_pixel, active_pixel, tag);
     }
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
     if (z_size == 1 && ascii_display) {
       AsciiDisplaySample(x_size, y_size, omp_sample, missing_char,
-                         horizontal_sampled_char, vertical_sampled_char);
+                         horizontal_sampled_char, vertical_sampled_char,
+                         negate);
     }
 #endif  // ifdef CATAMARI_OPENMP
 
+    // Sample using the sequential DPP sampler.
     GridStarSpaceBasisGramian(x_size, y_size, z_size, &matrix);
     const std::vector<Int> sample =
         SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      for (Int z = 0; z < z_size; ++z) {
-        const std::string filename = "sample-xy-" + std::to_string(z) + "-" +
-                                     std::to_string(round) + "-" +
-                                     typeid(Field).name() + ".tif";
-        WriteGridXYSliceToTIFF(filename, x_size, y_size, z_size, z, sample,
-                               box_size, background_pixel, active_pixel);
-      }
-      if (z_size > 1) {
-        for (Int y = 0; y < y_size; ++y) {
-          const std::string filename = "sample-xz-" + std::to_string(y) + "-" +
-                                       std::to_string(round) + "-" +
-                                       typeid(Field).name() + ".tif";
-          WriteGridXZSliceToTIFF(filename, x_size, y_size, z_size, y, sample,
-                                 box_size, background_pixel, active_pixel);
-        }
-        for (Int x = 0; x < x_size; ++x) {
-          const std::string filename = "sample-yz-" + std::to_string(x) + "-" +
-                                       std::to_string(round) + "-" +
-                                       typeid(Field).name() + ".tif";
-          WriteGridYZSliceToTIFF(filename, x_size, y_size, z_size, x, sample,
-                                 box_size, background_pixel, active_pixel);
-        }
-      }
+      const std::string tag = typeid(Field).name();
+      WriteGridSampleToTIFF(x_size, y_size, z_size, round, sample, box_size,
+                            negate, background_pixel, active_pixel, tag);
     }
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
     if (z_size == 1 && ascii_display) {
       AsciiDisplaySample(x_size, y_size, sample, missing_char,
-                         horizontal_sampled_char, vertical_sampled_char);
+                         horizontal_sampled_char, vertical_sampled_char,
+                         negate);
     }
   }
 }
@@ -1054,7 +989,7 @@ template <typename Field>
 void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
                           Int block_size, Int CATAMARI_UNUSED tile_size,
                           Int num_rounds, unsigned int random_seed,
-                          bool CATAMARI_UNUSED write_tiff) {
+                          bool CATAMARI_UNUSED write_tiff, bool negate) {
   BlasMatrix<Field> matrix;
   Buffer<Field> extra_buffer;
 
@@ -1068,6 +1003,7 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
   std::mt19937 generator(random_seed);
   for (Int round = 0; round < num_rounds; ++round) {
 #ifdef CATAMARI_OPENMP
+    // Sample using the OpenMP sampler.
     HexagonalStarSpaceBasisGramian(x_size, y_size, &matrix);
     extra_buffer.Resize(matrix.view.height * matrix.view.height);
     const std::vector<Int> omp_sample =
@@ -1075,23 +1011,26 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
                         &generator, &extra_buffer);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string filename = "sample-omp-xy-" + std::to_string(round) +
-                                   "-" + typeid(Field).name() + ".tif";
+      const std::string tag = "omp-" + typeid(Field).name();
+      const std::string filename =
+          "sample-xy-" + std::to_string(round) + "-" + tag + ".tif";
       WriteHexagonalToTIFF(filename, x_size, y_size, omp_sample, cell_size,
-                           background_pixel, active_pixel);
+                           background_pixel, active_pixel, negate);
     }
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
 #endif  // ifdef CATAMARI_OPENMP
 
+    // Sample using the sequential sampler.
     HexagonalStarSpaceBasisGramian(x_size, y_size, &matrix);
     const std::vector<Int> sample =
         SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string filename = "sample-xy-" + std::to_string(round) + "-" +
-                                   typeid(Field).name() + ".tif";
+      const std::string tag = typeid(Field).name();
+      const std::string filename =
+          "sample-xy-" + std::to_string(round) + "-" + tag + ".tif";
       WriteHexagonalToTIFF(filename, x_size, y_size, sample, cell_size,
-                           background_pixel, active_pixel);
+                           background_pixel, active_pixel, negate);
     }
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
   }
@@ -1101,6 +1040,8 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 
 int main(int argc, char** argv) {
   specify::ArgumentParser parser(argc, argv);
+  const bool negate =
+      parser.OptionalInput<bool>("negate", "Negate the DPP sample?", false);
   const bool hexagonal = parser.OptionalInput<bool>(
       "hexagonal", "Use a hexagonal 2D tiling?", false);
   const Int x_size =
@@ -1138,24 +1079,25 @@ int main(int argc, char** argv) {
   if (hexagonal) {
     std::cout << "Single-precision hexagonal:" << std::endl;
     RunHexagonalDPPTests<float>(maximum_likelihood, x_size, y_size, block_size,
-                                tile_size, num_rounds, random_seed, write_tiff);
+                                tile_size, num_rounds, random_seed, write_tiff,
+                                negate);
     std::cout << std::endl;
 
     std::cout << "Double-precision hexagonal:" << std::endl;
     RunHexagonalDPPTests<double>(maximum_likelihood, x_size, y_size, block_size,
-                                 tile_size, num_rounds, random_seed,
-                                 write_tiff);
+                                 tile_size, num_rounds, random_seed, write_tiff,
+                                 negate);
   } else {
     std::cout << "Single-precision grid:" << std::endl;
     RunGridDPPTests<float>(maximum_likelihood, x_size, y_size, z_size,
                            block_size, tile_size, num_rounds, random_seed,
-                           ascii_display, write_tiff);
+                           ascii_display, write_tiff, negate);
     std::cout << std::endl;
 
     std::cout << "Double-precision grid:" << std::endl;
     RunGridDPPTests<double>(maximum_likelihood, x_size, y_size, z_size,
                             block_size, tile_size, num_rounds, random_seed,
-                            ascii_display, write_tiff);
+                            ascii_display, write_tiff, negate);
   }
 
   return 0;
