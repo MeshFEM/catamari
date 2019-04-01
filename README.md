@@ -9,7 +9,8 @@ complex, supernodal sparse-direct
 LDL^H factorizations. It similarly contains sequential and DAG-scheduled,
 dense and sparse-direct, real and complex,
 [Determinantal Point Process](https://en.wikipedia.org/wiki/Determinantal_point_process)
-sampling through modified LDL^H factorizations.
+sampling through modified LDL^H factorizations -- and a nonsymmetric dense DPP
+sampler based upon a modified LU factorization.
 
 [![Join the chat at https://gitter.im/hodge_star/community](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/hodge_star/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Documentation](https://readthedocs.org/projects/catamari/badge/?version=latest)](https://hodgestar.com/catamari/docs/master/)
