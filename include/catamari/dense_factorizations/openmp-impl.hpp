@@ -559,7 +559,7 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleNonsymmetricDPP(
         #pragma omp task default(none)                     \
           firstprivate(i, i_sub, j_sub, matrix, tsize)     \
           depend(in: matrix_data[i_sub + i * leading_dim], \
-              matrix_data[j_sub + i * leading_dim])        \
+              matrix_data[i + j_sub * leading_dim])        \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
         {
           const Int row_tsize = std::min(height - i_sub, tsize);
@@ -567,7 +567,7 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleNonsymmetricDPP(
           const ConstBlasMatrixView<Field> row_block =
               matrix->Submatrix(i_sub, i, row_tsize, tsize).ToConst();
           const ConstBlasMatrixView<Field> column_block =
-              factor_ptr->Submatrix(i, j_sub, tsize, column_tsize);
+              matrix->Submatrix(i, j_sub, tsize, column_tsize);
           BlasMatrixView<Field> update_block =
               matrix->Submatrix(i_sub, j_sub, row_tsize, column_tsize);
           MatrixMultiplyNormalNormal(Field{-1}, row_block, column_block,
