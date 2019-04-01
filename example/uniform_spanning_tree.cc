@@ -291,27 +291,31 @@ inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
 
 // Writes out the Z^3 sample to TIFF.
 inline void WriteGridSampleToTIFF(Int x_size, Int y_size, Int z_size, Int round,
+                                  bool maximum_likelihood,
                                   const std::vector<Int>& sample, Int box_size,
                                   bool negate,
                                   const catamari::Pixel& background_pixel,
                                   const catamari::Pixel& active_pixel,
                                   const std::string& tag) {
   for (Int z = 0; z < z_size; ++z) {
-    const std::string filename = "sample-xy-" + std::to_string(z) + "-" +
-                                 std::to_string(round) + "-" + tag + ".tif";
+    const std::string filename =
+        "grid-xy-" + std::string(maximum_likelihood ? "ml-" : "") +
+        std::to_string(z) + "-" + std::to_string(round) + "-" + tag + ".tif";
     WriteGridXYSliceToTIFF(filename, x_size, y_size, z_size, z, sample,
                            box_size, background_pixel, active_pixel, negate);
   }
   if (z_size > 1) {
     for (Int y = 0; y < y_size; ++y) {
-      const std::string filename = "sample-xz-" + std::to_string(y) + "-" +
-                                   std::to_string(round) + "-" + tag + ".tif";
+      const std::string filename =
+          "grid-xz-" + std::string(maximum_likelihood ? "ml-" : "") +
+          std::to_string(y) + "-" + std::to_string(round) + "-" + tag + ".tif";
       WriteGridXZSliceToTIFF(filename, x_size, y_size, z_size, y, sample,
                              box_size, background_pixel, active_pixel, negate);
     }
     for (Int x = 0; x < x_size; ++x) {
-      const std::string filename = "sample-yz-" + std::to_string(x) + "-" +
-                                   std::to_string(round) + "-" + tag + ".tif";
+      const std::string filename =
+          "grid-yz-" + std::string(maximum_likelihood ? "ml-" : "") +
+          std::to_string(x) + "-" + std::to_string(round) + "-" + tag + ".tif";
       WriteGridYZSliceToTIFF(filename, x_size, y_size, z_size, x, sample,
                              box_size, background_pixel, active_pixel, negate);
     }
@@ -911,8 +915,9 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string tag = std::string("omp-") + typeid(Field).name();
-      WriteGridSampleToTIFF(x_size, y_size, z_size, round, omp_sample, box_size,
-                            negate, background_pixel, active_pixel, tag);
+      WriteGridSampleToTIFF(x_size, y_size, z_size, round, maximum_likelihood,
+                            omp_sample, box_size, negate, background_pixel,
+                            active_pixel, tag);
     }
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
     if (z_size == 1 && ascii_display) {
@@ -929,8 +934,9 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string tag = typeid(Field).name();
-      WriteGridSampleToTIFF(x_size, y_size, z_size, round, sample, box_size,
-                            negate, background_pixel, active_pixel, tag);
+      WriteGridSampleToTIFF(x_size, y_size, z_size, round, maximum_likelihood,
+                            sample, box_size, negate, background_pixel,
+                            active_pixel, tag);
     }
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
     if (z_size == 1 && ascii_display) {
@@ -971,7 +977,8 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
     if (write_tiff) {
       const std::string tag = std::string("omp-") + typeid(Field).name();
       const std::string filename =
-          "sample-xy-" + std::to_string(round) + "-" + tag + ".tif";
+          "hexagonal-" + std::string(maximum_likelihood ? "ml-" : "") +
+          std::to_string(round) + "-" + tag + ".tif";
       WriteHexagonalToTIFF(filename, x_size, y_size, omp_sample, cell_size,
                            background_pixel, active_pixel, negate);
     }
@@ -986,7 +993,8 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
     if (write_tiff) {
       const std::string tag = typeid(Field).name();
       const std::string filename =
-          "sample-xy-" + std::to_string(round) + "-" + tag + ".tif";
+          "hexagonal-" + std::string(maximum_likelihood ? "ml-" : "") +
+          std::to_string(round) + "-" + tag + ".tif";
       WriteHexagonalToTIFF(filename, x_size, y_size, sample, cell_size,
                            background_pixel, active_pixel, negate);
     }

@@ -554,8 +554,13 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
     if (write_tiff) {
       const std::string tag = std::string("omp-") + typeid(Real).name();
       const std::string filename =
-          "aztec-" + std::to_string(round) + "-" + tag + ".tif";
-      // TODO(Jack Poulson): Write sample to TIFF using N/S/E/W dimer coloring.
+          "aztec-" + std::string(maximum_likelihood ? "ml-" : "") +
+          std::to_string(round) + "-" + tag + ".tif";
+      WriteTilingToTIFF(filename, diamond_size, sample, box_size,
+                        north_source_pixel, north_target_pixel,
+                        south_source_pixel, south_target_pixel,
+                        east_source_pixel, east_target_pixel, west_source_pixel,
+                        west_target_pixel, boundary_pixel, background_pixel);
     } else {
       PrintSample(omp_sample);
     }
@@ -576,7 +581,8 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
     if (write_tiff) {
       const std::string tag = typeid(Real).name();
       const std::string filename =
-          "aztec-" + std::to_string(round) + "-" + tag + ".tif";
+          "aztec-" + std::string(maximum_likelihood ? "ml-" : "") +
+          std::to_string(round) + "-" + tag + ".tif";
       WriteTilingToTIFF(filename, diamond_size, sample, box_size,
                         north_source_pixel, north_target_pixel,
                         south_source_pixel, south_target_pixel,
@@ -596,7 +602,7 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
 int main(int argc, char** argv) {
   specify::ArgumentParser parser(argc, argv);
   const Int diamond_size = parser.OptionalInput<Int>(
-      "diamond_size", "The dimension of the Aztec diamond.", 50);
+      "diamond_size", "The dimension of the Aztec diamond.", 30);
   const Int tile_size = parser.OptionalInput<Int>(
       "tile_size", "The tile size for multithreaded factorization.", 128);
   const Int block_size = parser.OptionalInput<Int>(
