@@ -76,6 +76,13 @@ is given by:
 
 ![](./images/hexagonal_30x30.png)
 
+There is also support for sampling from real or complex, nonsymmetric DPP's.
+An import example of such processes is the Aztec diamond DPP, whose kernel is
+formed via Kenyon's formula. See [example/aztec_diamond.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/aztec_diamond.cc) for more information.
+An example output for a tiling of size 40 is given below:
+
+![](./images/aztec-40.png)
+
 ### License
 `catamari` is distributed under the
 [Mozilla Public License, v. 2.0](https://www.mozilla.org/media/MPL/2.0/index.815ca599c9df.txt).
