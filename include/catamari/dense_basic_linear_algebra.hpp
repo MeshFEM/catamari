@@ -228,6 +228,13 @@ void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
     const ConstBlasMatrixView<Field>& triangular_matrix,
     BlasMatrixView<Field>* matrix);
 
+// Updates 'matrix := matrix inv(triangular_matrix)', where
+// 'triangular_matrix' is assumed upper-triangular.
+template <class Field>
+void RightUpperTriangularSolves(
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix);
+
 #ifdef CATAMARI_OPENMP
 // Performs a multi-threaded MatrixMultiplyLowerNormalNormal using OpenMP tasks.
 // In most circumstances, it should be surrounded by:

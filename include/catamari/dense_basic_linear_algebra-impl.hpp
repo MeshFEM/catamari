@@ -2738,6 +2738,101 @@ inline void RightDiagonalTimesLowerTransposeUnitTriangularSolves(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
+void RightUpperTriangularSolves(
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
+  const Int height = matrix->height;
+  const Int width = matrix->width;
+  for (Int i = 0; i < height; ++i) {
+    for (Int j = 0; j < width; ++j) {
+      matrix->Entry(i, j) /= triangular_matrix(j, j);
+      const Field eta = matrix->Entry(i, j);
+      for (Int k = j + 1; k < width; ++k) {
+        matrix->Entry(i, k) -= eta * triangular_matrix(j, k);
+      }
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void RightUpperTriangularSolves(
+    const ConstBlasMatrixView<float>& triangular_matrix,
+    BlasMatrixView<float>* matrix) {
+  const char side = 'R';
+  const char uplo = 'U';
+  const char trans_triang = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const float alpha = 1;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BLAS_SYMBOL(strsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void RightUpperTriangularSolves(
+    const ConstBlasMatrixView<double>& triangular_matrix,
+    BlasMatrixView<double>* matrix) {
+  const char side = 'R';
+  const char uplo = 'U';
+  const char trans_triang = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const double alpha = 1;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BLAS_SYMBOL(dtrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void RightUpperTriangularSolves(
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    BlasMatrixView<Complex<float>>* matrix) {
+  const char side = 'R';
+  const char uplo = 'U';
+  const char trans_triang = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const Complex<float> alpha = 1;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BLAS_SYMBOL(ctrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+
+template <>
+inline void RightUpperTriangularSolves(
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    BlasMatrixView<Complex<double>>* matrix) {
+  const char side = 'R';
+  const char uplo = 'U';
+  const char trans_triang = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = matrix->height;
+  const BlasInt width_blas = matrix->width;
+  const Complex<double> alpha = 1;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt leading_dim_blas = matrix->leading_dim;
+  BLAS_SYMBOL(ztrsm)
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+   &leading_dim_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
 void Permute(const Buffer<Int>& permutation, BlasMatrixView<Field>* matrix) {
   for (Int j = 0; j < matrix->width; ++j) {
     // Make a copy of the current column.

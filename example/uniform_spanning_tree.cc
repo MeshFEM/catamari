@@ -40,6 +40,7 @@
 
 #include "catamari/blas_matrix.hpp"
 #include "catamari/dense_factorizations.hpp"
+#include "catamari/io_utils.hpp"
 #include "catamari/ldl.hpp"
 #include "quotient/timer.hpp"
 #include "specify.hpp"
@@ -48,10 +49,6 @@
 // driver, and so the entire driver is disabled if LAPACK support was not
 // detected.
 #ifdef CATAMARI_HAVE_LAPACK
-
-#ifdef CATAMARI_HAVE_LIBTIFF
-#include <tiffio.h>
-#endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
 using catamari::BlasMatrix;
 using catamari::BlasMatrixView;
@@ -89,46 +86,6 @@ void LAPACK_SYMBOL(sorgqr)(const BlasInt* height, const BlasInt* width,
 namespace {
 
 #ifdef CATAMARI_HAVE_LIBTIFF
-// Saves a row-major RGB pixel map into a TIFF image.
-void WriteTIFF(const std::string& filename, std::size_t height,
-               std::size_t width, const std::size_t samples_per_pixel,
-               const std::vector<char>& image) {
-  TIFF* tiff_img = TIFFOpen(filename.c_str(), "w");
-
-  TIFFSetField(tiff_img, TIFFTAG_IMAGEWIDTH, width);
-  TIFFSetField(tiff_img, TIFFTAG_IMAGELENGTH, height);
-  TIFFSetField(tiff_img, TIFFTAG_SAMPLESPERPIXEL, samples_per_pixel);
-  TIFFSetField(tiff_img, TIFFTAG_BITSPERSAMPLE, 8);
-  TIFFSetField(tiff_img, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
-  TIFFSetField(tiff_img, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
-  TIFFSetField(tiff_img, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
-
-  const std::size_t line_size = samples_per_pixel * width;
-  const std::size_t scanline_size = TIFFScanlineSize(tiff_img);
-  const std::size_t row_size = std::max(line_size, scanline_size);
-  unsigned char* row_buf = (unsigned char*)_TIFFmalloc(row_size);
-
-  for (uint32 row = 0; row < height; ++row) {
-    std::memcpy(row_buf, &image[(height - row - 1) * line_size], line_size);
-    if (TIFFWriteScanline(tiff_img, row_buf, row, 0) < 0) {
-      std::cout << "Could not write row." << std::endl;
-      break;
-    }
-  }
-
-  TIFFClose(tiff_img);
-  if (row_buf) {
-    _TIFFfree(row_buf);
-  }
-}
-
-// A representation of a TIFF pixel (without alpha).
-struct Pixel {
-  char red;
-  char green;
-  char blue;
-};
-
 // Returns whether the given value exists within a sorted list.
 template <typename Iterator, typename T>
 bool IndexExists(Iterator beg, Iterator end, T value) {
@@ -136,22 +93,14 @@ bool IndexExists(Iterator beg, Iterator end, T value) {
   return iter != end && *iter == value;
 }
 
-// Packs a pixel into the given position in a TIFF image buffer.
-void PackPixel(Int i, Int j, Int width, Pixel pixel, std::vector<char>* image) {
-  const Int samples_per_pixel = 3;
-  Int offset = samples_per_pixel * (j + i * width);
-  (*image)[offset++] = pixel.red;
-  (*image)[offset++] = pixel.green;
-  (*image)[offset++] = pixel.blue;
-}
-
 // Prints out an (x, y) slice of a Z^3 spanning tree.
 inline void WriteGridXYSliceToTIFF(const std::string& filename, Int x_size,
                                    Int y_size, Int z_size, Int z,
                                    const std::vector<Int>& sample,
                                    const Int box_size,
-                                   const Pixel& background_pixel,
-                                   const Pixel& active_pixel, bool negate) {
+                                   const catamari::Pixel& background_pixel,
+                                   const catamari::Pixel& active_pixel,
+                                   bool negate) {
   const Int num_x_edges = (x_size - 1) * y_size * z_size;
   const Int num_y_edges = x_size * (y_size - 1) * z_size;
 
@@ -170,7 +119,7 @@ inline void WriteGridXYSliceToTIFF(const std::string& filename, Int x_size,
   // Fill the background pixels.
   for (Int i = 0; i < height; ++i) {
     for (Int j = 0; j < width; ++j) {
-      PackPixel(i, j, width, background_pixel, &image);
+      catamari::PackPixel(i, j, width, background_pixel, &image);
     }
   }
 
@@ -183,7 +132,7 @@ inline void WriteGridXYSliceToTIFF(const std::string& filename, Int x_size,
         const Int i = y * box_size;
         const Int j_offset = x * box_size;
         for (Int j = j_offset; j <= j_offset + box_size; ++j) {
-          PackPixel(i, j, width, active_pixel, &image);
+          catamari::PackPixel(i, j, width, active_pixel, &image);
         }
       }
     }
@@ -198,14 +147,14 @@ inline void WriteGridXYSliceToTIFF(const std::string& filename, Int x_size,
           const Int j = x * box_size;
           const Int i_offset = y * box_size;
           for (Int i = i_offset; i <= i_offset + box_size; ++i) {
-            PackPixel(i, j, width, active_pixel, &image);
+            catamari::PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
     }
   }
 
-  WriteTIFF(filename, height, width, samples_per_pixel, image);
+  catamari::WriteTIFF(filename, height, width, samples_per_pixel, image);
 }
 
 // Prints out an (x, z) slice of a Z^3 spanning tree.
@@ -213,8 +162,9 @@ inline void WriteGridXZSliceToTIFF(const std::string& filename, Int x_size,
                                    Int y_size, Int z_size, Int y,
                                    const std::vector<Int>& sample,
                                    const Int box_size,
-                                   const Pixel& background_pixel,
-                                   const Pixel& active_pixel, bool negate) {
+                                   const catamari::Pixel& background_pixel,
+                                   const catamari::Pixel& active_pixel,
+                                   bool negate) {
   const Int num_x_edges = (x_size - 1) * y_size * z_size;
   const Int num_y_edges = x_size * (y_size - 1) * z_size;
 
@@ -235,7 +185,7 @@ inline void WriteGridXZSliceToTIFF(const std::string& filename, Int x_size,
   // Fill the background pixels.
   for (Int i = 0; i < height; ++i) {
     for (Int j = 0; j < width; ++j) {
-      PackPixel(i, j, width, background_pixel, &image);
+      catamari::PackPixel(i, j, width, background_pixel, &image);
     }
   }
 
@@ -248,7 +198,7 @@ inline void WriteGridXZSliceToTIFF(const std::string& filename, Int x_size,
         const Int i = z * box_size;
         const Int j_offset = x * box_size;
         for (Int j = j_offset; j <= j_offset + box_size; ++j) {
-          PackPixel(i, j, width, active_pixel, &image);
+          catamari::PackPixel(i, j, width, active_pixel, &image);
         }
       }
     }
@@ -263,14 +213,14 @@ inline void WriteGridXZSliceToTIFF(const std::string& filename, Int x_size,
           const Int j = x * box_size;
           const Int i_offset = z * box_size;
           for (Int i = i_offset; i <= i_offset + box_size; ++i) {
-            PackPixel(i, j, width, active_pixel, &image);
+            catamari::PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
     }
   }
 
-  WriteTIFF(filename, height, width, samples_per_pixel, image);
+  catamari::WriteTIFF(filename, height, width, samples_per_pixel, image);
 }
 
 // Prints out an (y, z) slice of a Z^3 spanning tree.
@@ -278,8 +228,9 @@ inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
                                    Int y_size, Int z_size, Int x,
                                    const std::vector<Int>& sample,
                                    const Int box_size,
-                                   const Pixel& background_pixel,
-                                   const Pixel& active_pixel, bool negate) {
+                                   const catamari::Pixel& background_pixel,
+                                   const catamari::Pixel& active_pixel,
+                                   bool negate) {
   const Int num_x_edges = (x_size - 1) * y_size * z_size;
   const Int num_y_edges = x_size * (y_size - 1) * z_size;
 
@@ -299,7 +250,7 @@ inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
   // Fill the background pixels.
   for (Int i = 0; i < height; ++i) {
     for (Int j = 0; j < width; ++j) {
-      PackPixel(i, j, width, background_pixel, &image);
+      catamari::PackPixel(i, j, width, background_pixel, &image);
     }
   }
 
@@ -313,7 +264,7 @@ inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
         const Int i = z * box_size;
         const Int j_offset = y * box_size;
         for (Int j = j_offset; j <= j_offset + box_size; ++j) {
-          PackPixel(i, j, width, active_pixel, &image);
+          catamari::PackPixel(i, j, width, active_pixel, &image);
         }
       }
     }
@@ -328,21 +279,23 @@ inline void WriteGridYZSliceToTIFF(const std::string& filename, Int x_size,
           const Int j = y * box_size;
           const Int i_offset = z * box_size;
           for (Int i = i_offset; i <= i_offset + box_size; ++i) {
-            PackPixel(i, j, width, active_pixel, &image);
+            catamari::PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
     }
   }
 
-  WriteTIFF(filename, height, width, samples_per_pixel, image);
+  catamari::WriteTIFF(filename, height, width, samples_per_pixel, image);
 }
 
 // Writes out the Z^3 sample to TIFF.
 inline void WriteGridSampleToTIFF(Int x_size, Int y_size, Int z_size, Int round,
                                   const std::vector<Int>& sample, Int box_size,
-                                  bool negate, Pixel background_pixel,
-                                  Pixel active_pixel, const std::string& tag) {
+                                  bool negate,
+                                  const catamari::Pixel& background_pixel,
+                                  const catamari::Pixel& active_pixel,
+                                  const std::string& tag) {
   for (Int z = 0; z < z_size; ++z) {
     const std::string filename = "sample-xy-" + std::to_string(z) + "-" +
                                  std::to_string(round) + "-" + tag + ".tif";
@@ -369,8 +322,9 @@ inline void WriteGridSampleToTIFF(Int x_size, Int y_size, Int z_size, Int round,
 inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
                                  Int y_size, const std::vector<Int>& sample,
                                  const Int cell_size,
-                                 const Pixel& background_pixel,
-                                 const Pixel& active_pixel, bool negate) {
+                                 const catamari::Pixel& background_pixel,
+                                 const catamari::Pixel& active_pixel,
+                                 bool negate) {
   const Int num_horz_edges =
       // Count the main set of horizontal connections for the grid of rings.
       (2 * x_size - 1) * y_size +
@@ -394,7 +348,7 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
   // Fill the background pixels.
   for (Int i = 0; i < height; ++i) {
     for (Int j = 0; j < width; ++j) {
-      PackPixel(i, j, width, background_pixel, &image);
+      catamari::PackPixel(i, j, width, background_pixel, &image);
     }
   }
 
@@ -426,7 +380,7 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
           const Int j_offset = x * horz_box_size + cell_size;
           const Int i = y * vert_box_size;
           for (Int j = j_offset; j <= j_offset + cell_size; ++j) {
-            PackPixel(i, j, width, active_pixel, &image);
+            catamari::PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -439,7 +393,7 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
           const Int j_offset = x * horz_box_size + 3 * cell_size;
           const Int i = y * vert_box_size + cell_size;
           for (Int j = j_offset; j <= j_offset + cell_size; ++j) {
-            PackPixel(i, j, width, active_pixel, &image);
+            catamari::PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -454,7 +408,7 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
           for (Int k = 0; k <= cell_size; ++k) {
             const Int i = i_offset - k;
             const Int j = j_offset + k;
-            PackPixel(i, j, width, active_pixel, &image);
+            catamari::PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -469,7 +423,7 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
           for (Int k = 0; k <= cell_size; ++k) {
             const Int i = i_offset + k;
             const Int j = j_offset + k;
-            PackPixel(i, j, width, active_pixel, &image);
+            catamari::PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -484,7 +438,7 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
           for (Int k = 0; k <= cell_size; ++k) {
             const Int i = i_offset + k;
             const Int j = j_offset + k;
-            PackPixel(i, j, width, active_pixel, &image);
+            catamari::PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -499,7 +453,7 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
           for (Int k = 0; k <= cell_size; ++k) {
             const Int i = i_offset - k;
             const Int j = j_offset + k;
-            PackPixel(i, j, width, active_pixel, &image);
+            catamari::PackPixel(i, j, width, active_pixel, &image);
           }
         }
       }
@@ -514,13 +468,13 @@ inline void WriteHexagonalToTIFF(const std::string& filename, Int x_size,
         const Int i = y_size * vert_box_size;
         for (Int k = 0; k <= cell_size; ++k) {
           const Int j = j_offset + k;
-          PackPixel(i, j, width, active_pixel, &image);
+          catamari::PackPixel(i, j, width, active_pixel, &image);
         }
       }
     }
   }
 
-  WriteTIFF(filename, height, width, samples_per_pixel, image);
+  catamari::WriteTIFF(filename, height, width, samples_per_pixel, image);
 }
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
@@ -928,9 +882,6 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
                      Int num_rounds, unsigned int random_seed,
                      bool ascii_display, bool CATAMARI_UNUSED write_tiff,
                      bool negate) {
-  BlasMatrix<Field> matrix;
-  Buffer<Field> extra_buffer;
-
   // ASCII display configuration.
   const char missing_char = ' ';
   const char horizontal_sampled_char = '-';
@@ -938,20 +889,25 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 
 #ifdef CATAMARI_HAVE_LIBTIFF
   // TIFF configuration.
-  const Pixel background_pixel{char(255), char(255), char(255)};
-  const Pixel active_pixel{char(255), char(0), char(0)};
+  const catamari::Pixel background_pixel{char(255), char(255), char(255)};
+  const catamari::Pixel active_pixel{char(255), char(0), char(0)};
   const Int box_size = 10;
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
+  BlasMatrix<Field> matrix;
+  GridStarSpaceBasisGramian(x_size, y_size, z_size, &matrix);
+
   std::mt19937 generator(random_seed);
+  BlasMatrix<Field> matrix_copy;
+  Buffer<Field> extra_buffer;
   for (Int round = 0; round < num_rounds; ++round) {
 #ifdef CATAMARI_OPENMP
     // Sample using the OpenMP DPP sampler.
-    GridStarSpaceBasisGramian(x_size, y_size, z_size, &matrix);
+    matrix_copy = matrix;
     extra_buffer.Resize(matrix.view.height * matrix.view.height);
     const std::vector<Int> omp_sample =
-        OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
-                        &generator, &extra_buffer);
+        OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
+                        &matrix_copy.view, &generator, &extra_buffer);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string tag = std::string("omp-") + typeid(Field).name();
@@ -967,9 +923,9 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 #endif  // ifdef CATAMARI_OPENMP
 
     // Sample using the sequential DPP sampler.
-    GridStarSpaceBasisGramian(x_size, y_size, z_size, &matrix);
-    const std::vector<Int> sample =
-        SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
+    matrix_copy = matrix;
+    const std::vector<Int> sample = SampleDPP(block_size, maximum_likelihood,
+                                              &matrix_copy.view, &generator);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string tag = typeid(Field).name();
@@ -990,25 +946,27 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
                           Int block_size, Int CATAMARI_UNUSED tile_size,
                           Int num_rounds, unsigned int random_seed,
                           bool CATAMARI_UNUSED write_tiff, bool negate) {
-  BlasMatrix<Field> matrix;
-  Buffer<Field> extra_buffer;
-
 #ifdef CATAMARI_HAVE_LIBTIFF
   // TIFF configuration.
-  const Pixel background_pixel{char(255), char(255), char(255)};
-  const Pixel active_pixel{char(255), char(0), char(0)};
+  const catamari::Pixel background_pixel{char(255), char(255), char(255)};
+  const catamari::Pixel active_pixel{char(255), char(0), char(0)};
   const Int cell_size = 5;
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
+  BlasMatrix<Field> matrix;
+  HexagonalStarSpaceBasisGramian(x_size, y_size, &matrix);
+
   std::mt19937 generator(random_seed);
+  BlasMatrix<Field> matrix_copy;
+  Buffer<Field> extra_buffer;
   for (Int round = 0; round < num_rounds; ++round) {
 #ifdef CATAMARI_OPENMP
     // Sample using the OpenMP sampler.
-    HexagonalStarSpaceBasisGramian(x_size, y_size, &matrix);
+    matrix_copy = matrix;
     extra_buffer.Resize(matrix.view.height * matrix.view.height);
     const std::vector<Int> omp_sample =
-        OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
-                        &generator, &extra_buffer);
+        OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
+                        &matrix_copy.view, &generator, &extra_buffer);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string tag = std::string("omp-") + typeid(Field).name();
@@ -1021,9 +979,9 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 #endif  // ifdef CATAMARI_OPENMP
 
     // Sample using the sequential sampler.
-    HexagonalStarSpaceBasisGramian(x_size, y_size, &matrix);
-    const std::vector<Int> sample =
-        SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
+    matrix_copy = matrix;
+    const std::vector<Int> sample = SampleDPP(block_size, maximum_likelihood,
+                                              &matrix_copy.view, &generator);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string tag = typeid(Field).name();

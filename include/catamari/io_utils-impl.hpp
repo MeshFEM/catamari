@@ -8,7 +8,11 @@
 #ifndef CATAMARI_IO_UTILS_IMPL_H_
 #define CATAMARI_IO_UTILS_IMPL_H_
 
+#include <cstring>
+#include <fstream>
+#include <iostream>
 #include <ostream>
+#include <string>
 
 #include "catamari/io_utils.hpp"
 
@@ -97,6 +101,49 @@ inline void TruncatedForestTimersToDot(const std::string& filename,
   // Write out the footer.
   file << "}\n";
 }
+
+#ifdef CATAMARI_HAVE_LIBTIFF
+inline void PackPixel(Int i, Int j, Int width, Pixel pixel,
+                      std::vector<char>* image) {
+  const Int samples_per_pixel = 3;
+  Int offset = samples_per_pixel * (j + i * width);
+  (*image)[offset++] = pixel.red;
+  (*image)[offset++] = pixel.green;
+  (*image)[offset++] = pixel.blue;
+}
+
+inline void WriteTIFF(const std::string& filename, std::size_t height,
+                      std::size_t width, const std::size_t samples_per_pixel,
+                      const std::vector<char>& image) {
+  TIFF* tiff_img = TIFFOpen(filename.c_str(), "w");
+
+  TIFFSetField(tiff_img, TIFFTAG_IMAGEWIDTH, width);
+  TIFFSetField(tiff_img, TIFFTAG_IMAGELENGTH, height);
+  TIFFSetField(tiff_img, TIFFTAG_SAMPLESPERPIXEL, samples_per_pixel);
+  TIFFSetField(tiff_img, TIFFTAG_BITSPERSAMPLE, 8);
+  TIFFSetField(tiff_img, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+  TIFFSetField(tiff_img, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+  TIFFSetField(tiff_img, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+
+  const std::size_t line_size = samples_per_pixel * width;
+  const std::size_t scanline_size = TIFFScanlineSize(tiff_img);
+  const std::size_t row_size = std::max(line_size, scanline_size);
+  unsigned char* row_buf = (unsigned char*)_TIFFmalloc(row_size);
+
+  for (uint32 row = 0; row < height; ++row) {
+    std::memcpy(row_buf, &image[(height - row - 1) * line_size], line_size);
+    if (TIFFWriteScanline(tiff_img, row_buf, row, 0) < 0) {
+      std::cout << "Could not write row." << std::endl;
+      break;
+    }
+  }
+
+  TIFFClose(tiff_img);
+  if (row_buf) {
+    _TIFFfree(row_buf);
+  }
+}
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
 }  // namespace catamari
 

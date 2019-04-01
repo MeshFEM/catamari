@@ -84,6 +84,31 @@ std::vector<Int> OpenMPLowerFactorAndSampleDPP(Int tile_size, Int block_size,
                                                std::vector<Field>* buffer);
 #endif  // ifdef CATAMARI_OPENMP
 
+// Returns a sample from the Determinantal Point Process implied by a
+// *nonsymmetric* marginal kernel matrix: a complex matrix with real
+// diagonal which satisfies [1]
+//
+//     (-1)^{|J|} det(K - I_J) >= 0 for all J \subseteq [n].
+//
+// The input matrix is overwritten with the associated L U factorization of the
+// modified kernel (each diagonal pivot with a failed coin-flip is decremented
+// by one).
+//
+// [1] Brunel, Learning Signed Determinantal Point Processes through the
+//     Principal Minor Assignment Problem.
+//
+template <class Field>
+std::vector<Int> LowerFactorAndSampleNonsymmetricDPP(
+    Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
+    std::mt19937* generator);
+
+#ifdef CATAMARI_OPENMP
+template <class Field>
+std::vector<Int> OpenMPLowerFactorAndSampleNonsymmetricDPP(
+    Int tile_size, Int block_size, bool maximum_likelihood,
+    BlasMatrixView<Field>* matrix, std::mt19937* generator);
+#endif  // ifdef CATAMARI_OPENMP
+
 }  // namespace catamari
 
 #include "catamari/dense_factorizations-impl.hpp"

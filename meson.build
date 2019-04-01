@@ -253,6 +253,14 @@ uniform_spanning_tree_exe = executable(
     dependencies : deps + example_deps,
     cpp_args : cxx_args)
 
+# A DPP which uniformly samples domino tilings of the Aztec diamond.
+aztec_diamond_exe = executable(
+    'aztec_diamond',
+    ['example/aztec_diamond.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps + example_deps,
+    cpp_args : cxx_args)
+
 # A performance test for factoring a dense matrix.
 dense_factorization_exe = executable(
     'dense_factorization',
