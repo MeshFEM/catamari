@@ -1,4 +1,4 @@
-![](./images/aztec-40-30pct.png)
+![](./images/aztec-40-20pct.png)
 
 [**catamari**](https://hodgestar.com/catamari/) is a
 [C++14](https://en.wikipedia.org/wiki/C%2B%2B14), header-only implementations of
