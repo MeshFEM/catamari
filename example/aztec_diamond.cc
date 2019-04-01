@@ -556,7 +556,7 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
       const std::string filename =
           "aztec-" + std::string(maximum_likelihood ? "ml-" : "") +
           std::to_string(round) + "-" + tag + ".tif";
-      WriteTilingToTIFF(filename, diamond_size, sample, box_size,
+      WriteTilingToTIFF(filename, diamond_size, omp_sample, box_size,
                         north_source_pixel, north_target_pixel,
                         south_source_pixel, south_target_pixel,
                         east_source_pixel, east_target_pixel, west_source_pixel,
