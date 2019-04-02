@@ -841,6 +841,7 @@ std::vector<Int> SampleDPP(Int block_size, bool maximum_likelihood,
   const double flops =
       (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
   const double gflops_per_sec = flops / (1.e9 * runtime);
+  std::cout << "Sequential DPP time: " << runtime << " seconds." << std::endl;
   std::cout << "Sequential DPP GFlop/s: " << gflops_per_sec << std::endl;
 
   return sample;
@@ -874,6 +875,7 @@ std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
   const double flops =
       (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
   const double gflops_per_sec = flops / (1.e9 * runtime);
+  std::cout << "OpenMP DPP time: " << runtime << " seconds." << std::endl;
   std::cout << "OpenMP DPP GFlop/s: " << gflops_per_sec << std::endl;
 
   return sample;
@@ -901,6 +903,10 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
   BlasMatrix<Field> matrix;
   GridStarSpaceBasisGramian(x_size, y_size, z_size, &matrix);
 
+  // A uniform spanning tree should have the initial edge cover two vertices and
+  // each additional edge should touch one new vertex.
+  const Int expected_sample_size = x_size * y_size * z_size - 1;
+
   std::mt19937 generator(random_seed);
   BlasMatrix<Field> matrix_copy;
   Buffer<Field> extra_buffer;
@@ -912,9 +918,16 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
     const std::vector<Int> omp_sample =
         OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
                         &matrix_copy.view, &generator, &extra_buffer);
+    if (Int(omp_sample.size()) != expected_sample_size) {
+      std::cerr << "ERROR: Sampled " << omp_sample.size() << " instead of "
+                << expected_sample_size << " edges." << std::endl;
+    }
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string tag = std::string("omp-") + typeid(Field).name();
+      const std::string tag = std::to_string(x_size) + std::string("-") +
+                              std::to_string(y_size) + std::string("-") +
+                              std::to_string(z_size) + std::string("-omp-") +
+                              typeid(Field).name();
       WriteGridSampleToTIFF(x_size, y_size, z_size, round, maximum_likelihood,
                             omp_sample, box_size, negate, background_pixel,
                             active_pixel, tag);
@@ -931,9 +944,16 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
     matrix_copy = matrix;
     const std::vector<Int> sample = SampleDPP(block_size, maximum_likelihood,
                                               &matrix_copy.view, &generator);
+    if (Int(sample.size()) != expected_sample_size) {
+      std::cerr << "ERROR: Sampled " << sample.size() << " instead of "
+                << expected_sample_size << " edges." << std::endl;
+    }
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string tag = typeid(Field).name();
+      const std::string tag = std::to_string(x_size) + std::string("-") +
+                              std::to_string(y_size) + std::string("-") +
+                              std::to_string(z_size) + std::string("-") +
+                              typeid(Field).name();
       WriteGridSampleToTIFF(x_size, y_size, z_size, round, maximum_likelihood,
                             sample, box_size, negate, background_pixel,
                             active_pixel, tag);
@@ -1028,9 +1048,9 @@ int main(int argc, char** argv) {
   const unsigned int random_seed = parser.OptionalInput<unsigned int>(
       "random_seed", "The random seed for the DPP.", 17u);
   const bool maximum_likelihood = parser.OptionalInput<bool>(
-      "maximum_likelihood", "Take a maximum likelihood DPP sample?", true);
+      "maximum_likelihood", "Take a maximum likelihood DPP sample?", false);
   const bool ascii_display = parser.OptionalInput<bool>(
-      "ascii_display", "Display the results in ASCII?", true);
+      "ascii_display", "Display the results in ASCII?", false);
   const bool write_tiff = parser.OptionalInput<bool>(
       "write_tiff", "Write out the results into a TIFF file?", true);
   if (!parser.OK()) {

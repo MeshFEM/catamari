@@ -587,9 +587,11 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
     }
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string tag = std::string("omp-") + typeid(Real).name();
-      const std::string dual_tag =
-          std::string("omp-dual-") + typeid(Real).name();
+      const std::string tag = std::to_string(diamond_size) +
+                              std::string("-omp-") + typeid(Real).name();
+      const std::string dual_tag = std::to_string(diamond_size) +
+                                   std::string("-omp-dual-") +
+                                   typeid(Real).name();
       const std::string filename =
           "aztec-" + std::string(maximum_likelihood ? "ml-" : "") +
           std::to_string(round) + "-" + tag + ".tif";
@@ -616,8 +618,10 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
     }
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
-      const std::string tag = typeid(Real).name();
-      const std::string dual_tag = std::string("dual-") + typeid(Real).name();
+      const std::string tag =
+          std::to_string(diamond_size) + "-" + typeid(Real).name();
+      const std::string dual_tag = std::to_string(diamond_size) +
+                                   std::string("-dual-") + typeid(Real).name();
       const std::string filename =
           "aztec-" + std::string(maximum_likelihood ? "ml-" : "") +
           std::to_string(round) + "-" + tag + ".tif";
