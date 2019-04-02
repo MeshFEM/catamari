@@ -94,6 +94,7 @@ std::vector<Int> SampleNonsymmetricDPP(Int block_size, bool maximum_likelihood,
   const double flops =
       (is_complex ? 4 : 1) * 2 * std::pow(1. * matrix_size, 3.) / 3.;
   const double gflops_per_sec = flops / (1.e9 * runtime);
+  std::cout << "Sequential time: " << runtime << " seconds." << std::endl;
   std::cout << "Sequential DPP GFlop/s: " << gflops_per_sec << std::endl;
 
   return sample;
@@ -125,6 +126,7 @@ std::vector<Int> OpenMPSampleNonsymmetricDPP(Int tile_size, Int block_size,
   const double flops =
       (is_complex ? 4 : 1) * 2 * std::pow(1. * matrix_size, 3.) / 3.;
   const double gflops_per_sec = flops / (1.e9 * runtime);
+  std::cout << "OpenMP time: " << runtime << " seconds." << std::endl;
   std::cout << "OpenMP DPP GFlop/s: " << gflops_per_sec << std::endl;
 
   return sample;
@@ -348,19 +350,47 @@ void PrintSample(const std::vector<Int>& sample) {
 }
 
 #ifdef CATAMARI_HAVE_LIBTIFF
+// A configuration
+struct DominoTIFFConfig {
+  // The pixel width for each vertex.
+  Int box_size = 10;
+
+  // The RGB values of the source portion of north dimers.
+  catamari::Pixel north_source_pixel{char(170), char(170), char(0)};
+
+  // The RGB values of the target portion of north dimers.
+  catamari::Pixel north_target_pixel{char(255), char(255), char(0)};
+
+  // The RGB values of the source portion of south dimers.
+  catamari::Pixel south_source_pixel{char(0), char(170), char(0)};
+
+  // The RGB values of the target portion of south dimers.
+  catamari::Pixel south_target_pixel{char(153), char(255), char(153)};
+
+  // The RGB values of the source portion of east dimers.
+  catamari::Pixel east_source_pixel{char(170), char(0), char(0)};
+
+  // The RGB values of the target portion of east dimers.
+  catamari::Pixel east_target_pixel{char(255), char(153), char(153)};
+
+  // The RGB values of the source portion of west dimers.
+  catamari::Pixel west_source_pixel{char(0), char(0), char(170)};
+
+  // The RGB values of the target portion of west dimers.
+  catamari::Pixel west_target_pixel{char(102), char(102), char(255)};
+
+  // The RGB value of the background pixel.
+  catamari::Pixel background_pixel{char(255), char(255), char(255)};
+
+  // The RGB value of the tile boundary pixel.
+  catamari::Pixel boundary_pixel{char(0), char(0), char(0)};
+};
+
+// Writes out a TIFF image for the domino tiling of the Aztec diamond.
 void WriteTilingToTIFF(const std::string& filename, Int diamond_size,
-                       const std::vector<Int>& sample, const Int box_size,
-                       const catamari::Pixel& north_source_pixel,
-                       const catamari::Pixel& north_target_pixel,
-                       const catamari::Pixel& south_source_pixel,
-                       const catamari::Pixel& south_target_pixel,
-                       const catamari::Pixel& east_source_pixel,
-                       const catamari::Pixel& east_target_pixel,
-                       const catamari::Pixel& west_source_pixel,
-                       const catamari::Pixel& west_target_pixel,
-                       const catamari::Pixel& boundary_pixel,
-                       const catamari::Pixel& background_pixel) {
-  const Int height = box_size * 2 * diamond_size;
+                       const std::vector<Int>& sample,
+                       const DominoTIFFConfig& config) {
+  const Int height = config.box_size * 2 * diamond_size;
   const Int width = height;
   const Int samples_per_pixel = 3;
   std::vector<char> image(width * height * samples_per_pixel);
@@ -368,12 +398,12 @@ void WriteTilingToTIFF(const std::string& filename, Int diamond_size,
   // Fill in the background pixels.
   for (Int i = 0; i < height; ++i) {
     for (Int j = 0; j < width; ++j) {
-      catamari::PackPixel(i, j, width, background_pixel, &image);
+      catamari::PackPixel(i, j, width, config.background_pixel, &image);
     }
   }
 
   const Int i_origin = 0;
-  const Int j_origin = box_size * diamond_size;
+  const Int j_origin = config.box_size * diamond_size;
 
   for (const Int& index : sample) {
     // Determine which face the index is in.
@@ -430,46 +460,46 @@ void WriteTilingToTIFF(const std::string& filename, Int diamond_size,
     catamari::Pixel source_pixel, target_pixel;
     if (face_edge == 0) {
       // East
-      source_pixel = east_source_pixel;
-      target_pixel = east_target_pixel;
+      source_pixel = config.east_source_pixel;
+      target_pixel = config.east_target_pixel;
     } else if (face_edge == 1) {
       // South
-      source_pixel = south_source_pixel;
-      target_pixel = south_target_pixel;
+      source_pixel = config.south_source_pixel;
+      target_pixel = config.south_target_pixel;
     } else if (face_edge == 2) {
       // North
-      source_pixel = north_source_pixel;
-      target_pixel = north_target_pixel;
+      source_pixel = config.north_source_pixel;
+      target_pixel = config.north_target_pixel;
     } else if (face_edge == 3) {
       // West
-      source_pixel = west_source_pixel;
-      target_pixel = west_target_pixel;
+      source_pixel = config.west_source_pixel;
+      target_pixel = config.west_target_pixel;
     } else {
       std::cerr << "Impossible fallback." << std::endl;
-      source_pixel = background_pixel;
-      target_pixel = background_pixel;
+      source_pixel = config.background_pixel;
+      target_pixel = config.background_pixel;
     }
 
     // Draw the source box.
-    const Int i_source_offset = i_origin + alpha_source * box_size;
-    const Int j_source_offset = j_origin + beta_source * box_size;
-    for (Int k = 0; k < box_size; ++k) {
+    const Int i_source_offset = i_origin + alpha_source * config.box_size;
+    const Int j_source_offset = j_origin + beta_source * config.box_size;
+    for (Int k = 0; k < config.box_size; ++k) {
       const Int i = i_source_offset + k;
-      for (Int l = 0; l < box_size; ++l) {
+      for (Int l = 0; l < config.box_size; ++l) {
         const Int j = j_source_offset + l;
 
-        if (k == box_size - 1 && !(face_edge == 2)) {
+        if (k == config.box_size - 1 && !(face_edge == 2)) {
           // Only draw the north wall if not a northern domino.
-          catamari::PackPixel(i, j, width, boundary_pixel, &image);
+          catamari::PackPixel(i, j, width, config.boundary_pixel, &image);
         } else if (k == 0 && !(face_edge == 1)) {
           // Only draw the south wall if not a southern domino.
-          catamari::PackPixel(i, j, width, boundary_pixel, &image);
-        } else if (l == box_size - 1 && !(face_edge == 0)) {
+          catamari::PackPixel(i, j, width, config.boundary_pixel, &image);
+        } else if (l == config.box_size - 1 && !(face_edge == 0)) {
           // Only draw the east wall if not an eastern domino.
-          catamari::PackPixel(i, j, width, boundary_pixel, &image);
+          catamari::PackPixel(i, j, width, config.boundary_pixel, &image);
         } else if (l == 0 && !(face_edge == 3)) {
           // Only draw the west wall if not a western domino.
-          catamari::PackPixel(i, j, width, boundary_pixel, &image);
+          catamari::PackPixel(i, j, width, config.boundary_pixel, &image);
         } else {
           catamari::PackPixel(i, j, width, source_pixel, &image);
         }
@@ -477,25 +507,25 @@ void WriteTilingToTIFF(const std::string& filename, Int diamond_size,
     }
 
     // Draw the target box.
-    const Int i_target_offset = i_origin + alpha_target * box_size;
-    const Int j_target_offset = j_origin + beta_target * box_size;
-    for (Int k = 0; k < box_size; ++k) {
+    const Int i_target_offset = i_origin + alpha_target * config.box_size;
+    const Int j_target_offset = j_origin + beta_target * config.box_size;
+    for (Int k = 0; k < config.box_size; ++k) {
       const Int i = i_target_offset + k;
-      for (Int l = 0; l < box_size; ++l) {
+      for (Int l = 0; l < config.box_size; ++l) {
         const Int j = j_target_offset + l;
 
-        if (k == box_size - 1 && !(face_edge == 1)) {
+        if (k == config.box_size - 1 && !(face_edge == 1)) {
           // Only draw the north wall if not a southern domino.
-          catamari::PackPixel(i, j, width, boundary_pixel, &image);
+          catamari::PackPixel(i, j, width, config.boundary_pixel, &image);
         } else if (k == 0 && !(face_edge == 2)) {
           // Only draw the south wall if not a northern domino.
-          catamari::PackPixel(i, j, width, boundary_pixel, &image);
-        } else if (l == box_size - 1 && !(face_edge == 3)) {
+          catamari::PackPixel(i, j, width, config.boundary_pixel, &image);
+        } else if (l == config.box_size - 1 && !(face_edge == 3)) {
           // Only draw the east wall if not a western domino.
-          catamari::PackPixel(i, j, width, boundary_pixel, &image);
+          catamari::PackPixel(i, j, width, config.boundary_pixel, &image);
         } else if (l == 0 && !(face_edge == 0)) {
           // Only draw the west wall if not an eastern domino.
-          catamari::PackPixel(i, j, width, boundary_pixel, &image);
+          catamari::PackPixel(i, j, width, config.boundary_pixel, &image);
         } else {
           catamari::PackPixel(i, j, width, target_pixel, &image);
         }
@@ -526,16 +556,21 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
 
   const Int expected_sample_size = diamond_size * (diamond_size + 1);
 
-  const catamari::Pixel north_source_pixel{char(170), char(170), char(0)};
-  const catamari::Pixel north_target_pixel{char(255), char(255), char(0)};
-  const catamari::Pixel south_source_pixel{char(0), char(170), char(0)};
-  const catamari::Pixel south_target_pixel{char(153), char(255), char(153)};
-  const catamari::Pixel east_source_pixel{char(170), char(0), char(0)};
-  const catamari::Pixel east_target_pixel{char(255), char(153), char(153)};
-  const catamari::Pixel west_source_pixel{char(0), char(0), char(170)};
-  const catamari::Pixel west_target_pixel{char(102), char(102), char(255)};
-  const catamari::Pixel background_pixel{char(255), char(255), char(255)};
-  const catamari::Pixel boundary_pixel{char(0), char(0), char(0)};
+  // Use the default of blue for west, red for east, yellow for north, and
+  // green for south.
+  DominoTIFFConfig config;
+  config.box_size = box_size;
+
+  // Use blue for north/south and red for east/west.
+  DominoTIFFConfig dual_config = config;
+  dual_config.north_source_pixel = config.west_source_pixel;
+  dual_config.north_target_pixel = config.west_target_pixel;
+  dual_config.south_source_pixel = config.west_source_pixel;
+  dual_config.south_target_pixel = config.west_target_pixel;
+  dual_config.east_source_pixel = config.east_source_pixel;
+  dual_config.east_target_pixel = config.east_target_pixel;
+  dual_config.west_source_pixel = config.east_source_pixel;
+  dual_config.west_target_pixel = config.east_target_pixel;
 
   std::mt19937 generator(random_seed);
   BlasMatrix<Complex<Real>> kenyon_copy;
@@ -553,14 +588,16 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string tag = std::string("omp-") + typeid(Real).name();
+      const std::string dual_tag =
+          std::string("omp-dual-") + typeid(Real).name();
       const std::string filename =
           "aztec-" + std::string(maximum_likelihood ? "ml-" : "") +
           std::to_string(round) + "-" + tag + ".tif";
-      WriteTilingToTIFF(filename, diamond_size, omp_sample, box_size,
-                        north_source_pixel, north_target_pixel,
-                        south_source_pixel, south_target_pixel,
-                        east_source_pixel, east_target_pixel, west_source_pixel,
-                        west_target_pixel, boundary_pixel, background_pixel);
+      const std::string dual_filename =
+          "aztec-" + std::string(maximum_likelihood ? "ml-" : "") +
+          std::to_string(round) + "-" + dual_tag + ".tif";
+      WriteTilingToTIFF(filename, diamond_size, omp_sample, config);
+      WriteTilingToTIFF(dual_filename, diamond_size, omp_sample, dual_config);
     } else {
       PrintSample(omp_sample);
     }
@@ -580,14 +617,15 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string tag = typeid(Real).name();
+      const std::string dual_tag = std::string("dual-") + typeid(Real).name();
       const std::string filename =
           "aztec-" + std::string(maximum_likelihood ? "ml-" : "") +
           std::to_string(round) + "-" + tag + ".tif";
-      WriteTilingToTIFF(filename, diamond_size, sample, box_size,
-                        north_source_pixel, north_target_pixel,
-                        south_source_pixel, south_target_pixel,
-                        east_source_pixel, east_target_pixel, west_source_pixel,
-                        west_target_pixel, boundary_pixel, background_pixel);
+      const std::string dual_filename =
+          "aztec-" + std::string(maximum_likelihood ? "ml-" : "") +
+          std::to_string(round) + "-" + dual_tag + ".tif";
+      WriteTilingToTIFF(filename, diamond_size, sample, config);
+      WriteTilingToTIFF(dual_filename, diamond_size, sample, dual_config);
     } else {
       PrintSample(sample);
     }
@@ -612,7 +650,7 @@ int main(int argc, char** argv) {
   const unsigned int random_seed = parser.OptionalInput<unsigned int>(
       "random_seed", "The random seed for the DPP.", 17u);
   const bool maximum_likelihood = parser.OptionalInput<bool>(
-      "maximum_likelihood", "Take a maximum likelihood DPP sample?", true);
+      "maximum_likelihood", "Take a maximum likelihood DPP sample?", false);
   const bool write_tiff = parser.OptionalInput<bool>(
       "write_tiff", "Write out the results into a TIFF file?", true);
   const Int box_size = parser.OptionalInput<Int>(
