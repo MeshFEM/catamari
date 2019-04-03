@@ -97,6 +97,9 @@ std::vector<Int> SampleNonsymmetricDPP(Int block_size, bool maximum_likelihood,
   std::cout << "Sequential time: " << runtime << " seconds." << std::endl;
   std::cout << "Sequential DPP GFlop/s: " << gflops_per_sec << std::endl;
 
+  const ComplexBase<Field> log_likelihood = catamari::DPPLogLikelihood(*matrix);
+  std::cout << "Sequential DPP log-likelihood: " << log_likelihood << std::endl;
+
   return sample;
 }
 
@@ -128,6 +131,9 @@ std::vector<Int> OpenMPSampleNonsymmetricDPP(Int tile_size, Int block_size,
   const double gflops_per_sec = flops / (1.e9 * runtime);
   std::cout << "OpenMP time: " << runtime << " seconds." << std::endl;
   std::cout << "OpenMP DPP GFlop/s: " << gflops_per_sec << std::endl;
+
+  const ComplexBase<Field> log_likelihood = catamari::DPPLogLikelihood(*matrix);
+  std::cout << "OpenMP DPP log-likelihood: " << log_likelihood << std::endl;
 
   return sample;
 }

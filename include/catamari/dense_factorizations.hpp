@@ -109,6 +109,11 @@ std::vector<Int> OpenMPLowerFactorAndSampleNonsymmetricDPP(
     BlasMatrixView<Field>* matrix, std::mt19937* generator);
 #endif  // ifdef CATAMARI_OPENMP
 
+// Returns the log-likelihood of a general DPP sample based upon the product of
+// the (real part of the) diagonal of the factored result.
+template <typename Field>
+ComplexBase<Field> DPPLogLikelihood(const BlasMatrixView<Field>& matrix);
+
 }  // namespace catamari
 
 #include "catamari/dense_factorizations-impl.hpp"

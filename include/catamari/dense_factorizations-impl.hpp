@@ -637,6 +637,25 @@ std::vector<Int> LowerFactorAndSampleNonsymmetricDPP(
       block_size, maximum_likelihood, matrix, generator);
 }
 
+template <typename Field>
+ComplexBase<Field> DPPLogLikelihood(const BlasMatrixView<Field>& matrix) {
+  typedef ComplexBase<Field> Real;
+  const Int matrix_size = matrix.height;
+  Real log_likelihood = 0;
+  for (Int i = 0; i < matrix_size; ++i) {
+    Real entry = quotient::RealPart(matrix(i, i));
+    if (entry > Real(0)) {
+      log_likelihood += std::log(entry);
+    } else if (entry < Real(0)) {
+      log_likelihood += std::log(-entry);
+    } else {
+      std::cerr << "Had an exactly zero diagonal entry of the result."
+                << std::endl;
+    }
+  }
+  return log_likelihood;
+}
+
 }  // namespace catamari
 
 #include "catamari/dense_factorizations/openmp-impl.hpp"
