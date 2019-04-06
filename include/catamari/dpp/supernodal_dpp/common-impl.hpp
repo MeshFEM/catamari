@@ -162,6 +162,24 @@ void SupernodalDPP<Field>::AppendSupernodeSample(
   }
 }
 
+template <typename Field>
+ComplexBase<Field> SupernodalDPP<Field>::LogLikelihood() const {
+  typedef ComplexBase<Field> Real;
+  const Int num_supernodes = diagonal_factor_->blocks.Size();
+
+  Real log_likelihood = 0;
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const ConstBlasMatrixView<Field> diag_block =
+        diagonal_factor_->blocks[supernode];
+    const Int supernode_size = diag_block.height;
+    for (Int j = 0; j < supernode_size; ++j) {
+      log_likelihood += std::log(std::abs(diag_block(j, j)));
+    }
+  }
+
+  return log_likelihood;
+}
+
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_SUPERNODAL_DPP_COMMON_IMPL_H_

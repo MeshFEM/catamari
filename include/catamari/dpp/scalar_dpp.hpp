@@ -31,6 +31,9 @@ class ScalarDPP {
   // pivot is kept based upon which choice is most likely.
   std::vector<Int> Sample(bool maximum_likelihood) const;
 
+  // Returns the log-likelihood of the last sample.
+  ComplexBase<Field> LogLikelihood() const;
+
  private:
   typedef ComplexBase<Field> Real;
 

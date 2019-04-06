@@ -106,6 +106,15 @@ std::vector<Int> DPP<Field>::Sample(bool maximum_likelihood) const {
   }
 }
 
+template <class Field>
+ComplexBase<Field> DPP<Field>::LogLikelihood() const {
+  if (is_supernodal_) {
+    return supernodal_dpp_->LogLikelihood();
+  } else {
+    return scalar_dpp_->LogLikelihood();
+  }
+}
+
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_DPP_IMPL_H_

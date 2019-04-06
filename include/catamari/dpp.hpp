@@ -44,6 +44,9 @@ class DPP {
   // pivot is kept based upon which choice is most likely.
   std::vector<Int> Sample(bool maximum_likelihood) const;
 
+  // Returns the log-likelihood of the last DPP sample.
+  ComplexBase<Field> LogLikelihood() const;
+
  private:
   // Whether or not a supernodal sampler was used. If it is true, only
   // 'supernodal_dpp_' should be non-null, and vice versa.

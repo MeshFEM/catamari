@@ -133,6 +133,28 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
   }
 }
 
+template <typename Field>
+void TestFactorizations(Int matrix_size, Int num_rounds, Int tile_size,
+                        Int block_size) {
+  BlasMatrix<Field> matrix;
+  Buffer<Field> extra_buffer;
+
+  for (Int round = 0; round < num_rounds; ++round) {
+    InitializeMatrix(matrix_size, &matrix);
+    RunCholeskyFactorization(tile_size, block_size, &matrix.view);
+
+    InitializeMatrix(matrix_size, &matrix);
+    RunLDLAdjointFactorization(tile_size, block_size, &matrix.view,
+                               &extra_buffer);
+
+    InitializeMatrix(matrix_size, &matrix);
+    RunLDLTransposeFactorization(tile_size, block_size, &matrix.view,
+                                 &extra_buffer);
+
+    std::cout << std::endl;
+  }
+}
+
 }  // anonymous namespace
 
 int main(int argc, char** argv) {
@@ -149,23 +171,22 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  BlasMatrix<Complex<double>> matrix;
-  Buffer<Complex<double>> extra_buffer;
+  std::cout << "Testing for float:" << std::endl;
+  TestFactorizations<float>(matrix_size, num_rounds, tile_size, block_size);
+  std::cout << std::endl;
 
-  for (Int round = 0; round < num_rounds; ++round) {
-    InitializeMatrix(matrix_size, &matrix);
-    RunCholeskyFactorization(tile_size, block_size, &matrix.view);
+  std::cout << "Testing for double:" << std::endl;
+  TestFactorizations<double>(matrix_size, num_rounds, tile_size, block_size);
+  std::cout << std::endl;
 
-    InitializeMatrix(matrix_size, &matrix);
-    RunLDLAdjointFactorization(tile_size, block_size, &matrix.view,
-                               &extra_buffer);
+  std::cout << "Testing for Complex<float>:" << std::endl;
+  TestFactorizations<Complex<float>>(matrix_size, num_rounds, tile_size,
+                                     block_size);
+  std::cout << std::endl;
 
-    InitializeMatrix(matrix_size, &matrix);
-    RunLDLTransposeFactorization(tile_size, block_size, &matrix.view,
-                                 &extra_buffer);
-
-    std::cout << std::endl;
-  }
+  std::cout << "Testing for Complex<double>:" << std::endl;
+  TestFactorizations<Complex<double>>(matrix_size, num_rounds, tile_size,
+                                      block_size);
 
   return 0;
 }

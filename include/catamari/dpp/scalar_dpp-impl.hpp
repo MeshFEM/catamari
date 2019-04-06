@@ -155,6 +155,19 @@ std::vector<Int> ScalarDPP<Field>::Sample(bool maximum_likelihood) const {
   return UpLookingSample(maximum_likelihood);
 }
 
+template <typename Field>
+ComplexBase<Field> ScalarDPP<Field>::LogLikelihood() const {
+  typedef ComplexBase<Field> Real;
+  const Int num_values = diagonal_factor_->values.Size();
+
+  Real log_likelihood = 0;
+  for (Int j = 0; j < num_values; ++j) {
+    log_likelihood += std::log(std::abs(diagonal_factor_->values[j]));
+  }
+
+  return log_likelihood;
+}
+
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_SCALAR_DPP_IMPL_H_

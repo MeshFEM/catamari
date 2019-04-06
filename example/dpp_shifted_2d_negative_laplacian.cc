@@ -15,6 +15,51 @@
 
 using catamari::Int;
 
+#ifdef CATAMARI_HAVE_LIBTIFF
+// Returns whether the given value exists within a sorted list.
+template <typename Iterator, typename T>
+bool IndexExists(Iterator beg, Iterator end, T value) {
+  auto iter = std::lower_bound(beg, end, value);
+  return iter != end && *iter == value;
+}
+
+// Writes out the sample to a TIFF file.
+inline void WriteGridToTIFF(const std::string& filename, Int x_size, Int y_size,
+                            const std::vector<Int>& sample, const Int box_size,
+                            const catamari::Pixel& background_pixel,
+                            const catamari::Pixel& active_pixel) {
+  const Int height = box_size * y_size;
+  const Int width = box_size * x_size;
+  const Int samples_per_pixel = 3;
+  std::vector<char> image(width * height * samples_per_pixel);
+
+  // Fill the background pixels.
+  for (Int i = 0; i < height; ++i) {
+    for (Int j = 0; j < width; ++j) {
+      catamari::PackPixel(i, j, width, background_pixel, &image);
+    }
+  }
+
+  for (Int y = 0; y < y_size; ++y) {
+    for (Int x = 0; x < x_size; ++x) {
+      const Int index = y + x * y_size;
+      const bool found = IndexExists(sample.begin(), sample.end(), index);
+      if (found) {
+        const Int i_offset = y * box_size;
+        const Int j_offset = x * box_size;
+        for (Int i = i_offset; i < i_offset + box_size; ++i) {
+          for (Int j = j_offset; j < j_offset + box_size; ++j) {
+            catamari::PackPixel(i, j, width, active_pixel, &image);
+          }
+        }
+      }
+    }
+  }
+
+  catamari::WriteTIFF(filename, height, width, samples_per_pixel, image);
+}
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
+
 // A list of properties to measure from DPP sampling.
 struct Experiment {
   // The number of seconds that elapsed during the object construction.
@@ -120,9 +165,17 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
 Experiment RunShifted2DNegativeLaplacianTest(
     Int x_size, Int y_size, double diagonal_shift, double scale,
     bool maximum_likelihood, bool analytical_ordering, bool print_sample,
-    bool ascii_display, char missing_char, char sampled_char, Int num_samples,
+    bool ascii_display, char missing_char, char sampled_char,
+    bool CATAMARI_UNUSED write_tiff, Int num_samples,
     const catamari::DPPControl& dpp_control, bool print_progress) {
   Experiment experiment;
+
+#ifdef CATAMARI_HAVE_LIBTIFF
+  // TIFF configuration.
+  const catamari::Pixel background_pixel{char(255), char(255), char(255)};
+  const catamari::Pixel active_pixel{char(255), char(0), char(0)};
+  const Int box_size = 5;
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
   // Read the matrix from file.
   std::unique_ptr<catamari::CoordinateMatrix<double>> matrix =
@@ -156,8 +209,16 @@ Experiment RunShifted2DNegativeLaplacianTest(
     sample = dpp->Sample(maximum_likelihood);
     const double sample_seconds = sample_timer.Stop();
     std::cout << "  sample took " << sample_seconds << " seconds." << std::endl;
+    const double log_likelihood = dpp->LogLikelihood();
+    std::cout << "  log-likelihood was: " << log_likelihood << std::endl;
     if (print_sample) {
       quotient::PrintVector(sample, "sample", std::cout);
+    }
+    if (write_tiff) {
+      const std::string filename =
+          std::string("shifted_laplacian-") + std::to_string(run) + ".tif";
+      WriteGridToTIFF(filename, x_size, y_size, sample, box_size,
+                      background_pixel, active_pixel);
     }
     if (ascii_display) {
       AsciiDisplaySample(x_size, y_size, sample, missing_char, sampled_char);
@@ -186,7 +247,9 @@ int main(int argc, char** argv) {
   const bool print_sample = parser.OptionalInput<bool>(
       "print_sample", "Print each DPP sample?", false);
   const bool ascii_display = parser.OptionalInput<bool>(
-      "ascii_display", "Display sample in ASCII?", true);
+      "ascii_display", "Display sample in ASCII?", false);
+  const bool write_tiff =
+      parser.OptionalInput<bool>("write_tiff", "Write samples to TIFF?", true);
   const char missing_char = parser.OptionalInput<char>(
       "missing_char", "ASCII display for missing index.", ' ');
   const char sampled_char = parser.OptionalInput<char>(
@@ -222,7 +285,7 @@ int main(int argc, char** argv) {
   const Experiment experiment = RunShifted2DNegativeLaplacianTest(
       x_size, y_size, diagonal_shift, scale, maximum_likelihood,
       analytical_ordering, print_sample, ascii_display, missing_char,
-      sampled_char, num_samples, dpp_control, print_progress);
+      sampled_char, write_tiff, num_samples, dpp_control, print_progress);
   PrintExperiment(experiment);
 
   return 0;
