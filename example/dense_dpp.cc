@@ -47,6 +47,7 @@ void SampleDPP(Int block_size, bool maximum_likelihood,
   const double flops =
       (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
   const double gflops_per_sec = flops / (1.e9 * runtime);
+  std::cout << "Sequential DPP time: " << runtime << " seconds." << std::endl;
   std::cout << "Sequential DPP GFlop/s: " << gflops_per_sec << std::endl;
 }
 
@@ -74,6 +75,7 @@ void OpenMPSampleDPP(Int tile_size, Int block_size, bool maximum_likelihood,
   const double flops =
       (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
   const double gflops_per_sec = flops / (1.e9 * runtime);
+  std::cout << "OpenMP DPP time: " << runtime << " seconds." << std::endl;
   std::cout << "OpenMP DPP GFlop/s: " << gflops_per_sec << std::endl;
 }
 #endif  // ifdef CATAMARI_OPENMP
@@ -118,12 +120,22 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  std::cout << "Single-precision:" << std::endl;
+  std::cout << "Single-precision real:" << std::endl;
+  RunDPPTests<float>(maximum_likelihood, matrix_size, block_size, tile_size,
+                     num_rounds, random_seed);
+  std::cout << std::endl;
+
+  std::cout << "Double-precision real:" << std::endl;
+  RunDPPTests<double>(maximum_likelihood, matrix_size, block_size, tile_size,
+                      num_rounds, random_seed);
+  std::cout << std::endl;
+
+  std::cout << "Single-precision complex:" << std::endl;
   RunDPPTests<Complex<float>>(maximum_likelihood, matrix_size, block_size,
                               tile_size, num_rounds, random_seed);
   std::cout << std::endl;
 
-  std::cout << "Double-precision:" << std::endl;
+  std::cout << "Double-precision complex:" << std::endl;
   RunDPPTests<Complex<double>>(maximum_likelihood, matrix_size, block_size,
                                tile_size, num_rounds, random_seed);
 

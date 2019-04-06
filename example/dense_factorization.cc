@@ -57,6 +57,7 @@ void RunCholeskyFactorization(Int tile_size, Int block_size,
     const double flops =
         (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
     const double gflops_per_sec = flops / (1.e9 * runtime);
+    std::cout << "Cholesky runtime: " << runtime << " seconds." << std::endl;
     std::cout << "Cholesky GFlops/sec: " << gflops_per_sec << std::endl;
   } else {
     std::cout << "Cholesky failed after " << num_pivots << " pivots."
@@ -91,10 +92,10 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
     const double flops =
         (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
     const double gflops_per_sec = flops / (1.e9 * runtime);
-    std::cout << "LDLAdjoint GFlops/sec: " << gflops_per_sec << std::endl;
+    std::cout << "LDL^H runtime: " << runtime << " seconds." << std::endl;
+    std::cout << "LDL^H GFlops/sec: " << gflops_per_sec << std::endl;
   } else {
-    std::cout << "LDLAdjoint failed after " << num_pivots << " pivots."
-              << std::endl;
+    std::cout << "LDL^H failed after " << num_pivots << " pivots." << std::endl;
   }
 }
 
@@ -125,10 +126,10 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
     const double flops =
         (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
     const double gflops_per_sec = flops / (1.e9 * runtime);
-    std::cout << "LDLTranspose GFlops/sec: " << gflops_per_sec << std::endl;
+    std::cout << "LDL^T runtime: " << runtime << " seconds." << std::endl;
+    std::cout << "LDL^T GFlops/sec: " << gflops_per_sec << std::endl;
   } else {
-    std::cout << "LDLTranspose failed after " << num_pivots << " pivots."
-              << std::endl;
+    std::cout << "LDL^T failed after " << num_pivots << " pivots." << std::endl;
   }
 }
 
