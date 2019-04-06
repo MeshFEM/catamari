@@ -535,7 +535,7 @@ std::vector<Int> LowerFactorAndSampleDPP(Int block_size,
 }
 
 template <class Field>
-std::vector<Int> LowerUnblockedFactorAndSampleNonsymmetricDPP(
+std::vector<Int> LowerUnblockedFactorAndSampleNonHermitianDPP(
     bool maximum_likelihood, BlasMatrixView<Field>* matrix,
     std::mt19937* generator) {
   typedef ComplexBase<Field> Real;
@@ -586,7 +586,7 @@ std::vector<Int> LowerUnblockedFactorAndSampleNonsymmetricDPP(
 }
 
 template <class Field>
-std::vector<Int> LowerBlockedFactorAndSampleNonsymmetricDPP(
+std::vector<Int> LowerBlockedFactorAndSampleNonHermitianDPP(
     Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
     std::mt19937* generator) {
   const Int height = matrix->height;
@@ -601,7 +601,7 @@ std::vector<Int> LowerBlockedFactorAndSampleNonsymmetricDPP(
     BlasMatrixView<Field> diagonal_block =
         matrix->Submatrix(i, i, bsize, bsize);
     std::vector<Int> block_sample =
-        LowerUnblockedFactorAndSampleNonsymmetricDPP(
+        LowerUnblockedFactorAndSampleNonHermitianDPP(
             maximum_likelihood, &diagonal_block, generator);
     for (const Int& index : block_sample) {
       sample.push_back(i + index);
@@ -630,10 +630,10 @@ std::vector<Int> LowerBlockedFactorAndSampleNonsymmetricDPP(
 }
 
 template <class Field>
-std::vector<Int> LowerFactorAndSampleNonsymmetricDPP(
+std::vector<Int> LowerFactorAndSampleNonHermitianDPP(
     Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
     std::mt19937* generator) {
-  return LowerBlockedFactorAndSampleNonsymmetricDPP(
+  return LowerBlockedFactorAndSampleNonHermitianDPP(
       block_size, maximum_likelihood, matrix, generator);
 }
 

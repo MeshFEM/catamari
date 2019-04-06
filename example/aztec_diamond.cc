@@ -16,6 +16,14 @@
 // Note that there appears to be a mising negative sign on the down-left edge
 // from 'b_0' in Fig. 4 of said publication.
 //
+// TODO(Jack Poulson): Make use of Figure 1 of:
+//
+//   Mark Adler, Sunil Chhita, Kurt Johansson, and Pierre van Moerbeke,
+//   "Tacnode GUE-minor Processes and Double Aztec Diamonds", Mar. 21, 2013.
+//   URL: https://arxiv.org/abs/1303.5279
+//
+// to extend support to the double Aztec diamond.
+//
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -79,7 +87,7 @@ bool IndexExists(Iterator beg, Iterator end, T value) {
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
 template <typename Field>
-std::vector<Int> SampleNonsymmetricDPP(Int block_size, bool maximum_likelihood,
+std::vector<Int> SampleNonHermitianDPP(Int block_size, bool maximum_likelihood,
                                        BlasMatrixView<Field>* matrix,
                                        std::mt19937* generator) {
   const bool is_complex = catamari::IsComplex<Field>::value;
@@ -87,7 +95,7 @@ std::vector<Int> SampleNonsymmetricDPP(Int block_size, bool maximum_likelihood,
   quotient::Timer timer;
   timer.Start();
 
-  const std::vector<Int> sample = LowerFactorAndSampleNonsymmetricDPP(
+  const std::vector<Int> sample = LowerFactorAndSampleNonHermitianDPP(
       block_size, maximum_likelihood, matrix, generator);
 
   const double runtime = timer.Stop();
@@ -105,7 +113,7 @@ std::vector<Int> SampleNonsymmetricDPP(Int block_size, bool maximum_likelihood,
 
 #ifdef CATAMARI_OPENMP
 template <typename Field>
-std::vector<Int> OpenMPSampleNonsymmetricDPP(Int tile_size, Int block_size,
+std::vector<Int> OpenMPSampleNonHermitianDPP(Int tile_size, Int block_size,
                                              bool maximum_likelihood,
                                              BlasMatrixView<Field>* matrix,
                                              std::mt19937* generator) {
@@ -120,7 +128,7 @@ std::vector<Int> OpenMPSampleNonsymmetricDPP(Int tile_size, Int block_size,
   std::vector<Int> sample;
   #pragma omp parallel
   #pragma omp single
-  sample = OpenMPLowerFactorAndSampleNonsymmetricDPP(
+  sample = OpenMPLowerFactorAndSampleNonHermitianDPP(
       tile_size, block_size, maximum_likelihood, matrix, generator);
 
   catamari::SetNumBlasThreads(old_max_threads);
@@ -585,7 +593,7 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
     // Sample using the OpenMP DPP sampler.
     kenyon_copy = kenyon_matrix;
     const std::vector<Int> omp_sample =
-        OpenMPSampleNonsymmetricDPP(tile_size, block_size, maximum_likelihood,
+        OpenMPSampleNonHermitianDPP(tile_size, block_size, maximum_likelihood,
                                     &kenyon_copy.view, &generator);
     if (Int(omp_sample.size()) != expected_sample_size) {
       std::cerr << "ERROR: Sampled " << omp_sample.size() << " instead of "
@@ -616,7 +624,7 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
 
     // Sample using the sequential DPP sampler.
     kenyon_copy = kenyon_matrix;
-    const std::vector<Int> sample = SampleNonsymmetricDPP(
+    const std::vector<Int> sample = SampleNonHermitianDPP(
         block_size, maximum_likelihood, &kenyon_copy.view, &generator);
     if (Int(sample.size()) != expected_sample_size) {
       std::cerr << "ERROR: Sampled " << sample.size() << " instead of "

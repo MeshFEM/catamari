@@ -483,7 +483,7 @@ std::vector<Int> OpenMPLowerFactorAndSampleDPP(Int tile_size, Int block_size,
 }
 
 template <class Field>
-std::vector<Int> OpenMPLowerBlockedFactorAndSampleNonsymmetricDPP(
+std::vector<Int> OpenMPLowerBlockedFactorAndSampleNonHermitianDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator) {
   const Int height = matrix->height;
@@ -513,7 +513,7 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleNonsymmetricDPP(
             generator, sample_ptr, block_sample_ptr)                    \
         depend(inout: matrix_data[i + i * leading_dim])
     {
-      *block_sample_ptr = LowerBlockedFactorAndSampleNonsymmetricDPP(
+      *block_sample_ptr = LowerBlockedFactorAndSampleNonHermitianDPP(
           block_size, maximum_likelihood, &diagonal_block, generator);
       for (const Int& index : *block_sample_ptr) {
         sample_ptr->push_back(i + index);
@@ -581,10 +581,10 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleNonsymmetricDPP(
 }
 
 template <class Field>
-std::vector<Int> OpenMPLowerFactorAndSampleNonsymmetricDPP(
+std::vector<Int> OpenMPLowerFactorAndSampleNonHermitianDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator) {
-  return OpenMPLowerBlockedFactorAndSampleNonsymmetricDPP(
+  return OpenMPLowerBlockedFactorAndSampleNonHermitianDPP(
       tile_size, block_size, maximum_likelihood, matrix, generator);
 }
 

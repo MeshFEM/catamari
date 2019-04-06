@@ -85,7 +85,7 @@ std::vector<Int> OpenMPLowerFactorAndSampleDPP(Int tile_size, Int block_size,
 #endif  // ifdef CATAMARI_OPENMP
 
 // Returns a sample from the Determinantal Point Process implied by a
-// *nonsymmetric* marginal kernel matrix: a complex matrix with real
+// *non-Hermitian* marginal kernel matrix: a real or complex matrix with real
 // diagonal which satisfies [1]
 //
 //     (-1)^{|J|} det(K - I_J) >= 0 for all J \subseteq [n].
@@ -98,13 +98,13 @@ std::vector<Int> OpenMPLowerFactorAndSampleDPP(Int tile_size, Int block_size,
 //     Principal Minor Assignment Problem.
 //
 template <class Field>
-std::vector<Int> LowerFactorAndSampleNonsymmetricDPP(
+std::vector<Int> LowerFactorAndSampleNonHermitianDPP(
     Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
     std::mt19937* generator);
 
 #ifdef CATAMARI_OPENMP
 template <class Field>
-std::vector<Int> OpenMPLowerFactorAndSampleNonsymmetricDPP(
+std::vector<Int> OpenMPLowerFactorAndSampleNonHermitianDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator);
 #endif  // ifdef CATAMARI_OPENMP
