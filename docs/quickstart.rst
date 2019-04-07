@@ -505,10 +505,12 @@ manner, perhaps using multithreaded BLAS calls) using the routine
   const bool maximum_likelihood = false;
   const int num_samples = 10;
   std::vector<std::vector<catamari::Int>> samples(num_samples);
+  std::vector<double> log_likelihoods(num_samples);
   for (int sample_index = 0; sample_index < num_samples; ++sample_index) {
     auto matrix_copy = matrix;
     samples[sample_index] = catamari::SampleLowerHermitianDPP(
         block_size, maximum_likelihood, &matrix_copy, &generator);
+    log_likelihoods[sample_index] = catamari::DPPLogLikelihood(matrix_copy.view);
   }
 
 The Hermitian DPP can be sampled using OpenMP's DAG-scheduler by instead calling
@@ -532,12 +534,17 @@ The Hermitian DPP can be sampled using OpenMP's DAG-scheduler by instead calling
   const bool maximum_likelihood = false;
   const int num_samples = 10;
   std::vector<std::vector<catamari::Int>> samples(num_samples);
+  std::vector<double> log_likelihoods(num_samples);
   for (int sample_index = 0; sample_index < num_samples; ++sample_index) {
     auto matrix_copy = matrix;
     #pragma omp parallel
     #pragma omp single
-    samples[sample_index] = catamari::OpenMPSampleLowerHermitianDPP(
-        tile_size, block_size, maximum_likelihood, &matrix_copy, &generator);
+    {
+      samples[sample_index] = catamari::OpenMPSampleLowerHermitianDPP(
+          tile_size, block_size, maximum_likelihood, &matrix_copy, &generator);
+      log_likelihoods[sample_index] = catamari::DPPLogLikelihood(
+          matrix_copy.view);
+    }
   }
 
   // Revert to the original number of BLAS threads.
