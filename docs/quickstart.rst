@@ -325,7 +325,7 @@ OpenMP threads is detected as greater than one).
 .. code-block:: cpp
 
   #include "catamari.hpp"
-  // Build a real or complex symmetric input matrix.
+  // Build a real or complex Hermitian input matrix.
   //
   // Alternatively, one could use
   // catamari::CoordinateMatrix<Field>::FromMatrixMarket to read the matrix from
@@ -395,7 +395,7 @@ using a complex :math:`LDL^T` factorization).
 Determinantal Point Process sampling
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Catamari's
-`Determinantal Point Process <https://en.wikipedia.org/wiki/Determinantal_point_process>`_
+`Determinantal Point Process <https://en.wikipedia.org/wiki/Determinantal_point_process>`_ [Macchi-1975]_
 samplers all operate directly on the *marginal kernel matrix*: if
 :math:`P` is a determinantal point process  with a ground set of cardinality
 :math:`n` (so that we may identify the ground set with indices
@@ -411,18 +411,20 @@ where :math:`K_A` is the :math:`|A| \times |A|` restriction of the row and
 column indices of the marginal kernel matrix :math:`K` to :math:`A`.
 
 The eigenvalues of a marginal kernel matrix are restricted to live in
-:math:`[0, 1]` (ensuring that all minors are valid probabilities). And, in
-the vast majority of cases (Cf. [Soshnikov-2000]_), including all of those relevant to this library,
-marginal kernel matrices are assumed to be Hermitian. Thus, we will henceforth
-assume all marginal kernel matrices Hermitian Positive Semi-Definite with
-two-norm bounded from above by 1.
+:math:`[0, 1]` (ensuring that all minors are valid probabilities). In many
+cases, the marginal kernel matrices are assumed to be Hermitian, in which case
+the eigenvalue bound is enough to guarantee an admissible kernel. More
+generally, for non-Hermitian matrices with eigenvalues in $[0, 1]$, they must
+also satisfy the condition [Brunel-2018]_:
 
-Essentially all of the high-performance techniques for performing a dense or
-sparse-direct :math:`LDL^H` factorization can be carried over to directly
-sampling a DPP from its marginal kernel matrix by exploiting the relationship
-between Schur complements and conditional DPP sampling (by sequentially flipping
-a Bernoulli coin based upon the value of each pivot to determine whether its
-corresponding index should be in the sample).
+.. math::
+
+   (-1)^{|J|} \text{det}(K - I_J) \ge 0,\,\,\forall J \subseteq [n].
+
+Catamari separately handles Hermitian and non-Hermitian kernels -- one makes
+use of modified $LDL^H$ factorizations, and the other $LU$ factorizations.
+The core notion is the close relationship between forming Schur complements and
+forming conditional DPPs.
 
 **Proposition (DPP Schur complements).** Given disjoint subsets
 :math:`A, B \subseteq \mathcal{Y}` of the ground set :math:`\mathcal{Y}` of a
@@ -437,7 +439,7 @@ Determinantal Point Process with marginal kernel :math:`K`, the probability of
    P[B \subseteq \mathbf{Y} | A \subseteq \mathbf{Y}] &=
        \text{det}(K_B - K_{B, A} K_A^{-1} K_{A, B}), \\
    P[B \subseteq \mathbf{Y} | A \subseteq \mathbf{Y}^c] &=
-       \text{det}(K_B + K_{B, A} (I - K_A)^{-1} K_{A, B}).
+       \text{det}(K_B - K_{B, A} (K_A - I)^{-1} K_{A, B}).
    \end{align*},
 
 where :math:`K_{A, B}` denotes the restriction of the marginal kernel :math:`K`
@@ -451,38 +453,44 @@ to the rows with indices in :math:`A` and columns with indices in :math:`B`.
 and
 
 .. math::
-   P[B \subseteq \mathbf{Y} | A \subseteq \mathbf{Y}] =
+   \mathbb{P}[B \subseteq \mathbf{Y} | A \subseteq \mathbf{Y}] =
        \frac{\text{det}(K_{A \cup B})}{\text{det}(K_A)}.
 
-The second claim follows from applying the first result to the complementary
-DPP (:math:`\hat{K} = I - K`) to find:
+The second claim follows from repeated application of the case where :math:`A`
+is a single element, :math:`a`:
 
 .. math::
-   P[B \subseteq \mathbf{Y}^c | A \subseteq \mathbf{Y}^c] =
-       \text{det}((I - K)_B - K_{B, A} (I - K)_A^{-1} K_{A, B}).
+   :nowrap:
 
-Taking the complement of said Schur complement shows the second result.
-:math:`\qedsymbol`.
+   \begin{align*}
+   P[B \subseteq \mathbf{Y} | a \notin \mathbf{Y}] &=
+      \frac{P[a \notin \mathbf{Y} | B \subseteq \mathbf{Y}]
+       P[B \subseteq \mathbf{Y}]}{P[a \notin \mathbf{Y}]} \\
+    &= \frac{(1 - P[a \in \mathbf{Y} | B \subseteq \mathbf{Y}]) P[B \subseteq \mathbf{Y}]}{1 - P[a \in \mathbf{Y}]} \\
+    &= \frac{P[B \subseteq \mathbf{Y}] - P[a \in \mathbf{Y} \wedge B \subseteq \mathbf{Y}]}{1 - P[a \in \mathbf{Y}]} \\
+    &= \frac{\text{det}(K_B) - \text{det}(K_{a \cup B})}{1 - K_a} \\
+    &= \text{det}(K_B)(1 - K_{a,B} \frac{{K_B}^{-1}}{K_a - 1} K_{B,a}) \\
+    &= \text{det}(K_B - K_{B,a} (K_a - 1)^{-1} K_{a,B}).\,\,\qedsymbol
+   \end{align*}
 
 As a corollary, given that the probability of a particular index being included
 in a DPP sample is equivalent to its (conditioned) diagonal value, we may
-modify a traditional :math:`LDL^H` factorization of the Hermitian Positive
-Semi-Definite marginal kernel to sample a DPP: when a classical :math:`LDL^H`
-factorization reaches a pivot value, we flip a Bernoulli coin with heads
-probability equal to the pivot value (which lies in :math:`[0, 1]`) to decide
+modify a traditional triangular factorization of the marginal kernel
+to sample a DPP: when a classical factorization reaches a pivot value, we flip
+a Bernoulli coin with heads probability equal to the pivot value
+(which lies in :math:`[0, 1]`) to decide
 if the pivot index will be in the sample. If the coin comes up heads, we keep
 the sample and procede as usual (as the conditional DPP with the pivot index
 kept will equal a traditional Schur complement); otherwise, we can subtract
 one from the pivot (making the value non-positive, and negative almost surely),
-and procede as usual. It is an exercise for the reader to verify that the
-resulting Schur complement is equal to the second equation from our proposition.
+and procede as usual.
 
 
 Dense DPP sampling
 """"""""""""""""""
-A dense DPP can be sampled from its kernel matrix (in a sequential manner,
-perhaps using multithreaded BLAS calls) using the routine
-:samp:`catamari::LowerFactorAndSampleDPP`:
+A dense Hermitian DPP can be sampled from its kernel matrix (in a sequential
+manner, perhaps using multithreaded BLAS calls) using the routine
+:samp:`catamari::SampleLowerHermitianDPP`:
 
 .. code-block:: cpp
 
@@ -499,12 +507,12 @@ perhaps using multithreaded BLAS calls) using the routine
   std::vector<std::vector<catamari::Int>> samples(num_samples);
   for (int sample_index = 0; sample_index < num_samples; ++sample_index) {
     auto matrix_copy = matrix;
-    samples[sample_index] = catamari::LowerFactorAndSampleDPP(
+    samples[sample_index] = catamari::SampleLowerHermitianDPP(
         block_size, maximum_likelihood, &matrix_copy, &generator);
   }
 
-The DPP can be sampled using OpenMP's DAG-scheduler by instead calling
-:samp:`catamari::OpenMPLowerFactorAndSampleSPP`:
+The Hermitian DPP can be sampled using OpenMP's DAG-scheduler by instead calling
+:samp:`catamari::OpenMPSampleLowerHermitianDPP`:
 
 .. code-block:: cpp
 
@@ -528,7 +536,7 @@ The DPP can be sampled using OpenMP's DAG-scheduler by instead calling
     auto matrix_copy = matrix;
     #pragma omp parallel
     #pragma omp single
-    samples[sample_index] = catamari::OpenMPLowerFactorAndSampleDPP(
+    samples[sample_index] = catamari::OpenMPSampleLowerHermitianDPP(
         tile_size, block_size, maximum_likelihood, &matrix_copy, &generator);
   }
 
@@ -540,9 +548,13 @@ An example of calling each of these routines can be found in
 dense DPP that uniformly samples spanning trees over a 2D grid graph, is given
 in `example/uniform_spanning_tree.cc <https://gitlab.com/hodge_star/catamari/blob/master/example/uniform_spanning_tree.cc>`_.
 
+Non-Hermitian dense DPPs can be sampled using :samp:`catamari::SampleNonHermitianDPP` or :samp:`catamari::OpenMPSampleNonHermitianDPP`. The
+example driver `example/aztec_diamond.cc <https://gitlab.com/hodge_star/catamari/blob/master/example/aztec_diamond.cc` demonstrates their usage for uniformly
+sampling domino tilings of the Aztec diamond.
+
 Sparse DPP sampling
 """""""""""""""""""
-Usage of catamari's sparse-direct DPP sampler via
+Usage of catamari's sparse-direct Hermitian DPP sampler via
 :samp:`catamari::CoordinateMatrix` is similar to usage of the library's
 sparse-direct solver.
 
@@ -563,14 +575,17 @@ sparse-direct solver.
   matrix.FlushEntryQueues();
 
   // Construct the sampler.
-  catamari::DPPControl dpp_control;
-  catamari::DPP<double> dpp(matrix, dpp_control);
+  catamari::SparseHermitianDPPControl dpp_control;
+  catamari::SparseHermitianDPP<double> dpp(matrix, dpp_control);
 
   // Extract samples (which can either be maximum-likelihood or not).
+  // The log-likelihoods of each sample are stored as well.
   const bool maximum_likelihood = false;
-  std::vector<std::vector<catamari::Int>> samples;
+  std::vector<std::vector<catamari::Int>> samples(num_samples);
+  std::vector<double> log_likelihoods(num_samples);
   for (int sample_index = 0; sample_index < num_samples; ++sample_index) {
     samples[sample_index] = dpp.Sample(maximum_likelihood);
+    log_likelihoods[sample_index] = dpp.LogLikelihood();
   }
 
 Like Catamari's sparse-direct solver, by default, the DPP sampler dynamically
@@ -590,10 +605,12 @@ A full example of sampling a DPP from a scaled negative 2D Laplacian is given at
 References
 ^^^^^^^^^^
 
+.. [Brunel-2018] Victor-Emmanuel Brunel, Learning Signed Determinantal Point Processes through the Principal Minor Assignment Problem, arXiv:1811.00465, 2018. URL: https://arxiv.org/abs/1811.00465
+
 .. [ChenEtAl-2008] Yanqing Chen, Timothy A. Davis, William W. Hager, and Sivasankaran Rajamanickam, Algorithm 887: CHOLMOD, Supernodal Sparse Cholesky Factorization and Update/Downdate, ACM Trans. Math. Softw., 35(3), Article 22, October 2008. DOI: http://10.1145/1391989.1391995
 
 .. [GeorgeEtAl-2006] Alan George, K.H. Irkamov, and A.B. Kucherov, Some properties of symmetric quasi-definite matrices, SIAM J. Matrix Anal. Appl., 21(4), pp. 1318--1323, 2006. DOI: https://epubs.siam.org/doi/10.1137/S0895479897329400
 
 .. [Higham-1998] Nicholas J. Higham, Factorizing complex symmetric matrices with positive definite real and imaginary parts, Mathematics of Computation, 64(224), pp. 1591--1599, 1998. URL: https://www.ams.org/journals/mcom/1998-67-224/S0025-5718-98-00978-8/S0025-5718-98-00978-8.pdf
 
-.. [Soshnikov-2000] A. Soshnikov, Determinantal random point fields. Russian Math. Surveys, 2000, 55 (5), 923–975. URL: https://arxiv.org/abs/math/0002099
+.. [Macchi-1975] O. Macchi, The coincidence approach to stochastic point processes. Adv. Appl. Probab., 7(83), pp. 83--122.

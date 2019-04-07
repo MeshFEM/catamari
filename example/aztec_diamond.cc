@@ -87,16 +87,16 @@ bool IndexExists(Iterator beg, Iterator end, T value) {
 #endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
 template <typename Field>
-std::vector<Int> SampleNonHermitianDPP(Int block_size, bool maximum_likelihood,
-                                       BlasMatrixView<Field>* matrix,
-                                       std::mt19937* generator) {
+std::vector<Int> SampleDPP(Int block_size, bool maximum_likelihood,
+                           BlasMatrixView<Field>* matrix,
+                           std::mt19937* generator) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   const Int matrix_size = matrix->height;
   quotient::Timer timer;
   timer.Start();
 
-  const std::vector<Int> sample = LowerFactorAndSampleNonHermitianDPP(
-      block_size, maximum_likelihood, matrix, generator);
+  const std::vector<Int> sample =
+      SampleNonHermitianDPP(block_size, maximum_likelihood, matrix, generator);
 
   const double runtime = timer.Stop();
   const double flops =
@@ -113,10 +113,10 @@ std::vector<Int> SampleNonHermitianDPP(Int block_size, bool maximum_likelihood,
 
 #ifdef CATAMARI_OPENMP
 template <typename Field>
-std::vector<Int> OpenMPSampleNonHermitianDPP(Int tile_size, Int block_size,
-                                             bool maximum_likelihood,
-                                             BlasMatrixView<Field>* matrix,
-                                             std::mt19937* generator) {
+std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
+                                 bool maximum_likelihood,
+                                 BlasMatrixView<Field>* matrix,
+                                 std::mt19937* generator) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   const Int matrix_size = matrix->height;
   quotient::Timer timer;
@@ -128,8 +128,8 @@ std::vector<Int> OpenMPSampleNonHermitianDPP(Int tile_size, Int block_size,
   std::vector<Int> sample;
   #pragma omp parallel
   #pragma omp single
-  sample = OpenMPLowerFactorAndSampleNonHermitianDPP(
-      tile_size, block_size, maximum_likelihood, matrix, generator);
+  sample = OpenMPSampleNonHermitianDPP(tile_size, block_size,
+                                       maximum_likelihood, matrix, generator);
 
   catamari::SetNumBlasThreads(old_max_threads);
 

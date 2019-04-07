@@ -41,7 +41,7 @@ void SampleDPP(Int block_size, bool maximum_likelihood,
   quotient::Timer timer;
   timer.Start();
 
-  LowerFactorAndSampleDPP(block_size, maximum_likelihood, matrix, generator);
+  SampleLowerHermitianDPP(block_size, maximum_likelihood, matrix, generator);
 
   const double runtime = timer.Stop();
   const double flops =
@@ -66,7 +66,7 @@ void OpenMPSampleDPP(Int tile_size, Int block_size, bool maximum_likelihood,
 
   #pragma omp parallel
   #pragma omp single
-  OpenMPLowerFactorAndSampleDPP(tile_size, block_size, maximum_likelihood,
+  OpenMPSampleLowerHermitianDPP(tile_size, block_size, maximum_likelihood,
                                 matrix, generator, extra_buffer);
 
   catamari::SetNumBlasThreads(old_max_threads);

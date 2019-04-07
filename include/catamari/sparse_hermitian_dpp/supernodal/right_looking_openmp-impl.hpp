@@ -5,8 +5,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_DPP_RIGHT_LOOKING_OPENMP_IMPL_H_
-#define CATAMARI_SUPERNODAL_DPP_RIGHT_LOOKING_OPENMP_IMPL_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_RIGHT_LOOKING_OPENMP_IMPL_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_RIGHT_LOOKING_OPENMP_IMPL_H_
 #ifdef CATAMARI_OPENMP
 
 #include <algorithm>
@@ -18,7 +18,7 @@
 namespace catamari {
 
 template <class Field>
-void SupernodalDPP<Field>::OpenMPRightLookingSupernodeSample(
+void SupernodalHermitianDPP<Field>::OpenMPRightLookingSupernodeSample(
     Int supernode, bool maximum_likelihood,
     supernodal_ldl::RightLookingSharedState<Field>* shared_state,
     Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
@@ -49,7 +49,7 @@ void SupernodalDPP<Field>::OpenMPRightLookingSupernodeSample(
     const int thread = omp_get_thread_num();
     PrivateState& private_state = (*private_states)[thread];
     Buffer<Field>* buffer = &private_state.ldl_state.scaled_transpose_buffer;
-    supernode_sample = OpenMPLowerFactorAndSampleDPP(
+    supernode_sample = OpenMPSampleLowerHermitianDPP(
         control_.factor_tile_size, control_.block_size, maximum_likelihood,
         &diagonal_block, &private_state.generator, buffer);
   }
@@ -88,7 +88,7 @@ void SupernodalDPP<Field>::OpenMPRightLookingSupernodeSample(
 }
 
 template <class Field>
-void SupernodalDPP<Field>::OpenMPRightLookingSubtree(
+void SupernodalHermitianDPP<Field>::OpenMPRightLookingSubtree(
     Int supernode, bool maximum_likelihood,
     supernodal_ldl::RightLookingSharedState<Field>* shared_state,
     Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
@@ -145,7 +145,7 @@ void SupernodalDPP<Field>::OpenMPRightLookingSubtree(
 }
 
 template <class Field>
-std::vector<Int> SupernodalDPP<Field>::OpenMPRightLookingSample(
+std::vector<Int> SupernodalHermitianDPP<Field>::OpenMPRightLookingSample(
     bool maximum_likelihood) const {
   const Int num_rows = matrix_.NumRows();
   const Int num_supernodes = ordering_.supernode_sizes.Size();
@@ -243,4 +243,5 @@ std::vector<Int> SupernodalDPP<Field>::OpenMPRightLookingSample(
 }  // namespace catamari
 
 #endif  // ifdef CATAMARI_OPENMP
-#endif  // ifndef CATAMARI_SUPERNODAL_DPP_RIGHT_LOOKING_OPENMP_IMPL_H_
+#endif  // ifndef
+        // CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_RIGHT_LOOKING_OPENMP_IMPL_H_

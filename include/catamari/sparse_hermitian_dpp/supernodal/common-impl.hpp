@@ -5,19 +5,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_DPP_COMMON_IMPL_H_
-#define CATAMARI_SUPERNODAL_DPP_COMMON_IMPL_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_COMMON_IMPL_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_COMMON_IMPL_H_
 
 #include <algorithm>
 
-#include "catamari/dpp/supernodal_dpp.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal.hpp"
 
 namespace catamari {
 
 template <class Field>
-SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
-                                    const SymmetricOrdering& ordering,
-                                    const SupernodalDPPControl& control)
+SupernodalHermitianDPP<Field>::SupernodalHermitianDPP(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const SupernodalHermitianDPPControl& control)
     : matrix_(matrix), ordering_(ordering), control_(control) {
 #ifdef CATAMARI_OPENMP
   const int max_threads = omp_get_max_threads();
@@ -52,7 +52,7 @@ SupernodalDPP<Field>::SupernodalDPP(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-void SupernodalDPP<Field>::FormSupernodes() {
+void SupernodalHermitianDPP<Field>::FormSupernodes() {
   // Greedily compute a supernodal partition using the original ordering.
   AssemblyForest orig_scalar_forest;
   SymmetricOrdering fund_ordering;
@@ -106,7 +106,7 @@ void SupernodalDPP<Field>::FormSupernodes() {
 }
 
 template <class Field>
-void SupernodalDPP<Field>::FormStructure() {
+void SupernodalHermitianDPP<Field>::FormStructure() {
   CATAMARI_ASSERT(supernode_degrees_.Size() == ordering_.supernode_sizes.Size(),
                   "Invalid supernode degrees size.");
 
@@ -129,7 +129,8 @@ void SupernodalDPP<Field>::FormStructure() {
 }
 
 template <class Field>
-std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
+std::vector<Int> SupernodalHermitianDPP<Field>::Sample(
+    bool maximum_likelihood) const {
   if (control_.algorithm == kLeftLookingLDL) {
 #ifdef CATAMARI_OPENMP
     if (omp_get_max_threads() > 1) {
@@ -148,7 +149,7 @@ std::vector<Int> SupernodalDPP<Field>::Sample(bool maximum_likelihood) const {
 }
 
 template <typename Field>
-void SupernodalDPP<Field>::AppendSupernodeSample(
+void SupernodalHermitianDPP<Field>::AppendSupernodeSample(
     Int supernode, const std::vector<Int>& supernode_sample,
     std::vector<Int>* sample) const {
   const Int supernode_start = ordering_.supernode_offsets[supernode];
@@ -163,7 +164,7 @@ void SupernodalDPP<Field>::AppendSupernodeSample(
 }
 
 template <typename Field>
-ComplexBase<Field> SupernodalDPP<Field>::LogLikelihood() const {
+ComplexBase<Field> SupernodalHermitianDPP<Field>::LogLikelihood() const {
   typedef ComplexBase<Field> Real;
   const Int num_supernodes = diagonal_factor_->blocks.Size();
 
@@ -182,4 +183,4 @@ ComplexBase<Field> SupernodalDPP<Field>::LogLikelihood() const {
 
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_SUPERNODAL_DPP_COMMON_IMPL_H_
+#endif  // ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_COMMON_IMPL_H_

@@ -348,7 +348,7 @@ Int OpenMPLowerLDLTransposeFactorization(Int tile_size, Int block_size,
 }
 
 template <class Field>
-std::vector<Int> OpenMPLowerBlockedFactorAndSampleDPP(
+std::vector<Int> OpenMPBlockedSampleLowerHermitianDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator,
     Buffer<Field>* buffer) {
@@ -390,7 +390,7 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleDPP(
             generator, sample_ptr, block_sample_ptr)                    \
         depend(inout: matrix_data[i + i * leading_dim])
     {
-      *block_sample_ptr = LowerBlockedFactorAndSampleDPP(
+      *block_sample_ptr = BlockedSampleLowerHermitianDPP(
           block_size, maximum_likelihood, &diagonal_block, generator);
       for (const Int& index : *block_sample_ptr) {
         sample_ptr->push_back(i + index);
@@ -473,17 +473,17 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleDPP(
 }
 
 template <class Field>
-std::vector<Int> OpenMPLowerFactorAndSampleDPP(Int tile_size, Int block_size,
+std::vector<Int> OpenMPSampleLowerHermitianDPP(Int tile_size, Int block_size,
                                                bool maximum_likelihood,
                                                BlasMatrixView<Field>* matrix,
                                                std::mt19937* generator,
                                                Buffer<Field>* buffer) {
-  return OpenMPLowerBlockedFactorAndSampleDPP(
+  return OpenMPBlockedSampleLowerHermitianDPP(
       tile_size, block_size, maximum_likelihood, matrix, generator, buffer);
 }
 
 template <class Field>
-std::vector<Int> OpenMPLowerBlockedFactorAndSampleNonHermitianDPP(
+std::vector<Int> OpenMPBlockedSampleNonHermitianDPP(
     Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator) {
   const Int height = matrix->height;
@@ -513,7 +513,7 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleNonHermitianDPP(
             generator, sample_ptr, block_sample_ptr)                    \
         depend(inout: matrix_data[i + i * leading_dim])
     {
-      *block_sample_ptr = LowerBlockedFactorAndSampleNonHermitianDPP(
+      *block_sample_ptr = BlockedSampleNonHermitianDPP(
           block_size, maximum_likelihood, &diagonal_block, generator);
       for (const Int& index : *block_sample_ptr) {
         sample_ptr->push_back(i + index);
@@ -581,10 +581,11 @@ std::vector<Int> OpenMPLowerBlockedFactorAndSampleNonHermitianDPP(
 }
 
 template <class Field>
-std::vector<Int> OpenMPLowerFactorAndSampleNonHermitianDPP(
-    Int tile_size, Int block_size, bool maximum_likelihood,
-    BlasMatrixView<Field>* matrix, std::mt19937* generator) {
-  return OpenMPLowerBlockedFactorAndSampleNonHermitianDPP(
+std::vector<Int> OpenMPSampleNonHermitianDPP(Int tile_size, Int block_size,
+                                             bool maximum_likelihood,
+                                             BlasMatrixView<Field>* matrix,
+                                             std::mt19937* generator) {
+  return OpenMPBlockedSampleNonHermitianDPP(
       tile_size, block_size, maximum_likelihood, matrix, generator);
 }
 

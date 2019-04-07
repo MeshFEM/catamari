@@ -834,7 +834,7 @@ std::vector<Int> SampleDPP(Int block_size, bool maximum_likelihood,
   quotient::Timer timer;
   timer.Start();
 
-  const std::vector<Int> sample = LowerFactorAndSampleDPP(
+  const std::vector<Int> sample = SampleLowerHermitianDPP(
       block_size, maximum_likelihood, matrix, generator);
 
   const double runtime = timer.Stop();
@@ -869,7 +869,7 @@ std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
   #pragma omp parallel
   #pragma omp single
   sample =
-      OpenMPLowerFactorAndSampleDPP(tile_size, block_size, maximum_likelihood,
+      OpenMPSampleLowerHermitianDPP(tile_size, block_size, maximum_likelihood,
                                     matrix, generator, extra_buffer);
 
   catamari::SetNumBlasThreads(old_max_threads);

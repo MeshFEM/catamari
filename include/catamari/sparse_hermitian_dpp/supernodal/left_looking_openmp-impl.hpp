@@ -5,20 +5,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_DPP_LEFT_LOOKING_OPENMP_IMPL_H_
-#define CATAMARI_SUPERNODAL_DPP_LEFT_LOOKING_OPENMP_IMPL_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_LEFT_LOOKING_OPENMP_IMPL_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_LEFT_LOOKING_OPENMP_IMPL_H_
 #ifdef CATAMARI_OPENMP
 
 #include <algorithm>
 
 #include "catamari/io_utils.hpp"
 
-#include "catamari/dpp/supernodal_dpp.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal.hpp"
 
 namespace catamari {
 
 template <class Field>
-void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeUpdate(
+void SupernodalHermitianDPP<Field>::OpenMPLeftLookingSupernodeUpdate(
     Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
     Buffer<PrivateState>* private_states) const {
   const SymmetricFactorizationType factorization_type =
@@ -200,7 +200,7 @@ void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeUpdate(
 }
 
 template <class Field>
-void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeSample(
+void SupernodalHermitianDPP<Field>::OpenMPLeftLookingSupernodeSample(
     Int main_supernode, bool maximum_likelihood,
     Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
   const SymmetricFactorizationType factorization_type =
@@ -218,7 +218,7 @@ void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeSample(
     const int thread = omp_get_thread_num();
     PrivateState& private_state = (*private_states)[thread];
     Buffer<Field>* buffer = &private_state.ldl_state.scaled_transpose_buffer;
-    supernode_sample = OpenMPLowerFactorAndSampleDPP(
+    supernode_sample = OpenMPSampleLowerHermitianDPP(
         control_.factor_tile_size, control_.block_size, maximum_likelihood,
         &main_diagonal_block, &private_state.generator, buffer);
   }
@@ -231,7 +231,7 @@ void SupernodalDPP<Field>::OpenMPLeftLookingSupernodeSample(
 }
 
 template <class Field>
-void SupernodalDPP<Field>::LeftLookingSubtree(
+void SupernodalHermitianDPP<Field>::LeftLookingSubtree(
     Int supernode, bool maximum_likelihood,
     supernodal_ldl::LeftLookingSharedState* shared_state,
     PrivateState* private_state, std::vector<Int>* sample) const {
@@ -264,7 +264,7 @@ void SupernodalDPP<Field>::LeftLookingSubtree(
 }
 
 template <class Field>
-void SupernodalDPP<Field>::OpenMPLeftLookingSubtree(
+void SupernodalHermitianDPP<Field>::OpenMPLeftLookingSubtree(
     Int supernode, bool maximum_likelihood,
     supernodal_ldl::LeftLookingSharedState* shared_state,
     Buffer<PrivateState>* private_states, std::vector<Int>* sample) const {
@@ -321,7 +321,7 @@ void SupernodalDPP<Field>::OpenMPLeftLookingSubtree(
 }
 
 template <class Field>
-std::vector<Int> SupernodalDPP<Field>::OpenMPLeftLookingSample(
+std::vector<Int> SupernodalHermitianDPP<Field>::OpenMPLeftLookingSample(
     bool maximum_likelihood) const {
   const Int num_rows = ordering_.supernode_offsets.Back();
   const Int num_supernodes = ordering_.supernode_sizes.Size();
@@ -414,4 +414,5 @@ std::vector<Int> SupernodalDPP<Field>::OpenMPLeftLookingSample(
 }  // namespace catamari
 
 #endif  // ifdef CATAMARI_OPENMP
-#endif  // ifndef CATAMARI_SUPERNODAL_DPP_LEFT_LOOKING_OPENMP_IMPL_H_
+#endif  // ifndef
+        // CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_LEFT_LOOKING_OPENMP_IMPL_H_

@@ -8,8 +8,8 @@
 #include <iostream>
 #include <vector>
 
-#include "catamari/dpp.hpp"
 #include "catamari/norms.hpp"
+#include "catamari/sparse_hermitian_dpp.hpp"
 #include "quotient/io_utils.hpp"
 #include "specify.hpp"
 
@@ -126,13 +126,12 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
 }
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
-Experiment RunMatrixMarketTest(const std::string& filename,
-                               bool skip_explicit_zeros,
-                               quotient::EntryMask mask, bool force_symmetry,
-                               double diagonal_shift, bool maximum_likelihood,
-                               Int num_samples,
-                               const catamari::DPPControl& dpp_control,
-                               bool print_progress) {
+Experiment RunMatrixMarketTest(
+    const std::string& filename, bool skip_explicit_zeros,
+    quotient::EntryMask mask, bool force_symmetry, double diagonal_shift,
+    bool maximum_likelihood, Int num_samples,
+    const catamari::SparseHermitianDPPControl& dpp_control,
+    bool print_progress) {
   typedef double Field;
   Experiment experiment;
 
@@ -150,7 +149,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   }
   quotient::Timer init_timer;
   init_timer.Start();
-  catamari::DPP<double> dpp(*matrix, dpp_control);
+  catamari::SparseHermitianDPP<double> dpp(*matrix, dpp_control);
   experiment.init_seconds = init_timer.Stop();
 
   // Sample the matrix.
@@ -177,7 +176,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
 std::unordered_map<std::string, Experiment> RunADD96Tests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, double diagonal_shift, bool maximum_likelihood,
-    Int num_samples, const catamari::DPPControl& dpp_control,
+    Int num_samples, const catamari::SparseHermitianDPPControl& dpp_control,
     bool print_progress) {
   const std::vector<std::string> matrix_names{
       "appu",     "bbmat",    "bcsstk30", "bcsstk31", "bcsstk32", "bcsstk33",
@@ -280,7 +279,7 @@ int main(int argc, char** argv) {
   const quotient::EntryMask mask =
       static_cast<quotient::EntryMask>(entry_mask_int);
 
-  catamari::DPPControl dpp_control;
+  catamari::SparseHermitianDPPControl dpp_control;
 
   // Set the minimum degree control options.
   {

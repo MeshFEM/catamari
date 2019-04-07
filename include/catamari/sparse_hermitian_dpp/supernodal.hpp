@@ -5,8 +5,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_DPP_H_
-#define CATAMARI_SUPERNODAL_DPP_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_H_
 
 #include <random>
 
@@ -15,7 +15,7 @@
 
 namespace catamari {
 
-struct SupernodalDPPControl {
+struct SupernodalHermitianDPPControl {
   // Configuration for the supernodal relaxation.
   SupernodalRelaxationControl relaxation_control;
 
@@ -69,11 +69,11 @@ struct SupernodalDPPControl {
 // The user-facing data structure for storing a supernodal LDL'-based DPP
 // sampler.
 template <class Field>
-class SupernodalDPP {
+class SupernodalHermitianDPP {
  public:
-  SupernodalDPP(const CoordinateMatrix<Field>& matrix,
-                const SymmetricOrdering& ordering,
-                const SupernodalDPPControl& control);
+  SupernodalHermitianDPP(const CoordinateMatrix<Field>& matrix,
+                         const SymmetricOrdering& ordering,
+                         const SupernodalHermitianDPPControl& control);
 
   // Return a sample from the DPP. If 'maximum_likelihood' is true, then each
   // pivot is kept based upon which choice is most likely.
@@ -120,7 +120,7 @@ class SupernodalDPP {
       diagonal_factor_;
 
   // The controls tructure for the DPP sampler.
-  const SupernodalDPPControl control_;
+  const SupernodalHermitianDPPControl control_;
 
   // The estimates of the amount of work required in each supernode's subtree.
   Buffer<double> work_estimates_;
@@ -225,11 +225,11 @@ class SupernodalDPP {
 
 }  // namespace catamari
 
-#include "catamari/dpp/supernodal_dpp/common-impl.hpp"
-#include "catamari/dpp/supernodal_dpp/common_openmp-impl.hpp"
-#include "catamari/dpp/supernodal_dpp/left_looking-impl.hpp"
-#include "catamari/dpp/supernodal_dpp/left_looking_openmp-impl.hpp"
-#include "catamari/dpp/supernodal_dpp/right_looking-impl.hpp"
-#include "catamari/dpp/supernodal_dpp/right_looking_openmp-impl.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal/common-impl.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal/common_openmp-impl.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal/left_looking-impl.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal/left_looking_openmp-impl.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal/right_looking-impl.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal/right_looking_openmp-impl.hpp"
 
-#endif  // ifndef CATAMARI_SUPERNODAL_DPP_H_
+#endif  // ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_H_

@@ -5,25 +5,25 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SCALAR_DPP_IMPL_H_
-#define CATAMARI_SCALAR_DPP_IMPL_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SCALAR_IMPL_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_SCALAR_IMPL_H_
 
 #include <algorithm>
 
-#include "catamari/dpp/scalar_dpp.hpp"
+#include "catamari/sparse_hermitian_dpp/scalar.hpp"
 
 namespace catamari {
 
 template <class Field>
-ScalarDPP<Field>::ScalarDPP(const CoordinateMatrix<Field>& matrix,
-                            const SymmetricOrdering& ordering,
-                            const ScalarDPPControl& control)
+ScalarHermitianDPP<Field>::ScalarHermitianDPP(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const ScalarHermitianDPPControl& control)
     : matrix_(matrix), ordering_(ordering), control_(control) {
   UpLookingSetup();
 }
 
 template <class Field>
-void ScalarDPP<Field>::UpLookingSetup() CATAMARI_NOEXCEPT {
+void ScalarHermitianDPP<Field>::UpLookingSetup() CATAMARI_NOEXCEPT {
   // TODO(Jack Poulson): Decide if/when the following should be parallelized.
   // The main cost tradeoffs are the need for the creation of the children in
   // the supernodal assembly forest and the additional memory allocations.
@@ -46,7 +46,7 @@ void ScalarDPP<Field>::UpLookingSetup() CATAMARI_NOEXCEPT {
 }
 
 template <class Field>
-void ScalarDPP<Field>::UpLookingRowUpdate(
+void ScalarHermitianDPP<Field>::UpLookingRowUpdate(
     Int row, const Int* column_beg, const Int* column_end,
     Int* column_update_ptrs, Field* row_workspace) const CATAMARI_NOEXCEPT {
   scalar_ldl::LowerStructure& lower_structure = lower_factor_->structure;
@@ -91,7 +91,7 @@ void ScalarDPP<Field>::UpLookingRowUpdate(
 }
 
 template <class Field>
-std::vector<Int> ScalarDPP<Field>::UpLookingSample(
+std::vector<Int> ScalarHermitianDPP<Field>::UpLookingSample(
     bool maximum_likelihood) const {
   const Int num_rows = matrix_.NumRows();
   const Buffer<Int>& parents = ordering_.assembly_forest.parents;
@@ -151,12 +151,13 @@ std::vector<Int> ScalarDPP<Field>::UpLookingSample(
 }
 
 template <class Field>
-std::vector<Int> ScalarDPP<Field>::Sample(bool maximum_likelihood) const {
+std::vector<Int> ScalarHermitianDPP<Field>::Sample(
+    bool maximum_likelihood) const {
   return UpLookingSample(maximum_likelihood);
 }
 
 template <typename Field>
-ComplexBase<Field> ScalarDPP<Field>::LogLikelihood() const {
+ComplexBase<Field> ScalarHermitianDPP<Field>::LogLikelihood() const {
   typedef ComplexBase<Field> Real;
   const Int num_values = diagonal_factor_->values.Size();
 
@@ -170,4 +171,4 @@ ComplexBase<Field> ScalarDPP<Field>::LogLikelihood() const {
 
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_SCALAR_DPP_IMPL_H_
+#endif  // ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SCALAR_IMPL_H_

@@ -5,19 +5,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_DPP_LEFT_LOOKING_IMPL_H_
-#define CATAMARI_SUPERNODAL_DPP_LEFT_LOOKING_IMPL_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_LEFT_LOOKING_IMPL_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_LEFT_LOOKING_IMPL_H_
 
 #include <algorithm>
 
 #include "catamari/io_utils.hpp"
 
-#include "catamari/dpp/supernodal_dpp.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal.hpp"
 
 namespace catamari {
 
 template <class Field>
-void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
+void SupernodalHermitianDPP<Field>::LeftLookingSupernodeUpdate(
     Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
     PrivateState* private_state) const {
   const SymmetricFactorizationType factorization_type =
@@ -140,7 +140,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeUpdate(
 }
 
 template <class Field>
-void SupernodalDPP<Field>::LeftLookingSupernodeSample(
+void SupernodalHermitianDPP<Field>::LeftLookingSupernodeSample(
     Int supernode, bool maximum_likelihood, PrivateState* private_state,
     std::vector<Int>* sample) const {
   const SymmetricFactorizationType factorization_type =
@@ -151,7 +151,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
 
   // Sample and factor the diagonal block.
   const std::vector<Int> supernode_sample =
-      LowerFactorAndSampleDPP(control_.block_size, maximum_likelihood,
+      SampleLowerHermitianDPP(control_.block_size, maximum_likelihood,
                               &diagonal_block, &private_state->generator);
   AppendSupernodeSample(supernode, supernode_sample, sample);
 
@@ -160,7 +160,7 @@ void SupernodalDPP<Field>::LeftLookingSupernodeSample(
 }
 
 template <class Field>
-std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
+std::vector<Int> SupernodalHermitianDPP<Field>::LeftLookingSample(
     bool maximum_likelihood) const {
   const Int num_rows = ordering_.supernode_offsets.Back();
   const Int num_supernodes = ordering_.supernode_sizes.Size();
@@ -215,4 +215,4 @@ std::vector<Int> SupernodalDPP<Field>::LeftLookingSample(
 
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_SUPERNODAL_DPP_LEFT_LOOKING_IMPL_H_
+#endif  // ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_LEFT_LOOKING_IMPL_H_

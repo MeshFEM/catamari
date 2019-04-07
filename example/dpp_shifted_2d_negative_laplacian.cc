@@ -8,7 +8,7 @@
 #include <iostream>
 #include <vector>
 
-#include "catamari/dpp.hpp"
+#include "catamari/sparse_hermitian_dpp.hpp"
 #include "catamari/unit_reach_nested_dissection.hpp"
 #include "quotient/io_utils.hpp"
 #include "specify.hpp"
@@ -167,7 +167,8 @@ Experiment RunShifted2DNegativeLaplacianTest(
     bool maximum_likelihood, bool analytical_ordering, bool print_sample,
     bool ascii_display, char missing_char, char sampled_char,
     bool CATAMARI_UNUSED write_tiff, Int num_samples,
-    const catamari::DPPControl& dpp_control, bool print_progress) {
+    const catamari::SparseHermitianDPPControl& dpp_control,
+    bool print_progress) {
   Experiment experiment;
 
 #ifdef CATAMARI_HAVE_LIBTIFF
@@ -188,13 +189,14 @@ Experiment RunShifted2DNegativeLaplacianTest(
   }
   quotient::Timer init_timer;
   init_timer.Start();
-  std::unique_ptr<catamari::DPP<double>> dpp;
+  std::unique_ptr<catamari::SparseHermitianDPP<double>> dpp;
   if (analytical_ordering) {
     catamari::SymmetricOrdering ordering;
     catamari::UnitReachNestedDissection2D(x_size - 1, y_size - 1, &ordering);
-    dpp.reset(new catamari::DPP<double>(*matrix, ordering, dpp_control));
+    dpp.reset(new catamari::SparseHermitianDPP<double>(*matrix, ordering,
+                                                       dpp_control));
   } else {
-    dpp.reset(new catamari::DPP<double>(*matrix, dpp_control));
+    dpp.reset(new catamari::SparseHermitianDPP<double>(*matrix, dpp_control));
   }
   experiment.init_seconds = init_timer.Stop();
 
@@ -270,7 +272,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  catamari::DPPControl dpp_control;
+  catamari::SparseHermitianDPPControl dpp_control;
 
   // Set the supernodal control options.
   {

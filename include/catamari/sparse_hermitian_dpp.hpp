@@ -5,16 +5,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_DPP_H_
-#define CATAMARI_DPP_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_H_
 
-#include "catamari/dpp/scalar_dpp.hpp"
-#include "catamari/dpp/supernodal_dpp.hpp"
+#include "catamari/sparse_hermitian_dpp/scalar.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal.hpp"
 #include "quotient/minimum_degree.hpp"
 
 namespace catamari {
 
-struct DPPControl {
+struct SparseHermitianDPPControl {
   // The configuration options for the Minimum Degree reordering.
   quotient::MinimumDegreeControl md_control;
 
@@ -22,23 +22,25 @@ struct DPPControl {
   SupernodalStrategy supernodal_strategy = kAdaptiveSupernodalStrategy;
 
   // The configuration options for the scalar DPP sampler.
-  ScalarDPPControl scalar_control;
+  ScalarHermitianDPPControl scalar_control;
 
   // The configuration options for the supernodal DPP sampler.
-  SupernodalDPPControl supernodal_control;
+  SupernodalHermitianDPPControl supernodal_control;
 };
 
 // The user-facing data structure for storing an LDL'-based DPP sampler.
 template <class Field>
-class DPP {
+class SparseHermitianDPP {
  public:
   // Constructs a DPP using an automatically-determined (Minimum Degree)
   // reordering.
-  DPP(const CoordinateMatrix<Field>& matrix, const DPPControl& control);
+  SparseHermitianDPP(const CoordinateMatrix<Field>& matrix,
+                     const SparseHermitianDPPControl& control);
 
   // Constructs a DPP using a user-specified ordering.
-  DPP(const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-      const DPPControl& control);
+  SparseHermitianDPP(const CoordinateMatrix<Field>& matrix,
+                     const SymmetricOrdering& ordering,
+                     const SparseHermitianDPPControl& control);
 
   // Return a sample from the DPP. If 'maximum_likelihood' is true, then each
   // pivot is kept based upon which choice is most likely.
@@ -53,14 +55,14 @@ class DPP {
   bool is_supernodal_;
 
   // The scalar DPP sampling structure.
-  std::unique_ptr<ScalarDPP<Field>> scalar_dpp_;
+  std::unique_ptr<ScalarHermitianDPP<Field>> scalar_dpp_;
 
   // The supernodal DPP sampling structure.
-  std::unique_ptr<SupernodalDPP<Field>> supernodal_dpp_;
+  std::unique_ptr<SupernodalHermitianDPP<Field>> supernodal_dpp_;
 };
 
 }  // namespace catamari
 
-#include "catamari/dpp-impl.hpp"
+#include "catamari/sparse_hermitian_dpp-impl.hpp"
 
-#endif  // ifndef CATAMARI_DPP_H_
+#endif  // ifndef CATAMARI_SPARSE_HERMITIAN_DPP_H_

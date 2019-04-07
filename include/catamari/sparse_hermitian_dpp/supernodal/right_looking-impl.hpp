@@ -5,19 +5,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_DPP_RIGHT_LOOKING_IMPL_H_
-#define CATAMARI_SUPERNODAL_DPP_RIGHT_LOOKING_IMPL_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_RIGHT_LOOKING_IMPL_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_RIGHT_LOOKING_IMPL_H_
 
 #include <algorithm>
 
 #include "catamari/io_utils.hpp"
 
-#include "catamari/dpp/supernodal_dpp.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal.hpp"
 
 namespace catamari {
 
 template <class Field>
-void SupernodalDPP<Field>::RightLookingSupernodeSample(
+void SupernodalHermitianDPP<Field>::RightLookingSupernodeSample(
     Int supernode, bool maximum_likelihood,
     supernodal_ldl::RightLookingSharedState<Field>* shared_state,
     PrivateState* private_state, std::vector<Int>* sample) const {
@@ -43,7 +43,7 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
 
   // Sample and factor the diagonal block.
   const std::vector<Int> supernode_sample =
-      LowerFactorAndSampleDPP(control_.block_size, maximum_likelihood,
+      SampleLowerHermitianDPP(control_.block_size, maximum_likelihood,
                               &diagonal_block, &private_state->generator);
   AppendSupernodeSample(supernode, supernode_sample, sample);
 
@@ -74,7 +74,7 @@ void SupernodalDPP<Field>::RightLookingSupernodeSample(
 }
 
 template <class Field>
-void SupernodalDPP<Field>::RightLookingSubtree(
+void SupernodalHermitianDPP<Field>::RightLookingSubtree(
     Int supernode, bool maximum_likelihood,
     supernodal_ldl::RightLookingSharedState<Field>* shared_state,
     PrivateState* private_state, std::vector<Int>* sample) const {
@@ -105,7 +105,7 @@ void SupernodalDPP<Field>::RightLookingSubtree(
 }
 
 template <class Field>
-std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
+std::vector<Int> SupernodalHermitianDPP<Field>::RightLookingSample(
     bool maximum_likelihood) const {
   const Int num_rows = matrix_.NumRows();
   const Int num_supernodes = ordering_.supernode_sizes.Size();
@@ -158,4 +158,4 @@ std::vector<Int> SupernodalDPP<Field>::RightLookingSample(
 
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_SUPERNODAL_DPP_RIGHT_LOOKING_IMPL_H_
+#endif  // ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_RIGHT_LOOKING_IMPL_H_

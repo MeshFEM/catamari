@@ -70,14 +70,14 @@ Int OpenMPLowerLDLTransposeFactorization(Int tile_size, Int block_size,
 // L D L^H factorization of the modified kernel (each diagonal pivot with a
 // failed coin-flip is decremented by one).
 template <class Field>
-std::vector<Int> LowerFactorAndSampleDPP(Int block_size,
+std::vector<Int> SampleLowerHermitianDPP(Int block_size,
                                          bool maximum_likelihood,
                                          BlasMatrixView<Field>* matrix,
                                          std::mt19937* generator);
 
 #ifdef CATAMARI_OPENMP
 template <class Field>
-std::vector<Int> OpenMPLowerFactorAndSampleDPP(Int tile_size, Int block_size,
+std::vector<Int> OpenMPSampleLowerHermitianDPP(Int tile_size, Int block_size,
                                                bool maximum_likelihood,
                                                BlasMatrixView<Field>* matrix,
                                                std::mt19937* generator,
@@ -98,15 +98,16 @@ std::vector<Int> OpenMPLowerFactorAndSampleDPP(Int tile_size, Int block_size,
 //     Principal Minor Assignment Problem.
 //
 template <class Field>
-std::vector<Int> LowerFactorAndSampleNonHermitianDPP(
-    Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
-    std::mt19937* generator);
+std::vector<Int> SampleNonHermitianDPP(Int block_size, bool maximum_likelihood,
+                                       BlasMatrixView<Field>* matrix,
+                                       std::mt19937* generator);
 
 #ifdef CATAMARI_OPENMP
 template <class Field>
-std::vector<Int> OpenMPLowerFactorAndSampleNonHermitianDPP(
-    Int tile_size, Int block_size, bool maximum_likelihood,
-    BlasMatrixView<Field>* matrix, std::mt19937* generator);
+std::vector<Int> OpenMPSampleNonHermitianDPP(Int tile_size, Int block_size,
+                                             bool maximum_likelihood,
+                                             BlasMatrixView<Field>* matrix,
+                                             std::mt19937* generator);
 #endif  // ifdef CATAMARI_OPENMP
 
 // Returns the log-likelihood of a general DPP sample based upon the product of

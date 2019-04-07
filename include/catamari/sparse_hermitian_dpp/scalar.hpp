@@ -5,8 +5,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SCALAR_DPP_H_
-#define CATAMARI_SCALAR_DPP_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SCALAR_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_SCALAR_H_
 
 #include <random>
 
@@ -15,17 +15,18 @@
 
 namespace catamari {
 
-struct ScalarDPPControl {
+struct ScalarHermitianDPPControl {
   // Currently, the only choice is 'up-looking' scalar DPP sampling.
   LDLAlgorithm algorithm = kUpLookingLDL;
 };
 
 // The user-facing data structure for storing a scalar LDL'-based DPP sampler.
 template <class Field>
-class ScalarDPP {
+class ScalarHermitianDPP {
  public:
-  ScalarDPP(const CoordinateMatrix<Field>& matrix,
-            const SymmetricOrdering& ordering, const ScalarDPPControl& control);
+  ScalarHermitianDPP(const CoordinateMatrix<Field>& matrix,
+                     const SymmetricOrdering& ordering,
+                     const ScalarHermitianDPPControl& control);
 
   // Return a sample from the DPP. If 'maximum_likelihood' is true, then each
   // pivot is kept based upon which choice is most likely.
@@ -61,7 +62,7 @@ class ScalarDPP {
   mutable std::unique_ptr<scalar_ldl::DiagonalFactor<Real>> diagonal_factor_;
 
   // The controls tructure for the DPP sampler.
-  const ScalarDPPControl control_;
+  const ScalarHermitianDPPControl control_;
 
   // Return a sample from the DPP using an up-looking algorithm.
   std::vector<Int> UpLookingSample(bool maximum_likelihood) const;
@@ -81,6 +82,6 @@ class ScalarDPP {
 
 }  // namespace catamari
 
-#include "catamari/dpp/scalar_dpp-impl.hpp"
+#include "catamari/sparse_hermitian_dpp/scalar-impl.hpp"
 
-#endif  // ifndef CATAMARI_SCALARL_DPP_H_
+#endif  // ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SCALAR_H_

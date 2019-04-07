@@ -5,16 +5,17 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_DPP_IMPL_H_
-#define CATAMARI_DPP_IMPL_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_IMPL_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_IMPL_H_
 
-#include "catamari/dpp.hpp"
+#include "catamari/sparse_hermitian_dpp.hpp"
 
 namespace catamari {
 
 template <class Field>
-DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
-                const DPPControl& control) {
+SparseHermitianDPP<Field>::SparseHermitianDPP(
+    const CoordinateMatrix<Field>& matrix,
+    const SparseHermitianDPPControl& control) {
   scalar_dpp_.reset();
   supernodal_dpp_.reset();
 
@@ -61,18 +62,19 @@ DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
     ordering.assembly_forest.FillFromParents();
 
     quotient_graph.release();
-    supernodal_dpp_.reset(
-        new SupernodalDPP<Field>(matrix, ordering, control.supernodal_control));
+    supernodal_dpp_.reset(new SupernodalHermitianDPP<Field>(
+        matrix, ordering, control.supernodal_control));
   } else {
     quotient_graph.release();
-    scalar_dpp_.reset(
-        new ScalarDPP<Field>(matrix, ordering, control.scalar_control));
+    scalar_dpp_.reset(new ScalarHermitianDPP<Field>(matrix, ordering,
+                                                    control.scalar_control));
   }
 }
 
 template <class Field>
-DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
-                const SymmetricOrdering& ordering, const DPPControl& control) {
+SparseHermitianDPP<Field>::SparseHermitianDPP(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const SparseHermitianDPPControl& control) {
   scalar_dpp_.reset();
   supernodal_dpp_.reset();
 
@@ -89,16 +91,17 @@ DPP<Field>::DPP(const CoordinateMatrix<Field>& matrix,
 
   is_supernodal_ = use_supernodal;
   if (use_supernodal) {
-    supernodal_dpp_.reset(
-        new SupernodalDPP<Field>(matrix, ordering, control.supernodal_control));
+    supernodal_dpp_.reset(new SupernodalHermitianDPP<Field>(
+        matrix, ordering, control.supernodal_control));
   } else {
-    scalar_dpp_.reset(
-        new ScalarDPP<Field>(matrix, ordering, control.scalar_control));
+    scalar_dpp_.reset(new ScalarHermitianDPP<Field>(matrix, ordering,
+                                                    control.scalar_control));
   }
 }
 
 template <class Field>
-std::vector<Int> DPP<Field>::Sample(bool maximum_likelihood) const {
+std::vector<Int> SparseHermitianDPP<Field>::Sample(
+    bool maximum_likelihood) const {
   if (is_supernodal_) {
     return supernodal_dpp_->Sample(maximum_likelihood);
   } else {
@@ -107,7 +110,7 @@ std::vector<Int> DPP<Field>::Sample(bool maximum_likelihood) const {
 }
 
 template <class Field>
-ComplexBase<Field> DPP<Field>::LogLikelihood() const {
+ComplexBase<Field> SparseHermitianDPP<Field>::LogLikelihood() const {
   if (is_supernodal_) {
     return supernodal_dpp_->LogLikelihood();
   } else {
@@ -117,4 +120,4 @@ ComplexBase<Field> DPP<Field>::LogLikelihood() const {
 
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_DPP_IMPL_H_
+#endif  // ifndef CATAMARI_SPARSE_HERMITIAN_DPP_IMPL_H_

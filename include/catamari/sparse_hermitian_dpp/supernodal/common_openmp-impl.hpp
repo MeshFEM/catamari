@@ -5,18 +5,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_SUPERNODAL_DPP_COMMON_OPENMP_IMPL_H_
-#define CATAMARI_SUPERNODAL_DPP_COMMON_OPENMP_IMPL_H_
+#ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_COMMON_OPENMP_IMPL_H_
+#define CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_COMMON_OPENMP_IMPL_H_
 #ifdef CATAMARI_OPENMP
 
 #include <algorithm>
 
-#include "catamari/dpp/supernodal_dpp.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal.hpp"
 
 namespace catamari {
 
 template <class Field>
-void SupernodalDPP<Field>::OpenMPFormSupernodes() {
+void SupernodalHermitianDPP<Field>::OpenMPFormSupernodes() {
   // Greedily compute a supernodal partition using the original ordering.
   AssemblyForest orig_scalar_forest;
   SymmetricOrdering fund_ordering;
@@ -76,7 +76,7 @@ void SupernodalDPP<Field>::OpenMPFormSupernodes() {
 }
 
 template <class Field>
-void SupernodalDPP<Field>::OpenMPFormStructure() {
+void SupernodalHermitianDPP<Field>::OpenMPFormStructure() {
   CATAMARI_ASSERT(supernode_degrees_.Size() == ordering_.supernode_sizes.Size(),
                   "Invalid supernode degrees size.");
 
@@ -102,4 +102,4 @@ void SupernodalDPP<Field>::OpenMPFormStructure() {
 }  // namespace catamari
 
 #endif  // ifdef CATAMARI_OPENMP
-#endif  // ifndef CATAMARI_SUPERNODAL_DPP_COMMON_OPENMP_IMPL_H_
+#endif  // ifndef CATAMARI_SPARSE_HERMITIAN_DPP_SUPERNODAL_COMMON_OPENMP_IMPL_H_

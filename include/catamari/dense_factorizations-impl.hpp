@@ -417,7 +417,7 @@ Int LowerLDLTransposeFactorization(Int block_size,
 }
 
 template <class Field>
-std::vector<Int> LowerUnblockedFactorAndSampleDPP(bool maximum_likelihood,
+std::vector<Int> UnblockedSampleLowerHermitianDPP(bool maximum_likelihood,
                                                   BlasMatrixView<Field>* matrix,
                                                   std::mt19937* generator) {
   typedef ComplexBase<Field> Real;
@@ -464,7 +464,7 @@ std::vector<Int> LowerUnblockedFactorAndSampleDPP(bool maximum_likelihood,
 }
 
 template <class Field>
-std::vector<Int> LowerBlockedFactorAndSampleDPP(Int block_size,
+std::vector<Int> BlockedSampleLowerHermitianDPP(Int block_size,
                                                 bool maximum_likelihood,
                                                 BlasMatrixView<Field>* matrix,
                                                 std::mt19937* generator) {
@@ -483,7 +483,7 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(Int block_size,
     // Overwrite the diagonal block with its LDL' factorization.
     BlasMatrixView<Field> diagonal_block =
         matrix->Submatrix(i, i, bsize, bsize);
-    std::vector<Int> block_sample = LowerUnblockedFactorAndSampleDPP(
+    std::vector<Int> block_sample = UnblockedSampleLowerHermitianDPP(
         maximum_likelihood, &diagonal_block, generator);
     for (const Int& index : block_sample) {
       sample.push_back(i + index);
@@ -526,18 +526,18 @@ std::vector<Int> LowerBlockedFactorAndSampleDPP(Int block_size,
 }
 
 template <class Field>
-std::vector<Int> LowerFactorAndSampleDPP(Int block_size,
+std::vector<Int> SampleLowerHermitianDPP(Int block_size,
                                          bool maximum_likelihood,
                                          BlasMatrixView<Field>* matrix,
                                          std::mt19937* generator) {
-  return LowerBlockedFactorAndSampleDPP(block_size, maximum_likelihood, matrix,
+  return BlockedSampleLowerHermitianDPP(block_size, maximum_likelihood, matrix,
                                         generator);
 }
 
 template <class Field>
-std::vector<Int> LowerUnblockedFactorAndSampleNonHermitianDPP(
-    bool maximum_likelihood, BlasMatrixView<Field>* matrix,
-    std::mt19937* generator) {
+std::vector<Int> UnblockedSampleNonHermitianDPP(bool maximum_likelihood,
+                                                BlasMatrixView<Field>* matrix,
+                                                std::mt19937* generator) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
   CATAMARI_ASSERT(height == matrix->width, "Can only sample square kernels.");
@@ -586,9 +586,10 @@ std::vector<Int> LowerUnblockedFactorAndSampleNonHermitianDPP(
 }
 
 template <class Field>
-std::vector<Int> LowerBlockedFactorAndSampleNonHermitianDPP(
-    Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
-    std::mt19937* generator) {
+std::vector<Int> BlockedSampleNonHermitianDPP(Int block_size,
+                                              bool maximum_likelihood,
+                                              BlasMatrixView<Field>* matrix,
+                                              std::mt19937* generator) {
   const Int height = matrix->height;
 
   std::vector<Int> sample;
@@ -600,9 +601,8 @@ std::vector<Int> LowerBlockedFactorAndSampleNonHermitianDPP(
     // Overwrite the diagonal block with its LDL' factorization.
     BlasMatrixView<Field> diagonal_block =
         matrix->Submatrix(i, i, bsize, bsize);
-    std::vector<Int> block_sample =
-        LowerUnblockedFactorAndSampleNonHermitianDPP(
-            maximum_likelihood, &diagonal_block, generator);
+    std::vector<Int> block_sample = UnblockedSampleNonHermitianDPP(
+        maximum_likelihood, &diagonal_block, generator);
     for (const Int& index : block_sample) {
       sample.push_back(i + index);
     }
@@ -630,11 +630,11 @@ std::vector<Int> LowerBlockedFactorAndSampleNonHermitianDPP(
 }
 
 template <class Field>
-std::vector<Int> LowerFactorAndSampleNonHermitianDPP(
-    Int block_size, bool maximum_likelihood, BlasMatrixView<Field>* matrix,
-    std::mt19937* generator) {
-  return LowerBlockedFactorAndSampleNonHermitianDPP(
-      block_size, maximum_likelihood, matrix, generator);
+std::vector<Int> SampleNonHermitianDPP(Int block_size, bool maximum_likelihood,
+                                       BlasMatrixView<Field>* matrix,
+                                       std::mt19937* generator) {
+  return BlockedSampleNonHermitianDPP(block_size, maximum_likelihood, matrix,
+                                      generator);
 }
 
 template <typename Field>
