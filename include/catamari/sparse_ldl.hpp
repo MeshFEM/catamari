@@ -66,7 +66,7 @@ struct RefinedSolveControl {
 
 // A wrapper for the scalar and supernodal factorization data structures.
 template <class Field>
-class SparseLDLFactorization {
+class SparseLDL {
  public:
   // The underlying real datatype of the scalar type.
   typedef ComplexBase<Field> Real;
