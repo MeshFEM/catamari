@@ -13,7 +13,7 @@
 
 #include "catamari/io_utils.hpp"
 
-#include "catamari/dpp/supernodal_dpp.hpp"
+#include "catamari/sparse_hermitian_dpp/supernodal.hpp"
 
 namespace catamari {
 
