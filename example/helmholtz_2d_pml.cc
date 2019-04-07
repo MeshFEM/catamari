@@ -24,8 +24,8 @@
 
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
-#include "catamari/ldl.hpp"
 #include "catamari/norms.hpp"
+#include "catamari/sparse_ldl.hpp"
 #include "catamari/unit_reach_nested_dissection.hpp"
 #include "specify.hpp"
 
@@ -741,7 +741,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
                    int num_pml_elements,
                    const Buffer<GaussianSource<double>>& sources,
                    bool analytical_ordering,
-                   const catamari::LDLControl& ldl_control,
+                   const catamari::SparseLDLControl& ldl_control,
                    bool print_progress) {
   typedef Complex<double> Field;
   typedef catamari::ComplexBase<Field> Real;
@@ -768,8 +768,8 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     std::cout << "  Running factorization..." << std::endl;
   }
   timer.Start();
-  catamari::LDLFactorization<Field> ldl_factorization;
-  catamari::LDLResult result;
+  catamari::SparseLDLFactorization<Field> ldl_factorization;
+  catamari::SparseLDLResult result;
   if (analytical_ordering) {
     catamari::SymmetricOrdering ordering;
     catamari::UnitReachNestedDissection2D(num_x_elements, num_y_elements,
@@ -958,7 +958,7 @@ int main(int argc, char** argv) {
                              source_stddev1},
   };
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLTransposeFactorization);
   ldl_control.supernodal_strategy =
       static_cast<catamari::SupernodalStrategy>(supernodal_strategy_int);

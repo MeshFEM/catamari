@@ -11,7 +11,7 @@
 #include <random>
 
 #include "catamari/buffer.hpp"
-#include "catamari/ldl.hpp"
+#include "catamari/sparse_ldl.hpp"
 
 namespace catamari {
 

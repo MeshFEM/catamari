@@ -10,8 +10,8 @@
 
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
-#include "catamari/ldl.hpp"
 #include "catamari/norms.hpp"
+#include "catamari/sparse_ldl.hpp"
 #include "specify.hpp"
 
 using catamari::BlasMatrix;
@@ -170,7 +170,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
                                bool skip_explicit_zeros,
                                quotient::EntryMask mask, bool force_symmetry,
                                double diagonal_shift,
-                               const catamari::LDLControl& ldl_control,
+                               const catamari::SparseLDLControl& ldl_control,
                                bool print_progress) {
   typedef double Field;
   typedef catamari::ComplexBase<Field> BaseField;
@@ -193,8 +193,8 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   }
   quotient::Timer factorization_timer;
   factorization_timer.Start();
-  catamari::LDLFactorization<Field> ldl_factorization;
-  const catamari::LDLResult result =
+  catamari::SparseLDLFactorization<Field> ldl_factorization;
+  const catamari::SparseLDLResult result =
       ldl_factorization.Factor(*matrix, ldl_control);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (result.num_successful_pivots < num_rows) {
@@ -243,7 +243,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
 std::unordered_map<std::string, Experiment> RunCustomTests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, double diagonal_shift,
-    const catamari::LDLControl& ldl_control, bool print_progress) {
+    const catamari::SparseLDLControl& ldl_control, bool print_progress) {
   // TODO(Jack Poulson): Document why each of the commented out matrices was
   // unable to be factored. In most, if not all, cases, this seems to be due
   // to excessive memory usage. But std::bad_alloc errors are not being
@@ -370,7 +370,7 @@ int main(int argc, char** argv) {
   const quotient::EntryMask mask =
       static_cast<quotient::EntryMask>(entry_mask_int);
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(
       static_cast<catamari::SymmetricFactorizationType>(
           factorization_type_int));

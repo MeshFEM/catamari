@@ -9,8 +9,8 @@
 #include <iostream>
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
-#include "catamari/ldl.hpp"
 #include "catamari/norms.hpp"
+#include "catamari/sparse_ldl.hpp"
 #include "catamari/unit_reach_nested_dissection.hpp"
 #include "catch2/catch.hpp"
 
@@ -22,7 +22,7 @@ namespace {
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
 void RunTest(Int num_x_elements, Int num_y_elements, bool analytical_ordering,
-             const catamari::LDLControl& ldl_control) {
+             const catamari::SparseLDLControl& ldl_control) {
   typedef double Field;
   typedef catamari::ComplexBase<Field> Real;
 
@@ -59,8 +59,8 @@ void RunTest(Int num_x_elements, Int num_y_elements, bool analytical_ordering,
       catamari::EuclideanNorm(right_hand_sides.ConstView());
 
   // Factor the matrix.
-  catamari::LDLFactorization<Field> ldl_factorization;
-  catamari::LDLResult result;
+  catamari::SparseLDLFactorization<Field> ldl_factorization;
+  catamari::SparseLDLResult result;
   if (analytical_ordering) {
     catamari::SymmetricOrdering ordering;
     catamari::UnitReachNestedDissection2D(num_x_elements - 1,
@@ -92,7 +92,7 @@ TEST_CASE("2D right Cholesky [analytical]", "2D right chol [analyt]") {
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 2;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kCholeskyFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -108,7 +108,7 @@ TEST_CASE("2D right adjoint [analytical]", "2D right adjoint [analyt]") {
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 2;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLAdjointFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -124,7 +124,7 @@ TEST_CASE("2D right transpose [analytical]", "2D right transpose [analyt]") {
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 2;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLTransposeFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -140,7 +140,7 @@ TEST_CASE("2D right Cholesky", "2D right chol") {
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 2;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kCholeskyFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -156,7 +156,7 @@ TEST_CASE("2D right adjoint", "2D right adjoint") {
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 2;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLAdjointFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -172,7 +172,7 @@ TEST_CASE("2D right transpose", "2D right transpose") {
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 2;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLTransposeFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -188,7 +188,7 @@ TEST_CASE("2D left Cholesky [analytical]", "2D left chol [analyt]") {
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 0;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kCholeskyFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -204,7 +204,7 @@ TEST_CASE("2D left adjoint [analytical]", "2D left adjoint [analyt]") {
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 0;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLAdjointFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -220,7 +220,7 @@ TEST_CASE("2D left transpose [analytical]", "2D left transpose [analyt]") {
   const bool analytical_ordering = true;
   const int ldl_algorithm_int = 0;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLTransposeFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -236,7 +236,7 @@ TEST_CASE("2D left Cholesky", "2D left chol") {
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 0;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kCholeskyFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -252,7 +252,7 @@ TEST_CASE("2D left adjoint", "2D left adjoint") {
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 0;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLAdjointFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
@@ -268,7 +268,7 @@ TEST_CASE("2D left transpose", "2D left transpose") {
   const bool analytical_ordering = false;
   const int ldl_algorithm_int = 0;
 
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLTransposeFactorization);
   ldl_control.scalar_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);

@@ -339,7 +339,7 @@ OpenMP threads is detected as greater than one).
   matrix.FlushEntryQueues();
 
   // Fill the options for the factorization.
-  catamari::LDLControl ldl_control;
+  catamari::SparseLDLControl ldl_control;
   // The options for the factorization type are:
   //   * catamari::kCholeskyFactorization,
   //   * catamari::kLDLAdjointFactorization,
@@ -347,7 +347,7 @@ OpenMP threads is detected as greater than one).
   ldl_control.SetFactorizationType(catamari::kCholeskyFactorization);
 
   // Factor the matrix.
-  catamari::LDLFactorization<double> factorization;
+  catamari::SparseLDLFactorization<double> factorization;
   const catamari::LDLResult result = factorization.Factor(matrix, ldl_control);
 
   // Solve a linear system using the factorization.
@@ -372,8 +372,8 @@ upon the arithmetic intensity of the factorization. The former approach is
 used for sufficiently high arithmetic intensity (and operation count), while
 the latter is used for sufficiently small and/or sparse factorizations.
 This default strategy can be overridden by modifying the
-:samp:`catamari::LDLControl::supernodal_strategy` member variable of the control
-structure from its default value of
+:samp:`catamari::SparseLDLControl::supernodal_strategy` member variable of the
+control structure from its default value of
 :samp:`catamari::kAdaptiveSupernodalStrategy` to either
 :samp:`catamari::kSupernodalFactorization` or
 :samp:`catamari::kScalarFactorization`.
@@ -381,7 +381,7 @@ structure from its default value of
 There is also support for efficiently factoring sequences of matrices with
 identical sparsity patterns, but different numerical values, via the member
 function
-:samp:`catamari::LDLFactorization<Field>::RefactorWithFixedSparsityPattern(const catamari::CoordinateMatrix<Field>& matrix)`.
+:samp:`catamari::SparseLDLFactorization<Field>::RefactorWithFixedSparsityPattern(const catamari::CoordinateMatrix<Field>& matrix)`.
 Such a technique is important for an efficient implementation of an Interior
 Point Method.
 

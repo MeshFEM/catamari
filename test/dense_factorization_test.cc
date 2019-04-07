@@ -9,7 +9,6 @@
 #include <iostream>
 #include "catamari/blas_matrix.hpp"
 #include "catamari/dense_factorizations.hpp"
-#include "catamari/ldl.hpp"
 #include "catamari/norms.hpp"
 #include "catch2/catch.hpp"
 
