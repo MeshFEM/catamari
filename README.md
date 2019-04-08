@@ -85,7 +85,7 @@ An import example of such processes is the Aztec diamond DPP, whose kernel is
 formed via Kenyon's formula. See [example/aztec_diamond.cc](https://gitlab.com/hodge_star/catamari/blob/master/example/aztec_diamond.cc) for more information.
 An example output for a tiling of size 40 is given below:
 
-![](./images/aztec-40-40pct.png)
+![](./images/aztec-40-30pct.png)
 
 ### License
 `catamari` is distributed under the
