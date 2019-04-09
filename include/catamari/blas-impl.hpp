@@ -16,7 +16,7 @@ inline int GetMaxBlasThreads() {
 #ifdef CATAMARI_HAVE_MKL
   return mkl_get_max_threads();
 #elif defined(CATAMARI_HAVE_OPENBLAS)
-  return openblas_get_max_threads();
+  return openblas_get_num_threads();
 #else
   return 1;
 #endif  // ifdef CATAMARI_HAVE_MKL

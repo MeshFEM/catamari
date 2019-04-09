@@ -82,8 +82,12 @@ inline void MatrixVectorProduct(
   const BlasInt unit_stride_blas = 1;
   const BlasComplexFloat beta = 1;
   BLAS_SYMBOL(cgemv)
-  (&trans, &height_blas, &width_blas, &alpha, matrix.data, &leading_dim_blas,
-   input_vector, &unit_stride_blas, &beta, result, &unit_stride_blas);
+  (&trans, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(matrix.data), &leading_dim_blas,
+   reinterpret_cast<const BlasComplexFloat*>(input_vector), &unit_stride_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&beta),
+   reinterpret_cast<BlasComplexFloat*>(result), &unit_stride_blas);
 }
 
 template <>
@@ -98,8 +102,12 @@ inline void MatrixVectorProduct(
   const BlasInt unit_stride_blas = 1;
   const BlasComplexDouble beta = 1;
   BLAS_SYMBOL(zgemv)
-  (&trans, &height_blas, &width_blas, &alpha, matrix.data, &leading_dim_blas,
-   input_vector, &unit_stride_blas, &beta, result, &unit_stride_blas);
+  (&trans, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(matrix.data), &leading_dim_blas,
+   reinterpret_cast<const BlasComplexDouble*>(input_vector), &unit_stride_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&beta),
+   reinterpret_cast<BlasComplexDouble*>(result), &unit_stride_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
@@ -240,8 +248,12 @@ inline void TransposeMatrixVectorProduct(
   const BlasInt unit_stride_blas = 1;
   const Complex<float> beta = 1;
   BLAS_SYMBOL(cgemv)
-  (&trans, &height_blas, &width_blas, &alpha, matrix.data, &leading_dim_blas,
-   input_vector, &unit_stride_blas, &beta, result, &unit_stride_blas);
+  (&trans, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(matrix.data), &leading_dim_blas,
+   reinterpret_cast<const BlasComplexFloat*>(input_vector), &unit_stride_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&beta),
+   reinterpret_cast<BlasComplexFloat*>(result), &unit_stride_blas);
 }
 
 template <>
@@ -256,8 +268,12 @@ inline void TransposeMatrixVectorProduct(
   const BlasInt unit_stride_blas = 1;
   const Complex<double> beta = 1;
   BLAS_SYMBOL(zgemv)
-  (&trans, &height_blas, &width_blas, &alpha, matrix.data, &leading_dim_blas,
-   input_vector, &unit_stride_blas, &beta, result, &unit_stride_blas);
+  (&trans, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(matrix.data), &leading_dim_blas,
+   reinterpret_cast<const BlasComplexDouble*>(input_vector), &unit_stride_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&beta),
+   reinterpret_cast<BlasComplexDouble*>(result), &unit_stride_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
@@ -314,8 +330,10 @@ inline void TriangularSolveLeftLower(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt unit_stride_blas = 1;
   BLAS_SYMBOL(ctrsv)
-  (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
-   &triang_leading_dim_blas, vector, &unit_stride_blas);
+  (&uplo, &trans, &diag, &height_blas,
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(vector),
+   &unit_stride_blas);
 }
 
 template <>
@@ -329,8 +347,10 @@ inline void TriangularSolveLeftLower(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt unit_stride_blas = 1;
   BLAS_SYMBOL(ztrsv)
-  (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
-   &triang_leading_dim_blas, vector, &unit_stride_blas);
+  (&uplo, &trans, &diag, &height_blas,
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(vector),
+   &unit_stride_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
@@ -386,8 +406,10 @@ inline void TriangularSolveLeftLowerUnit(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt unit_stride_blas = 1;
   BLAS_SYMBOL(ctrsv)
-  (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
-   &triang_leading_dim_blas, vector, &unit_stride_blas);
+  (&uplo, &trans, &diag, &height_blas,
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(vector),
+   &unit_stride_blas);
 }
 
 template <>
@@ -401,8 +423,10 @@ inline void TriangularSolveLeftLowerUnit(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt unit_stride_blas = 1;
   BLAS_SYMBOL(ztrsv)
-  (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
-   &triang_leading_dim_blas, vector, &unit_stride_blas);
+  (&uplo, &trans, &diag, &height_blas,
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(vector),
+   &unit_stride_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
@@ -459,8 +483,10 @@ inline void TriangularSolveLeftLowerAdjoint(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt unit_stride_blas = 1;
   BLAS_SYMBOL(ctrsv)
-  (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
-   &triang_leading_dim_blas, vector, &unit_stride_blas);
+  (&uplo, &trans, &diag, &height_blas,
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(vector),
+   &unit_stride_blas);
 }
 
 template <>
@@ -474,8 +500,10 @@ inline void TriangularSolveLeftLowerAdjoint(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt unit_stride_blas = 1;
   BLAS_SYMBOL(ztrsv)
-  (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
-   &triang_leading_dim_blas, vector, &unit_stride_blas);
+  (&uplo, &trans, &diag, &height_blas,
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(vector),
+   &unit_stride_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
@@ -531,8 +559,10 @@ inline void TriangularSolveLeftLowerAdjointUnit(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt unit_stride_blas = 1;
   BLAS_SYMBOL(ctrsv)
-  (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
-   &triang_leading_dim_blas, vector, &unit_stride_blas);
+  (&uplo, &trans, &diag, &height_blas,
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(vector),
+   &unit_stride_blas);
 }
 
 template <>
@@ -546,8 +576,10 @@ inline void TriangularSolveLeftLowerAdjointUnit(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt unit_stride_blas = 1;
   BLAS_SYMBOL(ztrsv)
-  (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
-   &triang_leading_dim_blas, vector, &unit_stride_blas);
+  (&uplo, &trans, &diag, &height_blas,
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(vector),
+   &unit_stride_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
@@ -652,8 +684,12 @@ inline void MatrixMultiplyNormalNormal(
   const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(cgemm)
   (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
-   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
-   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &contraction_size_blas, reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(left_matrix.data),
+   &left_leading_dim_blas,
+   reinterpret_cast<const BlasComplexFloat*>(right_matrix.data),
+   &right_leading_dim_blas, reinterpret_cast<const BlasComplexFloat*>(&beta),
+   reinterpret_cast<BlasComplexFloat*>(output_matrix->data),
    &output_leading_dim_blas);
 }
 
@@ -686,8 +722,12 @@ inline void MatrixMultiplyNormalNormal(
   const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(zgemm)
   (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
-   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
-   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &contraction_size_blas, reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(left_matrix.data),
+   &left_leading_dim_blas,
+   reinterpret_cast<const BlasComplexDouble*>(right_matrix.data),
+   &right_leading_dim_blas, reinterpret_cast<const BlasComplexDouble*>(&beta),
+   reinterpret_cast<BlasComplexDouble*>(output_matrix->data),
    &output_leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -792,8 +832,12 @@ inline void MatrixMultiplyNormalTranspose(
   const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(cgemm)
   (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
-   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
-   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &contraction_size_blas, reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(left_matrix.data),
+   &left_leading_dim_blas,
+   reinterpret_cast<const BlasComplexFloat*>(right_matrix.data),
+   &right_leading_dim_blas, reinterpret_cast<const BlasComplexFloat*>(&beta),
+   reinterpret_cast<BlasComplexFloat*>(output_matrix->data),
    &output_leading_dim_blas);
 }
 
@@ -820,8 +864,12 @@ inline void MatrixMultiplyNormalTranspose(
   const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(zgemm)
   (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
-   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
-   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &contraction_size_blas, reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(left_matrix.data),
+   &left_leading_dim_blas,
+   reinterpret_cast<const BlasComplexDouble*>(right_matrix.data),
+   &right_leading_dim_blas, reinterpret_cast<const BlasComplexDouble*>(&beta),
+   reinterpret_cast<BlasComplexDouble*>(output_matrix->data),
    &output_leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -894,8 +942,12 @@ inline void MatrixMultiplyNormalAdjoint(
   const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(cgemm)
   (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
-   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
-   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &contraction_size_blas, reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(left_matrix.data),
+   &left_leading_dim_blas,
+   reinterpret_cast<const BlasComplexFloat*>(right_matrix.data),
+   &right_leading_dim_blas, reinterpret_cast<const BlasComplexFloat*>(&beta),
+   reinterpret_cast<BlasComplexFloat*>(output_matrix->data),
    &output_leading_dim_blas);
 }
 
@@ -922,8 +974,12 @@ inline void MatrixMultiplyNormalAdjoint(
   const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(zgemm)
   (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
-   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
-   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &contraction_size_blas, reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(left_matrix.data),
+   &left_leading_dim_blas,
+   reinterpret_cast<const BlasComplexDouble*>(right_matrix.data),
+   &right_leading_dim_blas, reinterpret_cast<const BlasComplexDouble*>(&beta),
+   reinterpret_cast<BlasComplexDouble*>(output_matrix->data),
    &output_leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -1004,8 +1060,12 @@ inline void MatrixMultiplyTransposeNormal(
   const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(cgemm)
   (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
-   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
-   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &contraction_size_blas, reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(left_matrix.data),
+   &left_leading_dim_blas,
+   reinterpret_cast<const BlasComplexFloat*>(right_matrix.data),
+   &right_leading_dim_blas, reinterpret_cast<const BlasComplexFloat*>(&beta),
+   reinterpret_cast<BlasComplexFloat*>(output_matrix->data),
    &output_leading_dim_blas);
 }
 
@@ -1026,8 +1086,12 @@ inline void MatrixMultiplyTransposeNormal(
   const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(zgemm)
   (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
-   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
-   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &contraction_size_blas, reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(left_matrix.data),
+   &left_leading_dim_blas,
+   reinterpret_cast<const BlasComplexDouble*>(right_matrix.data),
+   &right_leading_dim_blas, reinterpret_cast<const BlasComplexDouble*>(&beta),
+   reinterpret_cast<BlasComplexDouble*>(output_matrix->data),
    &output_leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -1088,8 +1152,12 @@ inline void MatrixMultiplyAdjointNormal(
   const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(cgemm)
   (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
-   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
-   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &contraction_size_blas, reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(left_matrix.data),
+   &left_leading_dim_blas,
+   reinterpret_cast<const BlasComplexFloat*>(right_matrix.data),
+   &right_leading_dim_blas, reinterpret_cast<const BlasComplexFloat*>(&beta),
+   reinterpret_cast<BlasComplexFloat*>(output_matrix->data),
    &output_leading_dim_blas);
 }
 
@@ -1110,8 +1178,12 @@ inline void MatrixMultiplyAdjointNormal(
   const BlasInt output_leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(zgemm)
   (&trans_left, &trans_right, &output_height_blas, &output_width_blas,
-   &contraction_size_blas, &alpha, left_matrix.data, &left_leading_dim_blas,
-   right_matrix.data, &right_leading_dim_blas, &beta, output_matrix->data,
+   &contraction_size_blas, reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(left_matrix.data),
+   &left_leading_dim_blas,
+   reinterpret_cast<const BlasComplexDouble*>(right_matrix.data),
+   &right_leading_dim_blas, reinterpret_cast<const BlasComplexDouble*>(&beta),
+   reinterpret_cast<BlasComplexDouble*>(output_matrix->data),
    &output_leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -1177,8 +1249,10 @@ inline void LowerNormalHermitianOuterProduct(
   const BlasInt factor_leading_dim_blas = left_matrix.leading_dim;
   const BlasInt leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(cherk)
-  (&uplo, &trans, &height_blas, &rank_blas, &alpha, left_matrix.data,
-   &factor_leading_dim_blas, &beta, output_matrix->data, &leading_dim_blas);
+  (&uplo, &trans, &height_blas, &rank_blas, &alpha,
+   reinterpret_cast<const BlasComplexFloat*>(left_matrix.data),
+   &factor_leading_dim_blas, &beta,
+   reinterpret_cast<BlasComplexFloat*>(output_matrix->data), &leading_dim_blas);
 }
 
 template <>
@@ -1193,8 +1267,11 @@ inline void LowerNormalHermitianOuterProduct(
   const BlasInt factor_leading_dim_blas = left_matrix.leading_dim;
   const BlasInt leading_dim_blas = output_matrix->leading_dim;
   BLAS_SYMBOL(zherk)
-  (&uplo, &trans, &height_blas, &rank_blas, &alpha, left_matrix.data,
-   &factor_leading_dim_blas, &beta, output_matrix->data, &leading_dim_blas);
+  (&uplo, &trans, &height_blas, &rank_blas, &alpha,
+   reinterpret_cast<const BlasComplexDouble*>(left_matrix.data),
+   &factor_leading_dim_blas, &beta,
+   reinterpret_cast<BlasComplexDouble*>(output_matrix->data),
+   &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
@@ -1807,8 +1884,10 @@ inline void LeftLowerTriangularSolves(
   const BlasInt leading_dim_blas = matrix->leading_dim;
 
   BLAS_SYMBOL(ctrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
    &leading_dim_blas);
 }
 
@@ -1830,8 +1909,10 @@ inline void LeftLowerTriangularSolves(
   const BlasInt leading_dim_blas = matrix->leading_dim;
 
   BLAS_SYMBOL(ztrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
    &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -1922,8 +2003,10 @@ inline void LeftLowerUnitTriangularSolves(
   const BlasInt leading_dim_blas = matrix->leading_dim;
 
   BLAS_SYMBOL(ctrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
    &leading_dim_blas);
 }
 
@@ -1945,8 +2028,10 @@ inline void LeftLowerUnitTriangularSolves(
   const BlasInt leading_dim_blas = matrix->leading_dim;
 
   BLAS_SYMBOL(ztrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
    &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -2036,8 +2121,10 @@ inline void LeftLowerAdjointTriangularSolves(
   const BlasInt leading_dim_blas = matrix->leading_dim;
 
   BLAS_SYMBOL(ctrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
    &leading_dim_blas);
 }
 
@@ -2059,8 +2146,10 @@ inline void LeftLowerAdjointTriangularSolves(
   const BlasInt leading_dim_blas = matrix->leading_dim;
 
   BLAS_SYMBOL(ztrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
    &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -2149,8 +2238,10 @@ inline void LeftLowerAdjointUnitTriangularSolves(
   const BlasInt leading_dim_blas = matrix->leading_dim;
 
   BLAS_SYMBOL(ctrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
    &leading_dim_blas);
 }
 
@@ -2172,8 +2263,10 @@ inline void LeftLowerAdjointUnitTriangularSolves(
   const BlasInt leading_dim_blas = matrix->leading_dim;
 
   BLAS_SYMBOL(ztrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
    &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -2230,8 +2323,10 @@ inline void LeftLowerTransposeUnitTriangularSolves(
   const BlasInt leading_dim_blas = matrix->leading_dim;
 
   BLAS_SYMBOL(ctrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
    &leading_dim_blas);
 }
 
@@ -2253,8 +2348,10 @@ inline void LeftLowerTransposeUnitTriangularSolves(
   const BlasInt leading_dim_blas = matrix->leading_dim;
 
   BLAS_SYMBOL(ztrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
    &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -2329,8 +2426,10 @@ inline void RightLowerAdjointTriangularSolves(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(ctrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
    &leading_dim_blas);
 }
 
@@ -2348,8 +2447,10 @@ inline void RightLowerAdjointTriangularSolves(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(ztrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
    &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -2423,8 +2524,10 @@ inline void RightLowerAdjointUnitTriangularSolves(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(ctrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
    &leading_dim_blas);
 }
 
@@ -2442,8 +2545,10 @@ inline void RightLowerAdjointUnitTriangularSolves(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(ztrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
    &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -2577,8 +2682,10 @@ inline void RightLowerTransposeTriangularSolves(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(ctrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
    &leading_dim_blas);
 }
 
@@ -2596,8 +2703,10 @@ inline void RightLowerTransposeTriangularSolves(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(ztrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
    &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -2647,8 +2756,10 @@ inline void RightLowerTransposeUnitTriangularSolves(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(ctrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
    &leading_dim_blas);
 }
 
@@ -2666,8 +2777,10 @@ inline void RightLowerTransposeUnitTriangularSolves(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(ztrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
    &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
@@ -2807,8 +2920,10 @@ inline void RightUpperTriangularSolves(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(ctrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexFloat*>(&alpha),
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
    &leading_dim_blas);
 }
 
@@ -2826,8 +2941,10 @@ inline void RightUpperTriangularSolves(
   const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BLAS_SYMBOL(ztrsm)
-  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
-   triangular_matrix.data, &triang_leading_dim_blas, matrix->data,
+  (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas,
+   reinterpret_cast<const BlasComplexDouble*>(&alpha),
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
    &leading_dim_blas);
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS

@@ -15,7 +15,7 @@
 // TODO(Jack Poulson): Attempt to support 64-bit BLAS when Int = long long int.
 typedef int BlasInt;
 typedef std::complex<float> BlasComplexFloat;
-typedef std::complex<float> BlasComplexDouble;
+typedef std::complex<double> BlasComplexDouble;
 
 extern "C" {
 

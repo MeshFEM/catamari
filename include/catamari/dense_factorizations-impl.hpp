@@ -117,6 +117,80 @@ inline Int LowerUnblockedCholeskyFactorization(BlasMatrixView<double>* matrix) {
   }
   return height;
 }
+
+template <>
+inline Int LowerUnblockedCholeskyFactorization(
+    BlasMatrixView<Complex<float>>* matrix) {
+  const Int height = matrix->height;
+  const Int leading_dim = matrix->leading_dim;
+  for (Int i = 0; i < height; ++i) {
+    const float delta = RealPart(matrix->Entry(i, i));
+    if (delta <= 0) {
+      return i;
+    }
+
+    const float delta_sqrt = std::sqrt(delta);
+    matrix->Entry(i, i) = delta_sqrt;
+
+    // Solve for the remainder of the i'th column of L.
+    for (Int k = i + 1; k < height; ++k) {
+      matrix->Entry(k, i) /= delta_sqrt;
+    }
+
+    // Perform the Hermitian rank-one update.
+    {
+      const BlasInt rem_height_blas = height - (i + 1);
+      const char lower = 'L';
+      const float alpha = -1;
+      const BlasInt unit_inc_blas = 1;
+      const BlasInt leading_dim_blas = leading_dim;
+      BLAS_SYMBOL(cher)
+      (&lower, &rem_height_blas, &alpha,
+       reinterpret_cast<const BlasComplexFloat*>(matrix->Pointer(i + 1, i)),
+       &unit_inc_blas,
+       reinterpret_cast<BlasComplexFloat*>(matrix->Pointer(i + 1, i + 1)),
+       &leading_dim_blas);
+    }
+  }
+  return height;
+}
+
+template <>
+inline Int LowerUnblockedCholeskyFactorization(
+    BlasMatrixView<Complex<double>>* matrix) {
+  const Int height = matrix->height;
+  const Int leading_dim = matrix->leading_dim;
+  for (Int i = 0; i < height; ++i) {
+    const double delta = RealPart(matrix->Entry(i, i));
+    if (delta <= 0) {
+      return i;
+    }
+
+    const double delta_sqrt = std::sqrt(delta);
+    matrix->Entry(i, i) = delta_sqrt;
+
+    // Solve for the remainder of the i'th column of L.
+    for (Int k = i + 1; k < height; ++k) {
+      matrix->Entry(k, i) /= delta_sqrt;
+    }
+
+    // Perform the Hermitian rank-one update.
+    {
+      const BlasInt rem_height_blas = height - (i + 1);
+      const char lower = 'L';
+      const double alpha = -1;
+      const BlasInt unit_inc_blas = 1;
+      const BlasInt leading_dim_blas = leading_dim;
+      BLAS_SYMBOL(zher)
+      (&lower, &rem_height_blas, &alpha,
+       reinterpret_cast<const BlasComplexDouble*>(matrix->Pointer(i + 1, i)),
+       &unit_inc_blas,
+       reinterpret_cast<BlasComplexDouble*>(matrix->Pointer(i + 1, i + 1)),
+       &leading_dim_blas);
+    }
+  }
+  return height;
+}
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
@@ -205,7 +279,8 @@ inline Int LowerCholeskyFactorization(Int block_size,
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BlasInt info;
   LAPACK_SYMBOL(cpotrf)
-  (&uplo, &height_blas, matrix->data, &leading_dim_blas, &info);
+  (&uplo, &height_blas, reinterpret_cast<BlasComplexFloat*>(matrix->data),
+   &leading_dim_blas, &info);
   if (info < 0) {
     std::cerr << "Argument " << -info << " had an illegal value." << std::endl;
     return 0;
@@ -224,7 +299,8 @@ inline Int LowerCholeskyFactorization(Int block_size,
   const BlasInt leading_dim_blas = matrix->leading_dim;
   BlasInt info;
   LAPACK_SYMBOL(zpotrf)
-  (&uplo, &height_blas, matrix->data, &leading_dim_blas, &info);
+  (&uplo, &height_blas, reinterpret_cast<BlasComplexDouble*>(matrix->data),
+   &leading_dim_blas, &info);
   if (info < 0) {
     std::cerr << "Argument " << -info << " had an illegal value." << std::endl;
     return 0;

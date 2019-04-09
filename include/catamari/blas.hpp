@@ -16,7 +16,7 @@
 
 #elif defined(CATAMARI_HAVE_OPENBLAS)
 
-#include "catmari/blas/openblas.hpp"
+#include "catamari/blas/openblas.hpp"
 
 #endif  // ifdef CATAMARI_HAVE_MKL
 
