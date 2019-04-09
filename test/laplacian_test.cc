@@ -59,21 +59,21 @@ void RunTest(Int num_x_elements, Int num_y_elements, bool analytical_ordering,
       catamari::EuclideanNorm(right_hand_sides.ConstView());
 
   // Factor the matrix.
-  catamari::SparseLDLFactorization<Field> ldl_factorization;
+  catamari::SparseLDL<Field> ldl;
   catamari::SparseLDLResult result;
   if (analytical_ordering) {
     catamari::SymmetricOrdering ordering;
     catamari::UnitReachNestedDissection2D(num_x_elements - 1,
                                           num_y_elements - 1, &ordering);
-    result = ldl_factorization.Factor(matrix, ordering, ldl_control);
+    result = ldl.Factor(matrix, ordering, ldl_control);
   } else {
-    result = ldl_factorization.Factor(matrix, ldl_control);
+    result = ldl.Factor(matrix, ldl_control);
   }
   REQUIRE(result.num_successful_pivots == num_rows);
 
   // Solve a random linear system.
   BlasMatrix<Field> solution = right_hand_sides;
-  ldl_factorization.Solve(&solution.view);
+  ldl.Solve(&solution.view);
 
   // Compute the residual.
   BlasMatrix<Field> residual = right_hand_sides;

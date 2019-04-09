@@ -16,8 +16,8 @@
 namespace catamari {
 
 template <class Field>
-SparseLDLResult SparseLDLFactorization<Field>::Factor(
-    const CoordinateMatrix<Field>& matrix, const SparseLDLControl& control) {
+SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
+                                         const SparseLDLControl& control) {
   scalar_factorization.reset();
   supernodal_factorization.reset();
 
@@ -87,9 +87,9 @@ SparseLDLResult SparseLDLFactorization<Field>::Factor(
 }
 
 template <class Field>
-SparseLDLResult SparseLDLFactorization<Field>::Factor(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const SparseLDLControl& control) {
+SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
+                                         const SymmetricOrdering& ordering,
+                                         const SparseLDLControl& control) {
   scalar_factorization.reset();
   supernodal_factorization.reset();
 
@@ -117,7 +117,7 @@ SparseLDLResult SparseLDLFactorization<Field>::Factor(
 }
 
 template <class Field>
-SparseLDLResult SparseLDLFactorization<Field>::RefactorWithFixedSparsityPattern(
+SparseLDLResult SparseLDL<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
   if (is_supernodal) {
     return supernodal_factorization->RefactorWithFixedSparsityPattern(matrix);
@@ -127,8 +127,7 @@ SparseLDLResult SparseLDLFactorization<Field>::RefactorWithFixedSparsityPattern(
 }
 
 template <class Field>
-void SparseLDLFactorization<Field>::Solve(
-    BlasMatrixView<Field>* right_hand_sides) const {
+void SparseLDL<Field>::Solve(BlasMatrixView<Field>* right_hand_sides) const {
   if (is_supernodal) {
     supernodal_factorization->Solve(right_hand_sides);
   } else {
@@ -137,7 +136,7 @@ void SparseLDLFactorization<Field>::Solve(
 }
 
 template <class Field>
-Int SparseLDLFactorization<Field>::RefinedSolve(
+Int SparseLDL<Field>::RefinedSolve(
     const CoordinateMatrix<Field>& matrix,
     const RefinedSolveControl<Real>& control,
     BlasMatrixView<Field>* right_hand_sides) const {
@@ -288,7 +287,7 @@ Int SparseLDLFactorization<Field>::RefinedSolve(
 }
 
 template <class Field>
-void SparseLDLFactorization<Field>::LowerTriangularSolve(
+void SparseLDL<Field>::LowerTriangularSolve(
     BlasMatrixView<Field>* right_hand_sides) const {
   if (is_supernodal) {
     supernodal_factorization->LowerTriangularSolve(right_hand_sides);
@@ -298,7 +297,7 @@ void SparseLDLFactorization<Field>::LowerTriangularSolve(
 }
 
 template <class Field>
-void SparseLDLFactorization<Field>::DiagonalSolve(
+void SparseLDL<Field>::DiagonalSolve(
     BlasMatrixView<Field>* right_hand_sides) const {
   if (is_supernodal) {
     supernodal_factorization->DiagonalSolve(right_hand_sides);
@@ -308,7 +307,7 @@ void SparseLDLFactorization<Field>::DiagonalSolve(
 }
 
 template <class Field>
-void SparseLDLFactorization<Field>::LowerTransposeTriangularSolve(
+void SparseLDL<Field>::LowerTransposeTriangularSolve(
     BlasMatrixView<Field>* right_hand_sides) const {
   if (is_supernodal) {
     supernodal_factorization->LowerTransposeTriangularSolve(right_hand_sides);
@@ -318,8 +317,8 @@ void SparseLDLFactorization<Field>::LowerTransposeTriangularSolve(
 }
 
 template <class Field>
-void SparseLDLFactorization<Field>::PrintLowerFactor(const std::string& label,
-                                                     std::ostream& os) const {
+void SparseLDL<Field>::PrintLowerFactor(const std::string& label,
+                                        std::ostream& os) const {
   if (is_supernodal) {
     supernodal_factorization->PrintLowerFactor(label, os);
   } else {
@@ -328,8 +327,8 @@ void SparseLDLFactorization<Field>::PrintLowerFactor(const std::string& label,
 }
 
 template <class Field>
-void SparseLDLFactorization<Field>::PrintDiagonalFactor(
-    const std::string& label, std::ostream& os) const {
+void SparseLDL<Field>::PrintDiagonalFactor(const std::string& label,
+                                           std::ostream& os) const {
   if (is_supernodal) {
     supernodal_factorization->PrintDiagonalFactor(label, os);
   } else {

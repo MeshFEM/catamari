@@ -768,15 +768,15 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     std::cout << "  Running factorization..." << std::endl;
   }
   timer.Start();
-  catamari::SparseLDLFactorization<Field> ldl_factorization;
+  catamari::SparseLDL<Field> ldl;
   catamari::SparseLDLResult result;
   if (analytical_ordering) {
     catamari::SymmetricOrdering ordering;
     catamari::UnitReachNestedDissection2D(num_x_elements, num_y_elements,
                                           &ordering);
-    result = ldl_factorization.Factor(matrix, ordering, ldl_control);
+    result = ldl.Factor(matrix, ordering, ldl_control);
   } else {
-    result = ldl_factorization.Factor(matrix, ldl_control);
+    result = ldl.Factor(matrix, ldl_control);
   }
   experiment.factorization_seconds = timer.Stop();
   if (result.num_successful_pivots < num_rows) {
@@ -797,7 +797,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     }
     BlasMatrix<Field> solution = right_hand_sides;
     timer.Start();
-    ldl_factorization.Solve(&solution.view);
+    ldl.Solve(&solution.view);
     experiment.solve_seconds = timer.Stop();
 
     if (print_progress) {
@@ -834,8 +834,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     }
     BlasMatrix<Field> solution = right_hand_sides;
     timer.Start();
-    ldl_factorization.RefinedSolve(matrix, refined_solve_control,
-                                   &solution.view);
+    ldl.RefinedSolve(matrix, refined_solve_control, &solution.view);
     experiment.refined_solve_seconds = timer.Stop();
 
     if (print_progress) {

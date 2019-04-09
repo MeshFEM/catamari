@@ -347,23 +347,22 @@ OpenMP threads is detected as greater than one).
   ldl_control.SetFactorizationType(catamari::kCholeskyFactorization);
 
   // Factor the matrix.
-  catamari::SparseLDLFactorization<double> factorization;
-  const catamari::LDLResult result = factorization.Factor(matrix, ldl_control);
+  catamari::SparseLDL<double> ldl;
+  const catamari::SparseLDLResult result = ldl.Factor(matrix, ldl_control);
 
   // Solve a linear system using the factorization.
   catamari::BlasMatrix<double> right_hand_sides;
   right_hand_sides.Resize(num_rows, num_rhs);
   // The (i, j) entry of the right-hand side can easily be read or modified, e.g.:
   //   right_hand_sides(i, j) = 1.;
-  factorization.Solve(&right_hand_sides.view);
+  ldl.Solve(&right_hand_sides.view);
 
   // Alternatively, one can solve using iterative-refinement, e.g., using:
   catamari::RefinedSolveControl<double> refined_solve_control;
   refined_solve_control.relative_tol = 1e-15;
   refined_solve_control.max_iters = 3;
   refined_solve_control.verbose = true;
-  factorization.RefinedSolve(
-      matrix, refined_solve_control, &right_hand_sides.view);
+  ldl.RefinedSolve(matrix, refined_solve_control, &right_hand_sides.view);
 
 Catamari's sparse-direct solver (like CHOLMOD before it [ChenEtAl-2008]_),
 by default, dynamically chooses between a
@@ -381,7 +380,7 @@ control structure from its default value of
 There is also support for efficiently factoring sequences of matrices with
 identical sparsity patterns, but different numerical values, via the member
 function
-:samp:`catamari::SparseLDLFactorization<Field>::RefactorWithFixedSparsityPattern(const catamari::CoordinateMatrix<Field>& matrix)`.
+:samp:`catamari::SparseLDL<Field>::RefactorWithFixedSparsityPattern(const catamari::CoordinateMatrix<Field>& matrix)`.
 Such a technique is important for an efficient implementation of an Interior
 Point Method.
 
@@ -395,7 +394,7 @@ using a complex :math:`LDL^T` factorization).
 Determinantal Point Process sampling
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Catamari's
-`Determinantal Point Process <https://en.wikipedia.org/wiki/Determinantal_point_process>`_ [Macchi-1975]_
+`Determinantal Point Process <https://en.wikipedia.org/wiki/Determinantal_point_process>`_ [Macchi-1975]_ [HoughEtAl-2006]_
 samplers all operate directly on the *marginal kernel matrix*: if
 :math:`P` is a determinantal point process  with a ground set of cardinality
 :math:`n` (so that we may identify the ground set with indices
@@ -505,10 +504,12 @@ manner, perhaps using multithreaded BLAS calls) using the routine
   const bool maximum_likelihood = false;
   const int num_samples = 10;
   std::vector<std::vector<catamari::Int>> samples(num_samples);
+  std::vector<double> log_likelihoods(num_samples);
   for (int sample_index = 0; sample_index < num_samples; ++sample_index) {
     auto matrix_copy = matrix;
     samples[sample_index] = catamari::SampleLowerHermitianDPP(
         block_size, maximum_likelihood, &matrix_copy, &generator);
+    log_likelihoods[sample_index] = catamari::DPPLogLikelihood(matrix_copy.view);
   }
 
 The Hermitian DPP can be sampled using OpenMP's DAG-scheduler by instead calling
@@ -532,12 +533,17 @@ The Hermitian DPP can be sampled using OpenMP's DAG-scheduler by instead calling
   const bool maximum_likelihood = false;
   const int num_samples = 10;
   std::vector<std::vector<catamari::Int>> samples(num_samples);
+  std::vector<double> log_likelihoods(num_samples);
   for (int sample_index = 0; sample_index < num_samples; ++sample_index) {
     auto matrix_copy = matrix;
     #pragma omp parallel
     #pragma omp single
-    samples[sample_index] = catamari::OpenMPSampleLowerHermitianDPP(
-        tile_size, block_size, maximum_likelihood, &matrix_copy, &generator);
+    {
+      samples[sample_index] = catamari::OpenMPSampleLowerHermitianDPP(
+          tile_size, block_size, maximum_likelihood, &matrix_copy, &generator);
+      log_likelihoods[sample_index] = catamari::DPPLogLikelihood(
+          matrix_copy.view);
+    }
   }
 
   // Revert to the original number of BLAS threads.
@@ -593,8 +599,8 @@ chooses between a right-looking
 multifrontal method and an up-looking simplicial approach based upon the
 arithmetic intensity of the factorization.
 This default strategy can be overridden by modifying the
-:samp:`catamari::LDLControl::supernodal_strategy` member variable of the control
-structure from its default value of
+:samp:`catamari::SparseLDLControl::supernodal_strategy` member variable of the
+control structure from its default value of
 :samp:`catamari::kAdaptiveSupernodalStrategy` to either
 :samp:`catamari::kSupernodalFactorization` or
 :samp:`catamari::kScalarFactorization`.
@@ -613,4 +619,6 @@ References
 
 .. [Higham-1998] Nicholas J. Higham, Factorizing complex symmetric matrices with positive definite real and imaginary parts, Mathematics of Computation, 64(224), pp. 1591--1599, 1998. URL: https://www.ams.org/journals/mcom/1998-67-224/S0025-5718-98-00978-8/S0025-5718-98-00978-8.pdf
 
-.. [Macchi-1975] O. Macchi, The coincidence approach to stochastic point processes. Adv. Appl. Probab., 7(83), pp. 83--122.
+.. [HoughEtAl-2006] J. Ben Hough, Manjunath Krishnapur, Yuval Peres, and Balint Virag, Determinantal Processes and Independence, Probability Surveys, Vol. 3, pp. 206--229, 2006. DOI: http://dx.doi.org/10.1214/154957806000000078
+
+.. [Macchi-1975] O. Macchi, The coincidence approach to stochastic point processes. Adv. Appl. Probab., 7(83), pp. 83--122. DOI: https://doi.org/10.2307/1425855
