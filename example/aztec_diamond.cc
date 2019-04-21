@@ -95,8 +95,8 @@ std::vector<Int> SampleDPP(Int block_size, bool maximum_likelihood,
   quotient::Timer timer;
   timer.Start();
 
-  const std::vector<Int> sample =
-      SampleNonHermitianDPP(block_size, maximum_likelihood, matrix, generator);
+  const std::vector<Int> sample = catamari::SampleNonHermitianDPP(
+      block_size, maximum_likelihood, matrix, generator);
 
   const double runtime = timer.Stop();
   const double flops =
@@ -128,8 +128,8 @@ std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
   std::vector<Int> sample;
   #pragma omp parallel
   #pragma omp single
-  sample = OpenMPSampleNonHermitianDPP(tile_size, block_size,
-                                       maximum_likelihood, matrix, generator);
+  sample = catamari::OpenMPSampleNonHermitianDPP(
+      tile_size, block_size, maximum_likelihood, matrix, generator);
 
   catamari::SetNumBlasThreads(old_max_threads);
 
@@ -593,8 +593,8 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
     // Sample using the OpenMP DPP sampler.
     kenyon_copy = kenyon_matrix;
     const std::vector<Int> omp_sample =
-        OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
-                        &kenyon_copy.view, &generator);
+        ::OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
+                          &kenyon_copy.view, &generator);
     if (Int(omp_sample.size()) != expected_sample_size) {
       std::cerr << "ERROR: Sampled " << omp_sample.size() << " instead of "
                 << expected_sample_size << " dimers." << std::endl;

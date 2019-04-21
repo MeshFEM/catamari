@@ -40,21 +40,43 @@ void SampleDPP(Int block_size, bool maximum_likelihood,
   quotient::Timer timer;
   timer.Start();
 
-  SampleLowerHermitianDPP(block_size, maximum_likelihood, matrix, generator);
+  catamari::SampleNonHermitianDPP(block_size, maximum_likelihood, matrix,
+                                  generator);
 
   const double runtime = timer.Stop();
   const double flops =
-      (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
+      (is_complex ? 4 : 1) * 2 * std::pow(1. * matrix_size, 3.) / 3.;
   const double gflops_per_sec = flops / (1.e9 * runtime);
   std::cout << "Sequential DPP time: " << runtime << " seconds." << std::endl;
   std::cout << "Sequential DPP GFlop/s: " << gflops_per_sec << std::endl;
 }
 
+template <typename Field>
+void SampleHermitianDPP(Int block_size, bool maximum_likelihood,
+                        BlasMatrixView<Field>* matrix,
+                        std::mt19937* generator) {
+  const bool is_complex = catamari::IsComplex<Field>::value;
+  const Int matrix_size = matrix->height;
+  quotient::Timer timer;
+  timer.Start();
+
+  catamari::SampleLowerHermitianDPP(block_size, maximum_likelihood, matrix,
+                                    generator);
+
+  const double runtime = timer.Stop();
+  const double flops =
+      (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
+  const double gflops_per_sec = flops / (1.e9 * runtime);
+  std::cout << "Sequential Hermitian DPP time: " << runtime << " seconds."
+            << std::endl;
+  std::cout << "Sequential Hermitian DPP GFlop/s: " << gflops_per_sec
+            << std::endl;
+}
+
 #ifdef CATAMARI_OPENMP
 template <typename Field>
 void OpenMPSampleDPP(Int tile_size, Int block_size, bool maximum_likelihood,
-                     BlasMatrixView<Field>* matrix, std::mt19937* generator,
-                     Buffer<Field>* extra_buffer) {
+                     BlasMatrixView<Field>* matrix, std::mt19937* generator) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   const Int matrix_size = matrix->height;
   quotient::Timer timer;
@@ -65,8 +87,38 @@ void OpenMPSampleDPP(Int tile_size, Int block_size, bool maximum_likelihood,
 
   #pragma omp parallel
   #pragma omp single
-  OpenMPSampleLowerHermitianDPP(tile_size, block_size, maximum_likelihood,
-                                matrix, generator, extra_buffer);
+  catamari::OpenMPSampleNonHermitianDPP(tile_size, block_size,
+                                        maximum_likelihood, matrix, generator);
+
+  catamari::SetNumBlasThreads(old_max_threads);
+
+  const double runtime = timer.Stop();
+  const double flops =
+      (is_complex ? 4 : 1) * 2 * std::pow(1. * matrix_size, 3.) / 3.;
+  const double gflops_per_sec = flops / (1.e9 * runtime);
+  std::cout << "OpenMP DPP time: " << runtime << " seconds." << std::endl;
+  std::cout << "OpenMP DPP GFlop/s: " << gflops_per_sec << std::endl;
+}
+
+template <typename Field>
+void OpenMPSampleHermitianDPP(Int tile_size, Int block_size,
+                              bool maximum_likelihood,
+                              BlasMatrixView<Field>* matrix,
+                              std::mt19937* generator,
+                              Buffer<Field>* extra_buffer) {
+  const bool is_complex = catamari::IsComplex<Field>::value;
+  const Int matrix_size = matrix->height;
+  quotient::Timer timer;
+  timer.Start();
+
+  const int old_max_threads = catamari::GetMaxBlasThreads();
+  catamari::SetNumBlasThreads(1);
+
+  #pragma omp parallel
+  #pragma omp single
+  catamari::OpenMPSampleLowerHermitianDPP(tile_size, block_size,
+                                          maximum_likelihood, matrix, generator,
+                                          extra_buffer);
 
   catamari::SetNumBlasThreads(old_max_threads);
 
@@ -74,8 +126,9 @@ void OpenMPSampleDPP(Int tile_size, Int block_size, bool maximum_likelihood,
   const double flops =
       (is_complex ? 4 : 1) * std::pow(1. * matrix_size, 3.) / 3.;
   const double gflops_per_sec = flops / (1.e9 * runtime);
-  std::cout << "OpenMP DPP time: " << runtime << " seconds." << std::endl;
-  std::cout << "OpenMP DPP GFlop/s: " << gflops_per_sec << std::endl;
+  std::cout << "OpenMP Hermitian DPP time: " << runtime << " seconds."
+            << std::endl;
+  std::cout << "OpenMP Hermitian DPP GFlop/s: " << gflops_per_sec << std::endl;
 }
 #endif  // ifdef CATAMARI_OPENMP
 
@@ -87,15 +140,30 @@ void RunDPPTests(bool maximum_likelihood, Int matrix_size, Int block_size,
   Buffer<Field> extra_buffer(matrix_size * matrix_size);
 
   std::mt19937 generator(random_seed);
+
+  // Hermitian tests.
   for (Int round = 0; round < num_rounds; ++round) {
 #ifdef CATAMARI_OPENMP
     InitializeMatrix(matrix_size, &matrix);
-    OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
-                    &generator, &extra_buffer);
+    ::OpenMPSampleHermitianDPP(tile_size, block_size, maximum_likelihood,
+                               &matrix.view, &generator, &extra_buffer);
 #endif  // ifdef CATAMARI_OPENMP
 
     InitializeMatrix(matrix_size, &matrix);
-    SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
+    ::SampleHermitianDPP(block_size, maximum_likelihood, &matrix.view,
+                         &generator);
+  }
+
+  // Non-Hermitian tests.
+  for (Int round = 0; round < num_rounds; ++round) {
+#ifdef CATAMARI_OPENMP
+    InitializeMatrix(matrix_size, &matrix);
+    ::OpenMPSampleDPP(tile_size, block_size, maximum_likelihood, &matrix.view,
+                      &generator);
+#endif  // ifdef CATAMARI_OPENMP
+
+    InitializeMatrix(matrix_size, &matrix);
+    ::SampleDPP(block_size, maximum_likelihood, &matrix.view, &generator);
   }
 }
 

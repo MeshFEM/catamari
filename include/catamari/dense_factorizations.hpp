@@ -117,6 +117,16 @@ ComplexBase<Field> DPPLogLikelihood(const BlasMatrixView<Field>& matrix);
 
 }  // namespace catamari
 
-#include "catamari/dense_factorizations-impl.hpp"
+#include "catamari/dense_factorizations/cholesky-impl.hpp"
+#include "catamari/dense_factorizations/cholesky_openmp-impl.hpp"
+#include "catamari/dense_factorizations/dpp_log_likelihood-impl.hpp"
+#include "catamari/dense_factorizations/hermitian_dpp-impl.hpp"
+#include "catamari/dense_factorizations/hermitian_dpp_openmp-impl.hpp"
+#include "catamari/dense_factorizations/ldl_adjoint-impl.hpp"
+#include "catamari/dense_factorizations/ldl_adjoint_openmp-impl.hpp"
+#include "catamari/dense_factorizations/ldl_transpose-impl.hpp"
+#include "catamari/dense_factorizations/ldl_transpose_openmp-impl.hpp"
+#include "catamari/dense_factorizations/nonhermitian_dpp-impl.hpp"
+#include "catamari/dense_factorizations/nonhermitian_dpp_openmp-impl.hpp"
 
 #endif  // ifndef CATAMARI_DENSE_FACTORIZATIONS_H_

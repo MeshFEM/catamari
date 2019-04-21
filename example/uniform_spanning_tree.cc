@@ -833,7 +833,7 @@ std::vector<Int> SampleDPP(Int block_size, bool maximum_likelihood,
   quotient::Timer timer;
   timer.Start();
 
-  const std::vector<Int> sample = SampleLowerHermitianDPP(
+  const std::vector<Int> sample = catamari::SampleLowerHermitianDPP(
       block_size, maximum_likelihood, matrix, generator);
 
   const double runtime = timer.Stop();
@@ -867,9 +867,9 @@ std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
   std::vector<Int> sample;
   #pragma omp parallel
   #pragma omp single
-  sample =
-      OpenMPSampleLowerHermitianDPP(tile_size, block_size, maximum_likelihood,
-                                    matrix, generator, extra_buffer);
+  sample = catamari::OpenMPSampleLowerHermitianDPP(tile_size, block_size,
+                                                   maximum_likelihood, matrix,
+                                                   generator, extra_buffer);
 
   catamari::SetNumBlasThreads(old_max_threads);
 
@@ -921,8 +921,8 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
     matrix_copy = matrix;
     extra_buffer.Resize(matrix.view.height * matrix.view.height);
     const std::vector<Int> omp_sample =
-        OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
-                        &matrix_copy.view, &generator, &extra_buffer);
+        ::OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
+                          &matrix_copy.view, &generator, &extra_buffer);
     if (Int(omp_sample.size()) != expected_sample_size) {
       std::cerr << "ERROR: Sampled " << omp_sample.size() << " instead of "
                 << expected_sample_size << " edges." << std::endl;
@@ -947,8 +947,8 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 
     // Sample using the sequential DPP sampler.
     matrix_copy = matrix;
-    const std::vector<Int> sample = SampleDPP(block_size, maximum_likelihood,
-                                              &matrix_copy.view, &generator);
+    const std::vector<Int> sample = ::SampleDPP(block_size, maximum_likelihood,
+                                                &matrix_copy.view, &generator);
     if (Int(sample.size()) != expected_sample_size) {
       std::cerr << "ERROR: Sampled " << sample.size() << " instead of "
                 << expected_sample_size << " edges." << std::endl;
@@ -996,8 +996,8 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
     matrix_copy = matrix;
     extra_buffer.Resize(matrix.view.height * matrix.view.height);
     const std::vector<Int> omp_sample =
-        OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
-                        &matrix_copy.view, &generator, &extra_buffer);
+        ::OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
+                          &matrix_copy.view, &generator, &extra_buffer);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string tag = std::string("omp-") + typeid(Field).name();
@@ -1012,8 +1012,8 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 
     // Sample using the sequential sampler.
     matrix_copy = matrix;
-    const std::vector<Int> sample = SampleDPP(block_size, maximum_likelihood,
-                                              &matrix_copy.view, &generator);
+    const std::vector<Int> sample = ::SampleDPP(block_size, maximum_likelihood,
+                                                &matrix_copy.view, &generator);
 #ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string tag = typeid(Field).name();
