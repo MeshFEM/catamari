@@ -53,6 +53,7 @@ using catamari::BlasMatrix;
 using catamari::BlasMatrixView;
 using catamari::Complex;
 using catamari::ComplexBase;
+using catamari::ConstBlasMatrixView;
 using catamari::Int;
 using quotient::Buffer;
 
@@ -843,7 +844,8 @@ std::vector<Int> SampleDPP(Int block_size, bool maximum_likelihood,
   std::cout << "Sequential DPP time: " << runtime << " seconds." << std::endl;
   std::cout << "Sequential DPP GFlop/s: " << gflops_per_sec << std::endl;
 
-  const ComplexBase<Field> log_likelihood = catamari::DPPLogLikelihood(*matrix);
+  const ComplexBase<Field> log_likelihood =
+      catamari::DPPLogLikelihood(matrix->ToConst());
   std::cout << "Sequential DPP log-likelihood: " << log_likelihood << std::endl;
 
   return sample;
@@ -880,7 +882,8 @@ std::vector<Int> OpenMPSampleDPP(Int tile_size, Int block_size,
   std::cout << "OpenMP DPP time: " << runtime << " seconds." << std::endl;
   std::cout << "OpenMP DPP GFlop/s: " << gflops_per_sec << std::endl;
 
-  const ComplexBase<Field> log_likelihood = catamari::DPPLogLikelihood(*matrix);
+  const ComplexBase<Field> log_likelihood =
+      catamari::DPPLogLikelihood(matrix->ToConst());
   std::cout << "OpenMP DPP log-likelihood: " << log_likelihood << std::endl;
 
   return sample;
@@ -911,6 +914,8 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
   // A uniform spanning tree should have the initial edge cover two vertices and
   // each additional edge should touch one new vertex.
   const Int expected_sample_size = x_size * y_size * z_size - 1;
+  std::cout << "Expected rank: " << expected_sample_size << std::endl;
+  std::cout << "Ground set size: " << matrix.view.height << std::endl;
 
   std::mt19937 generator(random_seed);
   BlasMatrix<Field> matrix_copy;
@@ -947,8 +952,8 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 
     // Sample using the sequential DPP sampler.
     matrix_copy = matrix;
-    const std::vector<Int> sample = ::SampleDPP(block_size, maximum_likelihood,
-                                                &matrix_copy.view, &generator);
+    std::vector<Int> sample = ::SampleDPP(block_size, maximum_likelihood,
+                                          &matrix_copy.view, &generator);
     if (Int(sample.size()) != expected_sample_size) {
       std::cerr << "ERROR: Sampled " << sample.size() << " instead of "
                 << expected_sample_size << " edges." << std::endl;

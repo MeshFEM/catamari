@@ -15,12 +15,12 @@
 namespace catamari {
 
 template <typename Field>
-ComplexBase<Field> DPPLogLikelihood(const BlasMatrixView<Field>& matrix) {
+ComplexBase<Field> DPPLogLikelihood(const ConstBlasMatrixView<Field>& matrix) {
   typedef ComplexBase<Field> Real;
   const Int matrix_size = matrix.height;
   Real log_likelihood = 0;
   for (Int i = 0; i < matrix_size; ++i) {
-    Real entry = quotient::RealPart(matrix(i, i));
+    const Real entry = quotient::RealPart(matrix(i, i));
     if (entry > Real(0)) {
       log_likelihood += std::log(entry);
     } else if (entry < Real(0)) {
@@ -29,6 +29,18 @@ ComplexBase<Field> DPPLogLikelihood(const BlasMatrixView<Field>& matrix) {
       std::cerr << "Had an exactly zero diagonal entry of the result."
                 << std::endl;
     }
+  }
+  return log_likelihood;
+}
+
+template <typename Field>
+ComplexBase<Field> ElementaryDPPLogLikelihood(
+    Int rank, const ConstBlasMatrixView<Field>& matrix) {
+  typedef ComplexBase<Field> Real;
+  Real log_likelihood = 0;
+  for (Int i = 0; i < rank; ++i) {
+    const Real entry = quotient::RealPart(matrix(i, i));
+    log_likelihood += 2 * std::log(entry);
   }
   return log_likelihood;
 }
