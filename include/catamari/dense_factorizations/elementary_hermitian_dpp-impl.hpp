@@ -13,9 +13,6 @@
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/lapack.hpp"
 
-// DO_NOT_SUBMIT
-#include "quotient/timer.hpp"
-
 #include "catamari/dense_factorizations.hpp"
 
 namespace catamari {
@@ -160,11 +157,14 @@ template <class Field>
 void PanelSampleElementaryLowerHermitianDPP(
     Int panel_offset, bool maximum_likelihood, Buffer<Int>* indices,
     BlasMatrixView<Field>* matrix, BlasMatrixView<Field>* panel,
-    Buffer<ComplexBase<Field>>* diagonal, Buffer<Field>* panel_row,
+    Buffer<Field>* panel_row, Buffer<ComplexBase<Field>>* diagonal,
     std::mt19937* generator, std::vector<Int>* sample) {
   typedef ComplexBase<Field> Real;
   const Int panel_height = panel->height;
   const Int panel_width = panel->width;
+
+  // Ensure there is enough space to store a row of the panel.
+  panel_row->Resize(panel_width);
 
   // Store the diagonal of the remaining submatrix.
   diagonal->Resize(panel_height);
@@ -172,8 +172,6 @@ void PanelSampleElementaryLowerHermitianDPP(
     const Int index = panel_offset + rel_index;
     (*diagonal)[rel_index] = RealPart(matrix->Entry(index, index));
   }
-
-  panel_row->Resize(panel_width);
 
   for (Int rel_index = 0; rel_index < panel_width; ++rel_index) {
     const Int index = panel_offset + rel_index;
@@ -234,16 +232,18 @@ std::vector<Int> BlockedSampleElementaryLowerHermitianDPP(
   BlasMatrixView<Field> panel;
   panel.data = panel_buffer.Data();
 
+  // For storing the complex conjugate of a single row of the panel to allow
+  // for a direct GEMV call.
+  Buffer<Field> panel_row(block_size);
+
   // Initialize the original indices.
   Buffer<Int> indices(height);
   for (Int i = 0; i < height; ++i) {
     indices[i] = i;
   }
 
+  // For storing the diagonal of the Schur complement.
   Buffer<Real> diagonal(height);
-  Buffer<Field> panel_row(block_size);
-
-  quotient::Timer panel_timer, outer_prod_timer;
 
   for (Int i = 0; i < height; i += block_size) {
     const Int bsize = std::min(rank - i, block_size);
@@ -252,11 +252,9 @@ std::vector<Int> BlockedSampleElementaryLowerHermitianDPP(
     panel.leading_dim = panel.height;
     diagonal.Resize(panel.height);
 
-    panel_timer.Start();
     elem_herm_dpp::PanelSampleElementaryLowerHermitianDPP(
-        i, maximum_likelihood, &indices, matrix, &panel, &diagonal, &panel_row,
+        i, maximum_likelihood, &indices, matrix, &panel, &panel_row, &diagonal,
         generator, &sample);
-    panel_timer.Stop();
     if (rank == i + bsize) {
       break;
     }
@@ -267,15 +265,9 @@ std::vector<Int> BlockedSampleElementaryLowerHermitianDPP(
     BlasMatrixView<Field> matrix_bottom_right =
         matrix->Submatrix(i + bsize, i + bsize, size_left, size_left);
 
-    outer_prod_timer.Start();
     LowerNormalHermitianOuterProduct(Real{-1}, panel_lower, Real{1},
                                      &matrix_bottom_right);
-    outer_prod_timer.Stop();
   }
-
-  std::cout << "panel:      " << panel_timer.TotalSeconds() << " seconds.\n"
-            << "outer-prod: " << outer_prod_timer.TotalSeconds() << " seconds."
-            << std::endl;
 
   return sample;
 }
