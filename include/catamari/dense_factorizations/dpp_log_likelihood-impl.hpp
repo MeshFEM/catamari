@@ -20,7 +20,7 @@ ComplexBase<Field> DPPLogLikelihood(const ConstBlasMatrixView<Field>& matrix) {
   const Int matrix_size = matrix.height;
   Real log_likelihood = 0;
   for (Int i = 0; i < matrix_size; ++i) {
-    const Real entry = quotient::RealPart(matrix(i, i));
+    const Real entry = RealPart(matrix(i, i));
     if (entry > Real(0)) {
       log_likelihood += std::log(entry);
     } else if (entry < Real(0)) {
@@ -39,7 +39,7 @@ ComplexBase<Field> ElementaryDPPLogLikelihood(
   typedef ComplexBase<Field> Real;
   Real log_likelihood = 0;
   for (Int i = 0; i < rank; ++i) {
-    const Real entry = quotient::RealPart(matrix(i, i));
+    const Real entry = RealPart(matrix(i, i));
     log_likelihood += 2 * std::log(entry);
   }
   return log_likelihood;

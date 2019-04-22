@@ -93,26 +93,10 @@ namespace elem_herm_dpp {
 template <class Field>
 Int PanelPivotSelection(Int panel_offset, bool maximum_likelihood,
                         const ConstBlasMatrixView<Field>& panel,
-                        Buffer<ComplexBase<Field>>* diagonal,
+                        const Buffer<ComplexBase<Field>>& diagonal,
                         std::mt19937* generator) {
   typedef ComplexBase<Field> Real;
-
-  const Int diag_length = diagonal->Size();
-  if (panel_offset > 0) {
-    // Update the diagonal using the newest column of the panel.
-    for (Int i = panel_offset; i < diag_length; ++i) {
-      const Field& entry = panel(i, panel_offset - 1);
-      CATAMARI_ASSERT(entry == entry,
-                      "NaN at index (" + std::to_string(i) + ", " +
-                          std::to_string(panel_offset - 1) + ") of panel.");
-      (*diagonal)[i] -= RealPart(entry * Conjugate(entry));
-      (*diagonal)[i] = std::max((*diagonal)[i], Real(0));
-    }
-  } else {
-    for (Int i = panel_offset; i < diag_length; ++i) {
-      (*diagonal)[i] = std::max((*diagonal)[i], Real(0));
-    }
-  }
+  const Int diag_length = diagonal.Size();
 
   // Sample from the distribution (or pick its maximum).
   if (maximum_likelihood) {
@@ -120,9 +104,9 @@ Int PanelPivotSelection(Int panel_offset, bool maximum_likelihood,
     Int max_index = 0;
     Real max_value = -1;
     for (Int i = panel_offset; i < diag_length; ++i) {
-      if ((*diagonal)[i] > max_value) {
+      if (diagonal[i] > max_value) {
         max_index = i;
-        max_value = (*diagonal)[i];
+        max_value = diagonal[i];
       }
     }
     return max_index;
@@ -136,13 +120,13 @@ Int PanelPivotSelection(Int panel_offset, bool maximum_likelihood,
     // number of remaining indices to sample.
     Real diagonal_sum = 0;
     for (Int i = panel_offset; i < diag_length; ++i) {
-      diagonal_sum += (*diagonal)[i];
+      diagonal_sum += diagonal[i];
     }
 
     Int sample_index = panel_offset;
     for (Real cdf_value = 0; cdf_value < target_cdf_value;) {
       CATAMARI_ASSERT(sample_index < diag_length, "Exceeded panel size");
-      cdf_value += (*diagonal)[sample_index] / diagonal_sum;
+      cdf_value += diagonal[sample_index] / diagonal_sum;
       if (cdf_value >= target_cdf_value) {
         break;
       }
@@ -174,9 +158,26 @@ void PanelSampleElementaryLowerHermitianDPP(
   }
 
   for (Int rel_index = 0; rel_index < panel_width; ++rel_index) {
+    // Update the diagonal using the newest column of the panel. And ensure
+    // that it is non-negative.
+    if (rel_index > 0) {
+      for (Int i = rel_index; i < panel_height; ++i) {
+        const Field& entry = panel->Entry(i, rel_index - 1);
+        CATAMARI_ASSERT(entry == entry,
+                        "NaN at index (" + std::to_string(i) + ", " +
+                            std::to_string(rel_index - 1) + ") of panel.");
+        (*diagonal)[i] -= RealPart(entry * Conjugate(entry));
+        (*diagonal)[i] = std::max((*diagonal)[i], Real(0));
+      }
+    } else {
+      for (Int i = rel_index; i < panel_height; ++i) {
+        (*diagonal)[i] = std::max((*diagonal)[i], Real(0));
+      }
+    }
+
     const Int index = panel_offset + rel_index;
     const Int rel_pivot_index = PanelPivotSelection(
-        rel_index, maximum_likelihood, panel->ToConst(), diagonal, generator);
+        rel_index, maximum_likelihood, panel->ToConst(), *diagonal, generator);
     const Int pivot_index = panel_offset + rel_pivot_index;
     sample->push_back((*indices)[pivot_index]);
 

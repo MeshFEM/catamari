@@ -26,6 +26,7 @@ template <typename Field>
 void InitializeProjection(Int matrix_size, Int rank,
                           BlasMatrix<Field>* matrix) {
   typedef ComplexBase<Field> Real;
+  rank = std::min(matrix_size, rank);
 
   // We initialize the unitary factor with the first 'rank' columns of a
   // Householder transformation I - 2 v v', where v is a unit vector.
@@ -51,7 +52,7 @@ void InitializeProjection(Int matrix_size, Int rank,
 
   matrix->Resize(matrix_size, matrix_size, Field{0});
   for (Int j = 0; j < matrix_size; ++j) {
-    for (Int i = j; i < matrix_size; ++i) {
+    for (Int i = 0; i < matrix_size; ++i) {
       for (Int k = 0; k < rank; ++k) {
         matrix->Entry(i, j) += Q(i, k) * catamari::Conjugate(Q(j, k));
       }
@@ -89,6 +90,7 @@ void SampleElementaryHermitianDPP(Int block_size, Int rank,
                                   std::mt19937* generator) {
   const bool is_complex = catamari::IsComplex<Field>::value;
   const Int matrix_size = matrix->height;
+  rank = std::min(rank, matrix_size);
   quotient::Timer timer;
   timer.Start();
 
