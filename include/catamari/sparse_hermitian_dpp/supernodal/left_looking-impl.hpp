@@ -10,6 +10,7 @@
 
 #include <algorithm>
 
+#include "catamari/dense_dpp.hpp"
 #include "catamari/io_utils.hpp"
 
 #include "catamari/sparse_hermitian_dpp/supernodal.hpp"

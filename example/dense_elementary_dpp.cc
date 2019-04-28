@@ -8,7 +8,7 @@
 #include <iostream>
 
 #include "catamari/blas_matrix.hpp"
-#include "catamari/dense_factorizations.hpp"
+#include "catamari/dense_dpp.hpp"
 #include "catamari/norms.hpp"
 #include "quotient/timer.hpp"
 #include "specify.hpp"
@@ -263,7 +263,7 @@ int main(int argc, char** argv) {
   const unsigned int random_seed = parser.OptionalInput<unsigned int>(
       "random_seed", "The random seed for the DPP.", 17u);
   const bool maximum_likelihood = parser.OptionalInput<bool>(
-      "maximum_likelihood", "Take a maximum likelihood DPP sample?", true);
+      "maximum_likelihood", "Take a maximum likelihood DPP sample?", false);
   if (!parser.OK()) {
     return 0;
   }

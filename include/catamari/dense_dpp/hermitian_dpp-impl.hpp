@@ -5,15 +5,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_DENSE_FACTORIZATIONS_HERMITIAN_DPP_IMPL_H_
-#define CATAMARI_DENSE_FACTORIZATIONS_HERMITIAN_DPP_IMPL_H_
+#ifndef CATAMARI_DENSE_DPP_HERMITIAN_DPP_IMPL_H_
+#define CATAMARI_DENSE_DPP_HERMITIAN_DPP_IMPL_H_
 
 #include <cmath>
 
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/lapack.hpp"
 
-#include "catamari/dense_factorizations.hpp"
+#include "catamari/dense_dpp.hpp"
 
 namespace catamari {
 
@@ -137,4 +137,4 @@ std::vector<Int> SampleLowerHermitianDPP(Int block_size,
 
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_DENSE_FACTORIZATIONS_HERMITIAN_DPP_IMPL_H_
+#endif  // ifndef CATAMARI_DENSE_DPP_HERMITIAN_DPP_IMPL_H_

@@ -5,12 +5,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_DENSE_FACTORIZATIONS_DPP_LOG_LIKELIHOOD_IMPL_H_
-#define CATAMARI_DENSE_FACTORIZATIONS_DPP_LOG_LIKELIHOOD_IMPL_H_
+#ifndef CATAMARI_DENSE_DPP_DPP_LOG_LIKELIHOOD_IMPL_H_
+#define CATAMARI_DENSE_DPP_DPP_LOG_LIKELIHOOD_IMPL_H_
 
 #include <cmath>
 
-#include "catamari/dense_factorizations.hpp"
+#include "catamari/dense_dpp.hpp"
 
 namespace catamari {
 
@@ -47,4 +47,4 @@ ComplexBase<Field> ElementaryDPPLogLikelihood(
 
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_DENSE_FACTORIZATIONS_DPP_LOG_LIKELIHOOD_IMPL_H_
+#endif  // ifndef CATAMARI_DENSE_DPP_DPP_LOG_LIKELIHOOD_IMPL_H_

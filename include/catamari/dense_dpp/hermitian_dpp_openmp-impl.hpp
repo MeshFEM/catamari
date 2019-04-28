@@ -5,8 +5,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_DENSE_FACTORIZATIONS_ELEMENTARY_HERMITIAN_DPP_OPENMP_IMPL_H_
-#define CATAMARI_DENSE_FACTORIZATIONS_ELEMENTARY_HERMITIAN_DPP_OPENMP_IMPL_H_
+#ifndef CATAMARI_DENSE_DPP_HERMITIAN_DPP_OPENMP_IMPL_H_
+#define CATAMARI_DENSE_DPP_HERMITIAN_DPP_OPENMP_IMPL_H_
 #ifdef CATAMARI_OPENMP
 
 #include <cmath>
@@ -14,14 +14,13 @@
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/lapack.hpp"
 
-#include "catamari/dense_factorizations.hpp"
+#include "catamari/dense_dpp.hpp"
 
 namespace catamari {
 
-// TODO(Jack Poulson): Rewrite this routine.
 template <class Field>
-std::vector<Int> OpenMPBlockedSampleElementaryLowerHermitianDPP(
-    Int tile_size, Int block_size, Int rank, bool maximum_likelihood,
+std::vector<Int> OpenMPBlockedSampleLowerHermitianDPP(
+    Int tile_size, Int block_size, bool maximum_likelihood,
     BlasMatrixView<Field>* matrix, std::mt19937* generator,
     Buffer<Field>* buffer) {
   const Int height = matrix->height;
@@ -145,17 +144,16 @@ std::vector<Int> OpenMPBlockedSampleElementaryLowerHermitianDPP(
 }
 
 template <class Field>
-std::vector<Int> OpenMPSampleElementaryLowerHermitianDPP(
-    Int tile_size, Int block_size, Int rank, bool maximum_likelihood,
-    BlasMatrixView<Field>* matrix, std::mt19937* generator,
-    Buffer<Field>* buffer) {
-  return OpenMPBlockedSampleElementaryLowerHermitianDPP(
-      tile_size, block_size, rank, maximum_likelihood, matrix, generator,
-      buffer);
+std::vector<Int> OpenMPSampleLowerHermitianDPP(Int tile_size, Int block_size,
+                                               bool maximum_likelihood,
+                                               BlasMatrixView<Field>* matrix,
+                                               std::mt19937* generator,
+                                               Buffer<Field>* buffer) {
+  return OpenMPBlockedSampleLowerHermitianDPP(
+      tile_size, block_size, maximum_likelihood, matrix, generator, buffer);
 }
 
 }  // namespace catamari
 
 #endif  // ifdef CATAMARI_OPENMP
-#endif  // ifndef
-        // CATAMARI_DENSE_FACTORIZATIONS_ELEMENTARY_HERMITIAN_DPP_OPENMP_IMPL_H_
+#endif  // ifndef CATAMARI_DENSE_DPP_HERMITIAN_DPP_OPENMP_IMPL_H_

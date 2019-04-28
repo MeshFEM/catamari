@@ -39,7 +39,7 @@
 #include <vector>
 
 #include "catamari/blas_matrix.hpp"
-#include "catamari/dense_factorizations.hpp"
+#include "catamari/dense_dpp.hpp"
 #include "catamari/io_utils.hpp"
 #include "quotient/timer.hpp"
 #include "specify.hpp"

@@ -5,15 +5,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#ifndef CATAMARI_DENSE_FACTORIZATIONS_ELEMENTARY_HERMITIAN_DPP_IMPL_H_
-#define CATAMARI_DENSE_FACTORIZATIONS_ELEMENTARY_HERMITIAN_DPP_IMPL_H_
+#ifndef CATAMARI_DENSE_DPP_ELEMENTARY_HERMITIAN_DPP_IMPL_H_
+#define CATAMARI_DENSE_DPP_ELEMENTARY_HERMITIAN_DPP_IMPL_H_
 
 #include <cmath>
 
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/lapack.hpp"
 
-#include "catamari/dense_factorizations.hpp"
+#include "catamari/dense_dpp.hpp"
 
 namespace catamari {
 
@@ -91,7 +91,7 @@ void LowerHermitianSwap(Int index0, Int index1, BlasMatrixView<Field>* matrix) {
 namespace elem_herm_dpp {
 
 template <class Field>
-Int PanelPivotSelection(Int panel_offset, bool maximum_likelihood,
+Int PanelPivotSelection(Int rel_index, Int rank, bool maximum_likelihood,
                         const ConstBlasMatrixView<Field>& panel,
                         const Buffer<ComplexBase<Field>>& diagonal,
                         std::mt19937* generator) {
@@ -103,7 +103,7 @@ Int PanelPivotSelection(Int panel_offset, bool maximum_likelihood,
     // Return the index of the maximum value.
     Int max_index = 0;
     Real max_value = -1;
-    for (Int i = panel_offset; i < diag_length; ++i) {
+    for (Int i = rel_index; i < diag_length; ++i) {
       if (diagonal[i] > max_value) {
         max_index = i;
         max_value = diagonal[i];
@@ -115,15 +115,10 @@ Int PanelPivotSelection(Int panel_offset, bool maximum_likelihood,
     std::uniform_real_distribution<Real> uniform_dist{Real{0}, Real{1}};
     const Real target_cdf_value = uniform_dist(*generator);
 
-    // Compute the sum of the diagonal to normalize the PDF.
-    // NOTE: We could compute this value analytically, as it should be the
-    // number of remaining indices to sample.
-    Real diagonal_sum = 0;
-    for (Int i = panel_offset; i < diag_length; ++i) {
-      diagonal_sum += diagonal[i];
-    }
+    // The diagonal sum is guaranteed to be `rank - rel_index`.
+    const Real diagonal_sum = rank - rel_index;
 
-    Int sample_index = panel_offset;
+    Int sample_index = rel_index;
     for (Real cdf_value = 0; cdf_value < target_cdf_value;) {
       CATAMARI_ASSERT(sample_index < diag_length, "Exceeded panel size");
       cdf_value += diagonal[sample_index] / diagonal_sum;
@@ -139,77 +134,69 @@ Int PanelPivotSelection(Int panel_offset, bool maximum_likelihood,
 
 template <class Field>
 void PanelSampleElementaryLowerHermitianDPP(
-    Int panel_offset, bool maximum_likelihood, Buffer<Int>* indices,
-    BlasMatrixView<Field>* matrix, BlasMatrixView<Field>* panel,
+    Int panel_offset, Int panel_width, Int rank, bool maximum_likelihood,
+    Buffer<Int>* indices, BlasMatrixView<Field>* matrix,
     Buffer<Field>* panel_row, Buffer<ComplexBase<Field>>* diagonal,
     std::mt19937* generator, std::vector<Int>* sample) {
   typedef ComplexBase<Field> Real;
-  const Int panel_height = panel->height;
-  const Int panel_width = panel->width;
+  const Int panel_height = matrix->height - panel_offset;
+  const Int rank_remaining = rank - panel_offset;
+  Buffer<Real>& d = *diagonal;
+
+  const ConstBlasMatrixView<Field> panel =
+      matrix->Submatrix(panel_offset, panel_offset, panel_height, panel_width);
 
   // Ensure there is enough space to store a row of the panel.
   panel_row->Resize(panel_width);
 
   // Store the diagonal of the remaining submatrix.
-  diagonal->Resize(panel_height);
+  d.Resize(panel_height);
   for (Int rel_index = 0; rel_index < panel_height; ++rel_index) {
     const Int index = panel_offset + rel_index;
-    (*diagonal)[rel_index] = RealPart(matrix->Entry(index, index));
+    d[rel_index] = RealPart(matrix->Entry(index, index));
   }
 
   for (Int rel_index = 0; rel_index < panel_width; ++rel_index) {
-    // Update the diagonal using the newest column of the panel. And ensure
-    // that it is non-negative.
-    if (rel_index > 0) {
-      for (Int i = rel_index; i < panel_height; ++i) {
-        const Field& entry = panel->Entry(i, rel_index - 1);
-        CATAMARI_ASSERT(entry == entry,
-                        "NaN at index (" + std::to_string(i) + ", " +
-                            std::to_string(rel_index - 1) + ") of panel.");
-        (*diagonal)[i] -= RealPart(entry * Conjugate(entry));
-        (*diagonal)[i] = std::max((*diagonal)[i], Real(0));
-      }
-    } else {
-      for (Int i = rel_index; i < panel_height; ++i) {
-        (*diagonal)[i] = std::max((*diagonal)[i], Real(0));
-      }
-    }
-
     const Int index = panel_offset + rel_index;
     const Int rel_pivot_index = PanelPivotSelection(
-        rel_index, maximum_likelihood, panel->ToConst(), *diagonal, generator);
+        rel_index, rank_remaining, maximum_likelihood, panel, d, generator);
     const Int pivot_index = panel_offset + rel_pivot_index;
     sample->push_back((*indices)[pivot_index]);
 
     // Perform a Hermitian swap of indices 'index' and 'pivot_index'.
     LowerHermitianSwap(index, pivot_index, matrix);
     std::swap((*indices)[index], (*indices)[pivot_index]);
-    std::swap((*diagonal)[rel_index], (*diagonal)[rel_pivot_index]);
-    RowSwap(rel_index, rel_pivot_index, panel);
+    std::swap(d[rel_index], d[rel_pivot_index]);
 
     // matrix(index:end, index) -=
-    //     panel(rel_index:end, 0:rel_index) panel(rel_index, 0:rel_index)'
+    //     matrix(index:end, panel_offset:index)
+    //     matrix(index, panel_offset:index)'
     for (Int j_rel = 0; j_rel < rel_index; ++j_rel) {
-      (*panel_row)[j_rel] = Conjugate(panel->Entry(rel_index, j_rel));
+      (*panel_row)[j_rel] = Conjugate(panel(rel_index, j_rel));
     }
     const ConstBlasMatrixView<Field> panel_bottom_left =
-        panel->Submatrix(rel_index, 0, panel_height - rel_index, rel_index);
+        panel.Submatrix(rel_index, 0, panel_height - rel_index, rel_index);
     MatrixVectorProduct(Field{-1}, panel_bottom_left, panel_row->Data(),
                         matrix->Pointer(index, index));
 
-    // matrix(index+1:end, index:index+1) /= sqrt(alpha11)
+    // Form the new column:
+    //   matrix(index+1:end, index) /= sqrt(alpha11)
+    // and update the remainder of the diagonal.
     const Real alpha11_sqrt = std::sqrt(RealPart(matrix->Entry(index, index)));
     matrix->Entry(index, index) = alpha11_sqrt;
     const Real alpha11_inv_sqrt = Real(1) / alpha11_sqrt;
     CATAMARI_ASSERT(alpha11_inv_sqrt == alpha11_inv_sqrt,
                     "NaN at pivot " + std::to_string(index));
-    for (Int i_rel = rel_index + 1; i_rel < panel_height; ++i_rel) {
-      const Int i = panel_offset + i_rel;
-      matrix->Entry(i, index) *= alpha11_inv_sqrt;
-      panel->Entry(i_rel, rel_index) = matrix->Entry(i, index);
-      CATAMARI_ASSERT(matrix->Entry(i, index) == matrix->Entry(i, index),
-                      "Writing NaN into matrix(" + std::to_string(i) + ", " +
-                          std::to_string(index) + ").");
+    for (Int i = index + 1; i < matrix->height; ++i) {
+      Field& entry = matrix->Entry(i, index);
+      entry *= alpha11_inv_sqrt;
+      CATAMARI_ASSERT(entry == entry, "Writing NaN into matrix(" +
+                                          std::to_string(i) + ", " +
+                                          std::to_string(index) + ").");
+
+      const Int i_rel = i - panel_offset;
+      d[i_rel] -= RealPart(entry * Conjugate(entry));
+      d[i_rel] = std::max(d[i_rel], Real(0));
     }
   }
 }
@@ -228,11 +215,6 @@ std::vector<Int> BlockedSampleElementaryLowerHermitianDPP(
   std::vector<Int> sample;
   sample.reserve(height);
 
-  // Set up a buffer for the largest possible panel.
-  Buffer<Field> panel_buffer(height * block_size);
-  BlasMatrixView<Field> panel;
-  panel.data = panel_buffer.Data();
-
   // For storing the complex conjugate of a single row of the panel to allow
   // for a direct GEMV call.
   Buffer<Field> panel_row(block_size);
@@ -248,21 +230,18 @@ std::vector<Int> BlockedSampleElementaryLowerHermitianDPP(
 
   for (Int i = 0; i < height; i += block_size) {
     const Int bsize = std::min(rank - i, block_size);
-    panel.height = height - i;
-    panel.width = bsize;
-    panel.leading_dim = panel.height;
-    diagonal.Resize(panel.height);
+    diagonal.Resize(height - i);
 
     elem_herm_dpp::PanelSampleElementaryLowerHermitianDPP(
-        i, maximum_likelihood, &indices, matrix, &panel, &panel_row, &diagonal,
-        generator, &sample);
+        i, bsize, rank, maximum_likelihood, &indices, matrix, &panel_row,
+        &diagonal, generator, &sample);
     if (rank == i + bsize) {
       break;
     }
 
     const Int size_left = height - (i + bsize);
     const ConstBlasMatrixView<Field> panel_lower =
-        panel.Submatrix(bsize, 0, size_left, bsize);
+        matrix->Submatrix(i + bsize, i, size_left, bsize);
     BlasMatrixView<Field> matrix_bottom_right =
         matrix->Submatrix(i + bsize, i + bsize, size_left, size_left);
 
@@ -283,4 +262,4 @@ std::vector<Int> SampleElementaryLowerHermitianDPP(
 
 }  // namespace catamari
 
-#endif  // ifndef CATAMARI_DENSE_FACTORIZATIONS_ELEMENTARY_HERMITIAN_DPP_IMPL_H_
+#endif  // ifndef CATAMARI_DENSE_DPP_ELEMENTARY_HERMITIAN_DPP_IMPL_H_
