@@ -168,21 +168,21 @@ void PanelSampleElementaryLowerHermitianDPP(
     std::swap((*indices)[index], (*indices)[pivot_index]);
     std::swap(d[rel_index], d[rel_pivot_index]);
 
-    // matrix(index:end, index) -=
-    //     matrix(index:end, panel_offset:index)
+    // matrix(index+1:end, index) -=
+    //     matrix(index+1:end, panel_offset:index)
     //     matrix(index, panel_offset:index)'
     for (Int j_rel = 0; j_rel < rel_index; ++j_rel) {
       (*panel_row)[j_rel] = Conjugate(panel(rel_index, j_rel));
     }
-    const ConstBlasMatrixView<Field> panel_bottom_left =
-        panel.Submatrix(rel_index, 0, panel_height - rel_index, rel_index);
+    const ConstBlasMatrixView<Field> panel_bottom_left = panel.Submatrix(
+        rel_index + 1, 0, panel_height - (rel_index + 1), rel_index);
     MatrixVectorProduct(Field{-1}, panel_bottom_left, panel_row->Data(),
-                        matrix->Pointer(index, index));
+                        matrix->Pointer(index + 1, index));
 
     // Form the new column:
     //   matrix(index+1:end, index) /= sqrt(alpha11)
     // and update the remainder of the diagonal.
-    const Real alpha11_sqrt = std::sqrt(RealPart(matrix->Entry(index, index)));
+    const Real alpha11_sqrt = std::sqrt(d[rel_index]);
     matrix->Entry(index, index) = alpha11_sqrt;
     const Real alpha11_inv_sqrt = Real(1) / alpha11_sqrt;
     CATAMARI_ASSERT(alpha11_inv_sqrt == alpha11_inv_sqrt,
