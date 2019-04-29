@@ -99,7 +99,7 @@ void SampleElementaryHermitianDPP(Int block_size, Int rank,
 
   const double runtime = timer.Stop();
   const double flops =
-      (is_complex ? 4 : 1) * rank * std::pow(1. * matrix_size, 2.) / 3.;
+      (is_complex ? 4 : 1) * matrix_size * std::pow(1. * rank, 2.) / 3.;
   const double gflops_per_sec = flops / (1.e9 * runtime);
   std::cout << "Sequential elementary Hermitian DPP time: " << runtime
             << " seconds." << std::endl;
