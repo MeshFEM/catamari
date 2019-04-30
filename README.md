@@ -15,8 +15,11 @@ sampler based upon a modified LU factorization.
 [![Join the chat at https://gitter.im/hodge_star/community](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/hodge_star/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Documentation](https://readthedocs.org/projects/catamari/badge/?version=latest)](https://hodgestar.com/catamari/docs/master/)
 
-### Talk on the techniques behind Catamari
-Slides from a talk given on April 8, 2019 at The Royal Society are [available here](https://hodgestar.com/catamari/April8-2019-RoyalSociety.pdf).
+### Preprint on the techniques behind Catamari
+A [preprint](https://hodgestar.com/storage/hpc_dpp_preprint-April30-2019.pdf)
+on Catamari is now available, as are the
+[slides](https://hodgestar.com/catamari/April8-2019-RoyalSociety.pdf) from a
+preceding talk.
 
 ### Dependencies
 The only strict dependency for manually including the headers in your project
