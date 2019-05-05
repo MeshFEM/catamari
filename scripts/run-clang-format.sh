@@ -1,9 +1,10 @@
 #!/bin/bash
 
 HEADERS=`find include/ -print | grep "\.h"`
+SRC=`find src/ -print | grep "\.cc"`
 EXAMPLES=`find example/ -print | grep "\.cc"`
 TESTS=`find test/ -print | grep "\.cc"`
-SOURCE_FILES="${HEADERS} ${EXAMPLES} ${TESTS}"
+SOURCE_FILES="${HEADERS} ${EXAMPLES} ${SRC} ${TESTS}"
 
 # Replace "#pragma omp" with "//#pragma omp" to avoid poor formatting.
 sed -i 's/#pragma omp/\/\/#pragma omp/g' ${SOURCE_FILES}

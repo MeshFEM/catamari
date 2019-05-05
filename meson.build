@@ -193,6 +193,15 @@ if get_option('enable_debug')
   cxx_args += '-DCATAMARI_DEBUG'
 endif
 
+# A C library for Catamari.
+catamari_c = shared_library(
+    'catamari_c',
+    ['src/catamari_c.cc'],
+    include_directories : include_dir,
+    dependencies : deps,
+    cpp_args : cxx_args,
+    install : true)
+
 # Tests for the Complex class.
 complex_test_exe = executable(
     'complex_test',
@@ -320,5 +329,5 @@ dpp_shifted_2d_negative_laplacian_exe = executable(
 # For using catamari as a subproject.
 catamari_dep = declare_dependency(include_directories : include_dir)
 
-# Install include/catamari.hpp and include/catamari/
+# Install include/catamari.{h, hpp} and include/catamari/
 install_subdir('include', install_dir : '.')
