@@ -93,19 +93,19 @@ CATAMARI_EXPORT void CatamariSampleLowerHermitianDPPComplexDouble(
 
 #ifdef CATAMARI_OPENMP
 CATAMARI_EXPORT void CatamariOpenMPSampleLowerHermitianDPPFloat(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewFloat* matrix, CatamariBufferInt* sample);
 
 CATAMARI_EXPORT void CatamariOpenMPSampleLowerHermitianDPPDouble(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewDouble* matrix, CatamariBufferInt* sample);
 
 CATAMARI_EXPORT void CatamariOpenMPSampleLowerHermitianDPPComplexFloat(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewComplexFloat* matrix, CatamariBufferInt* sample);
 
 CATAMARI_EXPORT void CatamariOpenMPSampleLowerHermitianDPPComplexDouble(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewComplexDouble* matrix, CatamariBufferInt* sample);
 #endif  // ifdef CATAMARI_OPENMP
 
@@ -127,19 +127,19 @@ CATAMARI_EXPORT void CatamariSampleNonHermitianDPPComplexDouble(
 
 #ifdef CATAMARI_OPENMP
 CATAMARI_EXPORT void CatamariOpenMPSampleNonHermitianDPPFloat(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewFloat* matrix, CatamariBufferInt* sample);
 
 CATAMARI_EXPORT void CatamariOpenMPSampleNonHermitianDPPDouble(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewDouble* matrix, CatamariBufferInt* sample);
 
 CATAMARI_EXPORT void CatamariOpenMPSampleNonHermitianDPPComplexFloat(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewComplexFloat* matrix, CatamariBufferInt* sample);
 
 CATAMARI_EXPORT void CatamariOpenMPSampleNonHermitianDPPComplexDouble(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewComplexDouble* matrix, CatamariBufferInt* sample);
 #endif  // ifdef CATAMARI_OPENMP
 

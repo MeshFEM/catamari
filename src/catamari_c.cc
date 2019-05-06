@@ -156,68 +156,80 @@ void CatamariSampleLowerHermitianDPPComplexDouble(
 
 #ifdef CATAMARI_OPENMP
 void CatamariOpenMPSampleLowerHermitianDPPFloat(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewFloat* matrix, CatamariBufferInt* sample) {
   // Convert the view into C++.
   auto matrix_cxx = BlasMatrixViewToCxx(matrix);
 
   // Sample the DPP.
+  const catamari::Int height = matrix_cxx.height;
+  catamari::Buffer<float> buffer(height * height);
   std::vector<catamari::Int> sample_cxx;
   #pragma omp parallel
   #pragma omp single
   sample_cxx = catamari::OpenMPSampleLowerHermitianDPP(
-      block_size, maximum_likelihood, &matrix_cxx, &g_generator);
+      tile_size, block_size, maximum_likelihood, &matrix_cxx, &g_generator,
+      &buffer);
 
   // Return the sample in the C format.
   VectorIntToC(sample_cxx, sample);
 }
 
 void CatamariOpenMPSampleLowerHermitianDPPDouble(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewDouble* matrix, CatamariBufferInt* sample) {
   // Convert the view into C++.
   auto matrix_cxx = BlasMatrixViewToCxx(matrix);
 
   // Sample the DPP.
+  const catamari::Int height = matrix_cxx.height;
+  catamari::Buffer<double> buffer(height * height);
   std::vector<catamari::Int> sample_cxx;
   #pragma omp parallel
   #pragma omp single
   sample_cxx = catamari::OpenMPSampleLowerHermitianDPP(
-      block_size, maximum_likelihood, &matrix_cxx, &g_generator);
+      tile_size, block_size, maximum_likelihood, &matrix_cxx, &g_generator,
+      &buffer);
 
   // Return the sample in the C format.
   VectorIntToC(sample_cxx, sample);
 }
 
 void CatamariOpenMPSampleLowerHermitianDPPComplexFloat(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewComplexFloat* matrix, CatamariBufferInt* sample) {
   // Convert the view into C++.
   auto matrix_cxx = BlasMatrixViewToCxx(matrix);
 
   // Sample the DPP.
+  const catamari::Int height = matrix_cxx.height;
+  catamari::Buffer<catamari::Complex<float>> buffer(height * height);
   std::vector<catamari::Int> sample_cxx;
   #pragma omp parallel
   #pragma omp single
   sample_cxx = catamari::OpenMPSampleLowerHermitianDPP(
-      block_size, maximum_likelihood, &matrix_cxx, &g_generator);
+      tile_size, block_size, maximum_likelihood, &matrix_cxx, &g_generator,
+      &buffer);
 
   // Return the sample in the C format.
   VectorIntToC(sample_cxx, sample);
 }
 
 void CatamariOpenMPSampleLowerHermitianDPPComplexDouble(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewComplexDouble* matrix, CatamariBufferInt* sample) {
   // Convert the view into C++.
   auto matrix_cxx = BlasMatrixViewToCxx(matrix);
 
   // Sample the DPP.
+  const catamari::Int height = matrix_cxx.height;
+  catamari::Buffer<catamari::Complex<double>> buffer(height * height);
   std::vector<catamari::Int> sample_cxx;
   #pragma omp parallel
   #pragma omp single
   sample_cxx = catamari::OpenMPSampleLowerHermitianDPP(
-      block_size, maximum_likelihood, &matrix_cxx, &g_generator);
+      tile_size, block_size, maximum_likelihood, &matrix_cxx, &g_generator,
+      &buffer);
 
   // Return the sample in the C format.
   VectorIntToC(sample_cxx, sample);
@@ -284,7 +296,7 @@ void CatamariSampleNonHermitianDPPComplexDouble(
 
 #ifdef CATAMARI_OPENMP
 void CatamariOpenMPSampleNonHermitianDPPFloat(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewFloat* matrix, CatamariBufferInt* sample) {
   // Convert the view into C++.
   auto matrix_cxx = BlasMatrixViewToCxx(matrix);
@@ -294,14 +306,14 @@ void CatamariOpenMPSampleNonHermitianDPPFloat(
   #pragma omp parallel
   #pragma omp single
   sample_cxx = catamari::OpenMPSampleNonHermitianDPP(
-      block_size, maximum_likelihood, &matrix_cxx, &g_generator);
+      tile_size, block_size, maximum_likelihood, &matrix_cxx, &g_generator);
 
   // Return the sample in the C format.
   VectorIntToC(sample_cxx, sample);
 }
 
 void CatamariOpenMPSampleNonHermitianDPPDouble(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewDouble* matrix, CatamariBufferInt* sample) {
   // Convert the view into C++.
   auto matrix_cxx = BlasMatrixViewToCxx(matrix);
@@ -311,14 +323,14 @@ void CatamariOpenMPSampleNonHermitianDPPDouble(
   #pragma omp parallel
   #pragma omp single
   sample_cxx = catamari::OpenMPSampleNonHermitianDPP(
-      block_size, maximum_likelihood, &matrix_cxx, &g_generator);
+      tile_size, block_size, maximum_likelihood, &matrix_cxx, &g_generator);
 
   // Return the sample in the C format.
   VectorIntToC(sample_cxx, sample);
 }
 
 void CatamariOpenMPSampleNonHermitianDPPComplexFloat(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewComplexFloat* matrix, CatamariBufferInt* sample) {
   // Convert the view into C++.
   auto matrix_cxx = BlasMatrixViewToCxx(matrix);
@@ -328,14 +340,14 @@ void CatamariOpenMPSampleNonHermitianDPPComplexFloat(
   #pragma omp parallel
   #pragma omp single
   sample_cxx = catamari::OpenMPSampleNonHermitianDPP(
-      block_size, maximum_likelihood, &matrix_cxx, &g_generator);
+      tile_size, block_size, maximum_likelihood, &matrix_cxx, &g_generator);
 
   // Return the sample in the C format.
   VectorIntToC(sample_cxx, sample);
 }
 
 void CatamariOpenMPSampleNonHermitianDPPComplexDouble(
-    CatamariInt block_size, bool maximum_likelihood,
+    CatamariInt tile_size, CatamariInt block_size, bool maximum_likelihood,
     CatamariBlasMatrixViewComplexDouble* matrix, CatamariBufferInt* sample) {
   // Convert the view into C++.
   auto matrix_cxx = BlasMatrixViewToCxx(matrix);
@@ -345,7 +357,7 @@ void CatamariOpenMPSampleNonHermitianDPPComplexDouble(
   #pragma omp parallel
   #pragma omp single
   sample_cxx = catamari::OpenMPSampleNonHermitianDPP(
-      block_size, maximum_likelihood, &matrix_cxx, &g_generator);
+      tile_size, block_size, maximum_likelihood, &matrix_cxx, &g_generator);
 
   // Return the sample in the C format.
   VectorIntToC(sample_cxx, sample);
