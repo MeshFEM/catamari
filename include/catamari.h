@@ -66,6 +66,10 @@ struct CatamariBufferInt {
   CatamariInt* data;
 };
 
+CATAMARI_EXPORT void CatamariHas64BitInts(bool* has_64_bit_ints);
+
+CATAMARI_EXPORT void CatamariHasOpenMP(bool* has_openmp);
+
 CATAMARI_EXPORT void CatamariBufferIntInit(CatamariBufferInt* buffer);
 CATAMARI_EXPORT void CatamariBufferIntDestroy(CatamariBufferInt* buffer);
 

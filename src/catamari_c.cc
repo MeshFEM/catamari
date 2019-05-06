@@ -16,6 +16,9 @@ void VectorIntToC(const std::vector<catamari::Int>& vec,
   CatamariBufferIntDestroy(vec_c);
   vec_c->size = vec.size();
   vec_c->data = new CatamariInt[vec_c->size];
+  for (catamari::Int i = 0; i < vec_c->size; ++i) {
+    vec_c->data[i] = vec[i];
+  }
 }
 
 catamari::BlasMatrixView<float> BlasMatrixViewToCxx(
@@ -59,6 +62,18 @@ catamari::BlasMatrixView<catamari::Complex<double>> BlasMatrixViewToCxx(
 }
 
 }  // anonymous namespace
+
+void CatamariHas64BitInts(bool* has_64_bit_ints) {
+  *has_64_bit_ints = sizeof(catamari::Int) == 8;
+}
+
+void CatamariHasOpenMP(bool* has_openmp) {
+#ifdef CATAMARI_OPENMP
+  *has_openmp = true;
+#else
+  *has_openmp = false;
+#endif
+}
 
 void CatamariBufferIntInit(CatamariBufferInt* buffer) {
   buffer->size = 0;
