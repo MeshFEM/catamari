@@ -196,7 +196,7 @@ endif
 # A C library for Catamari.
 catamari_c = shared_library(
     'catamari_c',
-    ['src/catamari_c.cc'],
+    ['src/buffer_c.cc', 'src/catamari_c.cc', 'src/dense_dpp_c.cc'],
     include_directories : include_dir,
     dependencies : deps,
     cpp_args : cxx_args,
