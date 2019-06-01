@@ -182,6 +182,14 @@ if libtiff.found()
   example_deps += libtiff
 endif
 
+# Test if mantis is installed.
+found_mantis = cxx.has_header('mantis.hpp')
+if not found_mantis
+  mantis_proj = subproject('mantis')
+  mantis_dep = mantis_proj.get_variable('mantis_dep')
+  deps += mantis_dep
+endif
+
 # Test if quotient is installed.
 found_quotient = cxx.has_header('quotient.hpp')
 if not found_quotient
