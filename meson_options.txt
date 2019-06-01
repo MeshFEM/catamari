@@ -60,3 +60,18 @@ option('disable_openmp',
     type : 'boolean',
     value : false,
     description : 'disable OpenMP support?')
+
+option('disable_gcc_fma',
+    type : 'boolean',
+    value : false,
+    description : 'disable GCC FMA intrinsic fallback?')
+
+option('disable_xlc_fma',
+    type : 'boolean',
+    value : false,
+    description : 'disable XLC FMA intrinsic fallback?')
+
+option('ieee_sum',
+    type : 'boolean',
+    value : false,
+    description : 'enable IEEE double-mantissa summation?')

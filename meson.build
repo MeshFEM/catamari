@@ -35,6 +35,40 @@ if cxx.get_id() == 'gcc'
   cxx_args += '-fcx-fortran-rules'
 endif
 
+cpu_family = build_machine.cpu_family()
+if cpu_family == 'x86' or cpu_family == 'x86_64'
+  cxx_args += '-DX86'
+endif
+
+system = build_machine.system()
+if system == 'linux'
+  cxx_args += '-DLINUX'
+endif
+
+# Handle the Fused Multiply Add/Subtraction approaches.
+have_fma_intrinsic = false
+if not have_fma_intrinsic and cxx.get_id() == 'gcc' and cxx.version() >= '4.3'
+  if not get_option('disable_gcc_fma')
+    have_fma_intrinsic = true
+    cxx_args += '-DMANTIS_GCC_FUSED_MULTIPLY_ADD'
+  else
+    message('Avoiding GCC __builtin_fma due to disable_gcc_fma option.')
+  endif
+endif
+if not have_fma_intrinsic and cxx.get_id() == 'xlc'
+  if not get_option('disable_xlc_fma')
+    have_fma_intrinsic = true
+    cxx_args += '-DMANTIS_XLC_FUSED_MULTIPLY_ADD'
+  else
+    message('Avoiding XLC __fmadd due to disable_xlc_fma option.')
+  endif
+endif
+
+if get_option('ieee_sum')
+  # Use the more accurate, but slower, summation mechanism.
+  cxx_args += '-DMANTIS_IEEE_SUM'
+endif
+
 if get_option('disable_tcmalloc')
   have_tcmalloc = false
 else
