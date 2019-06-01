@@ -136,7 +136,7 @@ void RunCholeskyFactorization(Int tile_size, Int block_size,
   const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
   const Real tolerance = 100 * std::numeric_limits<Real>::epsilon();
-  REQUIRE(relative_residual < tolerance);
+  REQUIRE(relative_residual <= tolerance);
 }
 
 template <typename Field>
@@ -183,7 +183,7 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
   const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
   const Real tolerance = 100 * std::numeric_limits<Real>::epsilon();
-  REQUIRE(relative_residual < tolerance);
+  REQUIRE(relative_residual <= tolerance);
 }
 
 template <typename Field>
@@ -230,7 +230,7 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
   const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
   const Real tolerance = 100 * std::numeric_limits<Real>::epsilon();
-  REQUIRE(relative_residual < tolerance);
+  REQUIRE(relative_residual <= tolerance);
 }
 
 }  // anonymous namespace

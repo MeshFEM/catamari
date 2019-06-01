@@ -21,9 +21,9 @@ using catamari::Int;
 namespace {
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
+template <typename Field>
 void RunTest(Int num_x_elements, Int num_y_elements, bool analytical_ordering,
              const catamari::SparseLDLControl& ldl_control) {
-  typedef double Field;
   typedef catamari::ComplexBase<Field> Real;
 
   // Construct the scaled negative laplacian.
@@ -81,7 +81,8 @@ void RunTest(Int num_x_elements, Int num_y_elements, bool analytical_ordering,
                         &residual.view);
   const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
-  REQUIRE(relative_residual < 1e-12);
+  const Real tolerance = 100 * std::numeric_limits<Real>::epsilon();
+  REQUIRE(relative_residual <= tolerance);
 }
 
 }  // anonymous namespace
@@ -99,7 +100,22 @@ TEST_CASE("2D right Cholesky [analytical]", "2D right chol [analyt]") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D right adjoint [analytical]", "2D right adjoint [analyt]") {
@@ -115,7 +131,22 @@ TEST_CASE("2D right adjoint [analytical]", "2D right adjoint [analyt]") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D right transpose [analytical]", "2D right transpose [analyt]") {
@@ -131,7 +162,22 @@ TEST_CASE("2D right transpose [analytical]", "2D right transpose [analyt]") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D right Cholesky", "2D right chol") {
@@ -147,7 +193,22 @@ TEST_CASE("2D right Cholesky", "2D right chol") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D right adjoint", "2D right adjoint") {
@@ -163,7 +224,22 @@ TEST_CASE("2D right adjoint", "2D right adjoint") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D right transpose", "2D right transpose") {
@@ -179,7 +255,22 @@ TEST_CASE("2D right transpose", "2D right transpose") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D left Cholesky [analytical]", "2D left chol [analyt]") {
@@ -195,7 +286,22 @@ TEST_CASE("2D left Cholesky [analytical]", "2D left chol [analyt]") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D left adjoint [analytical]", "2D left adjoint [analyt]") {
@@ -211,7 +317,22 @@ TEST_CASE("2D left adjoint [analytical]", "2D left adjoint [analyt]") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D left transpose [analytical]", "2D left transpose [analyt]") {
@@ -227,7 +348,22 @@ TEST_CASE("2D left transpose [analytical]", "2D left transpose [analyt]") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D left Cholesky", "2D left chol") {
@@ -243,7 +379,22 @@ TEST_CASE("2D left Cholesky", "2D left chol") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D left adjoint", "2D left adjoint") {
@@ -259,7 +410,22 @@ TEST_CASE("2D left adjoint", "2D left adjoint") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
 TEST_CASE("2D left transpose", "2D left transpose") {
@@ -275,5 +441,20 @@ TEST_CASE("2D left transpose", "2D left transpose") {
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
 
-  RunTest(num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
