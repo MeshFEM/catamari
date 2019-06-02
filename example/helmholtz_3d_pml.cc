@@ -975,19 +975,8 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     timer.Start();
     ldl.Solve(&solution.view);
     experiment.solve_seconds = timer.Stop();
-
     if (print_progress) {
-      // Print the solution.
-      std::cout << "X: \n";
-      const Int num_rhs = sources.Size();
-      for (Int row = 0; row < num_rows; ++row) {
-        for (Int j = 0; j < num_rhs; ++j) {
-          const Complex<Real> entry = solution(row, j);
-          std::cout << entry.real() << " + " << entry.imag() << "i ";
-        }
-        std::cout << "\n";
-      }
-      std::cout << std::endl;
+      catamari::PrintBlasMatrixView(solution.view, "X", std::cout);
     }
 
     // Compute the residual.
@@ -1012,19 +1001,8 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     timer.Start();
     ldl.RefinedSolve(matrix, refined_solve_control, &solution.view);
     experiment.refined_solve_seconds = timer.Stop();
-
     if (print_progress) {
-      // Print the solution.
-      std::cout << "XRefined: \n";
-      const Int num_rhs = sources.Size();
-      for (Int row = 0; row < num_rows; ++row) {
-        for (Int j = 0; j < num_rhs; ++j) {
-          const Complex<Real> entry = solution(row, j);
-          std::cout << entry.real() << " + " << entry.imag() << "i ";
-        }
-        std::cout << "\n";
-      }
-      std::cout << std::endl;
+      catamari::PrintBlasMatrixView(solution.view, "XRefined", std::cout);
     }
 
     // Compute the residual.

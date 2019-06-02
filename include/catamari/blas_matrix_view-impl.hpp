@@ -117,6 +117,19 @@ ConstBlasMatrixView<T> BlasMatrixView<T>::Submatrix(Int row_beg, Int column_beg,
   return submatrix;
 }
 
+template <class T>
+void PrintBlasMatrixView(const BlasMatrixView<T>& matrix,
+                         const std::string& label, std::ostream& os) {
+  os << label << ":\n";
+  for (Int i = 0; i < matrix.height; ++i) {
+    for (Int j = 0; j < matrix.width; ++j) {
+      os << matrix(i, j) << " ";
+    }
+    os << "\n";
+  }
+  os << std::endl;
+}
+
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_BLAS_MATRIX_VIEW_IMPL_H_

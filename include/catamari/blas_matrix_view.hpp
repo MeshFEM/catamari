@@ -8,6 +8,9 @@
 #ifndef CATAMARI_BLAS_MATRIX_VIEW_H_
 #define CATAMARI_BLAS_MATRIX_VIEW_H_
 
+#include <iostream>
+#include <string>
+
 #include "catamari/integers.hpp"
 
 namespace catamari {
@@ -102,6 +105,11 @@ struct BlasMatrixView {
   ConstBlasMatrixView<T> Submatrix(Int row_beg, Int column_beg, Int num_rows,
                                    Int num_columns) const;
 };
+
+// Pretty-prints the BlasMatrixView.
+template <class T>
+void PrintBlasMatrixView(const BlasMatrixView<T>& matrix,
+                         const std::string& label, std::ostream& os);
 
 }  // namespace catamari
 

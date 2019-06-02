@@ -494,12 +494,12 @@ void CoordinateMatrix<Field>::CombineSortedEntries(
 
 template <class Field>
 void PrintCoordinateMatrix(const CoordinateMatrix<Field>& matrix,
-                           const std::string& label) {
-  std::cout << label << ":\n";
+                           const std::string& label, std::ostream& os) {
+  os << label << ":\n";
   for (const MatrixEntry<Field>& entry : matrix.Entries()) {
-    std::cout << entry.row << " " << entry.column << " " << entry.value << "\n";
+    os << entry.row << " " << entry.column << " " << entry.value << "\n";
   }
-  std::cout << std::endl;
+  os << std::endl;
 }
 
 }  // namespace catamari
