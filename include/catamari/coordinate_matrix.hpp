@@ -137,6 +137,12 @@ class CoordinateMatrix {
   // removals.
   void RemoveEntry(Int row, Int column);
 
+  // Changes a pre-existing entry at position (row, column) to the new value.
+  void ReplaceEntry(Int row, Int column, const Field& value);
+
+  // Adds the given value to a pre-existing entry at position (row, column).
+  void AddToEntry(Int row, Int column, const Field& value);
+
   // Returns a reference to the entry with the given index.
   const MatrixEntry<Field>& Entry(Int entry_index) const CATAMARI_NOEXCEPT;
 

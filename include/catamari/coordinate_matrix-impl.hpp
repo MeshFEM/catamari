@@ -13,6 +13,7 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #include "catamari/complex.hpp"
@@ -365,6 +366,28 @@ void CoordinateMatrix<Field>::RemoveEntry(Int row, Int column) {
   ReserveEntryRemovals(1);
   QueueEntryRemoval(row, column);
   FlushEntryQueues();
+}
+
+template <class Field>
+void CoordinateMatrix<Field>::ReplaceEntry(Int row, Int column,
+                                           const Field& value) {
+  const Int entry_index = EntryOffset(row, column);
+  if (entry_index == RowEntryOffset(row + 1) ||
+      entries_[entry_index].column != column) {
+    throw std::invalid_argument("Entry does not exist.");
+  }
+  entries_[entry_index].value = value;
+}
+
+template <class Field>
+void CoordinateMatrix<Field>::AddToEntry(Int row, Int column,
+                                         const Field& value) {
+  const Int entry_index = EntryOffset(row, column);
+  if (entry_index == RowEntryOffset(row + 1) ||
+      entries_[entry_index].column != column) {
+    throw std::invalid_argument("Entry does not exist.");
+  }
+  entries_[entry_index].value += value;
 }
 
 template <class Field>
