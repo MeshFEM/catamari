@@ -48,6 +48,74 @@ void ApplySparse(const Field& alpha,
   }
 }
 
+template <class Field>
+void ApplyTransposeSparse(const Field& alpha,
+                          const CoordinateMatrix<Field>& sparse_matrix,
+                          const ConstBlasMatrixView<Field>& input_matrix,
+                          const Field& beta, BlasMatrixView<Field>* result) {
+  const Int num_rows = sparse_matrix.NumRows();
+  const Int num_rhs = input_matrix.width;
+  CATAMARI_ASSERT(input_matrix.height == num_rows,
+                  "input_matrix was the incorrect height.");
+  CATAMARI_ASSERT(result->height == sparse_matrix.NumColumns(),
+                  "result was the incorrect height.");
+  CATAMARI_ASSERT(input_matrix.width == result->width,
+                  "result was the incorrect width.");
+
+  // vec1 += alpha matrix vec0 + beta vec1
+  const Buffer<MatrixEntry<Field>>& entries = sparse_matrix.Entries();
+  for (Int row = 0; row < num_rows; ++row) {
+    for (Int j = 0; j < num_rhs; ++j) {
+      result->Entry(row, j) *= beta;
+    }
+
+    const Int row_beg = sparse_matrix.RowEntryOffset(row);
+    const Int row_end = sparse_matrix.RowEntryOffset(row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      CATAMARI_ASSERT(entry.row == row, "Invalid entry row index.");
+      for (Int j = 0; j < num_rhs; ++j) {
+        result->Entry(entry.column, j) +=
+            alpha * entry.value * input_matrix(row, j);
+      }
+    }
+  }
+}
+
+template <class Field>
+void ApplyAdjointSparse(const Field& alpha,
+                        const CoordinateMatrix<Field>& sparse_matrix,
+                        const ConstBlasMatrixView<Field>& input_matrix,
+                        const Field& beta, BlasMatrixView<Field>* result) {
+  const Int num_rows = sparse_matrix.NumRows();
+  const Int num_rhs = input_matrix.width;
+  CATAMARI_ASSERT(input_matrix.height == num_rows,
+                  "input_matrix was the incorrect height.");
+  CATAMARI_ASSERT(result->height == sparse_matrix.NumColumns(),
+                  "result was the incorrect height.");
+  CATAMARI_ASSERT(input_matrix.width == result->width,
+                  "result was the incorrect width.");
+
+  // vec1 += alpha matrix vec0 + beta vec1
+  const Buffer<MatrixEntry<Field>>& entries = sparse_matrix.Entries();
+  for (Int row = 0; row < num_rows; ++row) {
+    for (Int j = 0; j < num_rhs; ++j) {
+      result->Entry(row, j) *= beta;
+    }
+
+    const Int row_beg = sparse_matrix.RowEntryOffset(row);
+    const Int row_end = sparse_matrix.RowEntryOffset(row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      CATAMARI_ASSERT(entry.row == row, "Invalid entry row index.");
+      const Field value = std::conj(entry.value);
+      for (Int j = 0; j < num_rhs; ++j) {
+        result->Entry(entry.column, j) += alpha * value * input_matrix(row, j);
+      }
+    }
+  }
+}
+
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_APPLY_SPARSE_IMPL_H_

@@ -20,6 +20,20 @@ void ApplySparse(const Field& alpha,
                  const ConstBlasMatrixView<Field>& input_matrix,
                  const Field& beta, BlasMatrixView<Field>* result);
 
+// vec1 := alpha matrix^T vec0 + beta vec1.
+template <class Field>
+void ApplyTransposeSparse(const Field& alpha,
+                          const CoordinateMatrix<Field>& sparse_matrix,
+                          const ConstBlasMatrixView<Field>& input_matrix,
+                          const Field& beta, BlasMatrixView<Field>* result);
+
+// vec1 := alpha matrix^H vec0 + beta vec1.
+template <class Field>
+void ApplyAdjointSparse(const Field& alpha,
+                        const CoordinateMatrix<Field>& sparse_matrix,
+                        const ConstBlasMatrixView<Field>& input_matrix,
+                        const Field& beta, BlasMatrixView<Field>* result);
+
 }  // namespace catamari
 
 #include "catamari/apply_sparse-impl.hpp"
