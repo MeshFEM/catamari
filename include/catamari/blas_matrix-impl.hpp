@@ -254,6 +254,18 @@ const ConstBlasMatrixView<Field> BlasMatrix<Field>::ConstView() const {
   return view.ToConst();
 }
 
+template <class T>
+std::ostream& operator<<(std::ostream& os, const BlasMatrix<T>& matrix) {
+  return os << matrix.ConstView();
+}
+
+template <class T>
+void Print(const BlasMatrix<T>& matrix, const std::string& label,
+           std::ostream& os) {
+  os << label << ":\n";
+  os << matrix.ConstView() << std::endl;
+}
+
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_BLAS_MATRIX_IMPL_H_

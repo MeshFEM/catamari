@@ -163,7 +163,7 @@ Experiment RunMatrixMarketTest(
     sample = dpp.Sample(maximum_likelihood);
     const double sample_seconds = sample_timer.Stop();
     std::cout << "  sample took " << sample_seconds << " seconds." << std::endl;
-    quotient::PrintVector(sample, "sample", std::cout);
+    quotient::Print(sample, "sample", std::cout);
   }
   experiment.sample_seconds = sample_timer.TotalSeconds() / num_samples;
 

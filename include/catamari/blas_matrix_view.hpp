@@ -110,8 +110,16 @@ struct BlasMatrixView {
 
 // Pretty-prints the BlasMatrixView.
 template <class T>
-void PrintBlasMatrixView(const BlasMatrixView<T>& matrix,
-                         const std::string& label, std::ostream& os);
+std::ostream& operator<<(std::ostream& os,
+                         const ConstBlasMatrixView<T>& matrix);
+template <class T>
+std::ostream& operator<<(std::ostream& os, const BlasMatrixView<T>& matrix);
+template <class T>
+void Print(const ConstBlasMatrixView<T>& matrix, const std::string& label,
+           std::ostream& os);
+template <class T>
+void Print(const BlasMatrixView<T>& matrix, const std::string& label,
+           std::ostream& os);
 
 }  // namespace catamari
 

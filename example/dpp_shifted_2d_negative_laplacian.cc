@@ -214,7 +214,7 @@ Experiment RunShifted2DNegativeLaplacianTest(
     const double log_likelihood = dpp->LogLikelihood();
     std::cout << "  log-likelihood was: " << log_likelihood << std::endl;
     if (print_sample) {
-      quotient::PrintVector(sample, "sample", std::cout);
+      quotient::Print(sample, "sample", std::cout);
     }
     if (write_tiff) {
       const std::string filename =

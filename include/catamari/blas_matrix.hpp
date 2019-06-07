@@ -113,6 +113,13 @@ struct BlasMatrix {
   const ConstBlasMatrixView<Field> ConstView() const;
 };
 
+// Pretty-prints the BlasMatrix.
+template <class T>
+std::ostream& operator<<(std::ostream& os, const BlasMatrix<T>& matrix);
+template <class T>
+void Print(const BlasMatrix<T>& matrix, const std::string& label,
+           std::ostream& os);
+
 }  // namespace catamari
 
 #include "catamari/blas_matrix-impl.hpp"

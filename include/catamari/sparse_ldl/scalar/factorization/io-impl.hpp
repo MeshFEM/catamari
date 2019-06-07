@@ -56,7 +56,7 @@ void Factorization<Field>::PrintDiagonalFactor(const std::string& label,
     // TODO(Jack Poulson): Print the identity.
     return;
   }
-  quotient::PrintVector(diagonal_factor.values, label, os);
+  quotient::Print(diagonal_factor.values, label, os);
 }
 
 }  // namespace scalar_ldl

@@ -516,8 +516,17 @@ void CoordinateMatrix<Field>::CombineSortedEntries(
 }
 
 template <class Field>
-void PrintCoordinateMatrix(const CoordinateMatrix<Field>& matrix,
-                           const std::string& label, std::ostream& os) {
+std::ostream& operator<<(std::ostream& os,
+                         const CoordinateMatrix<Field>& matrix) {
+  for (const MatrixEntry<Field>& entry : matrix.Entries()) {
+    os << entry.row << " " << entry.column << " " << entry.value << "\n";
+  }
+  return os;
+}
+
+template <class Field>
+void Print(const CoordinateMatrix<Field>& matrix, const std::string& label,
+           std::ostream& os) {
   os << label << ":\n";
   for (const MatrixEntry<Field>& entry : matrix.Entries()) {
     os << entry.row << " " << entry.column << " " << entry.value << "\n";

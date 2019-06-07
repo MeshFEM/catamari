@@ -976,7 +976,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     ldl.Solve(&solution.view);
     experiment.solve_seconds = timer.Stop();
     if (print_progress) {
-      catamari::PrintBlasMatrixView(solution.view, "X", std::cout);
+      catamari::Print(solution, "X", std::cout);
     }
 
     // Compute the residual.
@@ -1002,7 +1002,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     ldl.RefinedSolve(matrix, refined_solve_control, &solution.view);
     experiment.refined_solve_seconds = timer.Stop();
     if (print_progress) {
-      catamari::PrintBlasMatrixView(solution.view, "XRefined", std::cout);
+      catamari::Print(solution, "XRefined", std::cout);
     }
 
     // Compute the residual.

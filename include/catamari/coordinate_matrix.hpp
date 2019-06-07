@@ -214,8 +214,11 @@ class CoordinateMatrix {
 
 // Pretty-prints the CoordinateMatrix.
 template <class Field>
-void PrintCoordinateMatrix(const CoordinateMatrix<Field>& matrix,
-                           const std::string& label, std::ostream& os);
+std::ostream& operator<<(std::ostream& os,
+                         const CoordinateMatrix<Field>& matrix);
+template <class Field>
+void Print(const CoordinateMatrix<Field>& matrix, const std::string& label,
+           std::ostream& os);
 
 }  // namespace catamari
 
