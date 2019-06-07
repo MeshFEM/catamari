@@ -53,6 +53,13 @@ struct BlasMatrix {
   // Resizes the matrix with initialization to a given value.
   void Resize(const Int& height, const Int& width, const Field& value);
 
+  // Resizes the matrix with a particular leading dim without initialization.
+  void Resize(const Int& height, const Int& width, const Int& leading_dim);
+
+  // Resizes the matrix with a particular leading dim with initialization.
+  void Resize(const Int& height, const Int& width, const Int& leading_dim,
+              const Field& value);
+
   // Returns the number of rows of the matrix.
   Int Height() const CATAMARI_NOEXCEPT;
 

@@ -114,20 +114,55 @@ void BlasMatrix<Field>::Resize(const Int& height, const Int& width) {
   if (height == view.height && width == view.width) {
     return;
   }
+  // TODO(Jack Poulson): Decide on how to handle 0 leading dimensions.
   data.Resize(height * width);
   view.height = height;
   view.width = width;
-  view.leading_dim = height;  // TODO(Jack Poulson): Handle 0 case.
+  view.leading_dim = height;
+  view.data = data.Data();
+}
+
+template <typename Field>
+void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
+                               const Int& leading_dim) {
+  if (height == view.height && width == view.width) {
+    return;
+  }
+  if (leading_dim < height) {
+    throw std::invalid_argument(
+        "The leading dimension must be at least as large as the height.");
+  }
+  // TODO(Jack Poulson): Decide on how to handle 0 leading dimensions.
+  data.Resize(leading_dim * width);
+  view.height = height;
+  view.width = width;
+  view.leading_dim = leading_dim;
   view.data = data.Data();
 }
 
 template <typename Field>
 void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
                                const Field& value) {
+  // TODO(Jack Poulson): Decide on how to handle 0 leading dimensions.
   data.Resize(height * width, value);
   view.height = height;
   view.width = width;
-  view.leading_dim = height;  // TODO(Jack Poulson): Handle 0 case.
+  view.leading_dim = height;
+  view.data = data.Data();
+}
+
+template <typename Field>
+void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
+                               const Int& leading_dim, const Field& value) {
+  if (leading_dim < height) {
+    throw std::invalid_argument(
+        "The leading dimension must be at least as large as the height.");
+  }
+  // TODO(Jack Poulson): Decide on how to handle 0 leading dimensions.
+  data.Resize(leading_dim * width, value);
+  view.height = height;
+  view.width = width;
+  view.leading_dim = leading_dim;
   view.data = data.Data();
 }
 
