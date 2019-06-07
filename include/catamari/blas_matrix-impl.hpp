@@ -132,6 +132,31 @@ void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
 }
 
 template <typename Field>
+Int BlasMatrix<Field>::Height() const CATAMARI_NOEXCEPT {
+  return view.height;
+}
+
+template <typename Field>
+Int BlasMatrix<Field>::Width() const CATAMARI_NOEXCEPT {
+  return view.width;
+}
+
+template <typename Field>
+Int BlasMatrix<Field>::LeadingDimension() const CATAMARI_NOEXCEPT {
+  return view.leading_dim;
+}
+
+template <typename Field>
+const Field* BlasMatrix<Field>::Data() const CATAMARI_NOEXCEPT {
+  return view.data;
+}
+
+template <typename Field>
+Field* BlasMatrix<Field>::Data() CATAMARI_NOEXCEPT {
+  return view.data;
+}
+
+template <typename Field>
 Field& BlasMatrix<Field>::operator()(Int row, Int column) {
   return view(row, column);
 }

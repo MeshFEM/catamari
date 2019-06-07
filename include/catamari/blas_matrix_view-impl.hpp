@@ -39,18 +39,18 @@ ConstBlasMatrixView<T> ConstBlasMatrixView<T>::Submatrix(
 }
 
 template <class T>
-ConstBlasMatrixView<T>::ConstBlasMatrixView() {}
+ConstBlasMatrixView<T>::ConstBlasMatrixView() CATAMARI_NOEXCEPT {}
 
 template <class T>
 ConstBlasMatrixView<T>::ConstBlasMatrixView(const BlasMatrixView<T>& matrix)
-    : height(matrix.height),
-      width(matrix.width),
-      leading_dim(matrix.leading_dim),
-      data(matrix.data) {}
+    CATAMARI_NOEXCEPT : height(matrix.height),
+                        width(matrix.width),
+                        leading_dim(matrix.leading_dim),
+                        data(matrix.data) {}
 
 template <class T>
 ConstBlasMatrixView<T>& ConstBlasMatrixView<T>::operator=(
-    const BlasMatrixView<T>& matrix) {
+    const BlasMatrixView<T>& matrix) CATAMARI_NOEXCEPT {
   height = matrix.height;
   width = matrix.width;
   leading_dim = matrix.leading_dim;
@@ -59,7 +59,7 @@ ConstBlasMatrixView<T>& ConstBlasMatrixView<T>::operator=(
 }
 
 template <class T>
-ConstBlasMatrixView<T> BlasMatrixView<T>::ToConst() const {
+ConstBlasMatrixView<T> BlasMatrixView<T>::ToConst() const CATAMARI_NOEXCEPT {
   ConstBlasMatrixView<T> const_matrix = *this;
   return const_matrix;
 }

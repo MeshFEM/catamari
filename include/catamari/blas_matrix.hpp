@@ -10,6 +10,7 @@
 
 #include "catamari/blas_matrix_view.hpp"
 #include "catamari/buffer.hpp"
+#include "catamari/macros.hpp"
 
 namespace catamari {
 
@@ -51,6 +52,21 @@ struct BlasMatrix {
 
   // Resizes the matrix with initialization to a given value.
   void Resize(const Int& height, const Int& width, const Field& value);
+
+  // Returns the number of rows of the matrix.
+  Int Height() const CATAMARI_NOEXCEPT;
+
+  // Returns the number of columns of the matrix.
+  Int Width() const CATAMARI_NOEXCEPT;
+
+  // Returns the leading dimension of the matrix.
+  Int LeadingDimension() const CATAMARI_NOEXCEPT;
+
+  // Returns an immutable data pointer for the matrix.
+  const Field* Data() const CATAMARI_NOEXCEPT;
+
+  // Returns a mutable data pointer for the matrix.
+  Field* Data() CATAMARI_NOEXCEPT;
 
   // Returns a modifiable reference to an entry of the matrix.
   Field& operator()(Int row, Int column);

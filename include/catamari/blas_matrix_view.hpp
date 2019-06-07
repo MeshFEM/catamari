@@ -12,6 +12,7 @@
 #include <string>
 
 #include "catamari/integers.hpp"
+#include "catamari/macros.hpp"
 
 namespace catamari {
 
@@ -50,13 +51,14 @@ struct ConstBlasMatrixView {
                                    Int num_columns) const;
 
   // A default constructor.
-  ConstBlasMatrixView();
+  ConstBlasMatrixView() CATAMARI_NOEXCEPT;
 
   // A copy constructor from a mutable matrix.
-  ConstBlasMatrixView(const BlasMatrixView<T>& matrix);
+  ConstBlasMatrixView(const BlasMatrixView<T>& matrix) CATAMARI_NOEXCEPT;
 
   // An assignment operator from a mutable matrix.
-  ConstBlasMatrixView<T>& operator=(const BlasMatrixView<T>& matrix);
+  ConstBlasMatrixView<T>& operator=(const BlasMatrixView<T>& matrix)
+      CATAMARI_NOEXCEPT;
 };
 
 // A data structure for manipulating a view of a BLAS-style column-major matrix.
@@ -75,7 +77,7 @@ struct BlasMatrixView {
   T* data;
 
   // Returns a constant equivalent of the current state.
-  ConstBlasMatrixView<T> ToConst() const;
+  ConstBlasMatrixView<T> ToConst() const CATAMARI_NOEXCEPT;
 
   // Returns a pointer to the entry in position (row, column).
   T* Pointer(Int row, Int column);
