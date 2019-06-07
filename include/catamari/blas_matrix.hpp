@@ -26,6 +26,19 @@ struct BlasMatrix {
   // Initializes the matrix to 0 x 0.
   BlasMatrix();
 
+  // Builds a height x width matrix without initialization.
+  BlasMatrix(const Int& height, const Int& width);
+
+  // Builds a height x width matrix with initialization.
+  BlasMatrix(const Int& height, const Int& width, const Field& value);
+
+  // Builds a height x width matrix without initialization.
+  BlasMatrix(const Int& height, const Int& width, const Int& leading_dim);
+
+  // Builds a height x width matrix with initialization.
+  BlasMatrix(const Int& height, const Int& width, const Int& leading_dim,
+             const Field& value);
+
   // Copy constructs a BLAS matrix by reducing the leading dimension to the
   // height.
   BlasMatrix(const BlasMatrix<Field>& matrix);

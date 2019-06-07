@@ -21,6 +21,29 @@ BlasMatrix<Field>::BlasMatrix() {
 }
 
 template <typename Field>
+BlasMatrix<Field>::BlasMatrix(const Int& height, const Int& width) {
+  Resize(height, width);
+}
+
+template <typename Field>
+BlasMatrix<Field>::BlasMatrix(const Int& height, const Int& width,
+                              const Field& value) {
+  Resize(height, width, value);
+}
+
+template <typename Field>
+BlasMatrix<Field>::BlasMatrix(const Int& height, const Int& width,
+                              const Int& leading_dim) {
+  Resize(height, width, leading_dim);
+}
+
+template <typename Field>
+BlasMatrix<Field>::BlasMatrix(const Int& height, const Int& width,
+                              const Int& leading_dim, const Field& value) {
+  Resize(height, width, leading_dim, value);
+}
+
+template <typename Field>
 BlasMatrix<Field>::BlasMatrix(const BlasMatrix<Field>& matrix) {
   const Int height = matrix.view.height;
   const Int width = matrix.view.width;
