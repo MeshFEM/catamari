@@ -123,6 +123,8 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
     const std::string& filename, bool skip_explicit_zeros,
     quotient::EntryMask mask, bool force_symmetry, bool hermitian,
     const Field& relative_shift, bool print_progress) {
+  typedef catamari::ComplexBase<Field> Real;
+
   if (print_progress) {
     std::cout << "Reading CoordinateGraph from " << filename << "..."
               << std::endl;
@@ -143,11 +145,29 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
     MakeSymmetric(matrix.get(), hermitian);
   }
 
-  const catamari::ComplexBase<Field> frob_norm =
-      catamari::EuclideanNorm(*matrix);
+  // Rescale the maximum norm to one.
+  {
+    const Real max_norm = catamari::MaxNorm(*matrix);
+    for (auto& entry : matrix->Entries()) {
+      entry.value /= max_norm;
+    }
+  }
 
   // Adding the diagonal shift.
+  const Real frob_norm = catamari::EuclideanNorm(*matrix);
   AddDiagonalShift(relative_shift * frob_norm, matrix.get());
+
+  {
+    Real min_abs = std::numeric_limits<Real>::max();
+    Real max_abs = 0;
+    for (auto& entry : matrix->Entries()) {
+      min_abs = std::min(min_abs, std::abs(entry.value));
+      max_abs = std::max(max_abs, std::abs(entry.value));
+    }
+
+    std::cout << "|A| has entries in [" << min_abs << ", " << max_abs << "]"
+              << std::endl;
+  }
 
   if (print_progress) {
     std::cout << "Matrix had " << matrix->NumRows() << " rows and "
@@ -176,7 +196,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
                                const catamari::SparseLDLControl& ldl_control,
                                bool print_progress) {
   typedef double Field;
-  typedef catamari::ComplexBase<Field> BaseField;
+  typedef catamari::ComplexBase<Field> Real;
   Experiment experiment;
 
   // Read the matrix from file.
@@ -213,7 +233,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   // Generate an arbitrary right-hand side.
   BlasMatrix<Field> right_hand_side;
   GenerateRightHandSide(num_rows, &right_hand_side);
-  const BaseField right_hand_side_norm =
+  const Real right_hand_side_norm =
       catamari::EuclideanNorm(right_hand_side.ConstView());
   if (print_progress) {
     std::cout << "  || b ||_F = " << right_hand_side_norm << std::endl;
@@ -224,7 +244,6 @@ Experiment RunMatrixMarketTest(const std::string& filename,
     std::cout << "  Running solve..." << std::endl;
   }
   // TODO(Jack Poulson): Make these parameters configurable.
-  typedef catamari::ComplexBase<Field> Real;
   catamari::RefinedSolveControl<Real> refined_solve_control;
   refined_solve_control.verbose = true;
   BlasMatrix<Field> solution = right_hand_side;
@@ -237,7 +256,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   BlasMatrix<Field> residual = right_hand_side;
   catamari::ApplySparse(Field{-1}, *matrix, solution.ConstView(), Field{1},
                         &residual.view);
-  const BaseField residual_norm = catamari::EuclideanNorm(residual.ConstView());
+  const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   std::cout << "  || B - A X ||_F / || B ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
 
@@ -312,7 +331,7 @@ std::unordered_map<std::string, Experiment> RunCustomTests(
 
 int main(int argc, char** argv) {
   typedef double Field;
-  typedef catamari::ComplexBase<Field> BaseField;
+  typedef catamari::ComplexBase<Field> Real;
 
   specify::ArgumentParser parser(argc, argv);
   const std::string filename = parser.OptionalInput<std::string>(
@@ -352,7 +371,7 @@ int main(int argc, char** argv) {
       parser.OptionalInput<int>("factorization_type_int",
                                 "Type of the factorization.\n"
                                 "0:Cholesky, 1:LDL', 2:LDL^T",
-                                1);
+                                0);
   const int supernodal_strategy_int =
       parser.OptionalInput<int>("supernodal_strategy_int",
                                 "The SupernodalStrategy int.\n"
@@ -366,7 +385,7 @@ int main(int argc, char** argv) {
   const float allowable_supernode_zero_ratio = parser.OptionalInput<float>(
       "allowable_supernode_zero_ratio",
       "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
-  const double relative_shift = parser.OptionalInput<BaseField>(
+  const double relative_shift = parser.OptionalInput<Real>(
       "relative_shift", "We add || A ||_F * relative_shift to the diagonal",
       10.);
   const int ldl_algorithm_int =
