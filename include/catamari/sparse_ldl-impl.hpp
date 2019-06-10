@@ -11,9 +11,18 @@
 
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
+#include "catamari/flush_to_zero.hpp"
+
 #include "catamari/sparse_ldl.hpp"
 
 namespace catamari {
+
+template <class Field>
+SparseLDL<Field>::SparseLDL() {
+  // Avoid the potential for order-of-magnitude performance degradation from
+  // slow subnormal processing.
+  EnableFlushToZero();
+}
 
 template <class Field>
 SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,

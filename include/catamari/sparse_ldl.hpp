@@ -82,6 +82,9 @@ class SparseLDL {
   std::unique_ptr<supernodal_ldl::Factorization<Field>>
       supernodal_factorization;
 
+  // The default constructor.
+  SparseLDL();
+
   // Performs the factorization using an automatically determined ordering.
   SparseLDLResult Factor(const CoordinateMatrix<Field>& matrix,
                          const SparseLDLControl& control);

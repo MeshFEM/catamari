@@ -122,7 +122,7 @@ template <typename Field>
 std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
     const std::string& filename, bool skip_explicit_zeros,
     quotient::EntryMask mask, bool force_symmetry, bool hermitian,
-    const Field& relative_shift, bool print_progress) {
+    const Field& relative_shift, double drop_tolerance, bool print_progress) {
   typedef catamari::ComplexBase<Field> Real;
 
   if (print_progress) {
@@ -148,8 +148,22 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
   // Rescale the maximum norm to one.
   {
     const Real max_norm = catamari::MaxNorm(*matrix);
+    Int num_to_drop = 0;
     for (auto& entry : matrix->Entries()) {
       entry.value /= max_norm;
+      if (std::abs(entry.value) <= drop_tolerance) {
+        std::cout << "  Will drop entry (" << entry.row << ", " << entry.column
+                  << ") with abs " << std::abs(entry.value) << std::endl;
+        ++num_to_drop;
+      }
+    }
+    if (num_to_drop > 0) {
+      for (const auto& entry : matrix->Entries()) {
+        if (std::abs(entry.value) <= drop_tolerance) {
+          matrix->QueueEntryRemoval(entry.row, entry.column);
+        }
+      }
+      matrix->FlushEntryQueues();
     }
   }
 
@@ -192,7 +206,7 @@ void GenerateRightHandSide(Int num_rows, BlasMatrix<Field>* right_hand_side) {
 Experiment RunMatrixMarketTest(const std::string& filename,
                                bool skip_explicit_zeros,
                                quotient::EntryMask mask, bool force_symmetry,
-                               double relative_shift,
+                               double relative_shift, double drop_tolerance,
                                const catamari::SparseLDLControl& ldl_control,
                                bool print_progress) {
   typedef double Field;
@@ -204,7 +218,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
                          catamari::kLDLTransposeFactorization;
   std::unique_ptr<catamari::CoordinateMatrix<Field>> matrix =
       LoadMatrix(filename, skip_explicit_zeros, mask, force_symmetry, hermitian,
-                 relative_shift, print_progress);
+                 relative_shift, drop_tolerance, print_progress);
   if (!matrix) {
     return experiment;
   }
@@ -267,7 +281,7 @@ Experiment RunMatrixMarketTest(const std::string& filename,
 // suite of SPD Matrix Market matrices.
 std::unordered_map<std::string, Experiment> RunCustomTests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
-    quotient::EntryMask mask, double relative_shift,
+    quotient::EntryMask mask, double relative_shift, double drop_tolerance,
     const catamari::SparseLDLControl& ldl_control, bool print_progress) {
   // The list of matrices tested in:
   //
@@ -319,7 +333,7 @@ std::unordered_map<std::string, Experiment> RunCustomTests(
     try {
       experiments[matrix_name] = RunMatrixMarketTest(
           filename, skip_explicit_zeros, mask, force_symmetry, relative_shift,
-          ldl_control, print_progress);
+          drop_tolerance, ldl_control, print_progress);
       PrintExperiment(experiments[matrix_name], matrix_name);
     } catch (std::exception& error) {
       std::cerr << "Caught exception: " << error.what() << std::endl;
@@ -387,7 +401,9 @@ int main(int argc, char** argv) {
       "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const double relative_shift = parser.OptionalInput<Real>(
       "relative_shift", "We add || A ||_F * relative_shift to the diagonal",
-      10.);
+      2.1);
+  const double drop_tolerance = parser.OptionalInput<Real>(
+      "drop_tolerance", "We drop entries with absolute value <= this.", 0.);
   const int ldl_algorithm_int =
       parser.OptionalInput<int>("ldl_algorithm_int",
                                 "The LDL algorithm type.\n"
@@ -449,14 +465,15 @@ int main(int argc, char** argv) {
   if (!matrix_market_directory.empty()) {
     const std::unordered_map<std::string, Experiment> experiments =
         RunCustomTests(matrix_market_directory, skip_explicit_zeros, mask,
-                       relative_shift, ldl_control, print_progress);
+                       relative_shift, drop_tolerance, ldl_control,
+                       print_progress);
     for (const std::pair<std::string, Experiment>& pairing : experiments) {
       PrintExperiment(pairing.second, pairing.first);
     }
   } else {
-    const Experiment experiment =
-        RunMatrixMarketTest(filename, skip_explicit_zeros, mask, force_symmetry,
-                            relative_shift, ldl_control, print_progress);
+    const Experiment experiment = RunMatrixMarketTest(
+        filename, skip_explicit_zeros, mask, force_symmetry, relative_shift,
+        drop_tolerance, ldl_control, print_progress);
     PrintExperiment(experiment, filename);
   }
 

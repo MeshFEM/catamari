@@ -8,6 +8,8 @@
 #ifndef CATAMARI_SPARSE_HERMITIAN_DPP_IMPL_H_
 #define CATAMARI_SPARSE_HERMITIAN_DPP_IMPL_H_
 
+#include "catamari/flush_to_zero.hpp"
+
 #include "catamari/sparse_hermitian_dpp.hpp"
 
 namespace catamari {
@@ -16,6 +18,10 @@ template <class Field>
 SparseHermitianDPP<Field>::SparseHermitianDPP(
     const CoordinateMatrix<Field>& matrix,
     const SparseHermitianDPPControl& control) {
+  // Avoid the potential for order-of-magnitude performance degradation from
+  // slow subnormal processing.
+  EnableFlushToZero();
+
   scalar_dpp_.reset();
   supernodal_dpp_.reset();
 
@@ -75,6 +81,10 @@ template <class Field>
 SparseHermitianDPP<Field>::SparseHermitianDPP(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const SparseHermitianDPPControl& control) {
+  // Avoid the potential for order-of-magnitude performance degradation from
+  // slow subnormal processing.
+  EnableFlushToZero();
+
   scalar_dpp_.reset();
   supernodal_dpp_.reset();
 
