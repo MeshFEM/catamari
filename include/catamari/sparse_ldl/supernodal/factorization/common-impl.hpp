@@ -164,8 +164,13 @@ void Factorization<Field>::InitialFactorizationSetup(
     const CoordinateMatrix<Field>& matrix) {
   AssemblyForest forest;
   Buffer<Int> supernode_degrees;
+
+  CATAMARI_START_TIMER(profile.form_supernodes);
   FormSupernodes(matrix, &forest, &supernode_degrees);
+  CATAMARI_STOP_TIMER(profile.form_supernodes);
+  CATAMARI_START_TIMER(profile.initialize_factors);
   InitializeFactors(matrix, forest, supernode_degrees);
+  CATAMARI_STOP_TIMER(profile.initialize_factors);
 }
 
 template <class Field>
@@ -174,6 +179,10 @@ SparseLDLResult Factorization<Field>::Factor(
     const SymmetricOrdering& manual_ordering, const Control& control) {
   control_ = control;
   ordering_ = manual_ordering;
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  profile.Reset();
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
 #ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {
@@ -187,11 +196,18 @@ SparseLDLResult Factorization<Field>::Factor(
   InitialFactorizationSetup(matrix);
 #endif
 
+  SparseLDLResult result;
   if (control_.algorithm == kLeftLookingLDL) {
-    return LeftLooking(matrix);
+    result = LeftLooking(matrix);
   } else {
-    return RightLooking(matrix);
+    result = RightLooking(matrix);
   }
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  std::cout << profile << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
+  return result;
 }
 
 template <class Field>
@@ -199,6 +215,10 @@ SparseLDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
   // TODO(Jack Poulson): Check that the previous factorization had an identical
   // sparsity pattern.
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  profile.Reset();
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
 #ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {
@@ -220,11 +240,18 @@ SparseLDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
                lower_factor_.get(), diagonal_factor_.get());
 #endif
 
+  SparseLDLResult result;
   if (control_.algorithm == kLeftLookingLDL) {
-    return LeftLooking(matrix);
+    result = LeftLooking(matrix);
   } else {
-    return RightLooking(matrix);
+    result = RightLooking(matrix);
   }
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  std::cout << profile << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
+  return result;
 }
 
 }  // namespace supernodal_ldl

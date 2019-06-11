@@ -30,6 +30,10 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   scalar_factorization.reset();
   supernodal_factorization.reset();
 
+#ifdef CATAMARI_ENABLE_TIMERS
+  quotient::Timer timer;
+  timer.Start();
+#endif
   std::unique_ptr<quotient::QuotientGraph> quotient_graph(
       new quotient::QuotientGraph(matrix.NumRows(), matrix.Entries(),
                                   control.md_control));
@@ -41,11 +45,19 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
     std::cout << "  " << time.first << ": " << time.second << std::endl;
   }
 #endif  // ifdef QUOTIENT_TIMERS
+#ifdef CATAMARI_ENABLE_TIMERS
+  std::cout << "Reordering time: " << timer.Stop() << " seconds." << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
+  CATAMARI_START_TIMER(timer);
   SymmetricOrdering ordering;
   quotient_graph->ComputePostorder(&ordering.inverse_permutation);
   quotient::InvertPermutation(ordering.inverse_permutation,
                               &ordering.permutation);
+#ifdef CATAMARI_ENABLE_TIMERS
+  std::cout << "Postorder and invert: " << timer.Stop() << " seconds."
+            << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {
@@ -67,6 +79,7 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   is_supernodal = use_supernodal;
   SparseLDLResult result;
   if (use_supernodal) {
+    CATAMARI_START_TIMER(timer);
     Buffer<Int> member_to_supernode;
     quotient_graph->PermutedMemberToSupernode(ordering.inverse_permutation,
                                               &member_to_supernode);
@@ -80,6 +93,10 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
     quotient_graph->PermutedSupernodeSizes(ordering.inverse_permutation,
                                            &ordering.supernode_sizes);
     OffsetScan(ordering.supernode_sizes, &ordering.supernode_offsets);
+#ifdef CATAMARI_ENABLE_TIMERS
+    std::cout << "Ordering postprocessing: " << timer.Stop() << " seconds."
+              << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
     quotient_graph.release();
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);

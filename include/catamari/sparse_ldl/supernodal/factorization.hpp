@@ -13,6 +13,10 @@
 #include "catamari/sparse_ldl/supernodal/lower_factor.hpp"
 #include "catamari/sparse_ldl/supernodal/supernode_utils.hpp"
 
+#ifdef CATAMARI_ENABLE_TIMERS
+#include "quotient/timer.hpp"
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
 namespace catamari {
 namespace supernodal_ldl {
 
@@ -79,10 +83,79 @@ struct Control {
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 };
 
+#ifdef CATAMARI_ENABLE_TIMERS
+struct FactorizationProfile {
+  quotient::Timer form_supernodes;
+
+  quotient::Timer initialize_factors;
+
+  quotient::Timer gemm;
+  double gemm_gflops = 0;
+
+  quotient::Timer herk;
+  double herk_gflops = 0;
+
+  quotient::Timer trsm;
+  double trsm_gflops = 0;
+
+  quotient::Timer cholesky;
+  double cholesky_gflops = 0;
+
+  quotient::Timer merge;
+
+  FactorizationProfile()
+      : form_supernodes("form_supernodes"),
+        initialize_factors("initialize_factors"),
+        gemm("gemm"),
+        herk("herk"),
+        trsm("trsm"),
+        cholesky("cholesky"),
+        merge("merge") {}
+
+  void Reset() {
+    form_supernodes.Reset("form_supernodes");
+    initialize_factors.Reset("initialize_factors");
+    gemm.Reset("gemm");
+    gemm_gflops = 0;
+    herk.Reset("herk");
+    herk_gflops = 0;
+    trsm.Reset("trsm");
+    trsm_gflops = 0;
+    cholesky.Reset("cholesky");
+    cholesky_gflops = 0;
+    merge.Reset("merge");
+  }
+};
+
+std::ostream& operator<<(std::ostream& os,
+                         const FactorizationProfile& profile) {
+  os << profile.form_supernodes << "\n"
+     << profile.initialize_factors << "\n"
+     << profile.merge << "\n"
+     << profile.gemm << "(GFlops: " << profile.gemm_gflops
+     << ", GFlop/sec: " << profile.gemm_gflops / profile.gemm.TotalSeconds()
+     << ")\n"
+     << profile.herk << "(GFlops: " << profile.herk_gflops
+     << ", GFlop/sec: " << profile.herk_gflops / profile.herk.TotalSeconds()
+     << ")\n"
+     << profile.trsm << "(GFlops: " << profile.trsm_gflops
+     << ", GFlop/sec: " << profile.trsm_gflops / profile.trsm.TotalSeconds()
+     << ")\n"
+     << profile.cholesky << "(GFlops: " << profile.cholesky_gflops
+     << ", GFlop/sec: "
+     << profile.cholesky_gflops / profile.cholesky.TotalSeconds() << ")\n";
+  return os;
+}
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
 // The user-facing data structure for storing a supernodal LDL' factorization.
 template <class Field>
 class Factorization {
  public:
+#ifdef CATAMARI_ENABLE_TIMERS
+  FactorizationProfile profile;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
   // Factors the given matrix using the prescribed permutation.
   SparseLDLResult Factor(const CoordinateMatrix<Field>& matrix,
                          const SymmetricOrdering& manual_ordering,

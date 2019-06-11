@@ -137,12 +137,18 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
     return matrix;
   }
 
+  std::cout << "Before enforcing symmetry: " << matrix->NumEntries()
+            << " entries." << std::endl;
+
   // Force symmetry since many of the examples are not.
   if (force_symmetry) {
     if (print_progress) {
       std::cout << "Enforcing matrix Hermiticity..." << std::endl;
     }
     MakeSymmetric(matrix.get(), hermitian);
+
+    std::cout << "After enforcing symmetry: " << matrix->NumEntries()
+              << " entries." << std::endl;
   }
 
   // Rescale the maximum norm to one.
@@ -171,7 +177,7 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
   const Real frob_norm = catamari::EuclideanNorm(*matrix);
   AddDiagonalShift(relative_shift * frob_norm, matrix.get());
 
-  {
+  if (print_progress) {
     Real min_abs = std::numeric_limits<Real>::max();
     Real max_abs = 0;
     for (auto& entry : matrix->Entries()) {
@@ -179,13 +185,9 @@ std::unique_ptr<catamari::CoordinateMatrix<Field>> LoadMatrix(
       max_abs = std::max(max_abs, std::abs(entry.value));
     }
 
-    std::cout << "|A| has entries in [" << min_abs << ", " << max_abs << "]"
-              << std::endl;
-  }
-
-  if (print_progress) {
-    std::cout << "Matrix had " << matrix->NumRows() << " rows and "
-              << matrix->NumEntries() << " entries." << std::endl;
+    std::cout << "|A| is " << matrix->NumRows() << " x " << matrix->NumColumns()
+              << "with " << matrix->NumEntries() << " entries, with values in ["
+              << min_abs << ", " << max_abs << "]" << std::endl;
 
     std::pair<Int, Int> densest_row_info = DensestRow(*matrix);
     std::cout << "Densest row is index " << densest_row_info.first << " with "
@@ -351,7 +353,7 @@ int main(int argc, char** argv) {
   const std::string filename = parser.OptionalInput<std::string>(
       "filename", "The location of a Matrix Market file.", "");
   const bool skip_explicit_zeros = parser.OptionalInput<bool>(
-      "skip_explicit_zeros", "Skip explicitly zero entries?", true);
+      "skip_explicit_zeros", "Skip explicitly zero entries?", false);
   const int entry_mask_int =
       parser.OptionalInput<int>("entry_mask_int",
                                 "The quotient::EntryMask integer.\n"
@@ -403,12 +405,25 @@ int main(int argc, char** argv) {
       "relative_shift", "We add || A ||_F * relative_shift to the diagonal",
       2.1);
   const double drop_tolerance = parser.OptionalInput<Real>(
-      "drop_tolerance", "We drop entries with absolute value <= this.", 0.);
+      "drop_tolerance", "We drop entries with absolute value <= this.", -1.);
   const int ldl_algorithm_int =
       parser.OptionalInput<int>("ldl_algorithm_int",
                                 "The LDL algorithm type.\n"
                                 "0:left-looking, 1:up-looking, 2:right-looking",
                                 2);
+  const Int block_size = parser.OptionalInput<Int>(
+      "block_size", "The dense algorithmic block size.", 64);
+#ifdef CATAMARI_OPENMP
+  const Int factor_tile_size = parser.OptionalInput<Int>(
+      "factor_tile_size", "The multithreaded factorization tile size.", 128);
+  const Int outer_product_tile_size = parser.OptionalInput<Int>(
+      "outer_product_tile_size", "The multithreaded outer-product tile size.",
+      240);
+  const Int merge_grain_size = parser.OptionalInput<Int>(
+      "merge_grain_size", "The number of columns to merge at once.", 500);
+  const Int sort_grain_size = parser.OptionalInput<Int>(
+      "sort_grain_size", "The number of columns to sort at once.", 200);
+#endif  // ifdef CATAMARI_OPENMP
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
   const std::string matrix_market_directory = parser.OptionalInput<std::string>(
@@ -455,6 +470,13 @@ int main(int argc, char** argv) {
     auto& sn_control = ldl_control.supernodal_control;
     sn_control.algorithm =
         static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+    sn_control.block_size = block_size;
+#ifdef CATAMARI_OPENMP
+    sn_control.factor_tile_size = factor_tile_size;
+    sn_control.outer_product_tile_size = outer_product_tile_size;
+    sn_control.merge_grain_size = merge_grain_size;
+    sn_control.sort_grain_size = sort_grain_size;
+#endif  // ifdef CATAMARI_OPENMP
     sn_control.relaxation_control.relax_supernodes = relax_supernodes;
     sn_control.relaxation_control.allowable_supernode_zeros =
         allowable_supernode_zeros;
