@@ -132,16 +132,16 @@ std::ostream& operator<<(std::ostream& os,
   os << profile.form_supernodes << "\n"
      << profile.initialize_factors << "\n"
      << profile.merge << "\n"
-     << profile.gemm << "(GFlops: " << profile.gemm_gflops
+     << profile.gemm << " (GFlops: " << profile.gemm_gflops
      << ", GFlop/sec: " << profile.gemm_gflops / profile.gemm.TotalSeconds()
      << ")\n"
-     << profile.herk << "(GFlops: " << profile.herk_gflops
+     << profile.herk << " (GFlops: " << profile.herk_gflops
      << ", GFlop/sec: " << profile.herk_gflops / profile.herk.TotalSeconds()
      << ")\n"
-     << profile.trsm << "(GFlops: " << profile.trsm_gflops
+     << profile.trsm << " (GFlops: " << profile.trsm_gflops
      << ", GFlop/sec: " << profile.trsm_gflops / profile.trsm.TotalSeconds()
      << ")\n"
-     << profile.cholesky << "(GFlops: " << profile.cholesky_gflops
+     << profile.cholesky << " (GFlops: " << profile.cholesky_gflops
      << ", GFlop/sec: "
      << profile.cholesky_gflops / profile.cholesky.TotalSeconds() << ")\n";
   return os;

@@ -52,6 +52,10 @@ inline void AssemblyForest::FillFromParents() {
   }
 }
 
+inline Int AssemblyForest::NumChildren(Int index) const {
+  return child_offsets[index + 1] - child_offsets[index];
+}
+
 }  // namespace catamari
 
 #endif  // ifndef CATAMARI_SYMMETRIC_ORDERING_IMPL_H_

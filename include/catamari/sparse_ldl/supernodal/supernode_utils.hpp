@@ -24,6 +24,10 @@ struct SupernodalRelaxationControl {
   //   multifrontal method", 1989.
   bool relax_supernodes = false;
 
+  // Any supernode merge that results in this number of columns or fewer is
+  // always allowed.
+  Int allowable_supernode_size = 4;
+
   // The allowable number of explicit zeros in any relaxed supernode.
   Int allowable_supernode_zeros = 128;
 
@@ -126,19 +130,9 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 // Compute an unrelaxed supernodal partition using the existing ordering.
 // We require that supernodes have dense diagonal blocks and equal structures
 // below the diagonal block.
-template <class Field>
-void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
-                               const SymmetricOrdering& ordering,
-                               AssemblyForest* scalar_forest,
-                               Buffer<Int>* supernode_sizes,
-                               scalar_ldl::LowerStructure* scalar_structure);
-#ifdef CATAMARI_OPENMP
-template <class Field>
-void OpenMPFormFundamentalSupernodes(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    AssemblyForest* scalar_forest, Buffer<Int>* supernode_sizes,
-    scalar_ldl::LowerStructure* scalar_structure);
-#endif  // ifdef CATAMARI_OPENMP
+void FormFundamentalSupernodes(const AssemblyForest& scalar_forest,
+                               const Buffer<Int>& scalar_degrees,
+                               Buffer<Int>* supernode_sizes);
 
 // Returns whether or not the child supernode can be merged into its parent by
 // counting the number of explicit zeros that would be introduced by the
@@ -157,32 +151,26 @@ void OpenMPFormFundamentalSupernodes(
 //   |      |      |
 //    -------------
 //
-// Because it is assumed that supernode 1 is the parent of supernode 0,
-// the only places explicit nonzeros can be introduced are in:
-//   * L10: if supernode 0 was not fully-connected to supernode 1.
-//   * L20: if supernode 0's structure (with supernode 1 removed) does not
-//     contain every member of the structure of supernode 1.
-//
-// Counting the number of explicit zeros that would be introduced is thus
-// simply a matter of counting these mismatches.
+// Because we have a fundamental supernode partition, we know that L10 is
+// nonzero in only its first row.
 //
 // The reason that downstream explicit zeros would not be introduced is the
 // same as the reason explicit zeros are not introduced into L21; supernode
 // 1 is the parent of supernode 0.
 //
-MergableStatus MergableSupernode(
-    Int child_tail, Int parent_tail, Int child_size, Int parent_size,
-    Int num_child_explicit_zeros, Int num_parent_explicit_zeros,
-    const Buffer<Int>& orig_member_to_index,
-    const scalar_ldl::LowerStructure& scalar_structure,
-    const SupernodalRelaxationControl& control);
+MergableStatus MergableSupernode(Int child_size, Int child_degree,
+                                 Int parent_size, Int parent_degree,
+                                 Int num_child_explicit_zeros,
+                                 Int num_parent_explicit_zeros,
+                                 const Buffer<Int>& orig_member_to_index,
+                                 const SupernodalRelaxationControl& control);
 
 void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
                    const Buffer<Int>& orig_supernode_sizes,
+                   const Buffer<Int>& orig_supernode_degrees,
                    const Buffer<Int>& orig_member_to_index,
                    const Buffer<Int>& children,
                    const Buffer<Int>& child_offsets,
-                   const scalar_ldl::LowerStructure& scalar_structure,
                    const SupernodalRelaxationControl& control,
                    Buffer<Int>* supernode_sizes,
                    Buffer<Int>* num_explicit_zeros,
@@ -197,7 +185,6 @@ void RelaxSupernodes(
     const Buffer<Int>& orig_supernode_parents,
     const Buffer<Int>& orig_supernode_degrees,
     const Buffer<Int>& orig_member_to_index,
-    const scalar_ldl::LowerStructure& scalar_structure,
     const SupernodalRelaxationControl& control,
     Buffer<Int>* relaxed_permutation, Buffer<Int>* relaxed_inverse_permutation,
     Buffer<Int>* relaxed_parents, Buffer<Int>* relaxed_supernode_parents,

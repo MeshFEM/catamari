@@ -58,13 +58,25 @@ void Factorization<Field>::OpenMPFormSupernodes(
   SymmetricOrdering fund_ordering;
   fund_ordering.permutation = ordering_.permutation;
   fund_ordering.inverse_permutation = ordering_.inverse_permutation;
-  scalar_ldl::LowerStructure scalar_structure;
-  OpenMPFormFundamentalSupernodes(matrix, ordering_, &orig_scalar_forest,
-                                  &fund_ordering.supernode_sizes,
-                                  &scalar_structure);
+
+  // Compute the non-supernodal elimination tree using the original ordering.
+  Buffer<Int> scalar_degrees;
+  scalar_ldl::OpenMPEliminationForestAndDegrees(
+      matrix, ordering_, &orig_scalar_forest.parents, &scalar_degrees);
+  orig_scalar_forest.FillFromParents();
+
+  FormFundamentalSupernodes(orig_scalar_forest, scalar_degrees,
+                            &fund_ordering.supernode_sizes);
   OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
   CATAMARI_ASSERT(fund_ordering.supernode_offsets.Back() == matrix.NumRows(),
                   "Supernodes did not sum to the matrix size.");
+#ifdef CATAMARI_DEBUG
+  if (!supernodal_ldl::ValidFundamentalSupernodes(
+          matrix, ordering_, fund_ordering.supernode_sizes)) {
+    std::cerr << "Invalid fundamental supernodes." << std::endl;
+    return;
+  }
+#endif  // ifdef CATAMARI_DEBUG
 
   Buffer<Int> fund_member_to_index;
   MemberToIndex(matrix.NumRows(), fund_ordering.supernode_offsets,
@@ -86,15 +98,14 @@ void Factorization<Field>::OpenMPFormSupernodes(
   const SupernodalRelaxationControl& relax_control =
       control_.relaxation_control;
   if (relax_control.relax_supernodes) {
-    // TODO(Jack Poulson): Parallelize RelaxSupernodes.
-    RelaxSupernodes(
-        orig_scalar_forest.parents, fund_ordering.supernode_sizes,
-        fund_ordering.supernode_offsets, fund_ordering.assembly_forest.parents,
-        fund_supernode_degrees, fund_member_to_index, scalar_structure,
-        relax_control, &ordering_.permutation, &ordering_.inverse_permutation,
-        &forest->parents, &ordering_.assembly_forest.parents, supernode_degrees,
-        &ordering_.supernode_sizes, &ordering_.supernode_offsets,
-        &supernode_member_to_index_);
+    RelaxSupernodes(orig_scalar_forest.parents, fund_ordering.supernode_sizes,
+                    fund_ordering.supernode_offsets,
+                    fund_ordering.assembly_forest.parents,
+                    fund_supernode_degrees, fund_member_to_index, relax_control,
+                    &ordering_.permutation, &ordering_.inverse_permutation,
+                    &forest->parents, &ordering_.assembly_forest.parents,
+                    supernode_degrees, &ordering_.supernode_sizes,
+                    &ordering_.supernode_offsets, &supernode_member_to_index_);
     forest->FillFromParents();
     ordering_.assembly_forest.FillFromParents();
   } else {

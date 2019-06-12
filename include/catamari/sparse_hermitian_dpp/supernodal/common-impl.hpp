@@ -58,11 +58,22 @@ void SupernodalHermitianDPP<Field>::FormSupernodes() {
   SymmetricOrdering fund_ordering;
   fund_ordering.permutation = ordering_.permutation;
   fund_ordering.inverse_permutation = ordering_.inverse_permutation;
-  scalar_ldl::LowerStructure scalar_structure;
+
+  Buffer<Int> orig_scalar_degrees;
+  scalar_ldl::EliminationForestAndDegrees(
+      matrix_, ordering_, &orig_scalar_forest.parents, &orig_scalar_degrees);
+  orig_scalar_forest.FillFromParents();
+
   supernodal_ldl::FormFundamentalSupernodes(
-      matrix_, ordering_, &orig_scalar_forest, &fund_ordering.supernode_sizes,
-      &scalar_structure);
+      orig_scalar_forest, orig_scalar_degrees, &fund_ordering.supernode_sizes);
   OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
+#ifdef CATAMARI_DEBUG
+  if (!supernodal_ldl::ValidFundamentalSupernodes(
+          matrix_, ordering_, fund_ordering.supernode_sizes)) {
+    std::cerr << "Invalid fundamental supernodes." << std::endl;
+    return;
+  }
+#endif  // ifdef CATAMARI_DEBUG
 
   Buffer<Int> fund_member_to_index;
   supernodal_ldl::MemberToIndex(matrix_.NumRows(),
@@ -84,7 +95,7 @@ void SupernodalHermitianDPP<Field>::FormSupernodes() {
     supernodal_ldl::RelaxSupernodes(
         orig_scalar_forest.parents, fund_ordering.supernode_sizes,
         fund_ordering.supernode_offsets, fund_ordering.assembly_forest.parents,
-        fund_supernode_degrees, fund_member_to_index, scalar_structure,
+        fund_supernode_degrees, fund_member_to_index,
         control_.relaxation_control, &ordering_.permutation,
         &ordering_.inverse_permutation, &forest_.parents,
         &ordering_.assembly_forest.parents, &supernode_degrees_,

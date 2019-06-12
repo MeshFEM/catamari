@@ -34,6 +34,9 @@ struct AssemblyForest {
 
   // Fills the children and root list from the parent list.
   void FillFromParents();
+
+  // Returns the number of children for the node with the given index.
+  Int NumChildren(Int index) const;
 };
 
 // A mechanism for passing reordering information into the factorization.
