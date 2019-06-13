@@ -60,10 +60,12 @@ void Factorization<Field>::OpenMPFormSupernodes(
   fund_ordering.inverse_permutation = ordering_.inverse_permutation;
 
   // Compute the non-supernodal elimination tree using the original ordering.
+  CATAMARI_START_TIMER(profile.scalar_elimination_forest);
   Buffer<Int> scalar_degrees;
   scalar_ldl::OpenMPEliminationForestAndDegrees(
       matrix, ordering_, &orig_scalar_forest.parents, &scalar_degrees);
   orig_scalar_forest.FillFromParents();
+  CATAMARI_STOP_TIMER(profile.scalar_elimination_forest);
 
   FormFundamentalSupernodes(orig_scalar_forest, scalar_degrees,
                             &fund_ordering.supernode_sizes);
@@ -84,17 +86,24 @@ void Factorization<Field>::OpenMPFormSupernodes(
 
   // TODO(Jack Poulson): Parallelize
   //     ConvertFromScalarToSupernodalEliminationForest.
+  CATAMARI_START_TIMER(profile.supernodal_elimination_forest);
   const Int num_fund_supernodes = fund_ordering.supernode_sizes.Size();
   Buffer<Int> fund_supernode_parents;
   ConvertFromScalarToSupernodalEliminationForest(
       num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
       &fund_ordering.assembly_forest.parents);
   fund_ordering.assembly_forest.FillFromParents();
+  CATAMARI_STOP_TIMER(profile.supernodal_elimination_forest);
 
-  Buffer<Int> fund_supernode_degrees;
-  OpenMPSupernodalDegrees(matrix, fund_ordering, orig_scalar_forest,
-                          fund_member_to_index, &fund_supernode_degrees);
+  // Convert the scalar degrees into supernodal degrees.
+  Buffer<Int> fund_supernode_degrees(num_fund_supernodes);
+  for (Int supernode = 0; supernode < num_fund_supernodes; ++supernode) {
+    const Int supernode_tail = fund_ordering.supernode_offsets[supernode] +
+                               fund_ordering.supernode_sizes[supernode] - 1;
+    fund_supernode_degrees[supernode] = scalar_degrees[supernode_tail];
+  }
 
+  CATAMARI_START_TIMER(profile.relax_supernodes);
   const SupernodalRelaxationControl& relax_control =
       control_.relaxation_control;
   if (relax_control.relax_supernodes) {
@@ -119,6 +128,7 @@ void Factorization<Field>::OpenMPFormSupernodes(
     supernode_member_to_index_ = fund_member_to_index;
     *supernode_degrees = fund_supernode_degrees;
   }
+  CATAMARI_STOP_TIMER(profile.relax_supernodes);
 }
 
 template <class Field>

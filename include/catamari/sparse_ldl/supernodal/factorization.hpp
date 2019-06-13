@@ -85,7 +85,11 @@ struct Control {
 
 #ifdef CATAMARI_ENABLE_TIMERS
 struct FactorizationProfile {
-  quotient::Timer form_supernodes;
+  quotient::Timer scalar_elimination_forest;
+
+  quotient::Timer supernodal_elimination_forest;
+
+  quotient::Timer relax_supernodes;
 
   quotient::Timer initialize_factors;
 
@@ -104,7 +108,9 @@ struct FactorizationProfile {
   quotient::Timer merge;
 
   FactorizationProfile()
-      : form_supernodes("form_supernodes"),
+      : scalar_elimination_forest("scalar_elimination_forest"),
+        supernodal_elimination_forest("supernodal_elimination_forest"),
+        relax_supernodes("relax_supernodes"),
         initialize_factors("initialize_factors"),
         gemm("gemm"),
         herk("herk"),
@@ -113,23 +119,27 @@ struct FactorizationProfile {
         merge("merge") {}
 
   void Reset() {
-    form_supernodes.Reset("form_supernodes");
-    initialize_factors.Reset("initialize_factors");
-    gemm.Reset("gemm");
+    scalar_elimination_forest.Reset(scalar_elimination_forest.Name());
+    supernodal_elimination_forest.Reset(supernodal_elimination_forest.Name());
+    relax_supernodes.Reset(relax_supernodes.Name());
+    initialize_factors.Reset(initialize_factors.Name());
+    gemm.Reset(gemm.Name());
     gemm_gflops = 0;
-    herk.Reset("herk");
+    herk.Reset(herk.Name());
     herk_gflops = 0;
-    trsm.Reset("trsm");
+    trsm.Reset(trsm.Name());
     trsm_gflops = 0;
-    cholesky.Reset("cholesky");
+    cholesky.Reset(cholesky.Name());
     cholesky_gflops = 0;
-    merge.Reset("merge");
+    merge.Reset(merge.Name());
   }
 };
 
 std::ostream& operator<<(std::ostream& os,
                          const FactorizationProfile& profile) {
-  os << profile.form_supernodes << "\n"
+  os << profile.scalar_elimination_forest << "\n"
+     << profile.supernodal_elimination_forest << "\n"
+     << profile.relax_supernodes << "\n"
      << profile.initialize_factors << "\n"
      << profile.merge << "\n"
      << profile.gemm << " (GFlops: " << profile.gemm_gflops

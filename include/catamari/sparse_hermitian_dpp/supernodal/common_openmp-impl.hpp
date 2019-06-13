@@ -55,10 +55,13 @@ void SupernodalHermitianDPP<Field>::OpenMPFormSupernodes() {
       &fund_ordering.assembly_forest.parents);
   fund_ordering.assembly_forest.FillFromParents();
 
-  Buffer<Int> fund_supernode_degrees;
-  supernodal_ldl::OpenMPSupernodalDegrees(
-      matrix_, fund_ordering, orig_scalar_forest, fund_member_to_index,
-      &fund_supernode_degrees);
+  // Convert the scalar degrees into the supernodal degrees.
+  Buffer<Int> fund_supernode_degrees(num_fund_supernodes);
+  for (Int supernode = 0; supernode < num_fund_supernodes; ++supernode) {
+    const Int supernode_tail = fund_ordering.supernode_offsets[supernode] +
+                               fund_ordering.supernode_sizes[supernode] - 1;
+    fund_supernode_degrees[supernode] = orig_scalar_degrees[supernode_tail];
+  }
 
   if (control_.relaxation_control.relax_supernodes) {
     supernodal_ldl::RelaxSupernodes(
