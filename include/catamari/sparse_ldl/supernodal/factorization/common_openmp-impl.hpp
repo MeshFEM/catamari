@@ -158,10 +158,61 @@ void Factorization<Field>::OpenMPInitializeFactors(
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                          supernode_member_to_index_);
   }
+}
 
-  OpenMPFillZeros(ordering_, lower_factor_.get(), diagonal_factor_.get());
-  OpenMPFillNonzeros(matrix, ordering_, supernode_member_to_index_,
-                     lower_factor_.get(), diagonal_factor_.get());
+template <class Field>
+void Factorization<Field>::OpenMPInitializeBlockColumn(
+    Int supernode, const CoordinateMatrix<Field>& matrix) {
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
+
+  const bool self_adjoint =
+      control_.factorization_type != kLDLTransposeFactorization;
+  const bool have_permutation = !ordering_.permutation.Empty();
+  const Int supernode_start = ordering_.supernode_offsets[supernode];
+  const Int supernode_size = ordering_.supernode_sizes[supernode];
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
+  const Int* index_beg = lower_factor_->StructureBeg(supernode);
+  const Int* index_end = lower_factor_->StructureEnd(supernode);
+
+  #pragma omp parallel for schedule(dynamic)
+  for (Int j = supernode_start; j < supernode_start + supernode_size; ++j) {
+    const Int j_rel = j - supernode_start;
+    const Int j_orig = have_permutation ? ordering_.inverse_permutation[j] : j;
+
+    // Fill the diagonal block's column with zeros.
+    Field* diag_column_ptr = diagonal_block.Pointer(0, j_rel);
+    std::fill(diag_column_ptr, diag_column_ptr + supernode_size, Field{0});
+
+    // Fill the lower block's column with zeros.
+    Field* lower_column_ptr = lower_block.Pointer(0, j_rel);
+    std::fill(lower_column_ptr, lower_column_ptr + lower_block.height,
+              Field{0});
+
+    // Insert the entries from the sparse matrix into this column.
+    const Int row_beg = matrix.RowEntryOffset(j_orig);
+    const Int row_end = matrix.RowEntryOffset(j_orig + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      const Int row =
+          have_permutation ? ordering_.permutation[entry.column] : entry.column;
+      if (row < supernode_start) {
+        continue;
+      }
+      const Field value = self_adjoint ? Conjugate(entry.value) : entry.value;
+      if (row < supernode_start + supernode_size) {
+        diag_column_ptr[row - supernode_start] = value;
+      } else {
+        const Int* iter = std::lower_bound(index_beg, index_end, row);
+        CATAMARI_ASSERT(iter != index_end, "Exceeded row indices.");
+        CATAMARI_ASSERT(*iter == row, "Entry (" + std::to_string(row) + ", " +
+                                          std::to_string(j) +
+                                          ") wasn't in the structure.");
+        const Int rel_row = std::distance(index_beg, iter);
+        lower_column_ptr[rel_row] = value;
+      }
+    }
+  }
 }
 
 }  // namespace supernodal_ldl

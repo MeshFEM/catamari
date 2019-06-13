@@ -203,6 +203,7 @@ bool Factorization<Field>::LeftLookingSubtree(
   }
 
   if (succeeded) {
+    InitializeBlockColumn(supernode, matrix);
     LeftLookingSupernodeUpdate(supernode, matrix, shared_state, private_state);
     succeeded = LeftLookingSupernodeFinalize(supernode, result);
   }

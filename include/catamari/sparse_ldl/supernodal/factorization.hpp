@@ -256,6 +256,15 @@ class Factorization {
                             Buffer<Int>* supernode_degrees);
 #endif  // ifdef CATAMARI_OPENMP
 
+  // Initializes a supernodal block column of the factorization using the
+  // input matrix.
+  void InitializeBlockColumn(Int supernode,
+                             const CoordinateMatrix<Field>& matrix);
+#ifdef CATAMARI_OPENMP
+  void OpenMPInitializeBlockColumn(Int supernode,
+                                   const CoordinateMatrix<Field>& matrix);
+#endif  // ifdef CATAMARI_OPENMP
+
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
                          const AssemblyForest& forest,
                          const Buffer<Int>& supernode_degrees);

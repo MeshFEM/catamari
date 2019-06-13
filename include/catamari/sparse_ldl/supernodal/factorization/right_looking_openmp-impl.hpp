@@ -157,6 +157,7 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
   }
 
   if (succeeded) {
+    OpenMPInitializeBlockColumn(supernode, matrix);
     #pragma omp taskgroup
     succeeded = OpenMPRightLookingSupernodeFinalize(supernode, shared_state,
                                                     private_states, result);

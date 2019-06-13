@@ -134,6 +134,7 @@ bool Factorization<Field>::RightLookingSubtree(
   }
 
   if (succeeded) {
+    InitializeBlockColumn(supernode, matrix);
     succeeded = RightLookingSupernodeFinalize(supernode, shared_state,
                                               private_state, result);
   } else {
