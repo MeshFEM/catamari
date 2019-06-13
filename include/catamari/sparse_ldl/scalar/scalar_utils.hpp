@@ -26,6 +26,9 @@ namespace scalar_ldl {
 // Cf. Tim Davis's "LDL"'s symbolic factorization.
 template <class Field>
 void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
+                                 Buffer<Int>* parents, Buffer<Int>* degrees);
+template <class Field>
+void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
                                  const SymmetricOrdering& ordering,
                                  Buffer<Int>* parents, Buffer<Int>* degrees);
 #ifdef CATAMARI_OPENMP

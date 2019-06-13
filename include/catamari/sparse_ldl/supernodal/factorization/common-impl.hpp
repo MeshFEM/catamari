@@ -74,8 +74,19 @@ void Factorization<Field>::FormSupernodes(const CoordinateMatrix<Field>& matrix,
 
   // Compute the non-supernodal elimination tree using the original ordering.
   Buffer<Int> scalar_degrees;
-  scalar_ldl::EliminationForestAndDegrees(
-      matrix, ordering_, &orig_scalar_forest.parents, &scalar_degrees);
+  const bool explicitly_permute = false;  // TODO(Jack Poulson): Make optional.
+  if (ordering_.permutation.Empty()) {
+    scalar_ldl::EliminationForestAndDegrees(matrix, &orig_scalar_forest.parents,
+                                            &scalar_degrees);
+  } else if (explicitly_permute) {
+    CoordinateMatrix<Field> reordered_matrix;
+    PermuteMatrix(matrix, ordering_, &reordered_matrix);
+    scalar_ldl::EliminationForestAndDegrees(
+        reordered_matrix, &orig_scalar_forest.parents, &scalar_degrees);
+  } else {
+    scalar_ldl::EliminationForestAndDegrees(
+        matrix, ordering_, &orig_scalar_forest.parents, &scalar_degrees);
+  }
   orig_scalar_forest.FillFromParents();
 
   FormFundamentalSupernodes(orig_scalar_forest, scalar_degrees,

@@ -9,6 +9,7 @@
 #define CATAMARI_SYMMETRIC_ORDERING_H_
 
 #include "catamari/buffer.hpp"
+#include "catamari/coordinate_matrix.hpp"
 #include "quotient/integers.hpp"
 
 namespace catamari {
@@ -64,6 +65,12 @@ struct SymmetricOrdering {
   // The (optional) supernodal assembly forest in the permuted ordering.
   AssemblyForest assembly_forest;
 };
+
+// Permutes a symmetric matrix using the given reordering.
+template <class Field>
+void PermuteMatrix(const CoordinateMatrix<Field>& matrix,
+                   const SymmetricOrdering& ordering,
+                   CoordinateMatrix<Field>* reordered_matrix);
 
 }  // namespace catamari
 

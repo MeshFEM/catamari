@@ -15,7 +15,6 @@ namespace scalar_ldl {
 
 template <class Field>
 void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
-                                 const SymmetricOrdering& ordering,
                                  Buffer<Int>* parents, Buffer<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
 
@@ -31,27 +30,79 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
   degrees->Resize(num_rows, 0);
 
   const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
-  const bool have_permutation = !ordering.permutation.Empty();
   for (Int row = 0; row < num_rows; ++row) {
     pattern_flags[row] = row;
-
-    const Int orig_row =
-        have_permutation ? ordering.inverse_permutation[row] : row;
-    const Int row_beg = matrix.RowEntryOffset(orig_row);
-    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+    const Int row_beg = matrix.RowEntryOffset(row);
+    const Int row_end = matrix.RowEntryOffset(row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
-      Int column =
-          have_permutation ? ordering.permutation[entry.column] : entry.column;
+      Int column = entry.column;
 
       // We are traversing the strictly lower triangle and know that the
       // indices are sorted.
       if (column >= row) {
-        if (have_permutation) {
-          continue;
-        } else {
-          break;
+        break;
+      }
+
+      // Look for new entries in the pattern by walking up to the root of this
+      // subtree of the elimination forest from index 'column'. Any unset
+      // parent pointers can be filled in during the traversal, as the current
+      // row index would then be the parent.
+      while (pattern_flags[column] != row) {
+        // Mark index 'column' as in the pattern of row 'row'.
+        pattern_flags[column] = row;
+        ++(*degrees)[column];
+
+        if ((*parents)[column] == -1) {
+          // This is the first occurrence of 'column' in a row pattern.
+          (*parents)[column] = row;
         }
+
+        // Move up to the parent in this subtree of the elimination forest.
+        // Moving to the parent will increase the index (but remain bounded
+        // from above by 'row').
+        column = (*parents)[column];
+      }
+    }
+  }
+}
+
+template <class Field>
+void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
+                                 const SymmetricOrdering& ordering,
+                                 Buffer<Int>* parents, Buffer<Int>* degrees) {
+  if (ordering.permutation.Empty()) {
+    EliminationForestAndDegrees(matrix, parents, degrees);
+    return;
+  }
+  const Int num_rows = matrix.NumRows();
+
+  // Initialize all of the parent indices as unset.
+  parents->Resize(num_rows, -1);
+
+  // A data structure for marking whether or not an index is in the pattern
+  // of the active row of the lower-triangular factor.
+  Buffer<Int> pattern_flags(num_rows);
+
+  // Initialize the number of subdiagonal entries that will be stored into
+  // each column.
+  degrees->Resize(num_rows, 0);
+
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int row = 0; row < num_rows; ++row) {
+    pattern_flags[row] = row;
+
+    const Int orig_row = ordering.inverse_permutation[row];
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      Int column = ordering.permutation[entry.column];
+
+      // We are traversing the strictly lower triangle and know that the
+      // indices are sorted.
+      if (column >= row) {
+        continue;
       }
 
       // Look for new entries in the pattern by walking up to the root of this

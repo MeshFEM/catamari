@@ -409,6 +409,17 @@ const Buffer<MatrixEntry<Field>>& CoordinateMatrix<Field>::Entries() const
 }
 
 template <class Field>
+Buffer<Int>& CoordinateMatrix<Field>::RowEntryOffsets() CATAMARI_NOEXCEPT {
+  return row_entry_offsets_;
+}
+
+template <class Field>
+const Buffer<Int>& CoordinateMatrix<Field>::RowEntryOffsets() const
+    CATAMARI_NOEXCEPT {
+  return row_entry_offsets_;
+}
+
+template <class Field>
 Int CoordinateMatrix<Field>::RowEntryOffset(Int row) const CATAMARI_NOEXCEPT {
   CATAMARI_ASSERT(
       EntryQueuesAreEmpty(),

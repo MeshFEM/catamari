@@ -153,6 +153,14 @@ class CoordinateMatrix {
   // Returns a reference to the underlying vector of entries.
   const Buffer<MatrixEntry<Field>>& Entries() const CATAMARI_NOEXCEPT;
 
+  // Direct access to the row entry offsets vector.
+  // NOTE: Not recommended for typical usage.
+  Buffer<Int>& RowEntryOffsets() CATAMARI_NOEXCEPT;
+
+  // Immutable direct access to the row entry offsets vector.
+  // NOTE: Not recommended for typical usage.
+  const Buffer<Int>& RowEntryOffsets() const CATAMARI_NOEXCEPT;
+
   // Returns the offset into the entry vector where entries from the given row
   // begin.
   Int RowEntryOffset(Int row) const CATAMARI_NOEXCEPT;
