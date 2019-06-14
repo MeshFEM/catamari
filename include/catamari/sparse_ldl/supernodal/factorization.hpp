@@ -259,10 +259,9 @@ class Factorization {
 
   // Form the (possibly relaxed) supernodes for the factorization.
   void FormSupernodes(const CoordinateMatrix<Field>& matrix,
-                      AssemblyForest* forest, Buffer<Int>* supernode_degrees);
+                      Buffer<Int>* supernode_degrees);
 #ifdef CATAMARI_OPENMP
   void OpenMPFormSupernodes(const CoordinateMatrix<Field>& matrix,
-                            AssemblyForest* forest,
                             Buffer<Int>* supernode_degrees);
 #endif  // ifdef CATAMARI_OPENMP
 
@@ -276,11 +275,9 @@ class Factorization {
 #endif  // ifdef CATAMARI_OPENMP
 
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
-                         const AssemblyForest& forest,
                          const Buffer<Int>& supernode_degrees);
 #ifdef CATAMARI_OPENMP
   void OpenMPInitializeFactors(const CoordinateMatrix<Field>& matrix,
-                               const AssemblyForest& forest,
                                const Buffer<Int>& supernode_degrees);
 #endif  // ifdef CATAMARI_OPENMP
 

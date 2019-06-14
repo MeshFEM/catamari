@@ -26,33 +26,31 @@ namespace supernodal_ldl {
 template <class Field>
 void Factorization<Field>::OpenMPInitialFactorizationSetup(
     const CoordinateMatrix<Field>& matrix) {
-  AssemblyForest forest;
   Buffer<Int> supernode_degrees;
 
 #ifdef CATAMARI_ENABLE_TIMERS
   quotient::Timer timer;
   timer.Start();
   #pragma omp taskgroup
-  OpenMPFormSupernodes(matrix, &forest, &supernode_degrees);
+  OpenMPFormSupernodes(matrix, &supernode_degrees);
   std::cout << "OpenMPFormSupernodes: " << timer.Stop() << std::endl;
 
   timer.Start();
   #pragma omp taskgroup
-  OpenMPInitializeFactors(matrix, forest, supernode_degrees);
+  OpenMPInitializeFactors(matrix, supernode_degrees);
   std::cout << "OpenMPInitializeFactors: " << timer.Stop() << std::endl;
 #else
   #pragma omp taskgroup
-  OpenMPFormSupernodes(matrix, &forest, &supernode_degrees);
+  OpenMPFormSupernodes(matrix, &supernode_degrees);
 
   #pragma omp taskgroup
-  OpenMPInitializeFactors(matrix, forest, supernode_degrees);
+  OpenMPInitializeFactors(matrix, supernode_degrees);
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 }
 
 template <class Field>
 void Factorization<Field>::OpenMPFormSupernodes(
-    const CoordinateMatrix<Field>& matrix, AssemblyForest* forest,
-    Buffer<Int>* supernode_degrees) {
+    const CoordinateMatrix<Field>& matrix, Buffer<Int>* supernode_degrees) {
   // Greedily compute a supernodal partition using the original ordering.
   AssemblyForest orig_scalar_forest;
   SymmetricOrdering fund_ordering;
@@ -112,14 +110,11 @@ void Factorization<Field>::OpenMPFormSupernodes(
                     fund_ordering.assembly_forest.parents,
                     fund_supernode_degrees, fund_member_to_index, relax_control,
                     &ordering_.permutation, &ordering_.inverse_permutation,
-                    &forest->parents, &ordering_.assembly_forest.parents,
-                    supernode_degrees, &ordering_.supernode_sizes,
-                    &ordering_.supernode_offsets, &supernode_member_to_index_);
-    forest->FillFromParents();
+                    &ordering_.assembly_forest.parents, supernode_degrees,
+                    &ordering_.supernode_sizes, &ordering_.supernode_offsets,
+                    &supernode_member_to_index_);
     ordering_.assembly_forest.FillFromParents();
   } else {
-    *forest = orig_scalar_forest;
-
     ordering_.supernode_sizes = fund_ordering.supernode_sizes;
     ordering_.supernode_offsets = fund_ordering.supernode_offsets;
     ordering_.assembly_forest.parents = fund_ordering.assembly_forest.parents;
@@ -133,7 +128,7 @@ void Factorization<Field>::OpenMPFormSupernodes(
 
 template <class Field>
 void Factorization<Field>::OpenMPInitializeFactors(
-    const CoordinateMatrix<Field>& matrix, const AssemblyForest& forest,
+    const CoordinateMatrix<Field>& matrix,
     const Buffer<Int>& supernode_degrees) {
   lower_factor_.reset(
       new LowerFactor<Field>(ordering_.supernode_sizes, supernode_degrees));
@@ -161,8 +156,7 @@ void Factorization<Field>::OpenMPInitializeFactors(
   }
 
   OpenMPFillStructureIndices(control_.sort_grain_size, matrix, ordering_,
-                             forest, supernode_member_to_index_,
-                             lower_factor_.get());
+                             supernode_member_to_index_, lower_factor_.get());
   if (control_.algorithm == kLeftLookingLDL) {
     // TODO(Jack Poulson): Switch to a multithreaded equivalent.
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,

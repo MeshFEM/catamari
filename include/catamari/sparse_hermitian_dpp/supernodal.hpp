@@ -99,9 +99,6 @@ class SupernodalHermitianDPP {
   // reordering choice for the DPP sampling.
   SymmetricOrdering ordering_;
 
-  // The scalar elimination forest.
-  AssemblyForest forest_;
-
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.
   Buffer<Int> supernode_member_to_index_;

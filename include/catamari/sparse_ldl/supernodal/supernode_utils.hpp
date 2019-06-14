@@ -179,18 +179,20 @@ void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
 // Walk up the tree in the original postordering, merging supernodes as we
 // progress. The 'relaxed_permutation' and 'relaxed_inverse_permutation'
 // variables are also inputs.
-void RelaxSupernodes(
-    const Buffer<Int>& orig_parents, const Buffer<Int>& orig_supernode_sizes,
-    const Buffer<Int>& orig_supernode_starts,
-    const Buffer<Int>& orig_supernode_parents,
-    const Buffer<Int>& orig_supernode_degrees,
-    const Buffer<Int>& orig_member_to_index,
-    const SupernodalRelaxationControl& control,
-    Buffer<Int>* relaxed_permutation, Buffer<Int>* relaxed_inverse_permutation,
-    Buffer<Int>* relaxed_parents, Buffer<Int>* relaxed_supernode_parents,
-    Buffer<Int>* relaxed_supernode_degrees,
-    Buffer<Int>* relaxed_supernode_sizes, Buffer<Int>* relaxed_supernode_starts,
-    Buffer<Int>* relaxed_supernode_member_to_index);
+void RelaxSupernodes(const Buffer<Int>& orig_parents,
+                     const Buffer<Int>& orig_supernode_sizes,
+                     const Buffer<Int>& orig_supernode_starts,
+                     const Buffer<Int>& orig_supernode_parents,
+                     const Buffer<Int>& orig_supernode_degrees,
+                     const Buffer<Int>& orig_member_to_index,
+                     const SupernodalRelaxationControl& control,
+                     Buffer<Int>* relaxed_permutation,
+                     Buffer<Int>* relaxed_inverse_permutation,
+                     Buffer<Int>* relaxed_supernode_parents,
+                     Buffer<Int>* relaxed_supernode_degrees,
+                     Buffer<Int>* relaxed_supernode_sizes,
+                     Buffer<Int>* relaxed_supernode_starts,
+                     Buffer<Int>* relaxed_supernode_member_to_index);
 
 // Computes the sizes of the structures of a supernodal LDL' factorization.
 template <class Field>
@@ -219,7 +221,6 @@ void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_forest,
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const SymmetricOrdering& ordering,
-                          const AssemblyForest& forest,
                           const Buffer<Int>& supernode_member_to_index,
                           LowerFactor<Field>* lower_factor);
 #ifdef CATAMARI_OPENMP
@@ -227,7 +228,6 @@ template <class Field>
 void OpenMPFillStructureIndices(Int sort_grain_size,
                                 const CoordinateMatrix<Field>& matrix,
                                 const SymmetricOrdering& ordering,
-                                const AssemblyForest& forest,
                                 const Buffer<Int>& supernode_member_to_index,
                                 LowerFactor<Field>* lower_factor);
 #endif  // ifdef CATAMARI_OPENMP

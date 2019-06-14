@@ -64,7 +64,6 @@ void Factorization<Field>::MergeContribution(
 
 template <class Field>
 void Factorization<Field>::FormSupernodes(const CoordinateMatrix<Field>& matrix,
-                                          AssemblyForest* forest,
                                           Buffer<Int>* supernode_degrees) {
   // Greedily compute a supernodal partition using the original ordering.
   AssemblyForest orig_scalar_forest;
@@ -133,14 +132,11 @@ void Factorization<Field>::FormSupernodes(const CoordinateMatrix<Field>& matrix,
                     fund_ordering.assembly_forest.parents,
                     fund_supernode_degrees, fund_member_to_index, relax_control,
                     &ordering_.permutation, &ordering_.inverse_permutation,
-                    &forest->parents, &ordering_.assembly_forest.parents,
-                    supernode_degrees, &ordering_.supernode_sizes,
-                    &ordering_.supernode_offsets, &supernode_member_to_index_);
-    forest->FillFromParents();
+                    &ordering_.assembly_forest.parents, supernode_degrees,
+                    &ordering_.supernode_sizes, &ordering_.supernode_offsets,
+                    &supernode_member_to_index_);
     ordering_.assembly_forest.FillFromParents();
   } else {
-    *forest = orig_scalar_forest;
-
     ordering_.supernode_sizes = fund_ordering.supernode_sizes;
     ordering_.supernode_offsets = fund_ordering.supernode_offsets;
     ordering_.assembly_forest.parents = fund_ordering.assembly_forest.parents;
@@ -154,7 +150,7 @@ void Factorization<Field>::FormSupernodes(const CoordinateMatrix<Field>& matrix,
 
 template <class Field>
 void Factorization<Field>::InitializeFactors(
-    const CoordinateMatrix<Field>& matrix, const AssemblyForest& forest,
+    const CoordinateMatrix<Field>& matrix,
     const Buffer<Int>& supernode_degrees) {
   lower_factor_.reset(
       new LowerFactor<Field>(ordering_.supernode_sizes, supernode_degrees));
@@ -181,7 +177,7 @@ void Factorization<Field>::InitializeFactors(
     max_lower_block_size_ = std::max(max_lower_block_size_, lower_block_size);
   }
 
-  FillStructureIndices(matrix, ordering_, forest, supernode_member_to_index_,
+  FillStructureIndices(matrix, ordering_, supernode_member_to_index_,
                        lower_factor_.get());
   if (control_.algorithm == kLeftLookingLDL) {
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
@@ -192,12 +188,10 @@ void Factorization<Field>::InitializeFactors(
 template <class Field>
 void Factorization<Field>::InitialFactorizationSetup(
     const CoordinateMatrix<Field>& matrix) {
-  AssemblyForest forest;
   Buffer<Int> supernode_degrees;
-
-  FormSupernodes(matrix, &forest, &supernode_degrees);
+  FormSupernodes(matrix, &supernode_degrees);
   CATAMARI_START_TIMER(profile.initialize_factors);
-  InitializeFactors(matrix, forest, supernode_degrees);
+  InitializeFactors(matrix, supernode_degrees);
   CATAMARI_STOP_TIMER(profile.initialize_factors);
 }
 

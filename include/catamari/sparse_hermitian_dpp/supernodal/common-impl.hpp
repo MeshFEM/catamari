@@ -100,15 +100,11 @@ void SupernodalHermitianDPP<Field>::FormSupernodes() {
         fund_ordering.supernode_offsets, fund_ordering.assembly_forest.parents,
         fund_supernode_degrees, fund_member_to_index,
         control_.relaxation_control, &ordering_.permutation,
-        &ordering_.inverse_permutation, &forest_.parents,
-        &ordering_.assembly_forest.parents, &supernode_degrees_,
-        &ordering_.supernode_sizes, &ordering_.supernode_offsets,
-        &supernode_member_to_index_);
-    forest_.FillFromParents();
+        &ordering_.inverse_permutation, &ordering_.assembly_forest.parents,
+        &supernode_degrees_, &ordering_.supernode_sizes,
+        &ordering_.supernode_offsets, &supernode_member_to_index_);
     ordering_.assembly_forest.FillFromParents();
   } else {
-    forest_ = orig_scalar_forest;
-
     ordering_.supernode_sizes = fund_ordering.supernode_sizes;
     ordering_.supernode_offsets = fund_ordering.supernode_offsets;
     ordering_.assembly_forest.parents = fund_ordering.assembly_forest.parents;
@@ -132,9 +128,8 @@ void SupernodalHermitianDPP<Field>::FormStructure() {
   max_supernode_size_ = *std::max_element(ordering_.supernode_sizes.begin(),
                                           ordering_.supernode_sizes.end());
 
-  supernodal_ldl::FillStructureIndices(matrix_, ordering_, forest_,
-                                       supernode_member_to_index_,
-                                       lower_factor_.get());
+  supernodal_ldl::FillStructureIndices(
+      matrix_, ordering_, supernode_member_to_index_, lower_factor_.get());
 
   if (control_.algorithm == kLeftLookingLDL) {
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,

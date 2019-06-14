@@ -156,18 +156,18 @@ void OpenMPSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 void OpenMPFillStructureIndicesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
-    Int root, LowerFactor<Field>* lower_factor,
+    const Buffer<Int>& supernode_member_to_index, Int root,
+    LowerFactor<Field>* lower_factor,
     Buffer<Buffer<Int>>* private_pattern_flags) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
   for (Int child_index = child_beg; child_index < child_end; ++child_index) {
     const Int child = ordering.assembly_forest.children[child_index];
-    #pragma omp task default(none) firstprivate(child)               \
-        shared(matrix, ordering, forest, supernode_member_to_index,  \
-            lower_factor, private_pattern_flags)
-    OpenMPFillStructureIndicesRecursion(matrix, ordering, forest,
+    #pragma omp task default(none) firstprivate(child)                    \
+        shared(matrix, ordering, supernode_member_to_index, lower_factor, \
+            private_pattern_flags)
+    OpenMPFillStructureIndicesRecursion(matrix, ordering,
                                         supernode_member_to_index, child,
                                         lower_factor, private_pattern_flags);
   }
@@ -236,7 +236,6 @@ template <class Field>
 void OpenMPFillStructureIndices(Int sort_grain_size,
                                 const CoordinateMatrix<Field>& matrix,
                                 const SymmetricOrdering& ordering,
-                                const AssemblyForest& forest,
                                 const Buffer<Int>& supernode_member_to_index,
                                 LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
@@ -256,10 +255,10 @@ void OpenMPFillStructureIndices(Int sort_grain_size,
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
-    #pragma omp task default(none) firstprivate(root)               \
-        shared(matrix, ordering, forest, supernode_member_to_index, \
-            lower_factor, private_pattern_flags)
-    OpenMPFillStructureIndicesRecursion(matrix, ordering, forest,
+    #pragma omp task default(none) firstprivate(root)                     \
+        shared(matrix, ordering, supernode_member_to_index, lower_factor, \
+            private_pattern_flags)
+    OpenMPFillStructureIndicesRecursion(matrix, ordering,
                                         supernode_member_to_index, root,
                                         lower_factor, &private_pattern_flags);
   }
