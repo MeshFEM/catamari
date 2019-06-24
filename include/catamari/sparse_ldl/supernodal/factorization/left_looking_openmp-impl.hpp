@@ -276,6 +276,7 @@ bool Factorization<Field>::OpenMPLeftLookingSubtree(
   }
 
   if (succeeded) {
+    #pragma omp taskgroup
     OpenMPInitializeBlockColumn(supernode, matrix);
 
     // Handle the current supernode's elimination.

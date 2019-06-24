@@ -244,6 +244,7 @@ SparseLDLResult Factorization<Field>::LeftLooking(
 
   // Note that any postordering of the supernodal elimination forest suffices.
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    InitializeBlockColumn(supernode, matrix);
     LeftLookingSupernodeUpdate(supernode, matrix, &shared_state,
                                &private_state);
     const bool succeeded = LeftLookingSupernodeFinalize(supernode, &result);
