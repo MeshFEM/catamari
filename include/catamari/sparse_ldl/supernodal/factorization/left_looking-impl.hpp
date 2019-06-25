@@ -65,15 +65,18 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
                                          descendant_supernode_size);
 
     BlasMatrixView<Field> scaled_transpose;
-    scaled_transpose.height = descendant_supernode_size;
-    scaled_transpose.width = descendant_main_intersect_size;
-    scaled_transpose.leading_dim = descendant_supernode_size;
-    scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
 
-    FormScaledTranspose(
-        control_.factorization_type,
-        diagonal_factor_->blocks[descendant_supernode].ToConst(),
-        descendant_main_matrix, &scaled_transpose);
+    if (control_.factorization_type != kCholeskyFactorization) {
+      scaled_transpose.height = descendant_supernode_size;
+      scaled_transpose.width = descendant_main_intersect_size;
+      scaled_transpose.leading_dim = descendant_supernode_size;
+      scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
+
+      FormScaledTranspose(
+          control_.factorization_type,
+          diagonal_factor_->blocks[descendant_supernode].ToConst(),
+          descendant_main_matrix, &scaled_transpose);
+    }
 
     BlasMatrixView<Field> workspace_matrix;
     workspace_matrix.height = descendant_main_intersect_size;
@@ -124,11 +127,12 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
           main_supernode_size);
 
       UpdateSubdiagonalBlock(
-          main_supernode, descendant_supernode, main_active_rel_row,
-          descendant_main_rel_row, descendant_active_rel_row,
-          ordering_.supernode_offsets, supernode_member_to_index_,
-          scaled_transpose.ToConst(), descendant_active_matrix, *lower_factor_,
-          &main_active_block, &workspace_matrix);
+          control_.factorization_type, main_supernode, descendant_supernode,
+          main_active_rel_row, descendant_main_rel_row, descendant_main_matrix,
+          descendant_active_rel_row, ordering_.supernode_offsets,
+          supernode_member_to_index_, scaled_transpose.ToConst(),
+          descendant_active_matrix, *lower_factor_, &main_active_block,
+          &workspace_matrix);
 
       ++descendant_active_intersect_size_beg;
       descendant_active_rel_row += descendant_active_intersect_size;

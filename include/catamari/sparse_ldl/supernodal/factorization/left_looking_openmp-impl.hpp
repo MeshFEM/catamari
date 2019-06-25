@@ -93,12 +93,14 @@ void Factorization<Field>::OpenMPLeftLookingSupernodeUpdate(
                                            descendant_supernode_size);
 
       BlasMatrixView<Field> scaled_transpose;
-      scaled_transpose.height = descendant_supernode_size;
-      scaled_transpose.width = descendant_main_intersect_size;
-      scaled_transpose.leading_dim = descendant_supernode_size;
-      scaled_transpose.data = private_state.scaled_transpose_buffer.Data();
-      FormScaledTranspose(factorization_type_copy, descendant_diag_block,
-                          descendant_main_matrix, &scaled_transpose);
+      if (control_.factorization_type != kCholeskyFactorization) {
+        scaled_transpose.height = descendant_supernode_size;
+        scaled_transpose.width = descendant_main_intersect_size;
+        scaled_transpose.leading_dim = descendant_supernode_size;
+        scaled_transpose.data = private_state.scaled_transpose_buffer.Data();
+        FormScaledTranspose(factorization_type_copy, descendant_diag_block,
+                            descendant_main_matrix, &scaled_transpose);
+      }
 
       BlasMatrixView<Field> workspace_matrix;
       workspace_matrix.height = descendant_main_intersect_size;
@@ -161,12 +163,14 @@ void Factorization<Field>::OpenMPLeftLookingSupernodeUpdate(
                                              descendant_supernode_size);
 
         BlasMatrixView<Field> scaled_transpose;
-        scaled_transpose.height = descendant_supernode_size;
-        scaled_transpose.width = descendant_main_intersect_size;
-        scaled_transpose.leading_dim = descendant_supernode_size;
-        scaled_transpose.data = private_state.scaled_transpose_buffer.Data();
-        FormScaledTranspose(factorization_type_copy, descendant_diag_block,
-                            descendant_main_matrix, &scaled_transpose);
+        if (control_.factorization_type != kCholeskyFactorization) {
+          scaled_transpose.height = descendant_supernode_size;
+          scaled_transpose.width = descendant_main_intersect_size;
+          scaled_transpose.leading_dim = descendant_supernode_size;
+          scaled_transpose.data = private_state.scaled_transpose_buffer.Data();
+          FormScaledTranspose(factorization_type_copy, descendant_diag_block,
+                              descendant_main_matrix, &scaled_transpose);
+        }
 
         BlasMatrixView<Field> main_active_block = main_lower_block.Submatrix(
             main_active_rel_row, 0, main_active_intersect_size,
@@ -179,8 +183,9 @@ void Factorization<Field>::OpenMPLeftLookingSupernodeUpdate(
         workspace_matrix.data = private_state.workspace_buffer.Data();
 
         UpdateSubdiagonalBlock(
-            main_supernode, descendant_supernode, main_active_rel_row,
-            descendant_main_rel_row, descendant_active_rel_row,
+            control_.factorization_type, main_supernode, descendant_supernode,
+            main_active_rel_row, descendant_main_rel_row,
+            descendant_main_matrix, descendant_active_rel_row,
             supernode_offsets_ref, supernode_member_to_index_ref,
             scaled_transpose.ToConst(), descendant_active_matrix,
             *lower_factor_ptr, &main_active_block, &workspace_matrix);

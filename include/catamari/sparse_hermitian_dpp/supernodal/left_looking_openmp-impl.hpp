@@ -112,7 +112,7 @@ void SupernodalHermitianDPP<Field>::OpenMPLeftLookingSupernodeUpdate(
       workspace_matrix.data = private_state.ldl_state.workspace_buffer.Data();
 
       supernodal_ldl::UpdateDiagonalBlock(
-          factorization_type, supernode_offsets_ref, *lower_factor_ptr,
+          kLDLAdjointFactorization, supernode_offsets_ref, *lower_factor_ptr,
           main_supernode, descendant_supernode, descendant_main_rel_row,
           descendant_main_matrix, scaled_transpose.ToConst(),
           &main_diagonal_block, &workspace_matrix);
@@ -187,8 +187,9 @@ void SupernodalHermitianDPP<Field>::OpenMPLeftLookingSupernodeUpdate(
         workspace_matrix.data = private_state.ldl_state.workspace_buffer.Data();
 
         supernodal_ldl::UpdateSubdiagonalBlock(
-            main_supernode, descendant_supernode, main_active_rel_row,
-            descendant_main_rel_row, descendant_active_rel_row,
+            kLDLAdjointFactorization, main_supernode, descendant_supernode,
+            main_active_rel_row, descendant_main_rel_row,
+            descendant_main_matrix, descendant_active_rel_row,
             supernode_offsets_ref, supernode_member_to_index_ref,
             scaled_transpose.ToConst(), descendant_active_matrix,
             *lower_factor_ptr, &main_active_block, &workspace_matrix);

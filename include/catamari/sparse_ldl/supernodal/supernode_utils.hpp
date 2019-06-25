@@ -343,9 +343,11 @@ void UpdateDiagonalBlock(
 // Z(:, m).
 template <class Field>
 void UpdateSubdiagonalBlock(
-    Int main_supernode, Int descendant_supernode, Int main_active_rel_row,
-    Int descendant_main_rel_row, Int descendant_active_rel_row,
-    const Buffer<Int>& supernode_starts,
+    SymmetricFactorizationType factorization_type, Int main_supernode,
+    Int descendant_supernode, Int main_active_rel_row,
+    Int descendant_main_rel_row,
+    const ConstBlasMatrixView<Field>& descendant_main_matrix,
+    Int descendant_active_rel_row, const Buffer<Int>& supernode_starts,
     const Buffer<Int>& supernode_member_to_index,
     const ConstBlasMatrixView<Field>& scaled_transpose,
     const ConstBlasMatrixView<Field>& descendant_active_matrix,

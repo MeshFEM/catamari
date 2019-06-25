@@ -86,7 +86,7 @@ void SupernodalHermitianDPP<Field>::LeftLookingSupernodeUpdate(
     workspace_matrix.data = private_state->ldl_state.workspace_buffer.Data();
 
     supernodal_ldl::UpdateDiagonalBlock(
-        factorization_type, ordering_.supernode_offsets, *lower_factor_,
+        kLDLAdjointFactorization, ordering_.supernode_offsets, *lower_factor_,
         main_supernode, descendant_supernode, descendant_main_rel_row,
         descendant_main_matrix, scaled_transpose.ToConst(),
         &main_diagonal_block, &workspace_matrix);
@@ -128,11 +128,12 @@ void SupernodalHermitianDPP<Field>::LeftLookingSupernodeUpdate(
           main_supernode_size);
 
       supernodal_ldl::UpdateSubdiagonalBlock(
-          main_supernode, descendant_supernode, main_active_rel_row,
-          descendant_main_rel_row, descendant_active_rel_row,
-          ordering_.supernode_offsets, supernode_member_to_index_,
-          scaled_transpose.ToConst(), descendant_active_matrix, *lower_factor_,
-          &main_active_block, &workspace_matrix);
+          kLDLAdjointFactorization, main_supernode, descendant_supernode,
+          main_active_rel_row, descendant_main_rel_row, descendant_main_matrix,
+          descendant_active_rel_row, ordering_.supernode_offsets,
+          supernode_member_to_index_, scaled_transpose.ToConst(),
+          descendant_active_matrix, *lower_factor_, &main_active_block,
+          &workspace_matrix);
 
       ++descendant_active_intersect_size_beg;
       descendant_active_rel_row += descendant_active_intersect_size;

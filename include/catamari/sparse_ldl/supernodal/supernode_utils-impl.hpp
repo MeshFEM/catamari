@@ -849,7 +849,7 @@ void UpdateDiagonalBlock(
     BlasMatrixView<Field>* workspace_matrix) {
   typedef ComplexBase<Field> Real;
   const Int main_supernode_size = main_diag_block->height;
-  const Int descendant_main_intersect_size = scaled_transpose.width;
+  const Int descendant_main_intersect_size = descendant_main_matrix.height;
 
   const bool inplace_update =
       descendant_main_intersect_size == main_supernode_size;
@@ -887,9 +887,11 @@ void UpdateDiagonalBlock(
 
 template <class Field>
 void UpdateSubdiagonalBlock(
-    Int main_supernode, Int descendant_supernode, Int main_active_rel_row,
-    Int descendant_main_rel_row, Int descendant_active_rel_row,
-    const Buffer<Int>& supernode_starts,
+    SymmetricFactorizationType factorization_type, Int main_supernode,
+    Int descendant_supernode, Int main_active_rel_row,
+    Int descendant_main_rel_row,
+    const ConstBlasMatrixView<Field>& descendant_main_matrix,
+    Int descendant_active_rel_row, const Buffer<Int>& supernode_starts,
     const Buffer<Int>& supernode_member_to_index,
     const ConstBlasMatrixView<Field>& scaled_transpose,
     const ConstBlasMatrixView<Field>& descendant_active_matrix,
@@ -898,7 +900,7 @@ void UpdateSubdiagonalBlock(
     BlasMatrixView<Field>* workspace_matrix) {
   const Int main_supernode_size = lower_factor.blocks[main_supernode].width;
   const Int main_active_intersect_size = main_active_block->height;
-  const Int descendant_main_intersect_size = scaled_transpose.width;
+  const Int descendant_main_intersect_size = descendant_main_matrix.height;
   const Int descendant_active_intersect_size = descendant_active_matrix.height;
   const bool inplace_update =
       main_active_intersect_size == descendant_active_intersect_size &&
@@ -906,8 +908,14 @@ void UpdateSubdiagonalBlock(
 
   BlasMatrixView<Field>* accumulation_matrix =
       inplace_update ? main_active_block : workspace_matrix;
-  MatrixMultiplyNormalNormal(Field{-1}, descendant_active_matrix,
-                             scaled_transpose, Field{1}, accumulation_matrix);
+  if (factorization_type == kCholeskyFactorization) {
+    MatrixMultiplyNormalAdjoint(Field{-1}, descendant_active_matrix,
+                                descendant_main_matrix, Field{1},
+                                accumulation_matrix);
+  } else {
+    MatrixMultiplyNormalNormal(Field{-1}, descendant_active_matrix,
+                               scaled_transpose, Field{1}, accumulation_matrix);
+  }
 
   if (!inplace_update) {
     const Int main_supernode_start = supernode_starts[main_supernode];
