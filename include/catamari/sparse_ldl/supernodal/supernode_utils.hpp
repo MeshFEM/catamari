@@ -62,6 +62,13 @@ struct LeftLookingSharedState {
   // supernode's structure.
   Buffer<const Int*> intersect_ptrs;
 
+  // Left-looking factorizations make use of linked lists of the descendants
+  // of each supernode.
+  Buffer<Int> descendant_lists;
+
+  // The heads of the linked lists used by left-looking factorizations.
+  Buffer<Int> descendant_list_heads;
+
 #ifdef CATAMARI_ENABLE_TIMERS
   // A separate timer for each supernode's inclusive processing time.
   Buffer<quotient::Timer> inclusive_timers;
@@ -97,9 +104,13 @@ struct PrivateState {
   // pattern.
   Buffer<Int> row_structure;
 
-  // A data structure for marking whether or not a supernode is in the pattern
+  // A data structure for marking whether or not a (super)node is in the pattern
   // of the active row of the lower-triangular factor.
   Buffer<Int> pattern_flags;
+
+  // A buffer for storing the relative indices mapping a descendant supernode's
+  // structure into one of its ancestor's structure.
+  Buffer<Int> relative_indices;
 
   // A buffer for storing (scaled) transposed descendant blocks.
   Buffer<Field> scaled_transpose_buffer;

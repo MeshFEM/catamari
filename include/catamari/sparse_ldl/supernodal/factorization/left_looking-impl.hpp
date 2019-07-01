@@ -21,149 +21,264 @@ namespace supernodal_ldl {
 
 template <class Field>
 void Factorization<Field>::LeftLookingSupernodeUpdate(
-    Int main_supernode, const CoordinateMatrix<Field>& matrix,
+    Int supernode, const CoordinateMatrix<Field>& matrix,
     LeftLookingSharedState* shared_state, PrivateState<Field>* private_state) {
-  BlasMatrixView<Field>& main_diagonal_block =
-      diagonal_factor_->blocks[main_supernode];
-  BlasMatrixView<Field>& main_lower_block =
-      lower_factor_->blocks[main_supernode];
-  const Int main_supernode_size = main_lower_block.width;
+  typedef ComplexBase<Field> Real;
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
+  const Int supernode_size = lower_block.width;
+  const Int supernode_degree = lower_block.height;
+  const Int supernode_offset = ordering_.supernode_offsets[supernode];
 
-  private_state->pattern_flags[main_supernode] = main_supernode;
+  // Scatter the pattern of this supernode into pattern_flags.
+  // TODO(Jack Poulson): Switch away from pointers to Int members.
+  const Int* structure = lower_factor_->StructureBeg(supernode);
+  for (Int i = 0; i < supernode_degree; ++i) {
+    private_state->pattern_flags[structure[i]] = i;
+  }
 
-  shared_state->rel_rows[main_supernode] = 0;
-  shared_state->intersect_ptrs[main_supernode] =
-      lower_factor_->IntersectionSizesBeg(main_supernode);
-
-  // Compute the supernodal row pattern.
-  const Int num_packed = ComputeRowPattern(
-      matrix, ordering_.permutation, ordering_.inverse_permutation,
-      ordering_.supernode_sizes, ordering_.supernode_offsets,
-      supernode_member_to_index_, ordering_.assembly_forest.parents,
-      main_supernode, private_state->pattern_flags.Data(),
-      private_state->row_structure.Data());
+  shared_state->rel_rows[supernode] = 0;
+  shared_state->intersect_ptrs[supernode] =
+      lower_factor_->IntersectionSizesBeg(supernode);
 
   // for J = find(L(K, :))
   //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
-  for (Int index = 0; index < num_packed; ++index) {
-    const Int descendant_supernode = private_state->row_structure[index];
-    CATAMARI_ASSERT(descendant_supernode < main_supernode,
-                    "Looking into upper triangle");
+  const Int head = shared_state->descendant_list_heads[supernode];
+  for (Int next_descendant = head; next_descendant >= 0;) {
+    const Int descendant = next_descendant;
+    CATAMARI_ASSERT(descendant < supernode, "Looking into upper triangle");
     const ConstBlasMatrixView<Field>& descendant_lower_block =
-        lower_factor_->blocks[descendant_supernode];
+        lower_factor_->blocks[descendant];
     const Int descendant_degree = descendant_lower_block.height;
-    const Int descendant_supernode_size = descendant_lower_block.width;
+    const Int descendant_size = descendant_lower_block.width;
 
-    const Int descendant_main_rel_row =
-        shared_state->rel_rows[descendant_supernode];
-    const Int descendant_main_intersect_size =
-        *shared_state->intersect_ptrs[descendant_supernode];
+    const Int descendant_main_rel_row = shared_state->rel_rows[descendant];
+    const Int intersect_size = *shared_state->intersect_ptrs[descendant];
+    CATAMARI_ASSERT(intersect_size > 0, "Non-positive intersection size.");
+
+    const Int* descendant_structure =
+        lower_factor_->StructureBeg(descendant) + descendant_main_rel_row;
+    CATAMARI_ASSERT(
+        descendant_structure < lower_factor_->StructureEnd(descendant),
+        "Relative row exceeded end of structure.");
+    CATAMARI_ASSERT(
+        supernode_member_to_index_[*descendant_structure] == supernode,
+        "First member of structure was not intersecting supernode.");
+    CATAMARI_ASSERT(
+        supernode_member_to_index_[descendant_structure[intersect_size - 1]] ==
+            supernode,
+        "Last member of structure was not intersecting supernode.");
 
     const ConstBlasMatrixView<Field> descendant_main_matrix =
         descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
-                                         descendant_main_intersect_size,
-                                         descendant_supernode_size);
+                                         intersect_size, descendant_size);
 
     BlasMatrixView<Field> scaled_transpose;
-
     if (control_.factorization_type != kCholeskyFactorization) {
-      scaled_transpose.height = descendant_supernode_size;
-      scaled_transpose.width = descendant_main_intersect_size;
-      scaled_transpose.leading_dim = descendant_supernode_size;
+      scaled_transpose.height = descendant_size;
+      scaled_transpose.width = intersect_size;
+      scaled_transpose.leading_dim = descendant_size;
       scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
-
-      FormScaledTranspose(
-          control_.factorization_type,
-          diagonal_factor_->blocks[descendant_supernode].ToConst(),
-          descendant_main_matrix, &scaled_transpose);
+      FormScaledTranspose(control_.factorization_type,
+                          diagonal_factor_->blocks[descendant].ToConst(),
+                          descendant_main_matrix, &scaled_transpose);
     }
 
+    const Int descendant_below_main_rel_row =
+        shared_state->rel_rows[descendant] + intersect_size;
+    const Int descendant_main_degree =
+        descendant_degree - descendant_main_rel_row;
+    const Int descendant_degree_remaining =
+        descendant_degree - descendant_below_main_rel_row;
+
+    // Construct mapping of descendant structure to supernode structure.
+    const bool inplace_diag_update = intersect_size == supernode_size;
+    const bool inplace_subdiag_update =
+        inplace_diag_update && descendant_degree_remaining == supernode_degree;
+    if (!inplace_subdiag_update) {
+      for (Int i_rel = 0; i_rel < descendant_main_degree; ++i_rel) {
+        const Int i = descendant_structure[i_rel];
+        if (i_rel < intersect_size) {
+          // Store the relative index in the diagonal block.
+          CATAMARI_ASSERT(
+              i >= supernode_offset && i < supernode_offset + supernode_size,
+              "Invalid relative diagonal block index.");
+          private_state->relative_indices[i_rel] = i - supernode_offset;
+        } else {
+          // Store the relative index in the lower structure.
+          private_state->relative_indices[i_rel] =
+              private_state->pattern_flags[i];
+          CATAMARI_ASSERT(
+              private_state->relative_indices[i_rel] >= 0 &&
+                  private_state->relative_indices[i_rel] < supernode_degree,
+              "Invalid subdiagonal relative index.");
+        }
+      }
+    }
+
+    // Update the diagonal block.
     BlasMatrixView<Field> workspace_matrix;
-    workspace_matrix.height = descendant_main_intersect_size;
-    workspace_matrix.width = descendant_main_intersect_size;
-    workspace_matrix.leading_dim = descendant_main_intersect_size;
+    workspace_matrix.height = intersect_size;
+    workspace_matrix.width = intersect_size;
+    workspace_matrix.leading_dim = intersect_size;
     workspace_matrix.data = private_state->workspace_buffer.Data();
+    if (inplace_diag_update) {
+      CATAMARI_START_TIMER(profile.herk);
+      if (control_.factorization_type == kCholeskyFactorization) {
+        LowerNormalHermitianOuterProduct(Real{-1}, descendant_main_matrix,
+                                         Real{1}, &diagonal_block);
+      } else {
+        MatrixMultiplyLowerNormalNormal(Field{-1}, descendant_main_matrix,
+                                        scaled_transpose.ToConst(), Field{1},
+                                        &diagonal_block);
+      }
+      CATAMARI_STOP_TIMER(profile.herk);
+    } else {
+      CATAMARI_START_TIMER(profile.herk);
+      if (control_.factorization_type == kCholeskyFactorization) {
+        LowerNormalHermitianOuterProduct(Real{-1}, descendant_main_matrix,
+                                         Real{0}, &workspace_matrix);
+      } else {
+        MatrixMultiplyLowerNormalNormal(Field{-1}, descendant_main_matrix,
+                                        scaled_transpose.ToConst(), Field{0},
+                                        &workspace_matrix);
+      }
+      CATAMARI_STOP_TIMER(profile.herk);
 
-    UpdateDiagonalBlock(
-        control_.factorization_type, ordering_.supernode_offsets,
-        *lower_factor_, main_supernode, descendant_supernode,
-        descendant_main_rel_row, descendant_main_matrix,
-        scaled_transpose.ToConst(), &main_diagonal_block, &workspace_matrix);
+      for (Int j_rel = 0; j_rel < intersect_size; ++j_rel) {
+        const Int j = private_state->relative_indices[j_rel];
+        for (Int i_rel = j_rel; i_rel < intersect_size; ++i_rel) {
+          const Int i = private_state->relative_indices[i_rel];
+          diagonal_block(i, j) += workspace_matrix(i_rel, j_rel);
+        }
+      }
+    }
+#ifdef CATAMARI_ENABLE_TIMERS
+    profile.herk_gflops +=
+        std::pow(1. * intersect_size, 2.) * descendant_size / 1.e9;
+#endif  // ifdefCATAMARI_ENABLE_TIMERS
 
-    shared_state->intersect_ptrs[descendant_supernode]++;
-    shared_state->rel_rows[descendant_supernode] +=
-        descendant_main_intersect_size;
+    shared_state->intersect_ptrs[descendant]++;
+    shared_state->rel_rows[descendant] = descendant_below_main_rel_row;
 
-    // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
-    //                = L(KNext:n, J) * Z(J, K).
-    const Int* descendant_active_intersect_size_beg =
-        shared_state->intersect_ptrs[descendant_supernode];
-    Int descendant_active_rel_row =
-        shared_state->rel_rows[descendant_supernode];
-    const Int* main_active_intersect_sizes =
-        lower_factor_->IntersectionSizesBeg(main_supernode);
-    Int main_active_rel_row = 0;
-    while (descendant_active_rel_row != descendant_degree) {
-      const Int descendant_active_intersect_size =
-          *descendant_active_intersect_size_beg;
+    next_descendant = shared_state->descendant_lists[descendant];
+    if (descendant_degree_remaining > 0) {
+      const ConstBlasMatrixView<Field> descendant_below_main_matrix =
+          descendant_lower_block.Submatrix(descendant_below_main_rel_row, 0,
+                                           descendant_degree_remaining,
+                                           descendant_size);
 
-      SeekForMainActiveRelativeRow(
-          main_supernode, descendant_supernode, descendant_active_rel_row,
-          supernode_member_to_index_, *lower_factor_, &main_active_rel_row,
-          &main_active_intersect_sizes);
-      const Int main_active_intersect_size = *main_active_intersect_sizes;
+      // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
+      //                = L(KNext:n, J) * Z(J, K).
+      if (inplace_subdiag_update) {
+        CATAMARI_START_TIMER(profile.gemm);
+        if (control_.factorization_type == kCholeskyFactorization) {
+          MatrixMultiplyNormalAdjoint(Field{-1}, descendant_below_main_matrix,
+                                      descendant_main_matrix, Field{1},
+                                      &lower_block);
+        } else {
+          MatrixMultiplyNormalNormal(Field{-1}, descendant_below_main_matrix,
+                                     scaled_transpose.ToConst(), Field{1},
+                                     &lower_block);
+        }
+        CATAMARI_STOP_TIMER(profile.gemm);
+      } else {
+        workspace_matrix.height = descendant_degree_remaining;
+        workspace_matrix.width = intersect_size;
+        workspace_matrix.leading_dim = descendant_degree_remaining;
 
-      const ConstBlasMatrixView<Field> descendant_active_matrix =
-          descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
-                                           descendant_active_intersect_size,
-                                           descendant_supernode_size);
+        CATAMARI_START_TIMER(profile.gemm);
+        if (control_.factorization_type == kCholeskyFactorization) {
+          MatrixMultiplyNormalAdjoint(Field{-1}, descendant_below_main_matrix,
+                                      descendant_main_matrix, Field{0},
+                                      &workspace_matrix);
+        } else {
+          MatrixMultiplyNormalNormal(Field{-1}, descendant_below_main_matrix,
+                                     scaled_transpose.ToConst(), Field{0},
+                                     &workspace_matrix);
+        }
+        CATAMARI_STOP_TIMER(profile.gemm);
 
-      // The width of the workspace matrix and pointer are already correct.
-      workspace_matrix.height = descendant_active_intersect_size;
-      workspace_matrix.leading_dim = descendant_active_intersect_size;
+        // Update the active diagonal block.
+        for (Int j_rel = 0; j_rel < intersect_size; ++j_rel) {
+          const Int j = private_state->relative_indices[j_rel];
+          CATAMARI_ASSERT(j >= 0 && j < supernode_size,
+                          "Invalid unpacked column index.");
+          CATAMARI_ASSERT(j + ordering_.supernode_offsets[supernode] ==
+                              descendant_structure[j_rel],
+                          "Mismatched unpacked column structure.");
+          for (Int i_rel = 0; i_rel < descendant_degree_remaining; ++i_rel) {
+            const Int i =
+                private_state->relative_indices[i_rel + intersect_size];
+            CATAMARI_ASSERT(i >= 0 && i < supernode_degree,
+                            "Invalid row index.");
+            CATAMARI_ASSERT(
+                structure[i] == descendant_structure[i_rel + intersect_size],
+                "Mismatched row structure.");
+            lower_block(i, j) += workspace_matrix(i_rel, j_rel);
+          }
+        }
+      }
+#ifdef CATAMARI_ENABLE_TIMERS
+      profile.gemm_gflops += 2. * intersect_size * descendant_size *
+                             descendant_degree_remaining / 1.e9;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
-      BlasMatrixView<Field> main_active_block = main_lower_block.Submatrix(
-          main_active_rel_row, 0, main_active_intersect_size,
-          main_supernode_size);
-
-      UpdateSubdiagonalBlock(
-          control_.factorization_type, main_supernode, descendant_supernode,
-          main_active_rel_row, descendant_main_rel_row, descendant_main_matrix,
-          descendant_active_rel_row, ordering_.supernode_offsets,
-          supernode_member_to_index_, scaled_transpose.ToConst(),
-          descendant_active_matrix, *lower_factor_, &main_active_block,
-          &workspace_matrix);
-
-      ++descendant_active_intersect_size_beg;
-      descendant_active_rel_row += descendant_active_intersect_size;
+      // Insert the descendant supernode into the list of its next ancestor.
+      // NOTE: We would need a lock for this in a multithreaded setting.
+      const Int next_ancestor =
+          supernode_member_to_index_[descendant_structure[intersect_size]];
+      shared_state->descendant_lists[descendant] =
+          shared_state->descendant_list_heads[next_ancestor];
+      shared_state->descendant_list_heads[next_ancestor] = descendant;
     }
   }
+
+  if (supernode_degree > 0) {
+    // Insert the supernode into the list of its parent.
+    // NOTE: We would need a lock for this in a multithreaded setting.
+    const Int parent = supernode_member_to_index_[structure[0]];
+    shared_state->descendant_lists[supernode] =
+        shared_state->descendant_list_heads[parent];
+    shared_state->descendant_list_heads[parent] = supernode;
+  }
+
+  // Clear the descendant list for this node.
+  shared_state->descendant_list_heads[supernode] = -1;
 }
 
 template <class Field>
 bool Factorization<Field>::LeftLookingSupernodeFinalize(
-    Int main_supernode, SparseLDLResult* result) {
-  BlasMatrixView<Field>& main_diagonal_block =
-      diagonal_factor_->blocks[main_supernode];
-  BlasMatrixView<Field>& main_lower_block =
-      lower_factor_->blocks[main_supernode];
-  const Int main_degree = main_lower_block.height;
-  const Int main_supernode_size = main_lower_block.width;
+    Int supernode, SparseLDLResult* result) {
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
+  const Int degree = lower_block.height;
+  const Int supernode_size = lower_block.width;
 
+  CATAMARI_START_TIMER(profile.cholesky);
   const Int num_supernode_pivots = FactorDiagonalBlock(
-      control_.block_size, control_.factorization_type, &main_diagonal_block);
+      control_.block_size, control_.factorization_type, &diagonal_block);
+  CATAMARI_STOP_TIMER(profile.cholesky);
   result->num_successful_pivots += num_supernode_pivots;
-  if (num_supernode_pivots < main_supernode_size) {
+  if (num_supernode_pivots < supernode_size) {
     return false;
   }
-  IncorporateSupernodeIntoLDLResult(main_supernode_size, main_degree, result);
-  if (!main_degree) {
+#ifdef CATAMARI_ENABLE_TIMERS
+  profile.cholesky_gflops += std::pow(1. * supernode_size, 3.) / 3.e9;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+  IncorporateSupernodeIntoLDLResult(supernode_size, degree, result);
+  if (!degree) {
     return true;
   }
 
-  CATAMARI_ASSERT(main_supernode_size > 0, "Supernode size was non-positive.");
+  CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
+  CATAMARI_START_TIMER(profile.trsm);
   SolveAgainstDiagonalBlock(control_.factorization_type,
-                            main_diagonal_block.ToConst(), &main_lower_block);
+                            diagonal_block.ToConst(), &lower_block);
+  CATAMARI_STOP_TIMER(profile.trsm);
+#ifdef CATAMARI_ENABLE_TIMERS
+  profile.trsm_gflops += std::pow(1. * supernode_size, 2.) * degree / 1.e9;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   return true;
 }
@@ -231,18 +346,23 @@ SparseLDLResult Factorization<Field>::LeftLooking(
   LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
+  shared_state.descendant_lists.Resize(num_supernodes);
+  shared_state.descendant_list_heads.Resize(num_supernodes, -1);
 #ifdef CATAMARI_ENABLE_TIMERS
   shared_state.inclusive_timers.Resize(num_supernodes);
   shared_state.exclusive_timers.Resize(num_supernodes);
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   PrivateState<Field> private_state;
-  private_state.row_structure.Resize(num_supernodes);
-  private_state.pattern_flags.Resize(num_supernodes);
-  private_state.scaled_transpose_buffer.Resize(
-      max_supernode_size_ * max_supernode_size_, Field{0});
-  private_state.workspace_buffer.Resize(
-      max_supernode_size_ * (max_supernode_size_ - 1), Field{0});
+  private_state.pattern_flags.Resize(matrix.NumRows());
+  private_state.relative_indices.Resize(matrix.NumRows());
+  if (control_.factorization_type != kCholeskyFactorization) {
+    private_state.scaled_transpose_buffer.Resize(
+        max_supernode_size_ * max_supernode_size_, Field{0});
+  }
+  const Int workspace_size = std::max(
+      max_lower_block_size_, max_supernode_size_ * (max_supernode_size_ - 1));
+  private_state.workspace_buffer.Resize(workspace_size, Field{0});
 
   SparseLDLResult result;
 
@@ -256,6 +376,14 @@ SparseLDLResult Factorization<Field>::LeftLooking(
       return result;
     }
   }
+
+#ifdef CATAMARI_DEBUG
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    CATAMARI_ASSERT(shared_state.rel_rows[supernode] ==
+                        lower_factor_->blocks[supernode].height,
+                    "Did not properly handle relative row offsets.");
+  }
+#endif  // ifdef CATAMARI_DEBUG
 
 #ifdef CATAMARI_ENABLE_TIMERS
   TruncatedForestTimersToDot(

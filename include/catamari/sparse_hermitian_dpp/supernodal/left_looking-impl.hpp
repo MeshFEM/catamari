@@ -17,6 +17,8 @@
 
 namespace catamari {
 
+// TODO(Jack Poulson): Incorporate improvements from the sparse left-looking
+// LDL.
 template <class Field>
 void SupernodalHermitianDPP<Field>::LeftLookingSupernodeUpdate(
     Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,

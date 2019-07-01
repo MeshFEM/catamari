@@ -288,8 +288,8 @@ SparseLDLResult Factorization<Field>::Factor(
 template <class Field>
 SparseLDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
-  // TODO(Jack Poulson): Check that the previous factorization had an identical
-  // sparsity pattern.
+// TODO(Jack Poulson): Check that the previous factorization had an identical
+// sparsity pattern.
 
 #ifdef CATAMARI_ENABLE_TIMERS
   profile.Reset();
