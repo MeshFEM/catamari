@@ -43,7 +43,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
 
   // for J = find(L(K, :))
   //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
-  const Int head = shared_state->descendant_list_heads[supernode];
+  const Int head = shared_state->descendants.heads[supernode];
   for (Int next_descendant = head; next_descendant >= 0;) {
     const Int descendant = next_descendant;
     CATAMARI_ASSERT(descendant < supernode, "Looking into upper triangle");
@@ -161,7 +161,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     shared_state->intersect_ptrs[descendant]++;
     shared_state->rel_rows[descendant] = descendant_below_main_rel_row;
 
-    next_descendant = shared_state->descendant_lists[descendant];
+    next_descendant = shared_state->descendants.lists[descendant];
     if (descendant_degree_remaining > 0) {
       const ConstBlasMatrixView<Field> descendant_below_main_matrix =
           descendant_lower_block.Submatrix(descendant_below_main_rel_row, 0,
@@ -228,9 +228,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
       // NOTE: We would need a lock for this in a multithreaded setting.
       const Int next_ancestor =
           supernode_member_to_index_[descendant_structure[intersect_size]];
-      shared_state->descendant_lists[descendant] =
-          shared_state->descendant_list_heads[next_ancestor];
-      shared_state->descendant_list_heads[next_ancestor] = descendant;
+      shared_state->descendants.Insert(next_ancestor, descendant);
     }
   }
 
@@ -238,13 +236,11 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     // Insert the supernode into the list of its parent.
     // NOTE: We would need a lock for this in a multithreaded setting.
     const Int parent = supernode_member_to_index_[structure[0]];
-    shared_state->descendant_lists[supernode] =
-        shared_state->descendant_list_heads[parent];
-    shared_state->descendant_list_heads[parent] = supernode;
+    shared_state->descendants.Insert(parent, supernode);
   }
 
   // Clear the descendant list for this node.
-  shared_state->descendant_list_heads[supernode] = -1;
+  shared_state->descendants.heads[supernode] = -1;
 }
 
 template <class Field>
@@ -346,8 +342,7 @@ SparseLDLResult Factorization<Field>::LeftLooking(
   LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
-  shared_state.descendant_lists.Resize(num_supernodes);
-  shared_state.descendant_list_heads.Resize(num_supernodes, -1);
+  shared_state.descendants.Initialize(num_supernodes);
 #ifdef CATAMARI_ENABLE_TIMERS
   shared_state.inclusive_timers.Resize(num_supernodes);
   shared_state.exclusive_timers.Resize(num_supernodes);

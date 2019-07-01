@@ -53,6 +53,31 @@ struct MergableStatus {
   Int num_merged_zeros;
 };
 
+// A data structure for maintaining singly linked lists eminating from each
+// supernode of a left-looking factorization.
+struct LinkedLists {
+  // A workspace of size 'num_supernodes' which contains the links in singly
+  // linked lists started by the non-negative indices of 'heads'.
+  Buffer<Int> lists;
+
+  // A map from each supernode to either the index of the start of a linked list
+  // in 'lists' or an empty list (signified by a negative index).
+  Buffer<Int> heads;
+
+  // Initializes empty linked lists eminating from each supernode.
+  void Initialize(Int num_supernodes) {
+    lists.Resize(num_supernodes);
+    heads.Resize(num_supernodes, -1);
+  }
+
+  // Inserts 'target_supernode' into the linked list associated with the
+  // 'source_supernode'.
+  void Insert(Int source_supernode, Int target_supernode) {
+    lists[target_supernode] = heads[source_supernode];
+    heads[source_supernode] = target_supernode;
+  }
+};
+
 struct LeftLookingSharedState {
   // The relative index of the active supernode within each supernode's
   // structure.
@@ -64,10 +89,7 @@ struct LeftLookingSharedState {
 
   // Left-looking factorizations make use of linked lists of the descendants
   // of each supernode.
-  Buffer<Int> descendant_lists;
-
-  // The heads of the linked lists used by left-looking factorizations.
-  Buffer<Int> descendant_list_heads;
+  LinkedLists descendants;
 
 #ifdef CATAMARI_ENABLE_TIMERS
   // A separate timer for each supernode's inclusive processing time.
