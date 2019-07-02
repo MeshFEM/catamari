@@ -182,6 +182,39 @@ void Factorization<Field>::InitializeFactors(
   if (control_.algorithm == kLeftLookingLDL) {
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                          supernode_member_to_index_);
+
+    // Compute the maximum of the diagonal and subdiagonal update sizes.
+    Int workspace_size = 0;
+    Int scaled_transpose_size = 0;
+    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+      const Int supernode_size = ordering_.supernode_sizes[supernode];
+      Int degree_remaining = supernode_degrees[supernode];
+      const Int* intersect_sizes_beg =
+          lower_factor_->IntersectionSizesBeg(supernode);
+      const Int* intersect_sizes_end =
+          lower_factor_->IntersectionSizesEnd(supernode);
+      for (const Int* iter = intersect_sizes_beg; iter != intersect_sizes_end;
+           ++iter) {
+        const Int intersect_size = *iter;
+        degree_remaining -= intersect_size;
+
+        // Handle the space for the diagonal block update.
+        workspace_size =
+            std::max(workspace_size, intersect_size * intersect_size);
+
+        // Handle the space for the lower update.
+        workspace_size =
+            std::max(workspace_size, intersect_size * degree_remaining);
+
+        if (control_.factorization_type != kCholeskyFactorization) {
+          // Increment the maximum scaled transpose size if necessary.
+          scaled_transpose_size =
+              std::max(scaled_transpose_size, supernode_size * intersect_size);
+        }
+      }
+    }
+    left_looking_workspace_size_ = workspace_size;
+    left_looking_scaled_transpose_size_ = scaled_transpose_size;
   }
 }
 

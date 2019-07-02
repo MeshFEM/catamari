@@ -353,11 +353,9 @@ SparseLDLResult Factorization<Field>::LeftLooking(
   private_state.relative_indices.Resize(matrix.NumRows());
   if (control_.factorization_type != kCholeskyFactorization) {
     private_state.scaled_transpose_buffer.Resize(
-        max_supernode_size_ * max_supernode_size_, Field{0});
+        left_looking_scaled_transpose_size_, Field{0});
   }
-  const Int workspace_size = std::max(
-      max_lower_block_size_, max_supernode_size_ * (max_supernode_size_ - 1));
-  private_state.workspace_buffer.Resize(workspace_size, Field{0});
+  private_state.workspace_buffer.Resize(left_looking_workspace_size_, Field{0});
 
   SparseLDLResult result;
 

@@ -241,6 +241,15 @@ class Factorization {
   // The largest number of entries in any supernode's lower block.
   Int max_lower_block_size_;
 
+  // The maximum workspace needed for a diagonal or subdiagonal update of a
+  // block column of a supernode.
+  Int left_looking_workspace_size_;
+
+  // The maximum workspace needed for storing the scaled transpose of an
+  // intersection of a block column with an ancestor supernode.
+  // This is only nonzero for LDL^T and LDL^H factorizations.
+  Int left_looking_scaled_transpose_size_;
+
   // The subdiagonal-block portion of the lower-triangular factor.
   std::unique_ptr<LowerFactor<Field>> lower_factor_;
 
