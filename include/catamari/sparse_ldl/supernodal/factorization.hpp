@@ -30,7 +30,7 @@ struct Control {
 
   // The choice of either left-looking or right-looking LDL' factorization.
   // There is currently no supernodal up-looking support.
-  LDLAlgorithm algorithm = kRightLookingLDL;
+  LDLAlgorithm algorithm = kAdaptiveLDL;
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.

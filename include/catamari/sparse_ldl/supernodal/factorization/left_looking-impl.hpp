@@ -96,23 +96,13 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     const bool inplace_subdiag_update =
         inplace_diag_update && descendant_degree_remaining == supernode_degree;
     if (!inplace_subdiag_update) {
-      for (Int i_rel = 0; i_rel < descendant_main_degree; ++i_rel) {
+      // Store the relative indices of the diagonal block.
+      for (Int i_rel = 0; i_rel < intersect_size; ++i_rel) {
         const Int i = descendant_structure[i_rel];
-        if (i_rel < intersect_size) {
-          // Store the relative index in the diagonal block.
-          CATAMARI_ASSERT(
-              i >= supernode_offset && i < supernode_offset + supernode_size,
-              "Invalid relative diagonal block index.");
-          private_state->relative_indices[i_rel] = i - supernode_offset;
-        } else {
-          // Store the relative index in the lower structure.
-          private_state->relative_indices[i_rel] =
-              private_state->pattern_flags[i];
-          CATAMARI_ASSERT(
-              private_state->relative_indices[i_rel] >= 0 &&
-                  private_state->relative_indices[i_rel] < supernode_degree,
-              "Invalid subdiagonal relative index.");
-        }
+        CATAMARI_ASSERT(
+            i >= supernode_offset && i < supernode_offset + supernode_size,
+            "Invalid relative diagonal block index.");
+        private_state->relative_indices[i_rel] = i - supernode_offset;
       }
     }
 
@@ -123,6 +113,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     workspace_matrix.leading_dim = intersect_size;
     workspace_matrix.data = private_state->workspace_buffer.Data();
     if (inplace_diag_update) {
+      // Apply the diagonal block update in-place.
       CATAMARI_START_TIMER(profile.herk);
       if (control_.factorization_type == kCholeskyFactorization) {
         LowerNormalHermitianOuterProduct(Real{-1}, descendant_main_matrix,
@@ -134,6 +125,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
       }
       CATAMARI_STOP_TIMER(profile.herk);
     } else {
+      // Form the diagonal block update out-of-place.
       CATAMARI_START_TIMER(profile.herk);
       if (control_.factorization_type == kCholeskyFactorization) {
         LowerNormalHermitianOuterProduct(Real{-1}, descendant_main_matrix,
@@ -145,6 +137,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
       }
       CATAMARI_STOP_TIMER(profile.herk);
 
+      // Apply the diagonal block update.
       for (Int j_rel = 0; j_rel < intersect_size; ++j_rel) {
         const Int j = private_state->relative_indices[j_rel];
         for (Int i_rel = j_rel; i_rel < intersect_size; ++i_rel) {
@@ -171,6 +164,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
       // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
       //                = L(KNext:n, J) * Z(J, K).
       if (inplace_subdiag_update) {
+        // Apply the subdiagonal block update in-place.
         CATAMARI_START_TIMER(profile.gemm);
         if (control_.factorization_type == kCholeskyFactorization) {
           MatrixMultiplyNormalAdjoint(Field{-1}, descendant_below_main_matrix,
@@ -183,10 +177,10 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
         }
         CATAMARI_STOP_TIMER(profile.gemm);
       } else {
+        // Form the subdiagonal block update out-of-place.
         workspace_matrix.height = descendant_degree_remaining;
         workspace_matrix.width = intersect_size;
         workspace_matrix.leading_dim = descendant_degree_remaining;
-
         CATAMARI_START_TIMER(profile.gemm);
         if (control_.factorization_type == kCholeskyFactorization) {
           MatrixMultiplyNormalAdjoint(Field{-1}, descendant_below_main_matrix,
@@ -199,7 +193,19 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
         }
         CATAMARI_STOP_TIMER(profile.gemm);
 
-        // Update the active diagonal block.
+        // Store the relative indices on the lower structure.
+        for (Int i_rel = intersect_size; i_rel < descendant_main_degree;
+             ++i_rel) {
+          const Int i = descendant_structure[i_rel];
+          private_state->relative_indices[i_rel] =
+              private_state->pattern_flags[i];
+          CATAMARI_ASSERT(
+              private_state->relative_indices[i_rel] >= 0 &&
+                  private_state->relative_indices[i_rel] < supernode_degree,
+              "Invalid subdiagonal relative index.");
+        }
+
+        // Apply the subdiagonal block update.
         for (Int j_rel = 0; j_rel < intersect_size; ++j_rel) {
           const Int j = private_state->relative_indices[j_rel];
           CATAMARI_ASSERT(j >= 0 && j < supernode_size,

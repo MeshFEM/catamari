@@ -409,8 +409,9 @@ int main(int argc, char** argv) {
   const int ldl_algorithm_int =
       parser.OptionalInput<int>("ldl_algorithm_int",
                                 "The LDL algorithm type.\n"
-                                "0:left-looking, 1:up-looking, 2:right-looking",
-                                2);
+                                "0:left-looking, 1:up-looking, 2:right-looking,"
+                                "3:adaptive",
+                                3);
   const Int block_size = parser.OptionalInput<Int>(
       "block_size", "The dense algorithmic block size.", 64);
 #ifdef CATAMARI_OPENMP

@@ -294,15 +294,24 @@ SparseLDLResult Factorization<Field>::Factor(
 
 #ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {
+    if (control_.algorithm == kAdaptiveLDL) {
+      control_.algorithm = kRightLookingLDL;
+    }
     #pragma omp parallel
     #pragma omp single
     OpenMPInitialFactorizationSetup(matrix);
   } else {
+    if (control_.algorithm == kAdaptiveLDL) {
+      control_.algorithm = kLeftLookingLDL;
+    }
     InitialFactorizationSetup(matrix);
   }
 #else
+  if (control_.algorithm == kAdaptiveLDL) {
+    control_.algorithm = kLeftLookingLDL;
+  }
   InitialFactorizationSetup(matrix);
-#endif
+#endif  // ifdef CATAMARI_OPENMP
 
   SparseLDLResult result;
   if (control_.algorithm == kLeftLookingLDL) {
@@ -318,12 +327,11 @@ SparseLDLResult Factorization<Field>::Factor(
   return result;
 }
 
+// TODO(Jack Poulson): Check that the previous factorization had an identical
+// sparsity pattern.
 template <class Field>
 SparseLDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
-// TODO(Jack Poulson): Check that the previous factorization had an identical
-// sparsity pattern.
-
 #ifdef CATAMARI_ENABLE_TIMERS
   profile.Reset();
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
