@@ -193,8 +193,7 @@ void FormFundamentalSupernodes(const AssemblyForest& scalar_forest,
 //
 MergableStatus MergableSupernode(Int child_size, Int child_degree,
                                  Int parent_size, Int parent_degree,
-                                 Int num_child_explicit_zeros,
-                                 Int num_parent_explicit_zeros,
+                                 Int num_child_zeros, Int num_parent_zeros,
                                  const Buffer<Int>& orig_member_to_index,
                                  const SupernodalRelaxationControl& control);
 
@@ -205,8 +204,7 @@ void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
                    const Buffer<Int>& children,
                    const Buffer<Int>& child_offsets,
                    const SupernodalRelaxationControl& control,
-                   Buffer<Int>* supernode_sizes,
-                   Buffer<Int>* num_explicit_zeros,
+                   Buffer<Int>* supernode_sizes, Buffer<Int>* num_zeros,
                    Buffer<Int>* last_merged_child, Buffer<Int>* merge_parents);
 
 // Walk up the tree in the original postordering, merging supernodes as we

@@ -188,41 +188,25 @@ inline void FormFundamentalSupernodes(const AssemblyForest& scalar_forest,
 
 inline MergableStatus MergableSupernode(
     Int child_size, Int child_degree, Int parent_size, Int parent_degree,
-    Int num_child_explicit_zeros, Int num_parent_explicit_zeros,
+    Int num_child_zeros, Int num_parent_zeros,
     const Buffer<Int>& orig_member_to_index,
     const SupernodalRelaxationControl& control) {
   MergableStatus status;
 
-  // Count the number of intersections of the child's structure with the
-  // parent supernode (and then leave the child structure pointer after the
-  // parent supernode).
-  //
-  // We know that any intersections of the child with the parent occur at the
-  // beginning of the child's structure. And, due to the nature of fundamental
-  // supernodes, there should be a single entry of intersection.
-  const Int num_child_parent_intersections = 1;
-  const Int num_missing_parent_intersections =
-      parent_size - num_child_parent_intersections;
-
-  // Since the structure of L21 contains the structure of L20, we need only
-  // compare the sizes of the structure of the parent supernode to the
-  // remaining structure size to know how many indices will need to be
-  // introduced into L20.
-  const Int remaining_child_degree =
-      child_degree - num_child_parent_intersections;
-  const Int num_missing_structure_indices =
-      parent_degree - remaining_child_degree;
-
+  // Since the child structure is contained in the union of the parent structure
+  // and parent supernode, we know how many rows of explicit zeros will be
+  // introduced underneath the diagonal block of the child supernode via the
+  // merger.
   const Int num_new_zeros =
-      (num_missing_parent_intersections + num_missing_structure_indices) *
-      child_size;
-  const Int num_old_zeros =
-      num_child_explicit_zeros + num_parent_explicit_zeros;
+      (parent_size + parent_degree - child_degree) * child_size;
+
+  const Int num_old_zeros = num_child_zeros + num_parent_zeros;
   const Int num_zeros = num_new_zeros + num_old_zeros;
   status.num_merged_zeros = num_zeros;
 
   // Check if the merge would meet the absolute merge criterion.
-  if (child_size + parent_size <= control.allowable_supernode_size ||
+  const Int combined_size = child_size + parent_size;
+  if (combined_size <= control.allowable_supernode_size ||
       num_zeros <= control.allowable_supernode_zeros) {
     status.mergable = true;
     return status;
@@ -230,21 +214,17 @@ inline MergableStatus MergableSupernode(
 
   // Check if the merge would meet the relative merge criterion.
   const Int num_expanded_entries =
-      /* num_nonzeros(L00) */
-      (child_size + (child_size + 1)) / 2 +
-      /* num_nonzeros(L10) */
-      parent_size * child_size +
-      /* num_nonzeros(L20) */
-      remaining_child_degree * child_size +
-      /* num_nonzeros(L11) */
-      (parent_size + (parent_size + 1)) / 2 +
-      /* num_nonzeros(L21) */
-      parent_degree * parent_size;
+      (combined_size * (combined_size + 1)) / 2 + parent_degree * combined_size;
+  CATAMARI_ASSERT(
+      num_expanded_entries > num_zeros,
+      "Number of expanded entries was <= the number of computed zeros.");
   if (num_zeros <=
       control.allowable_supernode_zero_ratio * num_expanded_entries) {
     status.mergable = true;
     return status;
   }
+
+  // TODO(Jack Poulson): Add more possibilities.
 
   status.mergable = false;
   return status;
@@ -257,8 +237,7 @@ inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
                           const Buffer<Int>& children,
                           const Buffer<Int>& child_offsets,
                           const SupernodalRelaxationControl& control,
-                          Buffer<Int>* supernode_sizes,
-                          Buffer<Int>* num_explicit_zeros,
+                          Buffer<Int>* supernode_sizes, Buffer<Int>* num_zeros,
                           Buffer<Int>* last_merged_child,
                           Buffer<Int>* merge_parents) {
   const Int child_beg = child_offsets[parent];
@@ -284,13 +263,12 @@ inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
       const Int parent_size = (*supernode_sizes)[parent];
       const Int parent_degree = orig_supernode_degrees[parent];
 
-      const Int num_child_explicit_zeros = (*num_explicit_zeros)[child];
-      const Int num_parent_explicit_zeros = (*num_explicit_zeros)[parent];
+      const Int num_child_zeros = (*num_zeros)[child];
+      const Int num_parent_zeros = (*num_zeros)[parent];
 
       const MergableStatus status = MergableSupernode(
-          child_size, child_degree, parent_size, parent_degree,
-          num_child_explicit_zeros, num_parent_explicit_zeros,
-          orig_member_to_index, control);
+          child_size, child_degree, parent_size, parent_degree, num_child_zeros,
+          num_parent_zeros, orig_member_to_index, control);
       if (status.mergable) {
         mergable_children.push_back(child_index);
         num_merged_zeros.push_back(status.num_merged_zeros);
@@ -324,19 +302,23 @@ inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
     (*supernode_sizes)[child] = 0;
 
     // Update the number of explicit zeros in the merged supernode.
-    (*num_explicit_zeros)[parent] = num_merged_zeros[merging_index];
+    (*num_zeros)[parent] = num_merged_zeros[merging_index];
 
     // Mark the child as merged.
     //
     // TODO(Jack Poulson): Consider following a similar strategy as quotient
     // and using SYMMETRIC_INDEX to pack a parent into the negative indices.
 
+    // Build the new uplink from the child in the assembly tree. We connect up
+    // to the last merged child of the parent since the parent start location
+    // moves to the merged child's supernodal index.
     if ((*last_merged_child)[parent] == -1) {
       (*merge_parents)[child] = parent;
     } else {
       (*merge_parents)[child] = (*last_merged_child)[parent];
     }
 
+    // Build the new downlink from the parent in the assembly tree.
     if ((*last_merged_child)[child] == -1) {
       (*last_merged_child)[parent] = child;
     } else {
@@ -377,14 +359,14 @@ inline void RelaxSupernodes(const Buffer<Int>& orig_parents,
   Buffer<Int> supernode_sizes = orig_supernode_sizes;
 
   // Initialize the number of explicit zeros stored in each original supernode.
-  Buffer<Int> num_explicit_zeros(num_supernodes, 0);
+  Buffer<Int> num_zeros(num_supernodes, 0);
 
   Buffer<Int> last_merged_children(num_supernodes, -1);
   Buffer<Int> merge_parents(num_supernodes, -1);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     MergeChildren(supernode, orig_supernode_starts, orig_supernode_sizes,
                   orig_supernode_degrees, orig_member_to_index, children,
-                  child_offsets, control, &supernode_sizes, &num_explicit_zeros,
+                  child_offsets, control, &supernode_sizes, &num_zeros,
                   &last_merged_children, &merge_parents);
   }
 
