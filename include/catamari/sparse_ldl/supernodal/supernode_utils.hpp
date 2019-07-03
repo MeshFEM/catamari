@@ -24,20 +24,16 @@ struct SupernodalRelaxationControl {
   //   multifrontal method", 1989.
   bool relax_supernodes = false;
 
-  // Any supernode merge that results in this number of columns or fewer is
-  // always allowed.
-  Int allowable_supernode_size = 4;
-
-  // The allowable number of explicit zeros in any relaxed supernode.
-  Int allowable_supernode_zeros = 128;
-
-  // The allowable ratio of explicit zeros in any relaxed supernode. This
-  // should be interpreted as an *alternative* allowance for a supernode merge.
-  // If the number of explicit zeros that would be introduced is less than or
-  // equal to 'allowable_supernode_zeros', *or* the ratio of explicit zeros to
-  // nonzeros is bounded by 'allowable_supernode_zero_ratio', then the merge
-  // can procede.
-  float allowable_supernode_zero_ratio = 0.01;
+  // A list of pairs of bounding combined supernode sizes and explicit zero
+  // ratios for deciding child/parent supernode mergability.
+  //
+  // These constants match that of CHOLMOD (Davis et al.).
+  std::vector<std::pair<Int, float>> cutoff_pairs{
+      std::make_pair(4, 1.f),
+      std::make_pair(16, 0.8f),
+      std::make_pair(48, 0.1f),
+      std::make_pair(std::numeric_limits<Int>::max(), 0.05f),
+  };
 };
 
 namespace supernodal_ldl {

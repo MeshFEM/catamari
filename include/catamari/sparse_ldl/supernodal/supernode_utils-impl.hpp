@@ -204,27 +204,20 @@ inline MergableStatus MergableSupernode(
   const Int num_zeros = num_new_zeros + num_old_zeros;
   status.num_merged_zeros = num_zeros;
 
-  // Check if the merge would meet the absolute merge criterion.
   const Int combined_size = child_size + parent_size;
-  if (combined_size <= control.allowable_supernode_size ||
-      num_zeros <= control.allowable_supernode_zeros) {
-    status.mergable = true;
-    return status;
-  }
-
-  // Check if the merge would meet the relative merge criterion.
   const Int num_expanded_entries =
       (combined_size * (combined_size + 1)) / 2 + parent_degree * combined_size;
   CATAMARI_ASSERT(
       num_expanded_entries > num_zeros,
       "Number of expanded entries was <= the number of computed zeros.");
-  if (num_zeros <=
-      control.allowable_supernode_zero_ratio * num_expanded_entries) {
-    status.mergable = true;
-    return status;
-  }
 
-  // TODO(Jack Poulson): Add more possibilities.
+  for (const std::pair<Int, float>& cutoff : control.cutoff_pairs) {
+    const Int num_zeros_cutoff = num_expanded_entries * cutoff.second;
+    if (cutoff.first >= combined_size && num_zeros_cutoff >= num_zeros) {
+      status.mergable = true;
+      return status;
+    }
+  }
 
   status.mergable = false;
   return status;

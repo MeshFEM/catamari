@@ -395,12 +395,6 @@ int main(int argc, char** argv) {
                                 2);
   const bool relax_supernodes = parser.OptionalInput<bool>(
       "relax_supernodes", "Relax the supernodes?", true);
-  const Int allowable_supernode_zeros =
-      parser.OptionalInput<Int>("allowable_supernode_zeros",
-                                "Number of zeros allowed in relaxations.", 128);
-  const float allowable_supernode_zero_ratio = parser.OptionalInput<float>(
-      "allowable_supernode_zero_ratio",
-      "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const double relative_shift = parser.OptionalInput<Real>(
       "relative_shift", "We add || A ||_F * relative_shift to the diagonal",
       2.1);
@@ -479,10 +473,6 @@ int main(int argc, char** argv) {
     sn_control.sort_grain_size = sort_grain_size;
 #endif  // ifdef CATAMARI_OPENMP
     sn_control.relaxation_control.relax_supernodes = relax_supernodes;
-    sn_control.relaxation_control.allowable_supernode_zeros =
-        allowable_supernode_zeros;
-    sn_control.relaxation_control.allowable_supernode_zero_ratio =
-        allowable_supernode_zero_ratio;
   }
 
   if (!matrix_market_directory.empty()) {
