@@ -156,7 +156,7 @@ void Factorization<Field>::LeftLookingSupernodeUpdate(
     }
 #ifdef CATAMARI_ENABLE_TIMERS
     profile.herk_gflops +=
-        std::pow(1. * intersect_size, 2.) * descendant_size / 1.e9;
+        intersect_size * (intersect_size + 1.) * descendant_size / 1.e9;
 #endif  // ifdefCATAMARI_ENABLE_TIMERS
 
     shared_state->intersect_ptrs[descendant]++;
@@ -279,7 +279,10 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(
     return false;
   }
 #ifdef CATAMARI_ENABLE_TIMERS
-  profile.cholesky_gflops += std::pow(1. * supernode_size, 3.) / 3.e9;
+  profile.cholesky_gflops +=
+      supernode_size *
+      (supernode_size * (supernode_size / 3.) + supernode_size / 2. - 5. / 6.) /
+      1.e9;
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
   IncorporateSupernodeIntoLDLResult(supernode_size, degree, result);
   if (!degree) {
@@ -350,17 +353,11 @@ bool Factorization<Field>::LeftLookingSubtree(
   return succeeded;
 }
 
+// We no longer support OpenMP in the left-looking factorization.
 template <class Field>
 SparseLDLResult Factorization<Field>::LeftLooking(
     const CoordinateMatrix<Field>& matrix) {
   CATAMARI_START_TIMER(profile.left_looking);
-#ifdef CATAMARI_OPENMP
-  if (omp_get_max_threads() > 1) {
-    const SparseLDLResult result = OpenMPLeftLooking(matrix);
-    CATAMARI_STOP_TIMER(profile.left_looking);
-    return result;
-  }
-#endif
   const Int num_supernodes = ordering_.supernode_sizes.Size();
 
   CATAMARI_START_TIMER(profile.left_looking_allocate);

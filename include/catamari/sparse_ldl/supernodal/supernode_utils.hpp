@@ -10,6 +10,7 @@
 
 #include "catamari/buffer.hpp"
 #include "catamari/sparse_ldl/scalar.hpp"
+#include "catamari/symmetric_ordering.hpp"
 
 #ifdef CATAMARI_ENABLE_TIMERS
 #include "quotient/timer.hpp"
@@ -118,10 +119,6 @@ struct RightLookingSharedState {
 
 template <typename Field>
 struct PrivateState {
-  // An integer workspace for storing the supernodes in the current row
-  // pattern.
-  Buffer<Int> row_structure;
-
   // A data structure for marking whether or not a (super)node is in the pattern
   // of the active row of the lower-triangular factor.
   Buffer<Int> pattern_flags;
@@ -207,35 +204,13 @@ void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
 // progress. The 'relaxed_permutation' and 'relaxed_inverse_permutation'
 // variables are also inputs.
 void RelaxSupernodes(const Buffer<Int>& orig_parents,
-                     const Buffer<Int>& orig_supernode_sizes,
-                     const Buffer<Int>& orig_supernode_starts,
-                     const Buffer<Int>& orig_supernode_parents,
+                     const SymmetricOrdering& orig_ordering,
                      const Buffer<Int>& orig_supernode_degrees,
                      const Buffer<Int>& orig_member_to_index,
                      const SupernodalRelaxationControl& control,
-                     Buffer<Int>* relaxed_permutation,
-                     Buffer<Int>* relaxed_inverse_permutation,
-                     Buffer<Int>* relaxed_supernode_parents,
+                     SymmetricOrdering* relaxed_ordering,
                      Buffer<Int>* relaxed_supernode_degrees,
-                     Buffer<Int>* relaxed_supernode_sizes,
-                     Buffer<Int>* relaxed_supernode_starts,
                      Buffer<Int>* relaxed_supernode_member_to_index);
-
-// Computes the sizes of the structures of a supernodal LDL' factorization.
-template <class Field>
-void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
-                       const SymmetricOrdering& ordering,
-                       const AssemblyForest& forest,
-                       const Buffer<Int>& member_to_index,
-                       Buffer<Int>* supernode_degrees);
-#ifdef CATAMARI_OPENMP
-template <class Field>
-void OpenMPSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
-                             const SymmetricOrdering& ordering,
-                             const AssemblyForest& forest,
-                             const Buffer<Int>& member_to_index,
-                             Buffer<Int>* supernode_degrees);
-#endif  // ifdef CATAMARI_OPENMP
 
 // Fills an estimate of the work required to eliminate the subtree in a
 // right-looking factorization.
@@ -287,18 +262,6 @@ void OpenMPFillZeros(const SymmetricOrdering& ordering,
                      LowerFactor<Field>* lower_factor,
                      DiagonalFactor<Field>* diagonal_factor);
 #endif  // ifdef CATAMARI_OPENMP
-
-// Computes the supernodal nonzero pattern of L(row, :) in
-// row_structure[0 : num_packed - 1].
-template <class Field>
-Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
-                      const Buffer<Int>& permutation,
-                      const Buffer<Int>& inverse_permutation,
-                      const Buffer<Int>& supernode_sizes,
-                      const Buffer<Int>& supernode_starts,
-                      const Buffer<Int>& member_to_index,
-                      const Buffer<Int>& supernode_parents, Int main_supernode,
-                      Int* pattern_flags, Int* row_structure);
 
 // Store the scaled adjoint update matrix, Z(d, m) = D(d, d) L(m, d)', or
 // the scaled transpose, Z(d, m) = D(d, d) L(m, d)^T.

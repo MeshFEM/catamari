@@ -369,6 +369,12 @@ int main(int argc, char** argv) {
   const bool aggressive_absorption = parser.OptionalInput<bool>(
       "aggressive_absorption", "Eliminate elements with aggressive absorption?",
       true);
+  const bool mass_elimination = parser.OptionalInput<bool>(
+      "mass_elimination", "Perform element 'mass elimination' absorption?",
+      true);
+  const bool push_pivot_into_front = parser.OptionalInput<bool>(
+      "push_pivot_into_front",
+      "When constructing element lists in AMD, put pivot in front?", true);
   const Int min_dense_threshold = parser.OptionalInput<Int>(
       "min_dense_threshold",
       "Lower-bound on non-diagonal nonzeros for a row to be dense. The actual "
@@ -452,6 +458,8 @@ int main(int argc, char** argv) {
     md_control.allow_supernodes = allow_supernodes;
     md_control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
     md_control.aggressive_absorption = aggressive_absorption;
+    md_control.mass_elimination = mass_elimination;
+    md_control.push_pivot_into_front = push_pivot_into_front;
     md_control.min_dense_threshold = min_dense_threshold;
     md_control.dense_sqrt_multiple = dense_sqrt_multiple;
   }

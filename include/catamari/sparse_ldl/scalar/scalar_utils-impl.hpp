@@ -14,8 +14,429 @@ namespace catamari {
 namespace scalar_ldl {
 
 template <class Field>
-void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
-                                 Buffer<Int>* parents, Buffer<Int>* degrees) {
+void EliminationForest(const CoordinateMatrix<Field>& matrix,
+                       Buffer<Int>* parents, Buffer<Int>* ancestors) {
+  const Int num_rows = matrix.NumRows();
+
+  // Initialize all of the parent indices as unset.
+  parents->Resize(num_rows, -1);
+
+  // For performing path compression.
+  ancestors->Resize(num_rows, -1);
+
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int row = 0; row < num_rows; ++row) {
+    const Int row_beg = matrix.RowEntryOffset(row);
+    const Int row_end = matrix.RowEntryOffset(row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      Int column = entry.column;
+
+      // We are traversing the strictly lower triangle and know that the
+      // indices are sorted.
+      if (column >= row) {
+        continue;
+      }
+
+      while (true) {
+        const Int ancestor = (*ancestors)[column];
+        if (ancestor == row) {
+          // We reached the root of the subtree rooted at 'row', so there
+          // was no change to the elimination tree.
+          break;
+        }
+
+        // Compress the path from column to row.
+        (*ancestors)[column] = row;
+
+        if (ancestor == -1) {
+          // We found a new edge in the elimination tree.
+          (*parents)[column] = row;
+          break;
+        }
+
+        // Move one more step up the tree.
+        column = ancestor;
+      }
+    }
+  }
+}
+
+template <class Field>
+void EliminationForest(const CoordinateMatrix<Field>& matrix,
+                       const SymmetricOrdering& ordering, Buffer<Int>* parents,
+                       Buffer<Int>* ancestors) {
+  if (ordering.permutation.Empty()) {
+    EliminationForest(matrix, parents, ancestors);
+    return;
+  }
+  const Int num_rows = matrix.NumRows();
+
+  // Initialize all of the parent indices as unset.
+  parents->Resize(num_rows, -1);
+
+  // For performing path compression.
+  ancestors->Resize(num_rows, -1);
+
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int row = 0; row < num_rows; ++row) {
+    const Int orig_row = ordering.inverse_permutation[row];
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      Int column = ordering.permutation[entry.column];
+
+      // We are traversing the strictly lower triangle and know that the
+      // indices are sorted.
+      if (column >= row) {
+        continue;
+      }
+
+      while (true) {
+        const Int ancestor = (*ancestors)[column];
+        if (ancestor == row) {
+          // We reached the root of the subtree rooted at 'row', so there
+          // was no change to the elimination tree.
+          break;
+        }
+
+        // Compress the path from column to row.
+        (*ancestors)[column] = row;
+
+        if (ancestor == -1) {
+          // We found a new edge in the elimination tree.
+          (*parents)[column] = row;
+          break;
+        }
+
+        // Move one more step up the tree.
+        column = ancestor;
+      }
+    }
+  }
+}
+
+template <class Field>
+void EliminationForest(const CoordinateMatrix<Field>& matrix,
+                       Buffer<Int>* parents) {
+  Buffer<Int> ancestors;
+  EliminationForest(matrix, parents, &ancestors);
+}
+
+template <class Field>
+void EliminationForest(const CoordinateMatrix<Field>& matrix,
+                       const SymmetricOrdering& ordering,
+                       Buffer<Int>* parents) {
+  Buffer<Int> ancestors;
+  EliminationForest(matrix, ordering, parents, &ancestors);
+}
+
+inline Int PostorderDepthFirstSearch(Int root, Int offset,
+                                     const Buffer<Int>& child_lists,
+                                     Buffer<Int>* child_list_heads,
+                                     std::stack<Int>* node_stack,
+                                     Buffer<Int>* postorder) {
+  node_stack->push(root);
+  while (!node_stack->empty()) {
+    const Int top = node_stack->top();
+    const Int child = (*child_list_heads)[top];
+    if (child == -1) {
+      node_stack->pop();
+      (*postorder)[offset++] = top;
+    } else {
+      (*child_list_heads)[top] = child_lists[child];
+      node_stack->push(child);
+    }
+  }
+  return offset;
+}
+
+inline void PostorderFromEliminationForest(const Buffer<Int>& parents,
+                                           Buffer<Int>* postorder) {
+  const Int num_rows = parents.Size();
+
+  // Construct the linked lists for the lists of children.
+  Buffer<Int> child_list_heads(num_rows, -1);
+  Buffer<Int> child_lists(num_rows);
+  for (Int row = num_rows - 1; row >= 0; --row) {
+    const Int parent = parents[row];
+    if (parent != -1) {
+      // Insert this row into the linked list of the parent.
+      child_lists[row] = child_list_heads[parent];
+      child_list_heads[parent] = row;
+    }
+  }
+
+  // TODO(Jack Poulson): Consider using an std::vector or Buffer so that we can
+  // preallocate 'num_rows' rather than relying on the std::dequeue dynamic
+  // allocation.
+  std::stack<Int> node_stack;
+
+  Int offset = 0;
+  postorder->Resize(num_rows);
+  for (Int row = 0; row < num_rows; ++row) {
+    if (parents[row] == -1) {
+      // Execute a depth first search from this root in the forst.
+      offset = PostorderDepthFirstSearch(
+          row, offset, child_lists, &child_list_heads, &node_stack, postorder);
+    }
+  }
+}
+
+// TODO(Jack Poulson): Prevent redundancy with version with an ordering.
+template <class Field>
+void DegreesFromEliminationForest(const CoordinateMatrix<Field>& matrix,
+                                  const Buffer<Int>& parents,
+                                  const Buffer<Int>& postorder,
+                                  Buffer<Int>* degrees) {
+  const Int num_rows = matrix.NumRows();
+  degrees->Resize(num_rows);
+
+  // Initialize the first descendants and levels of the elimination tree.
+  Buffer<Int> levels(num_rows);
+  Buffer<Int> first_descs(num_rows, -1);
+  for (Int row_post = 0; row_post < num_rows; ++row_post) {
+    const Int row = postorder[row_post];
+
+    // As described in Fig. 3 of Gilbert,Ng, and Peyton's "An efficient
+    // algorithm to compute row and column counts for sparse Cholesky
+    // factorization", the column counts of leaves should be initialized as
+    // 1, whereas those of non-leaves should start at zero.
+    // Note that we can identify the 'wt' variable with 'cc'
+    // (the column counts, which are one more than the final degrees).
+    (*degrees)[row] = first_descs[row] == -1 ? 1 : 0;
+
+    // Traverse up the tree until we either encounter an ancestor whose level
+    // we already know, or we hit the root of the tree.
+    Int length, ancestor;
+    for (length = 0, ancestor = row;
+         ancestor != -1 && first_descs[ancestor] == -1;
+         ancestor = parents[ancestor], ++length) {
+      first_descs[ancestor] = row_post;
+    }
+    if (ancestor == -1) {
+      // Go back down to the root node.
+      --length;
+    } else {
+      // We stopped at an ancestor whose level we knew.
+      length += levels[ancestor];
+    }
+
+    // Fill in the levels between the start and where we stopped.
+    for (Int a = row; a != ancestor; a = parents[a], --length) {
+      levels[a] = length;
+    }
+  }
+
+  Buffer<Int> prev_neighbors(num_rows, -1);
+  Buffer<Int> prev_leafs(num_rows, -1);
+
+  // Initialize trivial supernodes.
+  Buffer<Int> set_parents(num_rows);
+  for (Int i = 0; i < num_rows; ++i) {
+    set_parents[i] = i;
+  }
+
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int row_post = 0; row_post < num_rows; ++row_post) {
+    const Int row = postorder[row_post];
+
+    // Subtract one from the column count of the parent (if it exists).
+    const Int parent = parents[row];
+    if (parent != -1) {
+      --(*degrees)[parent];
+    }
+
+    // Mark the equivalent of pattern_flags.
+    prev_neighbors[row] = row_post;
+
+    const Int row_beg = matrix.RowEntryOffset(row);
+    const Int row_end = matrix.RowEntryOffset(row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      const Int column = entry.column;
+      if (column <= row) {
+        continue;
+      }
+
+      if (first_descs[row] > prev_neighbors[column]) {
+        // 'row' is a leaf in the subtree rooted at 'column'.
+        ++(*degrees)[row];
+        const Int prev_leaf = prev_leafs[column];
+        if (prev_leaf != -1) {
+          // Find the root of the set containing 'prev_leaf'.
+          Int set_root = prev_leaf;
+          while (set_root != set_parents[set_root]) {
+            set_root = set_parents[set_root];
+          }
+
+          // Walk up the tree from the previous leaf to the set root, filling
+          // in the set root as the ancestor of each traversed member.
+          Int ancestor = prev_leaf;
+          while (ancestor != set_root) {
+            const Int next_ancestor = set_parents[ancestor];
+            set_parents[ancestor] = set_root;
+            ancestor = next_ancestor;
+          }
+
+          --(*degrees)[set_root];
+        }
+
+        prev_leafs[column] = row;
+      }
+      prev_neighbors[column] = row_post;
+    }
+
+    // Perform UNION(row, parent(row)).
+    if (parents[row] != -1) {
+      set_parents[row] = parents[row];
+    }
+  }
+
+  // Accumulate the column counts up the tree and convert from column counts
+  // into external degrees.
+  for (Int row = 0; row < num_rows; ++row) {
+    // Add this column count onto its parent, if it exists.
+    const Int parent = parents[row];
+    if (parent != -1) {
+      (*degrees)[parent] += (*degrees)[row];
+    }
+
+    // Convert the column count into a scalar external degree.
+    --(*degrees)[row];
+  }
+}
+
+template <class Field>
+void DegreesFromEliminationForest(const CoordinateMatrix<Field>& matrix,
+                                  const SymmetricOrdering& ordering,
+                                  const Buffer<Int>& parents,
+                                  const Buffer<Int>& postorder,
+                                  Buffer<Int>* degrees) {
+  const Int num_rows = matrix.NumRows();
+  degrees->Resize(num_rows);
+
+  // Initialize the first descendants and levels of the elimination tree.
+  Buffer<Int> levels(num_rows);
+  Buffer<Int> first_descs(num_rows, -1);
+  for (Int row_post = 0; row_post < num_rows; ++row_post) {
+    const Int row = postorder[row_post];
+
+    // As described in Fig. 3 of Gilbert,Ng, and Peyton's "An efficient
+    // algorithm to compute row and column counts for sparse Cholesky
+    // factorization", the column counts of leaves should be initialized as
+    // 1, whereas those of non-leaves should start at zero.
+    // Note that we can identify the 'wt' variable with 'cc'
+    // (the column counts, which are one more than the final degrees).
+    (*degrees)[row] = first_descs[row] == -1 ? 1 : 0;
+
+    // Traverse up the tree until we either encounter an ancestor whose level
+    // we already know, or we hit the root of the tree.
+    Int length, ancestor;
+    for (length = 0, ancestor = row;
+         ancestor != -1 && first_descs[ancestor] == -1;
+         ancestor = parents[ancestor], ++length) {
+      first_descs[ancestor] = row_post;
+    }
+    if (ancestor == -1) {
+      // Go back down to the root node.
+      --length;
+    } else {
+      // We stopped at an ancestor whose level we knew.
+      length += levels[ancestor];
+    }
+
+    // Fill in the levels between the start and where we stopped.
+    for (Int a = row; a != ancestor; a = parents[a], --length) {
+      levels[a] = length;
+    }
+  }
+
+  Buffer<Int> prev_neighbors(num_rows, -1);
+  Buffer<Int> prev_leafs(num_rows, -1);
+
+  // Initialize trivial supernodes.
+  Buffer<Int> set_parents(num_rows);
+  for (Int i = 0; i < num_rows; ++i) {
+    set_parents[i] = i;
+  }
+
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
+  for (Int row_post = 0; row_post < num_rows; ++row_post) {
+    const Int row = postorder[row_post];
+
+    // Subtract one from the column count of the parent (if it exists).
+    const Int parent = parents[row];
+    if (parent != -1) {
+      --(*degrees)[parent];
+    }
+
+    // Mark the equivalent of pattern_flags.
+    prev_neighbors[row] = row_post;
+
+    const Int orig_row = ordering.inverse_permutation[row];
+    const Int row_beg = matrix.RowEntryOffset(orig_row);
+    const Int row_end = matrix.RowEntryOffset(orig_row + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      const Int column = ordering.permutation[entry.column];
+      if (column <= row) {
+        continue;
+      }
+
+      if (first_descs[row] > prev_neighbors[column]) {
+        // 'row' is a leaf in the subtree rooted at 'column'.
+        ++(*degrees)[row];
+        const Int prev_leaf = prev_leafs[column];
+        if (prev_leaf != -1) {
+          // Find the root of the set containing 'prev_leaf'.
+          Int set_root = prev_leaf;
+          while (set_root != set_parents[set_root]) {
+            set_root = set_parents[set_root];
+          }
+
+          // Walk up the tree from the previous leaf to the set root, filling
+          // in the set root as the ancestor of each traversed member.
+          Int ancestor = prev_leaf;
+          while (ancestor != set_root) {
+            const Int next_ancestor = set_parents[ancestor];
+            set_parents[ancestor] = set_root;
+            ancestor = next_ancestor;
+          }
+
+          --(*degrees)[set_root];
+        }
+
+        prev_leafs[column] = row;
+      }
+      prev_neighbors[column] = row_post;
+    }
+
+    // Perform UNION(row, parent(row)).
+    if (parents[row] != -1) {
+      set_parents[row] = parents[row];
+    }
+  }
+
+  // Accumulate the column counts up the tree and convert from column counts
+  // into external degrees.
+  for (Int row = 0; row < num_rows; ++row) {
+    // Add this column count onto its parent, if it exists.
+    const Int parent = parents[row];
+    if (parent != -1) {
+      (*degrees)[parent] += (*degrees)[row];
+    }
+
+    // Convert the column count into a scalar external degree.
+    --(*degrees)[row];
+  }
+}
+
+template <class Field>
+void SimpleEliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
+                                       Buffer<Int>* parents,
+                                       Buffer<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
 
   // Initialize all of the parent indices as unset.
@@ -68,11 +489,12 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
-                                 const SymmetricOrdering& ordering,
-                                 Buffer<Int>* parents, Buffer<Int>* degrees) {
+void SimpleEliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
+                                       const SymmetricOrdering& ordering,
+                                       Buffer<Int>* parents,
+                                       Buffer<Int>* degrees) {
   if (ordering.permutation.Empty()) {
-    EliminationForestAndDegrees(matrix, parents, degrees);
+    SimpleEliminationForestAndDegrees(matrix, parents, degrees);
     return;
   }
   const Int num_rows = matrix.NumRows();
@@ -126,6 +548,29 @@ void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
       }
     }
   }
+}
+
+template <class Field>
+void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
+                                 Buffer<Int>* parents, Buffer<Int>* degrees) {
+  EliminationForest(matrix, parents);
+  Buffer<Int> postorder;
+  PostorderFromEliminationForest(*parents, &postorder);
+  DegreesFromEliminationForest(matrix, *parents, postorder, degrees);
+}
+
+template <class Field>
+void EliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
+                                 const SymmetricOrdering& ordering,
+                                 Buffer<Int>* parents, Buffer<Int>* degrees) {
+  if (ordering.permutation.Empty()) {
+    EliminationForestAndDegrees(matrix, parents, degrees);
+    return;
+  }
+  EliminationForest(matrix, ordering, parents);
+  Buffer<Int> postorder;
+  PostorderFromEliminationForest(*parents, &postorder);
+  DegreesFromEliminationForest(matrix, ordering, *parents, postorder, degrees);
 }
 
 template <class Field>

@@ -22,183 +22,11 @@ template <class Field>
 void SupernodalHermitianDPP<Field>::OpenMPLeftLookingSupernodeUpdate(
     Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
     Buffer<PrivateState>* private_states) const {
-  const SymmetricFactorizationType factorization_type =
-      kLDLAdjointFactorization;
+  // The left-looking supernodal update needs to be rewritten, but it is low
+  // priority since a multithreaded right-looking approach will almost always
+  // be faster.
 
-  BlasMatrixView<Field> main_diagonal_block =
-      diagonal_factor_->blocks[main_supernode];
-  BlasMatrixView<Field> main_lower_block =
-      lower_factor_->blocks[main_supernode];
-  const Int main_supernode_size = ordering_.supernode_sizes[main_supernode];
-
-  shared_state->rel_rows[main_supernode] = 0;
-  shared_state->intersect_ptrs[main_supernode] =
-      lower_factor_->IntersectionSizesBeg(main_supernode);
-
-  const int main_thread = omp_get_thread_num();
-  Buffer<Int>& pattern_flags =
-      (*private_states)[main_thread].ldl_state.pattern_flags;
-  Buffer<Int>& row_structure =
-      (*private_states)[main_thread].ldl_state.row_structure;
-
-  // Compute the supernodal row pattern.
-  pattern_flags[main_supernode] = main_supernode;
-  const Int num_packed = supernodal_ldl::ComputeRowPattern(
-      matrix_, ordering_.permutation, ordering_.inverse_permutation,
-      ordering_.supernode_sizes, ordering_.supernode_offsets,
-      supernode_member_to_index_, ordering_.assembly_forest.parents,
-      main_supernode, pattern_flags.Data(), row_structure.Data());
-
-  // OpenMP pragmas cannot operate on object members or function results.
-  const Buffer<Int>& supernode_offsets_ref = ordering_.supernode_offsets;
-  const Buffer<Int>& supernode_member_to_index_ref = supernode_member_to_index_;
-  supernodal_ldl::LowerFactor<Field>* const lower_factor_ptr =
-      lower_factor_.get();
-  Field* const main_diagonal_block_data CATAMARI_UNUSED =
-      main_diagonal_block.data;
-  Field* const main_lower_block_data = main_lower_block.data;
-
-  // for J = find(L(K, :))
-  //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
-  for (Int index = 0; index < num_packed; ++index) {
-    const Int descendant_supernode = row_structure[index];
-    CATAMARI_ASSERT(descendant_supernode < main_supernode,
-                    "Looking into upper triangle.");
-    const ConstBlasMatrixView<Field> descendant_lower_block =
-        lower_factor_->blocks[descendant_supernode];
-    const Int descendant_degree = descendant_lower_block.height;
-    const Int descendant_supernode_size = descendant_lower_block.width;
-
-    const Int descendant_main_rel_row =
-        shared_state->rel_rows[descendant_supernode];
-    const Int descendant_main_intersect_size =
-        *shared_state->intersect_ptrs[descendant_supernode];
-
-    const ConstBlasMatrixView<Field> descendant_diag_block =
-        diagonal_factor_->blocks[descendant_supernode].ToConst();
-
-    #pragma omp task default(none)                                         \
-        firstprivate(index, descendant_supernode, descendant_main_rel_row, \
-            descendant_main_intersect_size, descendant_lower_block,        \
-            descendant_diag_block, descendant_supernode_size,              \
-            private_states, main_diagonal_block, main_supernode)           \
-        shared(supernode_offsets_ref)                                      \
-        depend(out: main_diagonal_block_data)
-    {
-      const int thread = omp_get_thread_num();
-      PrivateState& private_state = (*private_states)[thread];
-
-      const ConstBlasMatrixView<Field> descendant_main_matrix =
-          descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
-                                           descendant_main_intersect_size,
-                                           descendant_supernode_size);
-
-      // BlasMatrixView<Field> scaled_transpose;
-      BlasMatrixView<Field> scaled_transpose;
-      scaled_transpose.height = descendant_supernode_size;
-      scaled_transpose.width = descendant_main_intersect_size;
-      scaled_transpose.leading_dim = descendant_supernode_size;
-      scaled_transpose.data =
-          private_state.ldl_state.scaled_transpose_buffer.Data();
-
-      supernodal_ldl::FormScaledTranspose(
-          factorization_type, descendant_diag_block, descendant_main_matrix,
-          &scaled_transpose);
-
-      BlasMatrixView<Field> workspace_matrix;
-      workspace_matrix.height = descendant_main_intersect_size;
-      workspace_matrix.width = descendant_main_intersect_size;
-      workspace_matrix.leading_dim = descendant_main_intersect_size;
-      workspace_matrix.data = private_state.ldl_state.workspace_buffer.Data();
-
-      supernodal_ldl::UpdateDiagonalBlock(
-          kLDLAdjointFactorization, supernode_offsets_ref, *lower_factor_ptr,
-          main_supernode, descendant_supernode, descendant_main_rel_row,
-          descendant_main_matrix, scaled_transpose.ToConst(),
-          &main_diagonal_block, &workspace_matrix);
-    }
-
-    shared_state->intersect_ptrs[descendant_supernode]++;
-    shared_state->rel_rows[descendant_supernode] +=
-        descendant_main_intersect_size;
-
-    // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
-    //                = L(KNext:n, J) * Z(J, K).
-    const Int* descendant_active_intersect_size_beg =
-        shared_state->intersect_ptrs[descendant_supernode];
-    Int descendant_active_rel_row =
-        shared_state->rel_rows[descendant_supernode];
-    const Int* main_active_intersect_sizes =
-        lower_factor_->IntersectionSizesBeg(main_supernode);
-    Int main_active_rel_row = 0;
-    while (descendant_active_rel_row != descendant_degree) {
-      const Int descendant_active_intersect_size =
-          *descendant_active_intersect_size_beg;
-
-      supernodal_ldl::SeekForMainActiveRelativeRow(
-          main_supernode, descendant_supernode, descendant_active_rel_row,
-          supernode_member_to_index_, *lower_factor_, &main_active_rel_row,
-          &main_active_intersect_sizes);
-      const Int main_active_intersect_size = *main_active_intersect_sizes;
-
-      #pragma omp task default(none)                                         \
-          firstprivate(factorization_type, index, descendant_supernode,      \
-              descendant_active_rel_row, descendant_main_rel_row,            \
-              main_active_rel_row, descendant_active_intersect_size,         \
-              descendant_main_intersect_size,                                \
-              main_active_intersect_size, descendant_supernode_size,         \
-              private_states, descendant_lower_block, descendant_diag_block, \
-              main_lower_block, main_supernode)                              \
-          shared(supernode_offsets_ref, supernode_member_to_index_ref)       \
-          depend(out: main_lower_block_data[main_active_rel_row])
-      {
-        const int thread = omp_get_thread_num();
-        PrivateState& private_state = (*private_states)[thread];
-
-        const ConstBlasMatrixView<Field> descendant_active_matrix =
-            descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
-                                             descendant_active_intersect_size,
-                                             descendant_supernode_size);
-
-        const ConstBlasMatrixView<Field> descendant_main_matrix =
-            descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
-                                             descendant_main_intersect_size,
-                                             descendant_supernode_size);
-
-        BlasMatrixView<Field> scaled_transpose;
-        scaled_transpose.height = descendant_supernode_size;
-        scaled_transpose.width = descendant_main_intersect_size;
-        scaled_transpose.leading_dim = descendant_supernode_size;
-        scaled_transpose.data =
-            private_state.ldl_state.scaled_transpose_buffer.Data();
-
-        supernodal_ldl::FormScaledTranspose(
-            factorization_type, descendant_diag_block, descendant_main_matrix,
-            &scaled_transpose);
-
-        BlasMatrixView<Field> main_active_block = main_lower_block.Submatrix(
-            main_active_rel_row, 0, main_active_intersect_size,
-            main_supernode_size);
-
-        BlasMatrixView<Field> workspace_matrix;
-        workspace_matrix.height = descendant_active_intersect_size;
-        workspace_matrix.width = descendant_main_intersect_size;
-        workspace_matrix.leading_dim = descendant_active_intersect_size;
-        workspace_matrix.data = private_state.ldl_state.workspace_buffer.Data();
-
-        supernodal_ldl::UpdateSubdiagonalBlock(
-            kLDLAdjointFactorization, main_supernode, descendant_supernode,
-            main_active_rel_row, descendant_main_rel_row,
-            descendant_main_matrix, descendant_active_rel_row,
-            supernode_offsets_ref, supernode_member_to_index_ref,
-            scaled_transpose.ToConst(), descendant_active_matrix,
-            *lower_factor_ptr, &main_active_block, &workspace_matrix);
-      }
-
-      ++descendant_active_intersect_size_beg;
-      descendant_active_rel_row += descendant_active_intersect_size;
-    }
-  }
+  // TODO(Jack Poulson): Rewrite this routine.
 }
 
 template <class Field>
@@ -341,6 +169,8 @@ std::vector<Int> SupernodalHermitianDPP<Field>::OpenMPLeftLookingSample(
   std::vector<Int> sample;
   sample.reserve(num_rows);
 
+  // TODO(Jack Poulson): Switch to the new memory allocation approach after
+  // rejuvenating the left-looking implementation.
   supernodal_ldl::LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
