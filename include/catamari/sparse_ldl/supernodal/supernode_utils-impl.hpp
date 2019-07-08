@@ -231,33 +231,29 @@ inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
                           const Buffer<Int>& orig_supernode_sizes,
                           const Buffer<Int>& orig_supernode_degrees,
                           const Buffer<Int>& orig_member_to_index,
-                          const Buffer<Int>& children,
-                          const Buffer<Int>& child_offsets,
+                          const Buffer<Int>& child_list_heads,
+                          const Buffer<Int>& child_lists,
                           const SupernodalRelaxationControl& control,
                           Buffer<Int>* supernode_sizes, Buffer<Int>* num_zeros,
                           Buffer<Int>* last_merged_child,
                           Buffer<Int>* merge_parents) {
-  const Int child_beg = child_offsets[parent];
-  const Int num_children = child_offsets[parent + 1] - child_beg;
-
-  const int kNumMergesReservation = 4;
-  std::vector<Int> mergable_children, num_merged_zeros;
-  mergable_children.reserve(kNumMergesReservation);
-  num_merged_zeros.reserve(kNumMergesReservation);
-
   // The following loop can execute at most 'num_children' times.
   while (true) {
-    // Compute the list of child indices that can be merged.
-    // TODO(Jack Poulson): Shortcut by only testing if child_size is greater
-    // than the largest mergable size. Or perhaps we should merge the one which
-    // introduces the least number of nonzeros first?
-    for (Int child_index = 0; child_index < num_children; ++child_index) {
-      const Int child = children[child_beg + child_index];
+    // Compute the index of a maximal mergable child (if it exists).
+    Int merging_child = -1;
+    Int num_new_zeros = 0;
+    Int num_merged_zeros = 0;
+    Int largest_mergable_size = 0;
+    for (Int child = child_list_heads[parent]; child != -1;
+         child = child_lists[child]) {
       if ((*merge_parents)[child] != -1) {
         continue;
       }
 
       const Int child_size = (*supernode_sizes)[child];
+      if (child_size < largest_mergable_size) {
+        continue;
+      }
       const Int child_degree = orig_supernode_degrees[child];
 
       const Int parent_size = (*supernode_sizes)[parent];
@@ -269,40 +265,31 @@ inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
       const MergableStatus status = MergableSupernode(
           child_size, child_degree, parent_size, parent_degree, num_child_zeros,
           num_parent_zeros, orig_member_to_index, control);
-      if (status.mergable) {
-        mergable_children.push_back(child_index);
-        num_merged_zeros.push_back(status.num_merged_zeros);
+      if (!status.mergable) {
+        continue;
+      }
+      const Int num_proposed_new_zeros =
+          status.num_merged_zeros - (num_child_zeros + num_parent_zeros);
+      if (child_size > largest_mergable_size ||
+          num_proposed_new_zeros < num_new_zeros) {
+        merging_child = child;
+        num_new_zeros = num_proposed_new_zeros;
+        num_merged_zeros = status.num_merged_zeros;
+        largest_mergable_size = child_size;
       }
     }
 
     // Skip this supernode if no children can be merged into it.
-    if (mergable_children.empty()) {
+    if (merging_child == -1) {
       break;
     }
-    const Int first_mergable_child = children[child_beg + mergable_children[0]];
-
-    // Select the largest mergable supernode.
-    Int merging_index = 0;
-    Int largest_mergable_size = (*supernode_sizes)[first_mergable_child];
-    for (std::size_t mergable_index = 1;
-         mergable_index < mergable_children.size(); ++mergable_index) {
-      const Int child_index = mergable_children[mergable_index];
-      const Int child = children[child_beg + child_index];
-      const Int child_size = (*supernode_sizes)[child];
-      if (child_size > largest_mergable_size) {
-        merging_index = mergable_index;
-        largest_mergable_size = child_size;
-      }
-    }
-    const Int child_index = mergable_children[merging_index];
-    const Int child = children[child_beg + child_index];
 
     // Absorb the child size into the parent.
-    (*supernode_sizes)[parent] += (*supernode_sizes)[child];
-    (*supernode_sizes)[child] = 0;
+    (*supernode_sizes)[parent] += (*supernode_sizes)[merging_child];
+    (*supernode_sizes)[merging_child] = 0;
 
     // Update the number of explicit zeros in the merged supernode.
-    (*num_zeros)[parent] = num_merged_zeros[merging_index];
+    (*num_zeros)[parent] = num_merged_zeros;
 
     // Mark the child as merged.
     //
@@ -313,21 +300,17 @@ inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
     // to the last merged child of the parent since the parent start location
     // moves to the merged child's supernodal index.
     if ((*last_merged_child)[parent] == -1) {
-      (*merge_parents)[child] = parent;
+      (*merge_parents)[merging_child] = parent;
     } else {
-      (*merge_parents)[child] = (*last_merged_child)[parent];
+      (*merge_parents)[merging_child] = (*last_merged_child)[parent];
     }
 
     // Build the new downlink from the parent in the assembly tree.
-    if ((*last_merged_child)[child] == -1) {
-      (*last_merged_child)[parent] = child;
+    if ((*last_merged_child)[merging_child] == -1) {
+      (*last_merged_child)[parent] = merging_child;
     } else {
-      (*last_merged_child)[parent] = (*last_merged_child)[child];
+      (*last_merged_child)[parent] = (*last_merged_child)[merging_child];
     }
-
-    // Clear the mergable children information since it is now stale.
-    mergable_children.clear();
-    num_merged_zeros.clear();
   }
 }
 
@@ -342,12 +325,17 @@ inline void RelaxSupernodes(const Buffer<Int>& orig_parents,
   const Int num_rows = orig_ordering.supernode_offsets.Back();
   const Int num_supernodes = orig_ordering.supernode_sizes.Size();
 
-  // Construct the down-links for the elimination forest.
-  // TODO(Jack Poulson): Switch to linked lists in a single array.
-  Buffer<Int> children;
-  Buffer<Int> child_offsets;
-  quotient::ChildrenFromParents(orig_ordering.assembly_forest.parents,
-                                &children, &child_offsets);
+  // Construct the children in the elimination forest.
+  Buffer<Int> child_list_heads(num_supernodes, -1);
+  Buffer<Int> child_lists(num_supernodes);
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    const Int parent = orig_ordering.assembly_forest.parents[supernode];
+    if (parent != -1) {
+      // Insert 'supernode' in the child list of its parent.
+      child_lists[supernode] = child_list_heads[parent];
+      child_list_heads[parent] = supernode;
+    }
+  }
 
   // Initialize the sizes of the merged supernodes, using the original indexing
   // and absorbing child sizes into the parents.
@@ -361,7 +349,7 @@ inline void RelaxSupernodes(const Buffer<Int>& orig_parents,
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     MergeChildren(supernode, orig_ordering.supernode_offsets,
                   orig_ordering.supernode_sizes, orig_supernode_degrees,
-                  orig_member_to_index, children, child_offsets, control,
+                  orig_member_to_index, child_list_heads, child_lists, control,
                   &supernode_sizes, &num_zeros, &last_merged_children,
                   &merge_parents);
   }
