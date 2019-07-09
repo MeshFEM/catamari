@@ -322,6 +322,108 @@ inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
   }
 }
 
+inline void RelaxedParentsAndDegrees(const Buffer<Int>& parents,
+                                     const Buffer<Int>& degrees,
+                                     const Buffer<Int>& merge_parents,
+                                     Buffer<Int>* original_to_relaxed,
+                                     Buffer<Int>* relaxed_parents,
+                                     Buffer<Int>* relaxed_degrees) {
+  // Count the number of remaining supernodes and construct a map from the
+  // original to relaxed indices.
+  const Int num_supernodes = merge_parents.Size();
+  original_to_relaxed->Resize(num_supernodes);
+  Int num_relaxed_supernodes = 0;
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    if (merge_parents[supernode] != -1) {
+      continue;
+    }
+    (*original_to_relaxed)[supernode] = num_relaxed_supernodes++;
+  }
+
+  // Fill in the parents for the relaxed supernodal elimination forest.
+  // Simultaneously, fill in the degrees of the relaxed supernodes (which are
+  // the same as the degrees of the parents of each merge tree).
+  relaxed_parents->Resize(num_relaxed_supernodes);
+  relaxed_degrees->Resize(num_relaxed_supernodes);
+  Int relaxed_offset = 0;
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    if (merge_parents[supernode] != -1) {
+      continue;
+    }
+    (*relaxed_degrees)[relaxed_offset] = degrees[supernode];
+
+    Int parent = parents[supernode];
+    if (parent == -1) {
+      // This is a root node, so mark it as such in the relaxation.
+      (*relaxed_parents)[relaxed_offset++] = -1;
+      continue;
+    }
+
+    // Compute the root of the merge sequence of our parent.
+    while (merge_parents[parent] != -1) {
+      parent = merge_parents[parent];
+    }
+
+    // Convert the root of the merge sequence of our parent from the original
+    // to the relaxed indexing.
+    (*relaxed_parents)[relaxed_offset++] = (*original_to_relaxed)[parent];
+  }
+}
+
+// Fill the inverse permutation, the supernode sizes, and the supernode
+// offsets.
+inline void RelaxationSizesOffsetsAndInversePermutation(
+    Int num_relaxed_supernodes, const Buffer<Int>& orig_sizes,
+    const Buffer<Int>& orig_offsets, const Buffer<Int>& last_merged_children,
+    const Buffer<Int>& merge_parents, const Buffer<Int>& original_to_relaxed,
+    Buffer<Int>* relaxed_sizes, Buffer<Int>* relaxed_offsets,
+    Buffer<Int>* relaxed_supernode_member_to_index,
+    Buffer<Int>* relaxation_inverse_permutation) {
+  const Int num_supernodes = orig_sizes.Size();
+  const Int num_rows = orig_offsets[num_supernodes];
+
+  relaxed_sizes->Resize(num_relaxed_supernodes);
+  relaxed_offsets->Resize(num_relaxed_supernodes + 1);
+  relaxed_supernode_member_to_index->Resize(num_rows);
+  relaxation_inverse_permutation->Resize(num_rows);
+
+  Int pack_offset = 0;
+  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+    if (merge_parents[supernode] != -1) {
+      continue;
+    }
+    const Int relaxed_supernode = original_to_relaxed[supernode];
+
+    // Get the leaf of the merge sequence to pack.
+    Int leaf_of_merge = supernode;
+    if (last_merged_children[supernode] != -1) {
+      leaf_of_merge = last_merged_children[supernode];
+    }
+
+    // Pack the merge sequence and count its total size.
+    (*relaxed_offsets)[relaxed_supernode] = pack_offset;
+    Int supernode_size = 0;
+    Int* supernode_index =
+        relaxed_supernode_member_to_index->Data() + pack_offset;
+    Int* supernode_inverse =
+        relaxation_inverse_permutation->Data() + pack_offset;
+    Int supernode_to_pack = leaf_of_merge;
+    while (supernode_to_pack != -1) {
+      const Int start = orig_offsets[supernode_to_pack];
+      const Int size = orig_sizes[supernode_to_pack];
+      for (Int j = 0; j < size; ++j) {
+        supernode_index[supernode_size] = relaxed_supernode;
+        supernode_inverse[supernode_size++] = start + j;
+      }
+      supernode_to_pack = merge_parents[supernode_to_pack];
+    }
+    (*relaxed_sizes)[relaxed_supernode] = supernode_size;
+    pack_offset += supernode_size;
+  }
+  CATAMARI_ASSERT(num_rows == pack_offset, "Did not pack num_rows indices.");
+  (*relaxed_offsets)[num_relaxed_supernodes] = num_rows;
+}
+
 inline void RelaxSupernodes(const SymmetricOrdering& orig_ordering,
                             const Buffer<Int>& orig_supernode_degrees,
                             const SupernodalRelaxationControl& control,
@@ -343,111 +445,43 @@ inline void RelaxSupernodes(const SymmetricOrdering& orig_ordering,
     }
   }
 
-  // Initialize the sizes of the merged supernodes, using the original indexing
-  // and absorbing child sizes into the parents.
-  Buffer<Int> supernode_sizes = orig_ordering.supernode_sizes;
-
-  // Initialize the number of explicit zeros stored in each original supernode.
-  Buffer<Int> num_zeros(num_supernodes, 0);
-
   Buffer<Int> last_merged_children(num_supernodes, -1);
   Buffer<Int> merge_parents(num_supernodes, -1);
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    MergeChildren(supernode, orig_ordering.supernode_offsets,
-                  orig_ordering.supernode_sizes, orig_supernode_degrees,
-                  child_list_heads, child_lists, control, &supernode_sizes,
-                  &num_zeros, &last_merged_children, &merge_parents);
-  }
+  {
+    // Initialize the sizes of the merged supernodes, using the original
+    // indexing and absorbing child sizes into the parents.
+    Buffer<Int> supernode_sizes = orig_ordering.supernode_sizes;
 
-  // Count the number of remaining supernodes and construct a map from the
-  // original to relaxed indices.
-  Buffer<Int> original_to_relaxed(num_supernodes, -1);
-  Int num_relaxed_supernodes = 0;
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    if (merge_parents[supernode] != -1) {
-      continue;
+    // Initialize the number of explicit zeros stored in each original
+    // supernode.
+    Buffer<Int> num_zeros(num_supernodes, 0);
+
+    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+      MergeChildren(supernode, orig_ordering.supernode_offsets,
+                    orig_ordering.supernode_sizes, orig_supernode_degrees,
+                    child_list_heads, child_lists, control, &supernode_sizes,
+                    &num_zeros, &last_merged_children, &merge_parents);
     }
-    original_to_relaxed[supernode] = num_relaxed_supernodes++;
   }
 
   // Fill in the parents for the relaxed supernodal elimination forest.
   // Simultaneously, fill in the degrees of the relaxed supernodes (which are
   // the same as the degrees of the parents of each merge tree).
-  relaxed_ordering->assembly_forest.parents.Resize(num_relaxed_supernodes);
-  relaxed_supernode_degrees->Resize(num_relaxed_supernodes);
-  Int relaxed_offset = 0;
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    if (merge_parents[supernode] != -1) {
-      continue;
-    }
-    (*relaxed_supernode_degrees)[relaxed_offset] =
-        orig_supernode_degrees[supernode];
-
-    Int parent = orig_ordering.assembly_forest.parents[supernode];
-    if (parent == -1) {
-      // This is a root node, so mark it as such in the relaxation.
-      relaxed_ordering->assembly_forest.parents[relaxed_offset++] = -1;
-      continue;
-    }
-
-    // Compute the root of the merge sequence of our parent.
-    while (merge_parents[parent] != -1) {
-      parent = merge_parents[parent];
-    }
-
-    // Convert the root of the merge sequence of our parent from the original
-    // to the relaxed indexing.
-    relaxed_ordering->assembly_forest.parents[relaxed_offset++] =
-        original_to_relaxed[parent];
-  }
+  Buffer<Int> original_to_relaxed;
+  RelaxedParentsAndDegrees(
+      orig_ordering.assembly_forest.parents, orig_supernode_degrees,
+      merge_parents, &original_to_relaxed,
+      &relaxed_ordering->assembly_forest.parents, relaxed_supernode_degrees);
 
   // Fill the inverse permutation, the supernode sizes, and the supernode
   // offsets.
-  Buffer<Int> relaxation_inverse_permutation(num_rows);
-  {
-    relaxed_ordering->supernode_sizes.Resize(num_relaxed_supernodes);
-    relaxed_ordering->supernode_offsets.Resize(num_relaxed_supernodes + 1);
-    relaxed_supernode_member_to_index->Resize(num_rows);
-    Int pack_offset = 0;
-    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-      if (merge_parents[supernode] != -1) {
-        continue;
-      }
-      const Int relaxed_supernode = original_to_relaxed[supernode];
-
-      // Get the leaf of the merge sequence to pack.
-      Int leaf_of_merge = supernode;
-      if (last_merged_children[supernode] != -1) {
-        leaf_of_merge = last_merged_children[supernode];
-      }
-
-      // Pack the merge sequence and count its total size.
-      relaxed_ordering->supernode_offsets[relaxed_supernode] = pack_offset;
-      Int supernode_size = 0;
-      Int* supernode_index =
-          relaxed_supernode_member_to_index->Data() + pack_offset;
-      Int* supernode_inverse =
-          relaxation_inverse_permutation.Data() + pack_offset;
-      Int supernode_to_pack = leaf_of_merge;
-      while (true) {
-        const Int start = orig_ordering.supernode_offsets[supernode_to_pack];
-        const Int size = orig_ordering.supernode_sizes[supernode_to_pack];
-        for (Int j = 0; j < size; ++j) {
-          supernode_index[supernode_size] = relaxed_supernode;
-          supernode_inverse[supernode_size++] = start + j;
-        }
-
-        if (merge_parents[supernode_to_pack] == -1) {
-          break;
-        }
-        supernode_to_pack = merge_parents[supernode_to_pack];
-      }
-      relaxed_ordering->supernode_sizes[relaxed_supernode] = supernode_size;
-      pack_offset += supernode_size;
-    }
-    CATAMARI_ASSERT(num_rows == pack_offset, "Did not pack num_rows indices.");
-    relaxed_ordering->supernode_offsets[num_relaxed_supernodes] = num_rows;
-  }
+  Buffer<Int> relaxation_inverse_permutation;
+  RelaxationSizesOffsetsAndInversePermutation(
+      relaxed_supernode_degrees->Size(), orig_ordering.supernode_sizes,
+      orig_ordering.supernode_offsets, last_merged_children, merge_parents,
+      original_to_relaxed, &relaxed_ordering->supernode_sizes,
+      &relaxed_ordering->supernode_offsets, relaxed_supernode_member_to_index,
+      &relaxation_inverse_permutation);
 
   // Compose the relaxation permutation with the original permutation.
   if (relaxed_ordering->permutation.Empty()) {
