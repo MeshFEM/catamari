@@ -19,7 +19,7 @@ inline void MemberToIndex(Int num_rows, const Buffer<Int>& supernode_starts,
                           Buffer<Int>* member_to_index) {
   member_to_index->Resize(num_rows);
 
-  std::size_t supernode = 0;
+  Int supernode = 0;
   for (Int column = 0; column < num_rows; ++column) {
     if (column == supernode_starts[supernode + 1]) {
       ++supernode;
@@ -29,7 +29,7 @@ inline void MemberToIndex(Int num_rows, const Buffer<Int>& supernode_starts,
                     "Column was not in the marked supernode.");
     (*member_to_index)[column] = supernode;
   }
-  CATAMARI_ASSERT(supernode == supernode_starts.Size() - 2,
+  CATAMARI_ASSERT(supernode == Int(supernode_starts.Size()) - 2,
                   "Ended on supernode " + std::to_string(supernode) +
                       " instead of " +
                       std::to_string(supernode_starts.Size() - 2));
@@ -39,7 +39,7 @@ inline void ConvertFromScalarToSupernodalEliminationForest(
     Int num_supernodes, const Buffer<Int>& parents,
     const Buffer<Int>& member_to_index, Buffer<Int>* supernode_parents) {
   const Int num_rows = parents.Size();
-  supernode_parents->Resize(num_supernodes, -1);
+  supernode_parents->Resize(num_supernodes);
   for (Int row = 0; row < num_rows; ++row) {
     const Int supernode = member_to_index[row];
     const Int parent = parents[row];
@@ -59,7 +59,7 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
                                 const SymmetricOrdering& ordering,
                                 const Buffer<Int>& supernode_sizes) {
   const Int num_rows = matrix.NumRows();
-  for (std::size_t index = 0; index < supernode_sizes.Size(); ++index) {
+  for (UInt index = 0; index < supernode_sizes.Size(); ++index) {
     CATAMARI_ASSERT(supernode_sizes[index] > 0,
                     "Supernode " + std::to_string(index) + " had length " +
                         std::to_string(supernode_sizes[index]));
@@ -424,15 +424,18 @@ inline void RelaxSupernodes(const SymmetricOrdering& orig_ordering,
       // Pack the merge sequence and count its total size.
       relaxed_ordering->supernode_offsets[relaxed_supernode] = pack_offset;
       Int supernode_size = 0;
+      Int* supernode_index =
+          relaxed_supernode_member_to_index->Data() + pack_offset;
+      Int* supernode_inverse =
+          relaxation_inverse_permutation.Data() + pack_offset;
       Int supernode_to_pack = leaf_of_merge;
       while (true) {
         const Int start = orig_ordering.supernode_offsets[supernode_to_pack];
         const Int size = orig_ordering.supernode_sizes[supernode_to_pack];
         for (Int j = 0; j < size; ++j) {
-          (*relaxed_supernode_member_to_index)[pack_offset] = relaxed_supernode;
-          relaxation_inverse_permutation[pack_offset++] = start + j;
+          supernode_index[supernode_size] = relaxed_supernode;
+          supernode_inverse[supernode_size++] = start + j;
         }
-        supernode_size += size;
 
         if (merge_parents[supernode_to_pack] == -1) {
           break;
@@ -440,6 +443,7 @@ inline void RelaxSupernodes(const SymmetricOrdering& orig_ordering,
         supernode_to_pack = merge_parents[supernode_to_pack];
       }
       relaxed_ordering->supernode_sizes[relaxed_supernode] = supernode_size;
+      pack_offset += supernode_size;
     }
     CATAMARI_ASSERT(num_rows == pack_offset, "Did not pack num_rows indices.");
     relaxed_ordering->supernode_offsets[num_relaxed_supernodes] = num_rows;
