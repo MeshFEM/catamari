@@ -276,16 +276,6 @@ void OpenMPFormScaledTranspose(Int tile_size,
                                BlasMatrixView<Field>* scaled_transpose);
 #endif  // ifdef CATAMARI_OPENMP
 
-// Moves the pointers for the main supernode down to the active supernode of
-// the descendant column block.
-template <class Field>
-void SeekForMainActiveRelativeRow(Int main_supernode, Int descendant_supernode,
-                                  Int descendant_active_rel_row,
-                                  const Buffer<Int>& supernode_member_to_index,
-                                  const LowerFactor<Field>& lower_factor,
-                                  Int* main_active_rel_row,
-                                  const Int** main_active_intersect_sizes);
-
 // Adds the schur complements of a given supernode's children onto its front.
 template <class Field>
 void MergeChildSchurComplements(Int supernode,

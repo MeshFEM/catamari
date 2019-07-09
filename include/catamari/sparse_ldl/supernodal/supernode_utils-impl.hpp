@@ -816,42 +816,6 @@ void UpdateSubdiagonalBlock(
 }
 
 template <class Field>
-void SeekForMainActiveRelativeRow(Int main_supernode, Int descendant_supernode,
-                                  Int descendant_active_rel_row,
-                                  const Buffer<Int>& supernode_member_to_index,
-                                  const LowerFactor<Field>& lower_factor,
-                                  Int* main_active_rel_row,
-                                  const Int** main_active_intersect_sizes) {
-  const Int* main_indices = lower_factor.StructureBeg(main_supernode);
-  const Int* descendant_indices =
-      lower_factor.StructureBeg(descendant_supernode);
-  const Int descendant_active_supernode_start =
-      descendant_indices[descendant_active_rel_row];
-  const Int active_supernode =
-      supernode_member_to_index[descendant_active_supernode_start];
-  CATAMARI_ASSERT(active_supernode > main_supernode,
-                  "Active supernode " + std::to_string(active_supernode) +
-                      " was <= the main supernode " +
-                      std::to_string(main_supernode));
-
-  Int main_active_intersect_size = **main_active_intersect_sizes;
-  Int main_active_first_row = main_indices[*main_active_rel_row];
-  while (supernode_member_to_index[main_active_first_row] < active_supernode) {
-    *main_active_rel_row += main_active_intersect_size;
-    ++*main_active_intersect_sizes;
-
-    main_active_first_row = main_indices[*main_active_rel_row];
-    main_active_intersect_size = **main_active_intersect_sizes;
-  }
-#ifdef CATAMARI_DEBUG
-  const Int main_active_supernode =
-      supernode_member_to_index[main_active_first_row];
-  CATAMARI_ASSERT(main_active_supernode == active_supernode,
-                  "Did not find active supernode.");
-#endif
-}
-
-template <class Field>
 void MergeChildSchurComplements(Int supernode,
                                 const SymmetricOrdering& ordering,
                                 LowerFactor<Field>* lower_factor,
