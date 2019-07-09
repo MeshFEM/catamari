@@ -147,23 +147,9 @@ void Factorization<Field>::InitializeFactors(
   CATAMARI_ASSERT(supernode_degrees.Size() == ordering_.supernode_sizes.Size(),
                   "Invalid supernode degrees size.");
 
-  // Store the largest supernode size of the factorization.
-  max_supernode_size_ = *std::max_element(ordering_.supernode_sizes.begin(),
-                                          ordering_.supernode_sizes.end());
-
   // Store the largest degree of the factorization for use in the solve phase.
   max_degree_ =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
-
-  // Compute the maximum number of entries below the diagonal block of a
-  // supernode.
-  max_lower_block_size_ = 0;
-  const Int num_supernodes = supernode_degrees.Size();
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int lower_block_size =
-        supernode_degrees[supernode] * ordering_.supernode_sizes[supernode];
-    max_lower_block_size_ = std::max(max_lower_block_size_, lower_block_size);
-  }
 
   FillStructureIndices(matrix, ordering_, supernode_member_to_index_,
                        lower_factor_.get());
@@ -174,6 +160,7 @@ void Factorization<Field>::InitializeFactors(
     // Compute the maximum of the diagonal and subdiagonal update sizes.
     Int workspace_size = 0;
     Int scaled_transpose_size = 0;
+    const Int num_supernodes = supernode_degrees.Size();
     for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
       const Int supernode_size = ordering_.supernode_sizes[supernode];
       Int degree_remaining = supernode_degrees[supernode];
@@ -203,6 +190,16 @@ void Factorization<Field>::InitializeFactors(
     }
     left_looking_workspace_size_ = workspace_size;
     left_looking_scaled_transpose_size_ = scaled_transpose_size;
+  } else {
+    // Compute the maximum number of entries below the diagonal block of a
+    // supernode.
+    max_lower_block_size_ = 0;
+    const Int num_supernodes = supernode_degrees.Size();
+    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+      const Int lower_block_size =
+          supernode_degrees[supernode] * ordering_.supernode_sizes[supernode];
+      max_lower_block_size_ = std::max(max_lower_block_size_, lower_block_size);
+    }
   }
 }
 

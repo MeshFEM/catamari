@@ -261,9 +261,6 @@ class Factorization {
   // supernode containing column 'i'.
   Buffer<Int> supernode_member_to_index_;
 
-  // The largest supernode size in the factorization.
-  Int max_supernode_size_;
-
   // The largest degree of a supernode in the factorization.
   Int max_degree_;
 
