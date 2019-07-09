@@ -445,29 +445,25 @@ inline void RelaxSupernodes(const SymmetricOrdering& orig_ordering,
     relaxed_ordering->supernode_offsets[num_relaxed_supernodes] = num_rows;
   }
 
-  // Compute the relaxation permutation.
-  Buffer<Int> relaxation_permutation(num_rows);
-  for (Int row = 0; row < num_rows; ++row) {
-    relaxation_permutation[relaxation_inverse_permutation[row]] = row;
-  }
-
   // Compose the relaxation permutation with the original permutation.
   if (relaxed_ordering->permutation.Empty()) {
-    relaxed_ordering->permutation = relaxation_permutation;
     relaxed_ordering->inverse_permutation = relaxation_inverse_permutation;
+    InvertPermutation(relaxed_ordering->inverse_permutation,
+                      &relaxed_ordering->permutation);
   } else {
-    // Compuse the relaxation and original permutations.
-    Buffer<Int> perm_copy = relaxed_ordering->permutation;
+    // Compute the inverse of relaxation_permutation with
+    // relaxed_ordering->permutation, which is the composition of their inverses
+    // in the opposite order.
+    Buffer<Int> inverse_perm_copy = relaxed_ordering->inverse_permutation;
     for (Int row = 0; row < num_rows; ++row) {
-      relaxed_ordering->permutation[row] =
-          relaxation_permutation[perm_copy[row]];
+      relaxed_ordering->inverse_permutation[row] =
+          inverse_perm_copy[relaxation_inverse_permutation[row]];
     }
 
     // Invert the composed permutation.
-    InvertPermutation(relaxed_ordering->permutation,
-                      &relaxed_ordering->inverse_permutation);
+    InvertPermutation(relaxed_ordering->inverse_permutation,
+                      &relaxed_ordering->permutation);
   }
-
   relaxed_ordering->assembly_forest.FillFromParents();
 }
 
