@@ -156,7 +156,7 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 // Compute an unrelaxed supernodal partition using the existing ordering.
 // We require that supernodes have dense diagonal blocks and equal structures
 // below the diagonal block.
-void FormFundamentalSupernodes(const AssemblyForest& scalar_forest,
+void FormFundamentalSupernodes(const Buffer<Int>& scalar_parents,
                                const Buffer<Int>& scalar_degrees,
                                Buffer<Int>* supernode_sizes);
 

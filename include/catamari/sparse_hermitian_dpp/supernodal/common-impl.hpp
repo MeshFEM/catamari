@@ -53,19 +53,16 @@ SupernodalHermitianDPP<Field>::SupernodalHermitianDPP(
 
 template <class Field>
 void SupernodalHermitianDPP<Field>::FormSupernodes() {
-  // Greedily compute a supernodal partition using the original ordering.
-  AssemblyForest orig_scalar_forest;
+  Buffer<Int> scalar_parents;
+  Buffer<Int> scalar_degrees;
+  scalar_ldl::EliminationForestAndDegrees(matrix_, ordering_, &scalar_parents,
+                                          &scalar_degrees);
+
   SymmetricOrdering fund_ordering;
   fund_ordering.permutation = ordering_.permutation;
   fund_ordering.inverse_permutation = ordering_.inverse_permutation;
-
-  Buffer<Int> orig_scalar_degrees;
-  scalar_ldl::EliminationForestAndDegrees(
-      matrix_, ordering_, &orig_scalar_forest.parents, &orig_scalar_degrees);
-  orig_scalar_forest.FillFromParents();
-
-  supernodal_ldl::FormFundamentalSupernodes(
-      orig_scalar_forest, orig_scalar_degrees, &fund_ordering.supernode_sizes);
+  supernodal_ldl::FormFundamentalSupernodes(scalar_parents, scalar_degrees,
+                                            &fund_ordering.supernode_sizes);
   OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
 #ifdef CATAMARI_DEBUG
   if (!supernodal_ldl::ValidFundamentalSupernodes(
@@ -82,21 +79,20 @@ void SupernodalHermitianDPP<Field>::FormSupernodes() {
 
   const Int num_fund_supernodes = fund_ordering.supernode_sizes.Size();
   supernodal_ldl::ConvertFromScalarToSupernodalEliminationForest(
-      num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
+      num_fund_supernodes, scalar_parents, fund_member_to_index,
       &fund_ordering.assembly_forest.parents);
-  fund_ordering.assembly_forest.FillFromParents();
 
   // Convert the scalar degrees into the supernodal degrees.
   Buffer<Int> fund_supernode_degrees(num_fund_supernodes);
   for (Int supernode = 0; supernode < num_fund_supernodes; ++supernode) {
     const Int supernode_tail = fund_ordering.supernode_offsets[supernode] +
                                fund_ordering.supernode_sizes[supernode] - 1;
-    fund_supernode_degrees[supernode] = orig_scalar_degrees[supernode_tail];
+    fund_supernode_degrees[supernode] = scalar_degrees[supernode_tail];
   }
 
   if (control_.relaxation_control.relax_supernodes) {
     supernodal_ldl::RelaxSupernodes(
-        orig_scalar_forest.parents, fund_ordering, fund_supernode_degrees,
+        scalar_parents, fund_ordering, fund_supernode_degrees,
         fund_member_to_index, control_.relaxation_control, &ordering_,
         &supernode_degrees_, &supernode_member_to_index_);
   } else {

@@ -51,21 +51,17 @@ void Factorization<Field>::OpenMPInitialFactorizationSetup(
 template <class Field>
 void Factorization<Field>::OpenMPFormSupernodes(
     const CoordinateMatrix<Field>& matrix, Buffer<Int>* supernode_degrees) {
-  // Greedily compute a supernodal partition using the original ordering.
-  AssemblyForest orig_scalar_forest;
+  CATAMARI_START_TIMER(profile.scalar_elimination_forest);
+  Buffer<Int> scalar_parents;
+  Buffer<Int> scalar_degrees;
+  scalar_ldl::OpenMPEliminationForestAndDegrees(
+      matrix, ordering_, &scalar_parents, &scalar_degrees);
+  CATAMARI_STOP_TIMER(profile.scalar_elimination_forest);
+
   SymmetricOrdering fund_ordering;
   fund_ordering.permutation = ordering_.permutation;
   fund_ordering.inverse_permutation = ordering_.inverse_permutation;
-
-  // Compute the non-supernodal elimination tree using the original ordering.
-  CATAMARI_START_TIMER(profile.scalar_elimination_forest);
-  Buffer<Int> scalar_degrees;
-  scalar_ldl::OpenMPEliminationForestAndDegrees(
-      matrix, ordering_, &orig_scalar_forest.parents, &scalar_degrees);
-  orig_scalar_forest.FillFromParents();
-  CATAMARI_STOP_TIMER(profile.scalar_elimination_forest);
-
-  FormFundamentalSupernodes(orig_scalar_forest, scalar_degrees,
+  FormFundamentalSupernodes(scalar_parents, scalar_degrees,
                             &fund_ordering.supernode_sizes);
   OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
   CATAMARI_ASSERT(fund_ordering.supernode_offsets.Back() == matrix.NumRows(),
@@ -88,9 +84,8 @@ void Factorization<Field>::OpenMPFormSupernodes(
   const Int num_fund_supernodes = fund_ordering.supernode_sizes.Size();
   Buffer<Int> fund_supernode_parents;
   ConvertFromScalarToSupernodalEliminationForest(
-      num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
+      num_fund_supernodes, scalar_parents, fund_member_to_index,
       &fund_ordering.assembly_forest.parents);
-  fund_ordering.assembly_forest.FillFromParents();
   CATAMARI_STOP_TIMER(profile.supernodal_elimination_forest);
 
   // Convert the scalar degrees into supernodal degrees.
@@ -105,9 +100,9 @@ void Factorization<Field>::OpenMPFormSupernodes(
   const SupernodalRelaxationControl& relax_control =
       control_.relaxation_control;
   if (relax_control.relax_supernodes) {
-    RelaxSupernodes(orig_scalar_forest.parents, fund_ordering,
-                    fund_supernode_degrees, fund_member_to_index, relax_control,
-                    &ordering_, supernode_degrees, &supernode_member_to_index_);
+    RelaxSupernodes(scalar_parents, fund_ordering, fund_supernode_degrees,
+                    fund_member_to_index, relax_control, &ordering_,
+                    supernode_degrees, &supernode_member_to_index_);
   } else {
     ordering_.supernode_sizes = fund_ordering.supernode_sizes;
     ordering_.supernode_offsets = fund_ordering.supernode_offsets;

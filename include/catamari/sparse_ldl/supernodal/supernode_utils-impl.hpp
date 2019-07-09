@@ -128,13 +128,23 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
   return valid;
 }
 
-inline void FormFundamentalSupernodes(const AssemblyForest& scalar_forest,
+inline void FormFundamentalSupernodes(const Buffer<Int>& scalar_parents,
                                       const Buffer<Int>& scalar_degrees,
                                       Buffer<Int>* supernode_sizes) {
   const Int num_rows = scalar_degrees.Size();
   supernode_sizes->Clear();
   if (!num_rows) {
     return;
+  }
+
+  // Count the number of parents of each supernode. We do not assume that the
+  // list of children has been constructed already.
+  Buffer<Int> num_children(num_rows, 0);
+  for (Int column = 0; column < num_rows; ++column) {
+    const Int parent = scalar_parents[column];
+    if (parent != -1) {
+      ++num_children[parent];
+    }
   }
 
   // Rather than explicitly traversing the structure, we can use its metadata
@@ -171,8 +181,8 @@ inline void FormFundamentalSupernodes(const AssemblyForest& scalar_forest,
   supernode_sizes->Resize(num_rows);
   (*supernode_sizes)[num_supernodes++] = 1;
   for (Int column = 1; column < num_rows; ++column) {
-    const bool is_parent = scalar_forest.parents[column - 1] == column;
-    const bool one_child = scalar_forest.NumChildren(column) == 1;
+    const bool is_parent = scalar_parents[column - 1] == column;
+    const bool one_child = num_children[column] == 1;
     const bool matching_degrees =
         scalar_degrees[column] == scalar_degrees[column - 1] - 1;
     if (is_parent && one_child && matching_degrees) {
