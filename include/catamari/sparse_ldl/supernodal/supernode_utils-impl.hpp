@@ -199,7 +199,6 @@ inline void FormFundamentalSupernodes(const Buffer<Int>& scalar_parents,
 inline MergableStatus MergableSupernode(
     Int child_size, Int child_degree, Int parent_size, Int parent_degree,
     Int num_child_zeros, Int num_parent_zeros,
-    const Buffer<Int>& orig_member_to_index,
     const SupernodalRelaxationControl& control) {
   MergableStatus status;
 
@@ -240,7 +239,6 @@ inline MergableStatus MergableSupernode(
 inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
                           const Buffer<Int>& orig_supernode_sizes,
                           const Buffer<Int>& orig_supernode_degrees,
-                          const Buffer<Int>& orig_member_to_index,
                           const Buffer<Int>& child_list_heads,
                           const Buffer<Int>& child_lists,
                           const SupernodalRelaxationControl& control,
@@ -274,7 +272,7 @@ inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
 
       const MergableStatus status = MergableSupernode(
           child_size, child_degree, parent_size, parent_degree, num_child_zeros,
-          num_parent_zeros, orig_member_to_index, control);
+          num_parent_zeros, control);
       if (!status.mergable) {
         continue;
       }
@@ -324,10 +322,8 @@ inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
   }
 }
 
-inline void RelaxSupernodes(const Buffer<Int>& orig_parents,
-                            const SymmetricOrdering& orig_ordering,
+inline void RelaxSupernodes(const SymmetricOrdering& orig_ordering,
                             const Buffer<Int>& orig_supernode_degrees,
-                            const Buffer<Int>& orig_member_to_index,
                             const SupernodalRelaxationControl& control,
                             SymmetricOrdering* relaxed_ordering,
                             Buffer<Int>* relaxed_supernode_degrees,
@@ -359,9 +355,8 @@ inline void RelaxSupernodes(const Buffer<Int>& orig_parents,
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     MergeChildren(supernode, orig_ordering.supernode_offsets,
                   orig_ordering.supernode_sizes, orig_supernode_degrees,
-                  orig_member_to_index, child_list_heads, child_lists, control,
-                  &supernode_sizes, &num_zeros, &last_merged_children,
-                  &merge_parents);
+                  child_list_heads, child_lists, control, &supernode_sizes,
+                  &num_zeros, &last_merged_children, &merge_parents);
   }
 
   // Count the number of remaining supernodes and construct a map from the

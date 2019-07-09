@@ -92,9 +92,8 @@ void SupernodalHermitianDPP<Field>::FormSupernodes() {
 
   if (control_.relaxation_control.relax_supernodes) {
     supernodal_ldl::RelaxSupernodes(
-        scalar_parents, fund_ordering, fund_supernode_degrees,
-        fund_member_to_index, control_.relaxation_control, &ordering_,
-        &supernode_degrees_, &supernode_member_to_index_);
+        fund_ordering, fund_supernode_degrees, control_.relaxation_control,
+        &ordering_, &supernode_degrees_, &supernode_member_to_index_);
   } else {
     ordering_.supernode_sizes = fund_ordering.supernode_sizes;
     ordering_.supernode_offsets = fund_ordering.supernode_offsets;

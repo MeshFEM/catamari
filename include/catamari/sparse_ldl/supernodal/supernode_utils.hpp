@@ -187,13 +187,11 @@ void FormFundamentalSupernodes(const Buffer<Int>& scalar_parents,
 MergableStatus MergableSupernode(Int child_size, Int child_degree,
                                  Int parent_size, Int parent_degree,
                                  Int num_child_zeros, Int num_parent_zeros,
-                                 const Buffer<Int>& orig_member_to_index,
                                  const SupernodalRelaxationControl& control);
 
 void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
                    const Buffer<Int>& orig_supernode_sizes,
                    const Buffer<Int>& orig_supernode_degrees,
-                   const Buffer<Int>& orig_member_to_index,
                    const Buffer<Int>& children,
                    const Buffer<Int>& child_offsets,
                    const SupernodalRelaxationControl& control,
@@ -203,10 +201,8 @@ void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
 // Walk up the tree in the original postordering, merging supernodes as we
 // progress. The 'relaxed_permutation' and 'relaxed_inverse_permutation'
 // variables are also inputs.
-void RelaxSupernodes(const Buffer<Int>& orig_parents,
-                     const SymmetricOrdering& orig_ordering,
+void RelaxSupernodes(const SymmetricOrdering& orig_ordering,
                      const Buffer<Int>& orig_supernode_degrees,
-                     const Buffer<Int>& orig_member_to_index,
                      const SupernodalRelaxationControl& control,
                      SymmetricOrdering* relaxed_ordering,
                      Buffer<Int>* relaxed_supernode_degrees,

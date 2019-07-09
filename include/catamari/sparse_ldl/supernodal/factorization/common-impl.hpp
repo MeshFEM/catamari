@@ -122,9 +122,8 @@ void Factorization<Field>::FormSupernodes(const CoordinateMatrix<Field>& matrix,
   const SupernodalRelaxationControl& relax_control =
       control_.relaxation_control;
   if (relax_control.relax_supernodes) {
-    RelaxSupernodes(scalar_parents, fund_ordering, fund_supernode_degrees,
-                    fund_member_to_index, relax_control, &ordering_,
-                    supernode_degrees, &supernode_member_to_index_);
+    RelaxSupernodes(fund_ordering, fund_supernode_degrees, relax_control,
+                    &ordering_, supernode_degrees, &supernode_member_to_index_);
   } else {
     ordering_.supernode_sizes = fund_ordering.supernode_sizes;
     ordering_.supernode_offsets = fund_ordering.supernode_offsets;
