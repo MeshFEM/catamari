@@ -265,7 +265,8 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   BlasMatrix<Field> solution = right_hand_side;
   quotient::Timer solve_timer;
   solve_timer.Start();
-  ldl.RefinedSolve(*matrix, refined_solve_control, &solution.view);
+  catamari::RefinedSolveStatus<Real> refined_solve_state =
+      ldl.RefinedSolve(*matrix, refined_solve_control, &solution.view);
   experiment.solve_seconds = solve_timer.Stop();
 
   // Compute the residual.
@@ -275,6 +276,10 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   std::cout << "  || B - A X ||_F / || B ||_F = "
             << residual_norm / right_hand_side_norm << std::endl;
+  std::cout << "  refined_solve_state.num_iterations: "
+            << refined_solve_state.num_iterations << "\n"
+            << "  refined_solve_state.residual_relative_max_norm: "
+            << refined_solve_state.residual_relative_max_norm << std::endl;
 
   return experiment;
 }

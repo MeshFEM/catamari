@@ -829,7 +829,8 @@ Experiment SolveModel(SpeedProfile profile, Real omega, Int num_x_elements,
     }
     BlasMatrix<Field> solution = right_hand_sides;
     timer.Start();
-    ldl.RefinedSolve(matrix, refined_solve_control, &solution.view);
+    catamari::RefinedSolveStatus<Real> refined_solve_state =
+        ldl.RefinedSolve(matrix, refined_solve_control, &solution.view);
     experiment.refined_solve_seconds = timer.Stop();
     if (print_progress) {
       catamari::Print(solution, "XRefined", std::cout);
@@ -842,6 +843,10 @@ Experiment SolveModel(SpeedProfile profile, Real omega, Int num_x_elements,
     const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
     std::cout << "  Refined || B - A X ||_F / || B ||_F = "
               << residual_norm / right_hand_side_norm << std::endl;
+    std::cout << "  refined_solve_state.num_iterations: "
+              << refined_solve_state.num_iterations << "\n"
+              << "  refined_solve_state.residual_relative_max_norm: "
+              << refined_solve_state.residual_relative_max_norm << std::endl;
   }
   PrintExperiment(experiment);
 

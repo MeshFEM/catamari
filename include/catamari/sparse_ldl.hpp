@@ -64,6 +64,21 @@ struct RefinedSolveControl {
   bool verbose = false;
 };
 
+// The return value of iterative refinement.
+template <typename Real>
+struct RefinedSolveStatus {
+  // The number of performed refinement iterations.
+  Int num_iterations;
+
+  // The maximum of the relative max norms of the residual matrix, i.e.,
+  //
+  //   max_j || b_j - A x_j ||_{max} / || b_j ||_{max},
+  //
+  // where we replace any division by zero with division by one. That is, we
+  // use absolute residual norms for any zero right-hand sides.
+  Real residual_relative_max_norm;
+};
+
 // A wrapper for the scalar and supernodal factorization data structures.
 template <class Field>
 class SparseLDL {
@@ -103,9 +118,10 @@ class SparseLDL {
   void Solve(BlasMatrixView<Field>* right_hand_sides) const;
 
   // Solves a set of linear systems using iterative refinement.
-  Int RefinedSolve(const CoordinateMatrix<Field>& matrix,
-                   const RefinedSolveControl<Real>& control,
-                   BlasMatrixView<Field>* right_hand_sides) const;
+  RefinedSolveStatus<Real> RefinedSolve(
+      const CoordinateMatrix<Field>& matrix,
+      const RefinedSolveControl<Real>& control,
+      BlasMatrixView<Field>* right_hand_sides) const;
 
   // Solves a set of linear systems using the lower-triangular factor.
   void LowerTriangularSolve(BlasMatrixView<Field>* right_hand_sides) const;
