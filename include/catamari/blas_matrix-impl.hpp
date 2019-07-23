@@ -12,39 +12,38 @@
 
 namespace catamari {
 
-template <typename Field>
-BlasMatrix<Field>::BlasMatrix() {
+template <typename T>
+BlasMatrix<T>::BlasMatrix() {
   view.height = 0;
   view.width = 0;
   view.leading_dim = 0;
   view.data = nullptr;
 }
 
-template <typename Field>
-BlasMatrix<Field>::BlasMatrix(const Int& height, const Int& width) {
+template <typename T>
+BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width) {
   Resize(height, width);
 }
 
-template <typename Field>
-BlasMatrix<Field>::BlasMatrix(const Int& height, const Int& width,
-                              const Field& value) {
+template <typename T>
+BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width, const T& value) {
   Resize(height, width, value);
 }
 
-template <typename Field>
-BlasMatrix<Field>::BlasMatrix(const Int& height, const Int& width,
-                              const Int& leading_dim) {
+template <typename T>
+BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width,
+                          const Int& leading_dim) {
   Resize(height, width, leading_dim);
 }
 
-template <typename Field>
-BlasMatrix<Field>::BlasMatrix(const Int& height, const Int& width,
-                              const Int& leading_dim, const Field& value) {
+template <typename T>
+BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width,
+                          const Int& leading_dim, const T& value) {
   Resize(height, width, leading_dim, value);
 }
 
-template <typename Field>
-BlasMatrix<Field>::BlasMatrix(const BlasMatrix<Field>& matrix) {
+template <typename T>
+BlasMatrix<T>::BlasMatrix(const BlasMatrix<T>& matrix) {
   const Int height = matrix.view.height;
   const Int width = matrix.view.width;
 
@@ -61,12 +60,12 @@ BlasMatrix<Field>::BlasMatrix(const BlasMatrix<Field>& matrix) {
   }
 }
 
-template <typename Field>
-BlasMatrix<Field>::BlasMatrix(const BlasMatrixView<Field>& matrix)
-    : BlasMatrix<Field>(matrix.ToConst()) {}
+template <typename T>
+BlasMatrix<T>::BlasMatrix(const BlasMatrixView<T>& matrix)
+    : BlasMatrix<T>(matrix.ToConst()) {}
 
-template <typename Field>
-BlasMatrix<Field>::BlasMatrix(const ConstBlasMatrixView<Field>& matrix) {
+template <typename T>
+BlasMatrix<T>::BlasMatrix(const ConstBlasMatrixView<T>& matrix) {
   const Int height = matrix.height;
   const Int width = matrix.width;
 
@@ -83,9 +82,8 @@ BlasMatrix<Field>::BlasMatrix(const ConstBlasMatrixView<Field>& matrix) {
   }
 }
 
-template <typename Field>
-BlasMatrix<Field>& BlasMatrix<Field>::operator=(
-    const BlasMatrix<Field>& matrix) {
+template <typename T>
+BlasMatrix<T>& BlasMatrix<T>::operator=(const BlasMatrix<T>& matrix) {
   if (this != &matrix) {
     const Int height = matrix.view.height;
     const Int width = matrix.view.width;
@@ -105,16 +103,14 @@ BlasMatrix<Field>& BlasMatrix<Field>::operator=(
   return *this;
 }
 
-template <typename Field>
-BlasMatrix<Field>& BlasMatrix<Field>::operator=(
-    const BlasMatrixView<Field>& matrix) {
+template <typename T>
+BlasMatrix<T>& BlasMatrix<T>::operator=(const BlasMatrixView<T>& matrix) {
   *this = matrix.ToConst();
   return *this;
 }
 
-template <typename Field>
-BlasMatrix<Field>& BlasMatrix<Field>::operator=(
-    const ConstBlasMatrixView<Field>& matrix) {
+template <typename T>
+BlasMatrix<T>& BlasMatrix<T>::operator=(const ConstBlasMatrixView<T>& matrix) {
   const Int height = matrix.height;
   const Int width = matrix.width;
 
@@ -132,8 +128,8 @@ BlasMatrix<Field>& BlasMatrix<Field>::operator=(
   return *this;
 }
 
-template <typename Field>
-void BlasMatrix<Field>::Resize(const Int& height, const Int& width) {
+template <typename T>
+void BlasMatrix<T>::Resize(const Int& height, const Int& width) {
   if (height == view.height && width == view.width) {
     return;
   }
@@ -145,9 +141,9 @@ void BlasMatrix<Field>::Resize(const Int& height, const Int& width) {
   view.data = data.Data();
 }
 
-template <typename Field>
-void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
-                               const Int& leading_dim) {
+template <typename T>
+void BlasMatrix<T>::Resize(const Int& height, const Int& width,
+                           const Int& leading_dim) {
   if (height == view.height && width == view.width) {
     return;
   }
@@ -163,9 +159,9 @@ void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
   view.data = data.Data();
 }
 
-template <typename Field>
-void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
-                               const Field& value) {
+template <typename T>
+void BlasMatrix<T>::Resize(const Int& height, const Int& width,
+                           const T& value) {
   // TODO(Jack Poulson): Decide on how to handle 0 leading dimensions.
   data.Resize(height * width, value);
   view.height = height;
@@ -174,9 +170,9 @@ void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
   view.data = data.Data();
 }
 
-template <typename Field>
-void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
-                               const Int& leading_dim, const Field& value) {
+template <typename T>
+void BlasMatrix<T>::Resize(const Int& height, const Int& width,
+                           const Int& leading_dim, const T& value) {
   if (leading_dim < height) {
     throw std::invalid_argument(
         "The leading dimension must be at least as large as the height.");
@@ -189,69 +185,82 @@ void BlasMatrix<Field>::Resize(const Int& height, const Int& width,
   view.data = data.Data();
 }
 
-template <typename Field>
-Int BlasMatrix<Field>::Height() const CATAMARI_NOEXCEPT {
+template <typename T>
+Int BlasMatrix<T>::Height() const CATAMARI_NOEXCEPT {
   return view.height;
 }
 
-template <typename Field>
-Int BlasMatrix<Field>::Width() const CATAMARI_NOEXCEPT {
+template <typename T>
+Int BlasMatrix<T>::Width() const CATAMARI_NOEXCEPT {
   return view.width;
 }
 
-template <typename Field>
-Int BlasMatrix<Field>::LeadingDimension() const CATAMARI_NOEXCEPT {
+template <typename T>
+Int BlasMatrix<T>::LeadingDimension() const CATAMARI_NOEXCEPT {
   return view.leading_dim;
 }
 
-template <typename Field>
-const Field* BlasMatrix<Field>::Data() const CATAMARI_NOEXCEPT {
+template <typename T>
+const T* BlasMatrix<T>::Data() const CATAMARI_NOEXCEPT {
   return view.data;
 }
 
-template <typename Field>
-Field* BlasMatrix<Field>::Data() CATAMARI_NOEXCEPT {
+template <typename T>
+T* BlasMatrix<T>::Data() CATAMARI_NOEXCEPT {
   return view.data;
 }
 
-template <typename Field>
-Field& BlasMatrix<Field>::operator()(Int row, Int column) {
+template <typename T>
+T& BlasMatrix<T>::operator()(Int row, Int column) {
   return view(row, column);
 }
 
-template <typename Field>
-const Field& BlasMatrix<Field>::operator()(Int row, Int column) const {
+template <typename T>
+const T& BlasMatrix<T>::operator()(Int row, Int column) const {
   return view(row, column);
 }
 
-template <typename Field>
-Field& BlasMatrix<Field>::Entry(Int row, Int column) {
+template <typename T>
+T& BlasMatrix<T>::Entry(Int row, Int column) {
   return view(row, column);
 }
 
-template <typename Field>
-const Field& BlasMatrix<Field>::Entry(Int row, Int column) const {
+template <typename T>
+const T& BlasMatrix<T>::Entry(Int row, Int column) const {
   return view(row, column);
 }
 
-template <typename Field>
-Field* BlasMatrix<Field>::Pointer(Int row, Int column) {
+template <typename T>
+T* BlasMatrix<T>::Pointer(Int row, Int column) {
   return view.Pointer(row, column);
 }
 
-template <typename Field>
-const Field* BlasMatrix<Field>::Pointer(Int row, Int column) const {
+template <typename T>
+const T* BlasMatrix<T>::Pointer(Int row, Int column) const {
   return view.Pointer(row, column);
 }
 
-template <typename Field>
-BlasMatrixView<Field> BlasMatrix<Field>::View() {
+template <typename T>
+BlasMatrixView<T> BlasMatrix<T>::View() {
   return view;
 }
 
-template <typename Field>
-const ConstBlasMatrixView<Field> BlasMatrix<Field>::ConstView() const {
+template <typename T>
+const ConstBlasMatrixView<T> BlasMatrix<T>::ConstView() const {
   return view.ToConst();
+}
+
+template <typename T>
+BlasMatrixView<T> BlasMatrix<T>::Submatrix(Int row_beg, Int column_beg,
+                                           Int num_rows, Int num_columns) {
+  return View().Submatrix(row_beg, column_beg, num_rows, num_columns);
+}
+
+template <typename T>
+ConstBlasMatrixView<T> BlasMatrix<T>::Submatrix(Int row_beg, Int column_beg,
+                                                Int num_rows,
+                                                Int num_columns) const {
+  return ConstView().Submatrix(row_beg, column_beg, num_rows, num_columns);
 }
 
 template <class T>

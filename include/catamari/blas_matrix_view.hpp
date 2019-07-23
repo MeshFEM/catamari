@@ -36,14 +36,26 @@ struct ConstBlasMatrixView {
   // The pointer to the top-left entry of the matrix.
   const T* data;
 
+  // Returns the number of rows of the matrix.
+  Int Height() const CATAMARI_NOEXCEPT;
+
+  // Returns the number of columns of the matrix.
+  Int Width() const CATAMARI_NOEXCEPT;
+
+  // Returns the leading dimension of the matrix.
+  Int LeadingDimension() const CATAMARI_NOEXCEPT;
+
+  // Returns an immutable pointer to the top-left entry of the matrix.
+  const T* Data() const CATAMARI_NOEXCEPT;
+
   // Returns a const pointer to the entry in position (row, column).
   const T* Pointer(Int row, Int column) const;
 
   // Returns a const reference to the entry in position (row, column).
-  const T& operator()(Int row, Int column) const;
+  const T& operator()(Int row, Int column = 0) const;
 
   // Returns a const reference to the entry in position (row, column).
-  const T& Entry(Int row, Int column) const;
+  const T& Entry(Int row, Int column = 0) const;
 
   // Returns a representation of the submatrix starting at position
   // (row_beg, column_beg) that has the given number of rows and columns.
@@ -76,6 +88,21 @@ struct BlasMatrixView {
   // The pointer to the top-left entry of the matrix.
   T* data;
 
+  // Returns the number of rows of the matrix.
+  Int Height() const CATAMARI_NOEXCEPT;
+
+  // Returns the number of columns of the matrix.
+  Int Width() const CATAMARI_NOEXCEPT;
+
+  // Returns the leading dimension of the matrix.
+  Int LeadingDimension() const CATAMARI_NOEXCEPT;
+
+  // Returns a pointer to the top-left entry of the matrix.
+  T* Data() CATAMARI_NOEXCEPT;
+
+  // Returns an immutable pointer to the top-left entry of the matrix.
+  const T* Data() const CATAMARI_NOEXCEPT;
+
   // Returns a constant equivalent of the current state.
   ConstBlasMatrixView<T> ToConst() const CATAMARI_NOEXCEPT;
 
@@ -86,16 +113,16 @@ struct BlasMatrixView {
   const T* Pointer(Int row, Int column) const;
 
   // Returns a reference to the entry in position (row, column).
-  T& operator()(Int row, Int column);
+  T& operator()(Int row, Int column = 0);
 
   // Returns a const reference to the entry in position (row, column).
-  const T& operator()(Int row, Int column) const;
+  const T& operator()(Int row, Int column = 0) const;
 
   // Returns a reference to the entry in position (row, column).
-  T& Entry(Int row, Int column);
+  T& Entry(Int row, Int column = 0);
 
   // Returns a const reference to the entry in position (row, column).
-  const T& Entry(Int row, Int column) const;
+  const T& Entry(Int row, Int column = 0) const;
 
   // Returns a representation of the submatrix starting at position
   // (row_beg, column_beg) that has the given number of rows and columns.
