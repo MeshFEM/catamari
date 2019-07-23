@@ -35,6 +35,85 @@ if cxx.get_id() == 'gcc'
   cxx_args += '-fcx-fortran-rules'
 endif
 
+# Add relevant architectural preprocessor definitions.
+cpu_family = build_machine.cpu_family()
+if cpu_family == 'arm'
+  cxx_args += '-DARM'
+elif cpu_family == 'x86' or cpu_family == 'x86_64'
+  cxx_args += '-DX86'
+endif
+
+# Add relevant Operating System preprocessor definitions.
+system = build_machine.system()
+if system == 'darwin'
+  cxx_args += '-DDARWIN'
+elif system == 'linux'
+  cxx_args += '-DLINUX'
+elif system == 'windows'
+  cxx_args += '-DWINDOWS'
+endif
+
+# Handle non-portable denormal disabling commands.
+# See https://carlh.net/plugins/denormals.php for discussion.
+#
+# Care is taken to enable support due to the large amount of performance that
+# can be lost in factoring matrices such as 'ldoor' from the SuiteSparse Matrix
+# Collection, which, for many different small diagonal shifts, leads to
+# many subnormals being produced during factorization, which can decrease BLAS
+# performance by a factor of ~25.
+#
+# NOTE: So far, only the Linux GCC and Linux Clang branches of the xmmintrin
+# branch have been explicitly tested, on Ubuntu 18.04 with g++-7 and clang++-7.
+# But the Intel -ftz command-line option should be assumed to function.
+have_denormal_handling = false
+have_intel = cxx.get_id() == 'intel' or cxx.get_id() == 'intel-cl'
+have_darwin_clang = system == 'darwin' and cxx.get_id() == 'clang'
+have_linux_clang = system == 'linux' and cxx.get_id() == 'clang'
+have_linux_gcc = system == 'linux' and cxx.get_id() == 'gcc'
+have_mingw = system == 'windows' and cxx.get_id() != 'msvc'
+if not have_denormal_handling
+  if have_intel
+    have_denormal_handling = true
+    cxx_args += '-ftz'
+  endif
+endif
+if not have_denormal_handling and not get_option('disable_xmmintrin')
+  if have_linux_gcc or have_linux_clang or have_mingw
+    have_denormal_handling = true
+    cxx_args += '-DCATAMARI_HAVE_XMMINTRIN'
+  endif
+endif
+if not have_denormal_handling and not get_option('disable_fenv_disable_denorms')
+  if have_darwin_clang
+    have_denormal_handling = true
+    cxx_args += '-DCATAMARI_HAVE_FENV_DISABLE_DENORMS'
+  endif
+endif
+
+# Handle the Fused Multiply Add/Subtraction approaches.
+have_fma_intrinsic = false
+if not have_fma_intrinsic and cxx.get_id() == 'gcc' and cxx.version() >= '4.3'
+  if not get_option('disable_gcc_fma')
+    have_fma_intrinsic = true
+    cxx_args += '-DMANTIS_GCC_FUSED_MULTIPLY_ADD'
+  else
+    message('Avoiding GCC __builtin_fma due to disable_gcc_fma option.')
+  endif
+endif
+if not have_fma_intrinsic and cxx.get_id() == 'xlc'
+  if not get_option('disable_xlc_fma')
+    have_fma_intrinsic = true
+    cxx_args += '-DMANTIS_XLC_FUSED_MULTIPLY_ADD'
+  else
+    message('Avoiding XLC __fmadd due to disable_xlc_fma option.')
+  endif
+endif
+
+if get_option('ieee_sum')
+  # Use the more accurate, but slower, summation mechanism.
+  cxx_args += '-DMANTIS_IEEE_SUM'
+endif
+
 if get_option('disable_tcmalloc')
   have_tcmalloc = false
 else
@@ -148,6 +227,14 @@ if libtiff.found()
   example_deps += libtiff
 endif
 
+# Test if mantis is installed.
+found_mantis = cxx.has_header('mantis.hpp')
+if not found_mantis
+  mantis_proj = subproject('mantis')
+  mantis_dep = mantis_proj.get_variable('mantis_dep')
+  deps += mantis_dep
+endif
+
 # Test if quotient is installed.
 found_quotient = cxx.has_header('quotient.hpp')
 if not found_quotient
@@ -192,6 +279,15 @@ if get_option('enable_debug')
   cxx_args += '-DQUOTIENT_DEBUG'
   cxx_args += '-DCATAMARI_DEBUG'
 endif
+
+# A C library for Catamari.
+catamari_c = shared_library(
+    'catamari_c',
+    ['src/buffer_c.cc', 'src/catamari_c.cc', 'src/dense_dpp_c.cc'],
+    include_directories : include_dir,
+    dependencies : deps,
+    cpp_args : cxx_args,
+    install : true)
 
 # Tests for the Complex class.
 complex_test_exe = executable(
@@ -320,5 +416,5 @@ dpp_shifted_2d_negative_laplacian_exe = executable(
 # For using catamari as a subproject.
 catamari_dep = declare_dependency(include_directories : include_dir)
 
-# Install include/catamari.hpp and include/catamari/
+# Install include/catamari.{h, hpp} and include/catamari/
 install_subdir('include', install_dir : '.')

@@ -13,6 +13,26 @@
 namespace catamari {
 
 template <class T>
+Int ConstBlasMatrixView<T>::Height() const CATAMARI_NOEXCEPT {
+  return height;
+}
+
+template <class T>
+Int ConstBlasMatrixView<T>::Width() const CATAMARI_NOEXCEPT {
+  return width;
+}
+
+template <class T>
+Int ConstBlasMatrixView<T>::LeadingDimension() const CATAMARI_NOEXCEPT {
+  return leading_dim;
+}
+
+template <class T>
+const T* ConstBlasMatrixView<T>::Data() const CATAMARI_NOEXCEPT {
+  return data;
+}
+
+template <class T>
 const T* ConstBlasMatrixView<T>::Pointer(Int row, Int column) const {
   return &data[row + column * leading_dim];
 }
@@ -39,18 +59,18 @@ ConstBlasMatrixView<T> ConstBlasMatrixView<T>::Submatrix(
 }
 
 template <class T>
-ConstBlasMatrixView<T>::ConstBlasMatrixView() {}
+ConstBlasMatrixView<T>::ConstBlasMatrixView() CATAMARI_NOEXCEPT {}
 
 template <class T>
 ConstBlasMatrixView<T>::ConstBlasMatrixView(const BlasMatrixView<T>& matrix)
-    : height(matrix.height),
-      width(matrix.width),
-      leading_dim(matrix.leading_dim),
-      data(matrix.data) {}
+    CATAMARI_NOEXCEPT : height(matrix.height),
+                        width(matrix.width),
+                        leading_dim(matrix.leading_dim),
+                        data(matrix.data) {}
 
 template <class T>
 ConstBlasMatrixView<T>& ConstBlasMatrixView<T>::operator=(
-    const BlasMatrixView<T>& matrix) {
+    const BlasMatrixView<T>& matrix) CATAMARI_NOEXCEPT {
   height = matrix.height;
   width = matrix.width;
   leading_dim = matrix.leading_dim;
@@ -59,7 +79,32 @@ ConstBlasMatrixView<T>& ConstBlasMatrixView<T>::operator=(
 }
 
 template <class T>
-ConstBlasMatrixView<T> BlasMatrixView<T>::ToConst() const {
+Int BlasMatrixView<T>::Height() const CATAMARI_NOEXCEPT {
+  return height;
+}
+
+template <class T>
+Int BlasMatrixView<T>::Width() const CATAMARI_NOEXCEPT {
+  return width;
+}
+
+template <class T>
+Int BlasMatrixView<T>::LeadingDimension() const CATAMARI_NOEXCEPT {
+  return leading_dim;
+}
+
+template <class T>
+T* BlasMatrixView<T>::Data() CATAMARI_NOEXCEPT {
+  return data;
+}
+
+template <class T>
+const T* BlasMatrixView<T>::Data() const CATAMARI_NOEXCEPT {
+  return data;
+}
+
+template <class T>
+ConstBlasMatrixView<T> BlasMatrixView<T>::ToConst() const CATAMARI_NOEXCEPT {
   ConstBlasMatrixView<T> const_matrix = *this;
   return const_matrix;
 }
@@ -115,6 +160,37 @@ ConstBlasMatrixView<T> BlasMatrixView<T>::Submatrix(Int row_beg, Int column_beg,
   submatrix.leading_dim = leading_dim;
   submatrix.data = Pointer(row_beg, column_beg);
   return submatrix;
+}
+
+template <class T>
+std::ostream& operator<<(std::ostream& os,
+                         const ConstBlasMatrixView<T>& matrix) {
+  for (Int i = 0; i < matrix.height; ++i) {
+    for (Int j = 0; j < matrix.width; ++j) {
+      os << matrix(i, j) << " ";
+    }
+    os << "\n";
+  }
+  return os;
+}
+
+template <class T>
+std::ostream& operator<<(std::ostream& os, const BlasMatrixView<T>& matrix) {
+  return os << matrix.ToConst();
+}
+
+template <class T>
+void Print(const ConstBlasMatrixView<T>& matrix, const std::string& label,
+           std::ostream& os) {
+  os << label << ":\n";
+  os << matrix << std::endl;
+}
+
+template <class T>
+void Print(const BlasMatrixView<T>& matrix, const std::string& label,
+           std::ostream& os) {
+  os << label << ":\n";
+  os << matrix << std::endl;
 }
 
 }  // namespace catamari

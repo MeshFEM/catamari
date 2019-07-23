@@ -12,6 +12,7 @@
 
 TEST_CASE("Basic", "[Basic]") {
   catamari::CoordinateMatrix<float> matrix;
+
   matrix.Resize(5, 5);
   matrix.ReserveEntryAdditions(6);
   matrix.QueueEntryAddition(3, 4, 1.f);
@@ -23,33 +24,45 @@ TEST_CASE("Basic", "[Basic]") {
   matrix.FlushEntryQueues();
   const catamari::Buffer<catamari::MatrixEntry<float>>& entries =
       matrix.Entries();
-
   const catamari::Buffer<catamari::MatrixEntry<float>> expected_entries{
       {2, 0, -1.f}, {2, 3, 2.f},  {3, 2, 4.f},
       {3, 4, 1.f},  {4, 2, -2.f}, {4, 4, 3.f},
   };
-
   REQUIRE(entries == expected_entries);
 
   matrix.ReserveEntryRemovals(2);
   matrix.QueueEntryRemoval(2, 3);
   matrix.QueueEntryRemoval(0, 4);
   matrix.FlushEntryQueues();
-
-  const catamari::Buffer<catamari::MatrixEntry<float>> new_expected_entries{
+  const catamari::Buffer<catamari::MatrixEntry<float>> update0_entries{
       {2, 0, -1.f}, {3, 2, 4.f}, {3, 4, 1.f}, {4, 2, -2.f}, {4, 4, 3.f},
   };
+  REQUIRE(entries == update0_entries);
 
   matrix.ReserveEntryAdditions(5);
   for (quotient::Int i = 0; i < 5; ++i) {
     matrix.QueueEntryAddition(i, i, 10.f);
   }
   matrix.FlushEntryQueues();
-
-  const catamari::Buffer<catamari::MatrixEntry<float>> final_expected_entries{
+  const catamari::Buffer<catamari::MatrixEntry<float>> update1_entries{
       {0, 0, 10.f}, {1, 1, 10.f}, {2, 0, -1.f}, {2, 2, 10.f}, {3, 2, 4.f},
       {3, 3, 10.f}, {3, 4, 1.f},  {4, 2, -2.f}, {4, 4, 13.f},
   };
+  REQUIRE(entries == update1_entries);
 
-  REQUIRE(entries == final_expected_entries);
+  matrix.ReplaceEntry(2, 0, 3.7f);
+  matrix.ReplaceEntry(3, 3, -9.f);
+  const catamari::Buffer<catamari::MatrixEntry<float>> update2_entries{
+      {0, 0, 10.f}, {1, 1, 10.f}, {2, 0, 3.7f}, {2, 2, 10.f}, {3, 2, 4.f},
+      {3, 3, -9.f}, {3, 4, 1.f},  {4, 2, -2.f}, {4, 4, 13.f},
+  };
+  REQUIRE(entries == update2_entries);
+
+  matrix.AddToEntry(3, 2, 1.f);
+  matrix.AddToEntry(4, 4, -2.f);
+  const catamari::Buffer<catamari::MatrixEntry<float>> update3_entries{
+      {0, 0, 10.f}, {1, 1, 10.f}, {2, 0, 3.7f}, {2, 2, 10.f}, {3, 2, 5.f},
+      {3, 3, -9.f}, {3, 4, 1.f},  {4, 2, -2.f}, {4, 4, 11.f},
+  };
+  REQUIRE(entries == update3_entries);
 }

@@ -25,171 +25,12 @@ void Factorization<Field>::OpenMPLeftLookingSupernodeUpdate(
     Int main_supernode, const CoordinateMatrix<Field>& matrix,
     LeftLookingSharedState* shared_state,
     Buffer<PrivateState<Field>>* private_states) {
-  BlasMatrixView<Field> main_diagonal_block =
-      diagonal_factor_->blocks[main_supernode];
-  BlasMatrixView<Field> main_lower_block =
-      lower_factor_->blocks[main_supernode];
-  const Int main_supernode_size = main_lower_block.width;
+  // The left-looking supernodal update needs to be rewritten, but it is low
+  // priority since a multithreaded right-looking approach will almost always
+  // be faster.
 
-  shared_state->rel_rows[main_supernode] = 0;
-  shared_state->intersect_ptrs[main_supernode] =
-      lower_factor_->IntersectionSizesBeg(main_supernode);
-
-  const int main_thread = omp_get_thread_num();
-  Buffer<Int>& pattern_flags = (*private_states)[main_thread].pattern_flags;
-  Buffer<Int>& row_structure = (*private_states)[main_thread].row_structure;
-
-  // Compute the supernodal row pattern.
-  pattern_flags[main_supernode] = main_supernode;
-  const Int num_packed = ComputeRowPattern(
-      matrix, ordering_.permutation, ordering_.inverse_permutation,
-      ordering_.supernode_sizes, ordering_.supernode_offsets,
-      supernode_member_to_index_, ordering_.assembly_forest.parents,
-      main_supernode, pattern_flags.Data(), row_structure.Data());
-
-  // OpenMP pragmas cannot operate on object members or function results.
-  const SymmetricFactorizationType factorization_type_copy =
-      control_.factorization_type;
-  const Buffer<Int>& supernode_offsets_ref = ordering_.supernode_offsets;
-  const Buffer<Int>& supernode_member_to_index_ref = supernode_member_to_index_;
-  LowerFactor<Field>* const lower_factor_ptr = lower_factor_.get();
-  Field* const main_diagonal_block_data CATAMARI_UNUSED =
-      main_diagonal_block.data;
-  Field* const main_lower_block_data = main_lower_block.data;
-
-  // for J = find(L(K, :))
-  //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
-  for (Int index = 0; index < num_packed; ++index) {
-    const Int descendant_supernode = row_structure[index];
-    CATAMARI_ASSERT(descendant_supernode < main_supernode,
-                    "Looking into upper triangle (multithreaded).");
-    const ConstBlasMatrixView<Field> descendant_lower_block =
-        lower_factor_ptr->blocks[descendant_supernode];
-    const Int descendant_degree = descendant_lower_block.height;
-    const Int descendant_supernode_size = descendant_lower_block.width;
-
-    const Int descendant_main_rel_row =
-        shared_state->rel_rows[descendant_supernode];
-    const Int descendant_main_intersect_size =
-        *shared_state->intersect_ptrs[descendant_supernode];
-
-    const ConstBlasMatrixView<Field> descendant_diag_block =
-        diagonal_factor_->blocks[descendant_supernode].ToConst();
-
-    #pragma omp task default(none)                                         \
-        firstprivate(index, descendant_supernode, descendant_main_rel_row, \
-            descendant_main_intersect_size, descendant_lower_block,        \
-            descendant_diag_block, descendant_supernode_size,              \
-            private_states, main_diagonal_block, main_supernode)           \
-        shared(supernode_offsets_ref)                                      \
-        depend(out: main_diagonal_block_data)
-    {
-      const int thread = omp_get_thread_num();
-      PrivateState<Field>& private_state = (*private_states)[thread];
-
-      const ConstBlasMatrixView<Field> descendant_main_matrix =
-          descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
-                                           descendant_main_intersect_size,
-                                           descendant_supernode_size);
-
-      BlasMatrixView<Field> scaled_transpose;
-      scaled_transpose.height = descendant_supernode_size;
-      scaled_transpose.width = descendant_main_intersect_size;
-      scaled_transpose.leading_dim = descendant_supernode_size;
-      scaled_transpose.data = private_state.scaled_transpose_buffer.Data();
-      FormScaledTranspose(factorization_type_copy, descendant_diag_block,
-                          descendant_main_matrix, &scaled_transpose);
-
-      BlasMatrixView<Field> workspace_matrix;
-      workspace_matrix.height = descendant_main_intersect_size;
-      workspace_matrix.width = descendant_main_intersect_size;
-      workspace_matrix.leading_dim = descendant_main_intersect_size;
-      workspace_matrix.data = private_state.workspace_buffer.Data();
-
-      UpdateDiagonalBlock(factorization_type_copy, supernode_offsets_ref,
-                          *lower_factor_ptr, main_supernode,
-                          descendant_supernode, descendant_main_rel_row,
-                          descendant_main_matrix, scaled_transpose.ToConst(),
-                          &main_diagonal_block, &workspace_matrix);
-    }
-
-    shared_state->intersect_ptrs[descendant_supernode]++;
-    shared_state->rel_rows[descendant_supernode] +=
-        descendant_main_intersect_size;
-
-    // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
-    //                = L(KNext:n, J) * Z(J, K).
-    const Int* descendant_active_intersect_size_beg =
-        shared_state->intersect_ptrs[descendant_supernode];
-    Int descendant_active_rel_row =
-        shared_state->rel_rows[descendant_supernode];
-    const Int* main_active_intersect_sizes =
-        lower_factor_ptr->IntersectionSizesBeg(main_supernode);
-    Int main_active_rel_row = 0;
-    while (descendant_active_rel_row != descendant_degree) {
-      const Int descendant_active_intersect_size =
-          *descendant_active_intersect_size_beg;
-
-      SeekForMainActiveRelativeRow(
-          main_supernode, descendant_supernode, descendant_active_rel_row,
-          supernode_member_to_index_ref, *lower_factor_ptr,
-          &main_active_rel_row, &main_active_intersect_sizes);
-      const Int main_active_intersect_size = *main_active_intersect_sizes;
-
-      #pragma omp task default(none)                                         \
-          firstprivate(index, descendant_supernode,                          \
-              descendant_active_rel_row, descendant_main_rel_row,            \
-              main_active_rel_row, descendant_active_intersect_size,         \
-              descendant_main_intersect_size,                                \
-              main_active_intersect_size, descendant_supernode_size,         \
-              private_states, descendant_lower_block, descendant_diag_block, \
-              main_lower_block, main_supernode)                              \
-          shared(supernode_offsets_ref, supernode_member_to_index_ref)       \
-          depend(out: main_lower_block_data[main_active_rel_row])
-      {
-        const int thread = omp_get_thread_num();
-        PrivateState<Field>& private_state = (*private_states)[thread];
-
-        const ConstBlasMatrixView<Field> descendant_active_matrix =
-            descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
-                                             descendant_active_intersect_size,
-                                             descendant_supernode_size);
-
-        const ConstBlasMatrixView<Field> descendant_main_matrix =
-            descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
-                                             descendant_main_intersect_size,
-                                             descendant_supernode_size);
-
-        BlasMatrixView<Field> scaled_transpose;
-        scaled_transpose.height = descendant_supernode_size;
-        scaled_transpose.width = descendant_main_intersect_size;
-        scaled_transpose.leading_dim = descendant_supernode_size;
-        scaled_transpose.data = private_state.scaled_transpose_buffer.Data();
-        FormScaledTranspose(factorization_type_copy, descendant_diag_block,
-                            descendant_main_matrix, &scaled_transpose);
-
-        BlasMatrixView<Field> main_active_block = main_lower_block.Submatrix(
-            main_active_rel_row, 0, main_active_intersect_size,
-            main_supernode_size);
-
-        BlasMatrixView<Field> workspace_matrix;
-        workspace_matrix.height = descendant_active_intersect_size;
-        workspace_matrix.width = descendant_main_intersect_size;
-        workspace_matrix.leading_dim = descendant_active_intersect_size;
-        workspace_matrix.data = private_state.workspace_buffer.Data();
-
-        UpdateSubdiagonalBlock(
-            main_supernode, descendant_supernode, main_active_rel_row,
-            descendant_main_rel_row, descendant_active_rel_row,
-            supernode_offsets_ref, supernode_member_to_index_ref,
-            scaled_transpose.ToConst(), descendant_active_matrix,
-            *lower_factor_ptr, &main_active_block, &workspace_matrix);
-      }
-
-      ++descendant_active_intersect_size_beg;
-      descendant_active_rel_row += descendant_active_intersect_size;
-    }
-  }
+  // TODO(Jack Poulson): Rewrite this routine. A mutex will be needed for the
+  // linked list updates.
 }
 
 template <class Field>
@@ -276,6 +117,9 @@ bool Factorization<Field>::OpenMPLeftLookingSubtree(
   }
 
   if (succeeded) {
+    #pragma omp taskgroup
+    OpenMPInitializeBlockColumn(supernode, matrix);
+
     // Handle the current supernode's elimination.
     #pragma omp taskgroup
     OpenMPLeftLookingSupernodeUpdate(supernode, matrix, shared_state,
@@ -295,13 +139,16 @@ bool Factorization<Field>::OpenMPLeftLookingSubtree(
 template <class Field>
 SparseLDLResult Factorization<Field>::OpenMPLeftLooking(
     const CoordinateMatrix<Field>& matrix) {
+  const Int num_rows = matrix.NumRows();
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
   const int max_threads = omp_get_max_threads();
 
+  CATAMARI_START_TIMER(profile.left_looking_allocate);
   LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
+  shared_state.descendants.Initialize(num_supernodes);
 #ifdef CATAMARI_ENABLE_TIMERS
   shared_state.inclusive_timers.Resize(num_supernodes);
   shared_state.exclusive_timers.Resize(num_supernodes);
@@ -309,28 +156,23 @@ SparseLDLResult Factorization<Field>::OpenMPLeftLooking(
 
   Buffer<PrivateState<Field>> private_states(max_threads);
 
-  const int max_supernode_size = max_supernode_size_;
   #pragma omp taskgroup
   for (int t = 0; t < max_threads; ++t) {
-    #pragma omp task default(none)                          \
-        firstprivate(t, num_supernodes, max_supernode_size) \
-        shared(private_states)
+    #pragma omp task default(none) \
+        firstprivate(t, num_supernodes, num_rows) shared(private_states)
     {
       PrivateState<Field>& private_state = private_states[t];
-      private_state.pattern_flags.Resize(num_supernodes, -1);
-      private_state.row_structure.Resize(num_supernodes);
-
-      // TODO(Jack Poulson): Switch to a reasonably-tight upper bound for each
-      // thread.
-      private_state.scaled_transpose_buffer.Resize(
-          max_supernode_size * max_supernode_size, Field{0});
-
-      // TODO(Jack Poulson): Switch to a reasonably-tight upper bound for each
-      // thread.
-      private_state.workspace_buffer.Resize(
-          max_supernode_size * (max_supernode_size - 1), Field{0});
+      private_state.pattern_flags.Resize(num_rows);
+      private_state.relative_indices.Resize(num_rows);
+      if (control_.factorization_type != kCholeskyFactorization) {
+        private_state.scaled_transpose_buffer.Resize(
+            left_looking_scaled_transpose_size_, Field{0});
+      }
+      private_state.workspace_buffer.Resize(left_looking_workspace_size_,
+                                            Field{0});
     }
   }
+  CATAMARI_STOP_TIMER(profile.left_looking_allocate);
 
   // Compute flop-count estimates so that we may prioritize the expensive
   // tasks before the cheaper ones.

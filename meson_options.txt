@@ -6,6 +6,16 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
 
+option('disable_xmmintrin',
+    type : 'boolean',
+    value : false,
+    description : 'prevents usage of xmmintrin')
+
+option('disable_fenv_disable_denorms',
+    type : 'boolean',
+    value : false,
+    description : 'prevents usage of FE_DFL_DISABLE_SSE_DENORMS_ENV')
+
 option('disable_tcmalloc',
     type : 'boolean',
     value : true,
@@ -60,3 +70,18 @@ option('disable_openmp',
     type : 'boolean',
     value : false,
     description : 'disable OpenMP support?')
+
+option('disable_gcc_fma',
+    type : 'boolean',
+    value : false,
+    description : 'disable GCC FMA intrinsic fallback?')
+
+option('disable_xlc_fma',
+    type : 'boolean',
+    value : false,
+    description : 'disable XLC FMA intrinsic fallback?')
+
+option('ieee_sum',
+    type : 'boolean',
+    value : false,
+    description : 'enable IEEE double-mantissa summation?')

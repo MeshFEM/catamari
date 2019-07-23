@@ -27,7 +27,7 @@ ComplexBase<Field> EuclideanNorm(const ConstBlasMatrixView<Field>& matrix) {
       catamari::UpdateScaledSquare(matrix(i, j), &scale, &scaled_square);
     }
   }
-  return scale * catamari::Sqrt(scaled_square);
+  return scale * std::sqrt(scaled_square);
 }
 
 // Returns the Frobenius norm of a sparse matrix.
@@ -39,7 +39,7 @@ ComplexBase<Field> EuclideanNorm(const CoordinateMatrix<Field>& matrix) {
   for (const MatrixEntry<Field>& entry : matrix.Entries()) {
     catamari::UpdateScaledSquare(entry.value, &scale, &scaled_square);
   }
-  return scale * catamari::Sqrt(scaled_square);
+  return scale * std::sqrt(scaled_square);
 }
 
 // Returns the max norm of a dense matrix.
@@ -51,7 +51,7 @@ ComplexBase<Field> MaxNorm(const ConstBlasMatrixView<Field>& matrix) {
   const Int width = matrix.width;
   for (Int j = 0; j < width; ++j) {
     for (Int i = 0; i < height; ++i) {
-      max_norm = std::max(max_norm, Abs(matrix(i, j)));
+      max_norm = std::max(max_norm, std::abs(matrix(i, j)));
     }
   }
   return max_norm;
@@ -63,7 +63,7 @@ ComplexBase<Field> MaxNorm(const CoordinateMatrix<Field>& matrix) {
   typedef ComplexBase<Field> Real;
   Real max_norm = 0;
   for (const MatrixEntry<Field>& entry : matrix.Entries()) {
-    max_norm = std::max(max_norm, Abs(entry.value));
+    max_norm = std::max(max_norm, std::abs(entry.value));
   }
   return max_norm;
 }

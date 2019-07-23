@@ -64,50 +64,67 @@ void Factorization<Field>::MergeContribution(
 
 template <class Field>
 void Factorization<Field>::FormSupernodes(const CoordinateMatrix<Field>& matrix,
-                                          AssemblyForest* forest,
                                           Buffer<Int>* supernode_degrees) {
-  // Greedily compute a supernodal partition using the original ordering.
-  AssemblyForest orig_scalar_forest;
+  CATAMARI_START_TIMER(profile.scalar_elimination_forest);
+  Buffer<Int> scalar_parents;
+  Buffer<Int> scalar_degrees;
+  const bool explicitly_permute = false;  // TODO(Jack Poulson): Make optional.
+  if (ordering_.permutation.Empty()) {
+    scalar_ldl::EliminationForestAndDegrees(matrix, &scalar_parents,
+                                            &scalar_degrees);
+  } else if (explicitly_permute) {
+    CoordinateMatrix<Field> reordered_matrix;
+    PermuteMatrix(matrix, ordering_, &reordered_matrix);
+    scalar_ldl::EliminationForestAndDegrees(reordered_matrix, &scalar_parents,
+                                            &scalar_degrees);
+  } else {
+    scalar_ldl::EliminationForestAndDegrees(matrix, ordering_, &scalar_parents,
+                                            &scalar_degrees);
+  }
+  CATAMARI_STOP_TIMER(profile.scalar_elimination_forest);
+
   SymmetricOrdering fund_ordering;
   fund_ordering.permutation = ordering_.permutation;
   fund_ordering.inverse_permutation = ordering_.inverse_permutation;
-  scalar_ldl::LowerStructure scalar_structure;
-  FormFundamentalSupernodes(matrix, ordering_, &orig_scalar_forest,
-                            &fund_ordering.supernode_sizes, &scalar_structure);
+  FormFundamentalSupernodes(scalar_parents, scalar_degrees,
+                            &fund_ordering.supernode_sizes);
   OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
   CATAMARI_ASSERT(fund_ordering.supernode_offsets.Back() == matrix.NumRows(),
                   "Supernodes did not sum to the matrix size.");
+#ifdef CATAMARI_DEBUG
+  if (!supernodal_ldl::ValidFundamentalSupernodes(
+          matrix, ordering_, fund_ordering.supernode_sizes)) {
+    std::cerr << "Invalid fundamental supernodes." << std::endl;
+    return;
+  }
+#endif  // ifdef CATAMARI_DEBUG
 
   Buffer<Int> fund_member_to_index;
   MemberToIndex(matrix.NumRows(), fund_ordering.supernode_offsets,
                 &fund_member_to_index);
 
+  CATAMARI_START_TIMER(profile.supernodal_elimination_forest);
   const Int num_fund_supernodes = fund_ordering.supernode_sizes.Size();
   ConvertFromScalarToSupernodalEliminationForest(
-      num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
+      num_fund_supernodes, scalar_parents, fund_member_to_index,
       &fund_ordering.assembly_forest.parents);
-  fund_ordering.assembly_forest.FillFromParents();
+  CATAMARI_STOP_TIMER(profile.supernodal_elimination_forest);
 
-  Buffer<Int> fund_supernode_degrees;
-  SupernodalDegrees(matrix, fund_ordering, orig_scalar_forest,
-                    fund_member_to_index, &fund_supernode_degrees);
+  // Construct the supernodal degrees from the scalar degrees.
+  Buffer<Int> fund_supernode_degrees(num_fund_supernodes);
+  for (Int supernode = 0; supernode < num_fund_supernodes; ++supernode) {
+    const Int supernode_tail = fund_ordering.supernode_offsets[supernode] +
+                               fund_ordering.supernode_sizes[supernode] - 1;
+    fund_supernode_degrees[supernode] = scalar_degrees[supernode_tail];
+  }
 
+  CATAMARI_START_TIMER(profile.relax_supernodes);
   const SupernodalRelaxationControl& relax_control =
       control_.relaxation_control;
   if (relax_control.relax_supernodes) {
-    RelaxSupernodes(
-        orig_scalar_forest.parents, fund_ordering.supernode_sizes,
-        fund_ordering.supernode_offsets, fund_ordering.assembly_forest.parents,
-        fund_supernode_degrees, fund_member_to_index, scalar_structure,
-        relax_control, &ordering_.permutation, &ordering_.inverse_permutation,
-        &forest->parents, &ordering_.assembly_forest.parents, supernode_degrees,
-        &ordering_.supernode_sizes, &ordering_.supernode_offsets,
-        &supernode_member_to_index_);
-    forest->FillFromParents();
-    ordering_.assembly_forest.FillFromParents();
+    RelaxSupernodes(fund_ordering, fund_supernode_degrees, relax_control,
+                    &ordering_, supernode_degrees, &supernode_member_to_index_);
   } else {
-    *forest = orig_scalar_forest;
-
     ordering_.supernode_sizes = fund_ordering.supernode_sizes;
     ordering_.supernode_offsets = fund_ordering.supernode_offsets;
     ordering_.assembly_forest.parents = fund_ordering.assembly_forest.parents;
@@ -116,11 +133,12 @@ void Factorization<Field>::FormSupernodes(const CoordinateMatrix<Field>& matrix,
     supernode_member_to_index_ = fund_member_to_index;
     *supernode_degrees = fund_supernode_degrees;
   }
+  CATAMARI_STOP_TIMER(profile.relax_supernodes);
 }
 
 template <class Field>
 void Factorization<Field>::InitializeFactors(
-    const CoordinateMatrix<Field>& matrix, const AssemblyForest& forest,
+    const CoordinateMatrix<Field>& matrix,
     const Buffer<Int>& supernode_degrees) {
   lower_factor_.reset(
       new LowerFactor<Field>(ordering_.supernode_sizes, supernode_degrees));
@@ -129,43 +147,123 @@ void Factorization<Field>::InitializeFactors(
   CATAMARI_ASSERT(supernode_degrees.Size() == ordering_.supernode_sizes.Size(),
                   "Invalid supernode degrees size.");
 
-  // Store the largest supernode size of the factorization.
-  max_supernode_size_ = *std::max_element(ordering_.supernode_sizes.begin(),
-                                          ordering_.supernode_sizes.end());
-
   // Store the largest degree of the factorization for use in the solve phase.
   max_degree_ =
       *std::max_element(supernode_degrees.begin(), supernode_degrees.end());
 
-  // Compute the maximum number of entries below the diagonal block of a
-  // supernode.
-  max_lower_block_size_ = 0;
-  const Int num_supernodes = supernode_degrees.Size();
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int lower_block_size =
-        supernode_degrees[supernode] * ordering_.supernode_sizes[supernode];
-    max_lower_block_size_ = std::max(max_lower_block_size_, lower_block_size);
-  }
-
-  FillStructureIndices(matrix, ordering_, forest, supernode_member_to_index_,
+  FillStructureIndices(matrix, ordering_, supernode_member_to_index_,
                        lower_factor_.get());
   if (control_.algorithm == kLeftLookingLDL) {
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                          supernode_member_to_index_);
-  }
 
-  FillZeros(ordering_, lower_factor_.get(), diagonal_factor_.get());
-  FillNonzeros(matrix, ordering_, supernode_member_to_index_,
-               lower_factor_.get(), diagonal_factor_.get());
+    // Compute the maximum of the diagonal and subdiagonal update sizes.
+    Int workspace_size = 0;
+    Int scaled_transpose_size = 0;
+    const Int num_supernodes = supernode_degrees.Size();
+    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+      const Int supernode_size = ordering_.supernode_sizes[supernode];
+      Int degree_remaining = supernode_degrees[supernode];
+      const Int* intersect_sizes_beg =
+          lower_factor_->IntersectionSizesBeg(supernode);
+      const Int* intersect_sizes_end =
+          lower_factor_->IntersectionSizesEnd(supernode);
+      for (const Int* iter = intersect_sizes_beg; iter != intersect_sizes_end;
+           ++iter) {
+        const Int intersect_size = *iter;
+        degree_remaining -= intersect_size;
+
+        // Handle the space for the diagonal block update.
+        workspace_size =
+            std::max(workspace_size, intersect_size * intersect_size);
+
+        // Handle the space for the lower update.
+        workspace_size =
+            std::max(workspace_size, intersect_size * degree_remaining);
+
+        if (control_.factorization_type != kCholeskyFactorization) {
+          // Increment the maximum scaled transpose size if necessary.
+          scaled_transpose_size =
+              std::max(scaled_transpose_size, supernode_size * intersect_size);
+        }
+      }
+    }
+    left_looking_workspace_size_ = workspace_size;
+    left_looking_scaled_transpose_size_ = scaled_transpose_size;
+  } else {
+    // Compute the maximum number of entries below the diagonal block of a
+    // supernode.
+    max_lower_block_size_ = 0;
+    const Int num_supernodes = supernode_degrees.Size();
+    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+      const Int lower_block_size =
+          supernode_degrees[supernode] * ordering_.supernode_sizes[supernode];
+      max_lower_block_size_ = std::max(max_lower_block_size_, lower_block_size);
+    }
+  }
 }
 
 template <class Field>
 void Factorization<Field>::InitialFactorizationSetup(
     const CoordinateMatrix<Field>& matrix) {
-  AssemblyForest forest;
   Buffer<Int> supernode_degrees;
-  FormSupernodes(matrix, &forest, &supernode_degrees);
-  InitializeFactors(matrix, forest, supernode_degrees);
+  FormSupernodes(matrix, &supernode_degrees);
+  CATAMARI_START_TIMER(profile.initialize_factors);
+  InitializeFactors(matrix, supernode_degrees);
+  CATAMARI_STOP_TIMER(profile.initialize_factors);
+}
+
+template <class Field>
+void Factorization<Field>::InitializeBlockColumn(
+    Int supernode, const CoordinateMatrix<Field>& matrix) {
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
+
+  const bool self_adjoint =
+      control_.factorization_type != kLDLTransposeFactorization;
+  const bool have_permutation = !ordering_.permutation.Empty();
+  const Int supernode_start = ordering_.supernode_offsets[supernode];
+  const Int supernode_size = ordering_.supernode_sizes[supernode];
+  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
+  const Int* index_beg = lower_factor_->StructureBeg(supernode);
+  const Int* index_end = lower_factor_->StructureEnd(supernode);
+  for (Int j = supernode_start; j < supernode_start + supernode_size; ++j) {
+    const Int j_rel = j - supernode_start;
+    const Int j_orig = have_permutation ? ordering_.inverse_permutation[j] : j;
+
+    // Fill the diagonal block's column with zeros.
+    Field* diag_column_ptr = diagonal_block.Pointer(0, j_rel);
+    std::fill(diag_column_ptr, diag_column_ptr + supernode_size, Field{0});
+
+    // Fill the lower block's column with zeros.
+    Field* lower_column_ptr = lower_block.Pointer(0, j_rel);
+    std::fill(lower_column_ptr, lower_column_ptr + lower_block.height,
+              Field{0});
+
+    // Insert the entries from the sparse matrix into this column.
+    const Int row_beg = matrix.RowEntryOffset(j_orig);
+    const Int row_end = matrix.RowEntryOffset(j_orig + 1);
+    for (Int index = row_beg; index < row_end; ++index) {
+      const MatrixEntry<Field>& entry = entries[index];
+      const Int row =
+          have_permutation ? ordering_.permutation[entry.column] : entry.column;
+      if (row < supernode_start) {
+        continue;
+      }
+      const Field value = self_adjoint ? Conjugate(entry.value) : entry.value;
+      if (row < supernode_start + supernode_size) {
+        diag_column_ptr[row - supernode_start] = value;
+      } else {
+        const Int* iter = std::lower_bound(index_beg, index_end, row);
+        CATAMARI_ASSERT(iter != index_end, "Exceeded row indices.");
+        CATAMARI_ASSERT(*iter == row, "Entry (" + std::to_string(row) + ", " +
+                                          std::to_string(j) +
+                                          ") wasn't in the structure.");
+        const Int rel_row = std::distance(index_beg, iter);
+        lower_column_ptr[rel_row] = value;
+      }
+    }
+  }
 }
 
 template <class Field>
@@ -175,56 +273,65 @@ SparseLDLResult Factorization<Field>::Factor(
   control_ = control;
   ordering_ = manual_ordering;
 
+#ifdef CATAMARI_ENABLE_TIMERS
+  profile.Reset();
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
 #ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {
+    if (control_.algorithm == kAdaptiveLDL) {
+      control_.algorithm = kRightLookingLDL;
+    }
     #pragma omp parallel
     #pragma omp single
     OpenMPInitialFactorizationSetup(matrix);
   } else {
+    if (control_.algorithm == kAdaptiveLDL) {
+      control_.algorithm = kLeftLookingLDL;
+    }
     InitialFactorizationSetup(matrix);
   }
 #else
-  InitialFactorizationSetup(matrix);
-#endif
-
-  if (control_.algorithm == kLeftLookingLDL) {
-    return LeftLooking(matrix);
-  } else {
-    return RightLooking(matrix);
+  if (control_.algorithm == kAdaptiveLDL) {
+    control_.algorithm = kLeftLookingLDL;
   }
+  InitialFactorizationSetup(matrix);
+#endif  // ifdef CATAMARI_OPENMP
+
+  SparseLDLResult result;
+  if (control_.algorithm == kLeftLookingLDL) {
+    result = LeftLooking(matrix);
+  } else {
+    result = RightLooking(matrix);
+  }
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  std::cout << profile << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
+  return result;
 }
 
+// TODO(Jack Poulson): Check that the previous factorization had an identical
+// sparsity pattern.
 template <class Field>
 SparseLDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
-// TODO(Jack Poulson): Check that the previous factorization had an identical
-// sparsity pattern.
-
-#ifdef CATAMARI_OPENMP
-  if (omp_get_max_threads() > 1) {
-    #pragma omp parallel
-    #pragma omp single
-    {
-      OpenMPFillZeros(ordering_, lower_factor_.get(), diagonal_factor_.get());
-      OpenMPFillNonzeros(matrix, ordering_, supernode_member_to_index_,
-                         lower_factor_.get(), diagonal_factor_.get());
-    }
-  } else {
-    FillZeros(ordering_, lower_factor_.get(), diagonal_factor_.get());
-    FillNonzeros(matrix, ordering_, supernode_member_to_index_,
-                 lower_factor_.get(), diagonal_factor_.get());
-  }
-#else
-  FillZeros(ordering_, lower_factor_.get(), diagonal_factor_.get());
-  FillNonzeros(matrix, ordering_, supernode_member_to_index_,
-               lower_factor_.get(), diagonal_factor_.get());
-#endif
-
+#ifdef CATAMARI_ENABLE_TIMERS
+  profile.Reset();
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+  SparseLDLResult result;
   if (control_.algorithm == kLeftLookingLDL) {
-    return LeftLooking(matrix);
+    result = LeftLooking(matrix);
   } else {
-    return RightLooking(matrix);
+    result = RightLooking(matrix);
   }
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  std::cout << profile << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
+  return result;
 }
 
 }  // namespace supernodal_ldl

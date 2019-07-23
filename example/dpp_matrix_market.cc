@@ -163,7 +163,7 @@ Experiment RunMatrixMarketTest(
     sample = dpp.Sample(maximum_likelihood);
     const double sample_seconds = sample_timer.Stop();
     std::cout << "  sample took " << sample_seconds << " seconds." << std::endl;
-    quotient::PrintVector(sample, "sample", std::cout);
+    quotient::Print(sample, "sample", std::cout);
   }
   experiment.sample_seconds = sample_timer.TotalSeconds() / num_samples;
 
@@ -242,12 +242,6 @@ int main(int argc, char** argv) {
                                 2);
   const bool relax_supernodes = parser.OptionalInput<bool>(
       "relax_supernodes", "Relax the supernodes?", true);
-  const Int allowable_supernode_zeros =
-      parser.OptionalInput<Int>("allowable_supernode_zeros",
-                                "Number of zeros allowed in relaxations.", 128);
-  const float allowable_supernode_zero_ratio = parser.OptionalInput<float>(
-      "allowable_supernode_zero_ratio",
-      "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const double diagonal_shift = parser.OptionalInput<Real>(
       "diagonal_shift", "The value to add to the diagonal.", 1e6);
   const int ldl_algorithm_int =
@@ -300,10 +294,6 @@ int main(int argc, char** argv) {
     sn_control.algorithm =
         static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
     sn_control.relaxation_control.relax_supernodes = relax_supernodes;
-    sn_control.relaxation_control.allowable_supernode_zeros =
-        allowable_supernode_zeros;
-    sn_control.relaxation_control.allowable_supernode_zero_ratio =
-        allowable_supernode_zero_ratio;
   }
 
   if (!matrix_market_directory.empty()) {

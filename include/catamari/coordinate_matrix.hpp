@@ -137,6 +137,12 @@ class CoordinateMatrix {
   // removals.
   void RemoveEntry(Int row, Int column);
 
+  // Changes a pre-existing entry at position (row, column) to the new value.
+  void ReplaceEntry(Int row, Int column, const Field& value);
+
+  // Adds the given value to a pre-existing entry at position (row, column).
+  void AddToEntry(Int row, Int column, const Field& value);
+
   // Returns a reference to the entry with the given index.
   const MatrixEntry<Field>& Entry(Int entry_index) const CATAMARI_NOEXCEPT;
 
@@ -146,6 +152,14 @@ class CoordinateMatrix {
 
   // Returns a reference to the underlying vector of entries.
   const Buffer<MatrixEntry<Field>>& Entries() const CATAMARI_NOEXCEPT;
+
+  // Direct access to the row entry offsets vector.
+  // NOTE: Not recommended for typical usage.
+  Buffer<Int>& RowEntryOffsets() CATAMARI_NOEXCEPT;
+
+  // Immutable direct access to the row entry offsets vector.
+  // NOTE: Not recommended for typical usage.
+  const Buffer<Int>& RowEntryOffsets() const CATAMARI_NOEXCEPT;
 
   // Returns the offset into the entry vector where entries from the given row
   // begin.
@@ -208,8 +222,11 @@ class CoordinateMatrix {
 
 // Pretty-prints the CoordinateMatrix.
 template <class Field>
-void PrintCoordinateMatrix(const CoordinateMatrix<Field>& matrix,
-                           const std::string& label);
+std::ostream& operator<<(std::ostream& os,
+                         const CoordinateMatrix<Field>& matrix);
+template <class Field>
+void Print(const CoordinateMatrix<Field>& matrix, const std::string& label,
+           std::ostream& os);
 
 }  // namespace catamari
 

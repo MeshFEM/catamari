@@ -211,8 +211,8 @@ void ConvertToDense(const CoordinateMatrix<Field>& sparse_matrix,
 
 // Inverts a single-precision complex dense matrix in-place.
 void InvertMatrix(BlasMatrix<Complex<float>>* matrix) {
-  const BlasInt num_rows = matrix->view.height;
-  const BlasInt leading_dim = matrix->view.leading_dim;
+  const BlasInt num_rows = matrix->Height();
+  const BlasInt leading_dim = matrix->LeadingDimension();
 
   Buffer<BlasInt> pivots(num_rows);
 
@@ -222,14 +222,14 @@ void InvertMatrix(BlasMatrix<Complex<float>>* matrix) {
   BlasInt info;
 
   LAPACK_SYMBOL(cgetrf)
-  (&num_rows, &num_rows, matrix->view.data, &leading_dim, pivots.Data(), &info);
+  (&num_rows, &num_rows, matrix->Data(), &leading_dim, pivots.Data(), &info);
   if (info) {
     std::cerr << "Exited cgetrf with info=" << info << std::endl;
     return;
   }
 
   LAPACK_SYMBOL(cgetri)
-  (&num_rows, matrix->view.data, &leading_dim, pivots.Data(), work.Data(),
+  (&num_rows, matrix->Data(), &leading_dim, pivots.Data(), work.Data(),
    &work_size, &info);
   if (info) {
     std::cerr << "Exited cgetri with info=" << info << std::endl;
@@ -238,8 +238,8 @@ void InvertMatrix(BlasMatrix<Complex<float>>* matrix) {
 
 // Inverts a double-precision complex dense matrix in-place.
 void InvertMatrix(BlasMatrix<Complex<double>>* matrix) {
-  const BlasInt num_rows = matrix->view.height;
-  const BlasInt leading_dim = matrix->view.leading_dim;
+  const BlasInt num_rows = matrix->Height();
+  const BlasInt leading_dim = matrix->LeadingDimension();
 
   Buffer<BlasInt> pivots(num_rows);
 
@@ -249,14 +249,14 @@ void InvertMatrix(BlasMatrix<Complex<double>>* matrix) {
   BlasInt info;
 
   LAPACK_SYMBOL(zgetrf)
-  (&num_rows, &num_rows, matrix->view.data, &leading_dim, pivots.Data(), &info);
+  (&num_rows, &num_rows, matrix->Data(), &leading_dim, pivots.Data(), &info);
   if (info) {
     std::cerr << "Exited zgetrf with info=" << info << std::endl;
     return;
   }
 
   LAPACK_SYMBOL(zgetri)
-  (&num_rows, matrix->view.data, &leading_dim, pivots.Data(), work.Data(),
+  (&num_rows, matrix->Data(), &leading_dim, pivots.Data(), work.Data(),
    &work_size, &info);
   if (info) {
     std::cerr << "Exited zgetri with info=" << info << std::endl;

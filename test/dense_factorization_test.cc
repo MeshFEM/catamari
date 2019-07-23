@@ -135,7 +135,8 @@ void RunCholeskyFactorization(Int tile_size, Int block_size,
                                        &residual.view);
   const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
-  REQUIRE(relative_residual < 1e-12);
+  const Real tolerance = 100 * std::numeric_limits<Real>::epsilon();
+  REQUIRE(relative_residual <= tolerance);
 }
 
 template <typename Field>
@@ -181,7 +182,8 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
                                        &residual.view);
   const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
-  REQUIRE(relative_residual < 1e-12);
+  const Real tolerance = 100 * std::numeric_limits<Real>::epsilon();
+  REQUIRE(relative_residual <= tolerance);
 }
 
 template <typename Field>
@@ -227,19 +229,167 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
                                        &residual.view);
   const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
   const Real relative_residual = residual_norm / right_hand_side_norm;
-  REQUIRE(relative_residual < 1e-12);
+  const Real tolerance = 100 * std::numeric_limits<Real>::epsilon();
+  REQUIRE(relative_residual <= tolerance);
 }
 
 }  // anonymous namespace
 
-TEST_CASE("Basic", "Basic") {
-  const Int matrix_size = 1000;
+TEST_CASE("Float", "Float") {
+  const Int matrix_size = 400;
+  const Int tile_size = 128;
+  const Int block_size = 64;
+  const Int num_rounds = 2;
+
+  BlasMatrix<float> matrix;
+  Buffer<float> extra_buffer;
+
+  for (Int round = 0; round < num_rounds; ++round) {
+    InitializeHPD(matrix_size, &matrix);
+    RunCholeskyFactorization(tile_size, block_size, &matrix);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunLDLAdjointFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeSymmetric(matrix_size, &matrix);
+    RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+  }
+}
+
+TEST_CASE("Double", "Double") {
+  const Int matrix_size = 400;
+  const Int tile_size = 128;
+  const Int block_size = 64;
+  const Int num_rounds = 2;
+
+  BlasMatrix<double> matrix;
+  Buffer<double> extra_buffer;
+
+  for (Int round = 0; round < num_rounds; ++round) {
+    InitializeHPD(matrix_size, &matrix);
+    RunCholeskyFactorization(tile_size, block_size, &matrix);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunLDLAdjointFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeSymmetric(matrix_size, &matrix);
+    RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+  }
+}
+
+TEST_CASE("DoubleFloat", "DoubleFloat") {
+  const Int matrix_size = 400;
+  const Int tile_size = 128;
+  const Int block_size = 64;
+  const Int num_rounds = 2;
+
+  BlasMatrix<mantis::DoubleMantissa<float>> matrix;
+  Buffer<mantis::DoubleMantissa<float>> extra_buffer;
+
+  for (Int round = 0; round < num_rounds; ++round) {
+    InitializeHPD(matrix_size, &matrix);
+    RunCholeskyFactorization(tile_size, block_size, &matrix);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunLDLAdjointFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeSymmetric(matrix_size, &matrix);
+    RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+  }
+}
+
+TEST_CASE("DoubleDouble", "DoubleDouble") {
+  const Int matrix_size = 400;
+  const Int tile_size = 128;
+  const Int block_size = 64;
+  const Int num_rounds = 2;
+
+  BlasMatrix<mantis::DoubleMantissa<double>> matrix;
+  Buffer<mantis::DoubleMantissa<double>> extra_buffer;
+
+  for (Int round = 0; round < num_rounds; ++round) {
+    InitializeHPD(matrix_size, &matrix);
+    RunCholeskyFactorization(tile_size, block_size, &matrix);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunLDLAdjointFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeSymmetric(matrix_size, &matrix);
+    RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+  }
+}
+
+TEST_CASE("ComplexFloat", "ComplexFloat") {
+  const Int matrix_size = 400;
+  const Int tile_size = 128;
+  const Int block_size = 64;
+  const Int num_rounds = 2;
+
+  BlasMatrix<Complex<float>> matrix;
+  Buffer<Complex<float>> extra_buffer;
+
+  for (Int round = 0; round < num_rounds; ++round) {
+    InitializeHPD(matrix_size, &matrix);
+    RunCholeskyFactorization(tile_size, block_size, &matrix);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunLDLAdjointFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeSymmetric(matrix_size, &matrix);
+    RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+  }
+}
+
+TEST_CASE("ComplexDouble", "ComplexDouble") {
+  const Int matrix_size = 400;
   const Int tile_size = 128;
   const Int block_size = 64;
   const Int num_rounds = 2;
 
   BlasMatrix<Complex<double>> matrix;
   Buffer<Complex<double>> extra_buffer;
+
+  for (Int round = 0; round < num_rounds; ++round) {
+    InitializeHPD(matrix_size, &matrix);
+    RunCholeskyFactorization(tile_size, block_size, &matrix);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunLDLAdjointFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeSymmetric(matrix_size, &matrix);
+    RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+  }
+}
+
+TEST_CASE("ComplexDoubleFloat", "ComplexDoubleFloat") {
+  const Int matrix_size = 300;
+  const Int tile_size = 128;
+  const Int block_size = 64;
+  const Int num_rounds = 2;
+
+  BlasMatrix<Complex<mantis::DoubleMantissa<float>>> matrix;
+  Buffer<Complex<mantis::DoubleMantissa<float>>> extra_buffer;
+
+  for (Int round = 0; round < num_rounds; ++round) {
+    InitializeHPD(matrix_size, &matrix);
+    RunCholeskyFactorization(tile_size, block_size, &matrix);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunLDLAdjointFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeSymmetric(matrix_size, &matrix);
+    RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+  }
+}
+
+TEST_CASE("ComplexDoubleDouble", "ComplexDoubleDouble") {
+  const Int matrix_size = 300;
+  const Int tile_size = 128;
+  const Int block_size = 64;
+  const Int num_rounds = 2;
+
+  BlasMatrix<Complex<mantis::DoubleMantissa<double>>> matrix;
+  Buffer<Complex<mantis::DoubleMantissa<double>>> extra_buffer;
 
   for (Int round = 0; round < num_rounds; ++round) {
     InitializeHPD(matrix_size, &matrix);

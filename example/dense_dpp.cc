@@ -23,11 +23,12 @@ namespace {
 
 template <typename Field>
 void InitializeMatrix(Int matrix_size, BlasMatrix<Field>* matrix) {
+  typedef mantis::ComplexBase<Field> Real;
   matrix->Resize(matrix_size, matrix_size);
   for (Int j = 0; j < matrix_size; ++j) {
-    matrix->Entry(j, j) = 1.;
+    matrix->Entry(j, j) = Real(1);
     for (Int i = j + 1; i < matrix_size; ++i) {
-      matrix->Entry(i, j) = -1. / (2 * matrix_size);
+      matrix->Entry(i, j) = Real(-1) / (2 * matrix_size);
     }
   }
 }
@@ -197,6 +198,18 @@ int main(int argc, char** argv) {
                       num_rounds, random_seed);
   std::cout << std::endl;
 
+  std::cout << "Double-float-precision real:" << std::endl;
+  RunDPPTests<mantis::DoubleMantissa<float>>(maximum_likelihood, matrix_size,
+                                             block_size, tile_size, num_rounds,
+                                             random_seed);
+  std::cout << std::endl;
+
+  std::cout << "Double-double-precision real:" << std::endl;
+  RunDPPTests<mantis::DoubleMantissa<double>>(maximum_likelihood, matrix_size,
+                                              block_size, tile_size, num_rounds,
+                                              random_seed);
+  std::cout << std::endl;
+
   std::cout << "Single-precision complex:" << std::endl;
   RunDPPTests<Complex<float>>(maximum_likelihood, matrix_size, block_size,
                               tile_size, num_rounds, random_seed);
@@ -205,6 +218,19 @@ int main(int argc, char** argv) {
   std::cout << "Double-precision complex:" << std::endl;
   RunDPPTests<Complex<double>>(maximum_likelihood, matrix_size, block_size,
                                tile_size, num_rounds, random_seed);
+  std::cout << std::endl;
+
+  std::cout << "Double-float-precision complex:" << std::endl;
+  RunDPPTests<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      maximum_likelihood, matrix_size, block_size, tile_size, num_rounds,
+      random_seed);
+  std::cout << std::endl;
+
+  std::cout << "Double-double-precision complex:" << std::endl;
+  RunDPPTests<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      maximum_likelihood, matrix_size, block_size, tile_size, num_rounds,
+      random_seed);
+  std::cout << std::endl;
 
   return 0;
 }

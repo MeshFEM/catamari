@@ -13,6 +13,7 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #include "catamari/complex.hpp"
@@ -368,6 +369,28 @@ void CoordinateMatrix<Field>::RemoveEntry(Int row, Int column) {
 }
 
 template <class Field>
+void CoordinateMatrix<Field>::ReplaceEntry(Int row, Int column,
+                                           const Field& value) {
+  const Int entry_index = EntryOffset(row, column);
+  if (entry_index == RowEntryOffset(row + 1) ||
+      entries_[entry_index].column != column) {
+    throw std::invalid_argument("Entry does not exist.");
+  }
+  entries_[entry_index].value = value;
+}
+
+template <class Field>
+void CoordinateMatrix<Field>::AddToEntry(Int row, Int column,
+                                         const Field& value) {
+  const Int entry_index = EntryOffset(row, column);
+  if (entry_index == RowEntryOffset(row + 1) ||
+      entries_[entry_index].column != column) {
+    throw std::invalid_argument("Entry does not exist.");
+  }
+  entries_[entry_index].value += value;
+}
+
+template <class Field>
 const MatrixEntry<Field>& CoordinateMatrix<Field>::Entry(Int entry_index) const
     CATAMARI_NOEXCEPT {
   return entries_[entry_index];
@@ -383,6 +406,17 @@ template <class Field>
 const Buffer<MatrixEntry<Field>>& CoordinateMatrix<Field>::Entries() const
     CATAMARI_NOEXCEPT {
   return entries_;
+}
+
+template <class Field>
+Buffer<Int>& CoordinateMatrix<Field>::RowEntryOffsets() CATAMARI_NOEXCEPT {
+  return row_entry_offsets_;
+}
+
+template <class Field>
+const Buffer<Int>& CoordinateMatrix<Field>::RowEntryOffsets() const
+    CATAMARI_NOEXCEPT {
+  return row_entry_offsets_;
 }
 
 template <class Field>
@@ -493,13 +527,22 @@ void CoordinateMatrix<Field>::CombineSortedEntries(
 }
 
 template <class Field>
-void PrintCoordinateMatrix(const CoordinateMatrix<Field>& matrix,
-                           const std::string& label) {
-  std::cout << label << ":\n";
+std::ostream& operator<<(std::ostream& os,
+                         const CoordinateMatrix<Field>& matrix) {
   for (const MatrixEntry<Field>& entry : matrix.Entries()) {
-    std::cout << entry.row << " " << entry.column << " " << entry.value << "\n";
+    os << entry.row << " " << entry.column << " " << entry.value << "\n";
   }
-  std::cout << std::endl;
+  return os;
+}
+
+template <class Field>
+void Print(const CoordinateMatrix<Field>& matrix, const std::string& label,
+           std::ostream& os) {
+  os << label << ":\n";
+  for (const MatrixEntry<Field>& entry : matrix.Entries()) {
+    os << entry.row << " " << entry.column << " " << entry.value << "\n";
+  }
+  os << std::endl;
 }
 
 }  // namespace catamari

@@ -15,7 +15,7 @@ namespace catamari {
 namespace scalar_ldl {
 
 template <class Field>
-void OpenMPEliminationForestAndDegreesRecursion(
+void OpenMPSimpleEliminationForestAndDegreesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     Int root, bool keep_structures, Buffer<Int>* parents, Buffer<Int>* degrees,
     Buffer<Buffer<std::vector<Int>>>* private_children_lists,
@@ -30,7 +30,7 @@ void OpenMPEliminationForestAndDegreesRecursion(
     #pragma omp task default(none) firstprivate(child, keep_structures)    \
         shared(matrix, ordering, parents, degrees, private_children_lists, \
         structures, private_pattern_flags, private_tmp_structures)
-    OpenMPEliminationForestAndDegreesRecursion(
+    OpenMPSimpleEliminationForestAndDegreesRecursion(
         matrix, ordering, child, keep_structures, parents, degrees,
         private_children_lists, structures, private_pattern_flags,
         private_tmp_structures);
@@ -168,10 +168,9 @@ void OpenMPEliminationForestAndDegreesRecursion(
 }
 
 template <class Field>
-void OpenMPEliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
-                                       const SymmetricOrdering& ordering,
-                                       Buffer<Int>* parents,
-                                       Buffer<Int>* degrees) {
+void OpenMPSimpleEliminationForestAndDegrees(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    Buffer<Int>* parents, Buffer<Int>* degrees) {
   const Int num_rows = matrix.NumRows();
   const int max_threads = omp_get_max_threads();
   parents->Resize(num_rows);
@@ -206,11 +205,23 @@ void OpenMPEliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
     #pragma omp task default(none) firstprivate(root, keep_structures)     \
         shared(matrix, ordering, parents, degrees, private_children_lists, \
             structures, private_pattern_flags, private_tmp_structures)
-    OpenMPEliminationForestAndDegreesRecursion(
+    OpenMPSimpleEliminationForestAndDegreesRecursion(
         matrix, ordering, root, keep_structures, parents, degrees,
         &private_children_lists, &structures, &private_pattern_flags,
         &private_tmp_structures);
   }
+}
+
+template <class Field>
+void OpenMPEliminationForestAndDegrees(const CoordinateMatrix<Field>& matrix,
+                                       const SymmetricOrdering& ordering,
+                                       Buffer<Int>* parents,
+                                       Buffer<Int>* degrees) {
+  // TODO(Jack Poulson): Parallel implementations of the sequential approach.
+
+  // Calling the sequential simple algorithm might be faster on small numbers
+  // of threads.
+  OpenMPSimpleEliminationForestAndDegrees(matrix, ordering, parents, degrees);
 }
 
 template <class Field>

@@ -430,7 +430,6 @@ class HelmholtzWithPMLTrilinearHexahedra {
     }
 
     // Store the evaluations of the basis function gradients.
-    // DO_NOT_SUBMIT
     basis_grad_evals_.Resize(num_quadrature_points,
                              num_basis_functions * kDimension);
     for (int z_quad = 0; z_quad < kQuadratureOrder; ++z_quad) {
@@ -975,19 +974,8 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     timer.Start();
     ldl.Solve(&solution.view);
     experiment.solve_seconds = timer.Stop();
-
     if (print_progress) {
-      // Print the solution.
-      std::cout << "X: \n";
-      const Int num_rhs = sources.Size();
-      for (Int row = 0; row < num_rows; ++row) {
-        for (Int j = 0; j < num_rhs; ++j) {
-          const Complex<Real> entry = solution(row, j);
-          std::cout << entry.real() << " + " << entry.imag() << "i ";
-        }
-        std::cout << "\n";
-      }
-      std::cout << std::endl;
+      catamari::Print(solution, "X", std::cout);
     }
 
     // Compute the residual.
@@ -1010,21 +998,11 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     }
     BlasMatrix<Field> solution = right_hand_sides;
     timer.Start();
-    ldl.RefinedSolve(matrix, refined_solve_control, &solution.view);
+    catamari::RefinedSolveStatus<Real> refined_solve_state =
+        ldl.RefinedSolve(matrix, refined_solve_control, &solution.view);
     experiment.refined_solve_seconds = timer.Stop();
-
     if (print_progress) {
-      // Print the solution.
-      std::cout << "XRefined: \n";
-      const Int num_rhs = sources.Size();
-      for (Int row = 0; row < num_rows; ++row) {
-        for (Int j = 0; j < num_rhs; ++j) {
-          const Complex<Real> entry = solution(row, j);
-          std::cout << entry.real() << " + " << entry.imag() << "i ";
-        }
-        std::cout << "\n";
-      }
-      std::cout << std::endl;
+      catamari::Print(solution, "XRefined", std::cout);
     }
 
     // Compute the residual.
@@ -1034,6 +1012,10 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
     std::cout << "  Refined || B - A X ||_F / || B ||_F = "
               << residual_norm / right_hand_side_norm << std::endl;
+    std::cout << "  refined_solve_state.num_iterations: "
+              << refined_solve_state.num_iterations << "\n"
+              << "  refined_solve_state.residual_relative_max_norm: "
+              << refined_solve_state.residual_relative_max_norm << std::endl;
   }
 
   // Reconstruct the problem with a frequency 1.5 times higher.
@@ -1204,17 +1186,12 @@ int main(int argc, char** argv) {
                                 2);
   const bool relax_supernodes = parser.OptionalInput<bool>(
       "relax_supernodes", "Relax the supernodes?", true);
-  const Int allowable_supernode_zeros =
-      parser.OptionalInput<Int>("allowable_supernode_zeros",
-                                "Number of zeros allowed in relaxations.", 128);
-  const float allowable_supernode_zero_ratio = parser.OptionalInput<float>(
-      "allowable_supernode_zero_ratio",
-      "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const int ldl_algorithm_int =
       parser.OptionalInput<int>("ldl_algorithm_int",
                                 "The LDL algorithm type.\n"
-                                "0:left-looking, 1:up-looking, 2:right-looking",
-                                2);
+                                "0:left-looking, 1:up-looking, 2:right-looking,"
+                                "3:adaptive",
+                                3);
   const Int block_size = parser.OptionalInput<Int>(
       "block_size", "The dense algorithmic block size.", 64);
 #ifdef CATAMARI_OPENMP
@@ -1274,10 +1251,6 @@ int main(int argc, char** argv) {
     sn_control.sort_grain_size = sort_grain_size;
 #endif  // ifdef CATAMARI_OPENMP
     sn_control.relaxation_control.relax_supernodes = relax_supernodes;
-    sn_control.relaxation_control.allowable_supernode_zeros =
-        allowable_supernode_zeros;
-    sn_control.relaxation_control.allowable_supernode_zero_ratio =
-        allowable_supernode_zero_ratio;
   }
 
   const Experiment experiment =

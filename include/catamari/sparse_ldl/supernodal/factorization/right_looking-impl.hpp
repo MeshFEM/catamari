@@ -40,11 +40,18 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   schur_complement.leading_dim = degree;
   schur_complement.data = schur_complement_buffer.Data();
 
+  CATAMARI_START_TIMER(profile.merge);
   MergeChildSchurComplements(supernode, ordering_, lower_factor_.get(),
                              diagonal_factor_.get(), shared_state);
+  CATAMARI_STOP_TIMER(profile.merge);
 
+  CATAMARI_START_TIMER(profile.cholesky);
   const Int num_supernode_pivots = FactorDiagonalBlock(
       control_.block_size, control_.factorization_type, &diagonal_block);
+  CATAMARI_STOP_TIMER(profile.cholesky);
+#ifdef CATAMARI_ENABLE_TIMERS
+  profile.cholesky_gflops += std::pow(1. * supernode_size, 3.) / 3.e9;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
   result->num_successful_pivots += num_supernode_pivots;
   if (num_supernode_pivots < supernode_size) {
     return false;
@@ -57,9 +64,15 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   }
 
   CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
+  CATAMARI_START_TIMER(profile.trsm);
   SolveAgainstDiagonalBlock(control_.factorization_type,
                             diagonal_block.ToConst(), &lower_block);
+  CATAMARI_STOP_TIMER(profile.trsm);
+#ifdef CATAMARI_ENABLE_TIMERS
+  profile.trsm_gflops += std::pow(1. * supernode_size, 2.) * degree / 1.e9;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
+  CATAMARI_START_TIMER(profile.herk);
   if (control_.factorization_type == kCholeskyFactorization) {
     LowerNormalHermitianOuterProduct(Real{-1}, lower_block.ToConst(), Real{1},
                                      &schur_complement);
@@ -75,6 +88,10 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
                                     scaled_transpose.ToConst(), Field{1},
                                     &schur_complement);
   }
+  CATAMARI_STOP_TIMER(profile.herk);
+#ifdef CATAMARI_ENABLE_TIMERS
+  profile.herk_gflops += std::pow(1. * degree, 2.) * supernode_size / 1.e9;
+#endif
 
   return true;
 }
@@ -117,6 +134,7 @@ bool Factorization<Field>::RightLookingSubtree(
   }
 
   if (succeeded) {
+    InitializeBlockColumn(supernode, matrix);
     succeeded = RightLookingSupernodeFinalize(supernode, shared_state,
                                               private_state, result);
   } else {

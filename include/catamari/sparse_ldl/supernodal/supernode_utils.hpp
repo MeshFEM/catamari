@@ -10,6 +10,7 @@
 
 #include "catamari/buffer.hpp"
 #include "catamari/sparse_ldl/scalar.hpp"
+#include "catamari/symmetric_ordering.hpp"
 
 #ifdef CATAMARI_ENABLE_TIMERS
 #include "quotient/timer.hpp"
@@ -24,16 +25,15 @@ struct SupernodalRelaxationControl {
   //   multifrontal method", 1989.
   bool relax_supernodes = false;
 
-  // The allowable number of explicit zeros in any relaxed supernode.
-  Int allowable_supernode_zeros = 128;
-
-  // The allowable ratio of explicit zeros in any relaxed supernode. This
-  // should be interpreted as an *alternative* allowance for a supernode merge.
-  // If the number of explicit zeros that would be introduced is less than or
-  // equal to 'allowable_supernode_zeros', *or* the ratio of explicit zeros to
-  // nonzeros is bounded by 'allowable_supernode_zero_ratio', then the merge
-  // can procede.
-  float allowable_supernode_zero_ratio = 0.01;
+  // A list of pairs of bounding combined supernode sizes and explicit zero
+  // ratios for deciding child/parent supernode mergability.
+  //
+  // These constants match that of CHOLMOD (Davis et al.).
+  std::vector<std::pair<Int, float>> cutoff_pairs{
+      std::make_pair(4, 1.f), std::make_pair(16, 0.8f),
+      std::make_pair(48, 0.1f),
+      std::make_pair(std::numeric_limits<Int>::max(), 0.05f),
+  };
 };
 
 namespace supernodal_ldl {
@@ -49,6 +49,31 @@ struct MergableStatus {
   Int num_merged_zeros;
 };
 
+// A data structure for maintaining singly linked lists eminating from each
+// supernode of a left-looking factorization.
+struct LinkedLists {
+  // A workspace of size 'num_supernodes' which contains the links in singly
+  // linked lists started by the non-negative indices of 'heads'.
+  Buffer<Int> lists;
+
+  // A map from each supernode to either the index of the start of a linked list
+  // in 'lists' or an empty list (signified by a negative index).
+  Buffer<Int> heads;
+
+  // Initializes empty linked lists eminating from each supernode.
+  void Initialize(Int num_supernodes) {
+    lists.Resize(num_supernodes);
+    heads.Resize(num_supernodes, -1);
+  }
+
+  // Inserts 'target_supernode' into the linked list associated with the
+  // 'source_supernode'.
+  void Insert(Int source_supernode, Int target_supernode) {
+    lists[target_supernode] = heads[source_supernode];
+    heads[source_supernode] = target_supernode;
+  }
+};
+
 struct LeftLookingSharedState {
   // The relative index of the active supernode within each supernode's
   // structure.
@@ -57,6 +82,10 @@ struct LeftLookingSharedState {
   // Pointers to the active supernode intersection size within each
   // supernode's structure.
   Buffer<const Int*> intersect_ptrs;
+
+  // Left-looking factorizations make use of linked lists of the descendants
+  // of each supernode.
+  LinkedLists descendants;
 
 #ifdef CATAMARI_ENABLE_TIMERS
   // A separate timer for each supernode's inclusive processing time.
@@ -89,13 +118,13 @@ struct RightLookingSharedState {
 
 template <typename Field>
 struct PrivateState {
-  // An integer workspace for storing the supernodes in the current row
-  // pattern.
-  Buffer<Int> row_structure;
-
-  // A data structure for marking whether or not a supernode is in the pattern
+  // A data structure for marking whether or not a (super)node is in the pattern
   // of the active row of the lower-triangular factor.
   Buffer<Int> pattern_flags;
+
+  // A buffer for storing the relative indices mapping a descendant supernode's
+  // structure into one of its ancestor's structure.
+  Buffer<Int> relative_indices;
 
   // A buffer for storing (scaled) transposed descendant blocks.
   Buffer<Field> scaled_transpose_buffer;
@@ -126,19 +155,9 @@ bool ValidFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
 // Compute an unrelaxed supernodal partition using the existing ordering.
 // We require that supernodes have dense diagonal blocks and equal structures
 // below the diagonal block.
-template <class Field>
-void FormFundamentalSupernodes(const CoordinateMatrix<Field>& matrix,
-                               const SymmetricOrdering& ordering,
-                               AssemblyForest* scalar_forest,
-                               Buffer<Int>* supernode_sizes,
-                               scalar_ldl::LowerStructure* scalar_structure);
-#ifdef CATAMARI_OPENMP
-template <class Field>
-void OpenMPFormFundamentalSupernodes(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    AssemblyForest* scalar_forest, Buffer<Int>* supernode_sizes,
-    scalar_ldl::LowerStructure* scalar_structure);
-#endif  // ifdef CATAMARI_OPENMP
+void FormFundamentalSupernodes(const Buffer<Int>& scalar_parents,
+                               const Buffer<Int>& scalar_degrees,
+                               Buffer<Int>* supernode_sizes);
 
 // Returns whether or not the child supernode can be merged into its parent by
 // counting the number of explicit zeros that would be introduced by the
@@ -157,69 +176,36 @@ void OpenMPFormFundamentalSupernodes(
 //   |      |      |
 //    -------------
 //
-// Because it is assumed that supernode 1 is the parent of supernode 0,
-// the only places explicit nonzeros can be introduced are in:
-//   * L10: if supernode 0 was not fully-connected to supernode 1.
-//   * L20: if supernode 0's structure (with supernode 1 removed) does not
-//     contain every member of the structure of supernode 1.
-//
-// Counting the number of explicit zeros that would be introduced is thus
-// simply a matter of counting these mismatches.
+// Because we have a fundamental supernode partition, we know that L10 is
+// nonzero in only its first row.
 //
 // The reason that downstream explicit zeros would not be introduced is the
 // same as the reason explicit zeros are not introduced into L21; supernode
 // 1 is the parent of supernode 0.
 //
-MergableStatus MergableSupernode(
-    Int child_tail, Int parent_tail, Int child_size, Int parent_size,
-    Int num_child_explicit_zeros, Int num_parent_explicit_zeros,
-    const Buffer<Int>& orig_member_to_index,
-    const scalar_ldl::LowerStructure& scalar_structure,
-    const SupernodalRelaxationControl& control);
+MergableStatus MergableSupernode(Int child_size, Int child_degree,
+                                 Int parent_size, Int parent_degree,
+                                 Int num_child_zeros, Int num_parent_zeros,
+                                 const SupernodalRelaxationControl& control);
 
 void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
                    const Buffer<Int>& orig_supernode_sizes,
-                   const Buffer<Int>& orig_member_to_index,
+                   const Buffer<Int>& orig_supernode_degrees,
                    const Buffer<Int>& children,
                    const Buffer<Int>& child_offsets,
-                   const scalar_ldl::LowerStructure& scalar_structure,
                    const SupernodalRelaxationControl& control,
-                   Buffer<Int>* supernode_sizes,
-                   Buffer<Int>* num_explicit_zeros,
+                   Buffer<Int>* supernode_sizes, Buffer<Int>* num_zeros,
                    Buffer<Int>* last_merged_child, Buffer<Int>* merge_parents);
 
 // Walk up the tree in the original postordering, merging supernodes as we
 // progress. The 'relaxed_permutation' and 'relaxed_inverse_permutation'
 // variables are also inputs.
-void RelaxSupernodes(
-    const Buffer<Int>& orig_parents, const Buffer<Int>& orig_supernode_sizes,
-    const Buffer<Int>& orig_supernode_starts,
-    const Buffer<Int>& orig_supernode_parents,
-    const Buffer<Int>& orig_supernode_degrees,
-    const Buffer<Int>& orig_member_to_index,
-    const scalar_ldl::LowerStructure& scalar_structure,
-    const SupernodalRelaxationControl& control,
-    Buffer<Int>* relaxed_permutation, Buffer<Int>* relaxed_inverse_permutation,
-    Buffer<Int>* relaxed_parents, Buffer<Int>* relaxed_supernode_parents,
-    Buffer<Int>* relaxed_supernode_degrees,
-    Buffer<Int>* relaxed_supernode_sizes, Buffer<Int>* relaxed_supernode_starts,
-    Buffer<Int>* relaxed_supernode_member_to_index);
-
-// Computes the sizes of the structures of a supernodal LDL' factorization.
-template <class Field>
-void SupernodalDegrees(const CoordinateMatrix<Field>& matrix,
-                       const SymmetricOrdering& ordering,
-                       const AssemblyForest& forest,
-                       const Buffer<Int>& member_to_index,
-                       Buffer<Int>* supernode_degrees);
-#ifdef CATAMARI_OPENMP
-template <class Field>
-void OpenMPSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
-                             const SymmetricOrdering& ordering,
-                             const AssemblyForest& forest,
-                             const Buffer<Int>& member_to_index,
-                             Buffer<Int>* supernode_degrees);
-#endif  // ifdef CATAMARI_OPENMP
+void RelaxSupernodes(const SymmetricOrdering& orig_ordering,
+                     const Buffer<Int>& orig_supernode_degrees,
+                     const SupernodalRelaxationControl& control,
+                     SymmetricOrdering* relaxed_ordering,
+                     Buffer<Int>* relaxed_supernode_degrees,
+                     Buffer<Int>* relaxed_supernode_member_to_index);
 
 // Fills an estimate of the work required to eliminate the subtree in a
 // right-looking factorization.
@@ -232,7 +218,6 @@ void FillSubtreeWorkEstimates(Int root, const AssemblyForest& supernode_forest,
 template <class Field>
 void FillStructureIndices(const CoordinateMatrix<Field>& matrix,
                           const SymmetricOrdering& ordering,
-                          const AssemblyForest& forest,
                           const Buffer<Int>& supernode_member_to_index,
                           LowerFactor<Field>* lower_factor);
 #ifdef CATAMARI_OPENMP
@@ -240,7 +225,6 @@ template <class Field>
 void OpenMPFillStructureIndices(Int sort_grain_size,
                                 const CoordinateMatrix<Field>& matrix,
                                 const SymmetricOrdering& ordering,
-                                const AssemblyForest& forest,
                                 const Buffer<Int>& supernode_member_to_index,
                                 LowerFactor<Field>* lower_factor);
 #endif  // ifdef CATAMARI_OPENMP
@@ -274,18 +258,6 @@ void OpenMPFillZeros(const SymmetricOrdering& ordering,
                      DiagonalFactor<Field>* diagonal_factor);
 #endif  // ifdef CATAMARI_OPENMP
 
-// Computes the supernodal nonzero pattern of L(row, :) in
-// row_structure[0 : num_packed - 1].
-template <class Field>
-Int ComputeRowPattern(const CoordinateMatrix<Field>& matrix,
-                      const Buffer<Int>& permutation,
-                      const Buffer<Int>& inverse_permutation,
-                      const Buffer<Int>& supernode_sizes,
-                      const Buffer<Int>& supernode_starts,
-                      const Buffer<Int>& member_to_index,
-                      const Buffer<Int>& supernode_parents, Int main_supernode,
-                      Int* pattern_flags, Int* row_structure);
-
 // Store the scaled adjoint update matrix, Z(d, m) = D(d, d) L(m, d)', or
 // the scaled transpose, Z(d, m) = D(d, d) L(m, d)^T.
 template <class Field>
@@ -302,16 +274,6 @@ void OpenMPFormScaledTranspose(Int tile_size,
                                const ConstBlasMatrixView<Field>& matrix,
                                BlasMatrixView<Field>* scaled_transpose);
 #endif  // ifdef CATAMARI_OPENMP
-
-// Moves the pointers for the main supernode down to the active supernode of
-// the descendant column block.
-template <class Field>
-void SeekForMainActiveRelativeRow(Int main_supernode, Int descendant_supernode,
-                                  Int descendant_active_rel_row,
-                                  const Buffer<Int>& supernode_member_to_index,
-                                  const LowerFactor<Field>& lower_factor,
-                                  Int* main_active_rel_row,
-                                  const Int** main_active_intersect_sizes);
 
 // Adds the schur complements of a given supernode's children onto its front.
 template <class Field>
@@ -356,9 +318,11 @@ void UpdateDiagonalBlock(
 // Z(:, m).
 template <class Field>
 void UpdateSubdiagonalBlock(
-    Int main_supernode, Int descendant_supernode, Int main_active_rel_row,
-    Int descendant_main_rel_row, Int descendant_active_rel_row,
-    const Buffer<Int>& supernode_starts,
+    SymmetricFactorizationType factorization_type, Int main_supernode,
+    Int descendant_supernode, Int main_active_rel_row,
+    Int descendant_main_rel_row,
+    const ConstBlasMatrixView<Field>& descendant_main_matrix,
+    Int descendant_active_rel_row, const Buffer<Int>& supernode_starts,
     const Buffer<Int>& supernode_member_to_index,
     const ConstBlasMatrixView<Field>& scaled_transpose,
     const ConstBlasMatrixView<Field>& descendant_active_matrix,

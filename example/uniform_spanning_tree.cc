@@ -536,10 +536,10 @@ inline void AsciiDisplaySample(Int x_size, Int y_size,
 // Overwrites an overcomplete basis for the star space with a minimal orthogonal
 // basis. (This is the single-precision variant.)
 void OverwriteWithOrthogonalBasis(BlasMatrix<float>* matrix) {
-  const BlasInt height = matrix->view.height;
-  const BlasInt width = matrix->view.width;
+  const BlasInt height = matrix->Height();
+  const BlasInt width = matrix->Width();
   const BlasInt min_dim = std::min(height, width);
-  const BlasInt leading_dim = matrix->view.leading_dim;
+  const BlasInt leading_dim = matrix->LeadingDimension();
 
   const BlasInt block_size = 64;
   const BlasInt work_size = std::max(block_size, BlasInt(3)) * width;
@@ -549,7 +549,7 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<float>* matrix) {
   BlasInt info;
   std::cout << "Calling sgeqpf..." << std::endl;
   LAPACK_SYMBOL(sgeqpf)
-  (&height, &width, matrix->view.data, &leading_dim, column_pivots.Data(),
+  (&height, &width, matrix->Data(), &leading_dim, column_pivots.Data(),
    reflector_scalars.Data(), work.Data(), &info);
   if (info != 0) {
     std::cerr << "sgeqpf info: " << info << std::endl;
@@ -573,7 +573,7 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<float>* matrix) {
   matrix->Resize(height, rank);
 
   LAPACK_SYMBOL(sorgqr)
-  (&height, &rank, &rank, matrix->view.data, &leading_dim,
+  (&height, &rank, &rank, matrix->Data(), &leading_dim,
    reflector_scalars.Data(), work.Data(), &work_size, &info);
   if (info != 0) {
     std::cerr << "sorgqr info: " << info << std::endl;
@@ -583,10 +583,10 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<float>* matrix) {
 // Overwrites an overcomplete basis for the star space with a minimal orthogonal
 // basis. (This is the double-precision variant.)
 void OverwriteWithOrthogonalBasis(BlasMatrix<double>* matrix) {
-  const BlasInt height = matrix->view.height;
-  const BlasInt width = matrix->view.width;
+  const BlasInt height = matrix->Height();
+  const BlasInt width = matrix->Width();
   const BlasInt min_dim = std::min(height, width);
-  const BlasInt leading_dim = matrix->view.leading_dim;
+  const BlasInt leading_dim = matrix->LeadingDimension();
 
   const BlasInt block_size = 64;
   const BlasInt work_size = std::max(block_size, BlasInt(3)) * width;
@@ -595,7 +595,7 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<double>* matrix) {
   quotient::Buffer<double> work(work_size);
   BlasInt info;
   LAPACK_SYMBOL(dgeqpf)
-  (&height, &width, matrix->view.data, &leading_dim, column_pivots.Data(),
+  (&height, &width, matrix->Data(), &leading_dim, column_pivots.Data(),
    reflector_scalars.Data(), work.Data(), &info);
   if (info != 0) {
     std::cerr << "dgeqpf info: " << info << std::endl;
@@ -619,7 +619,7 @@ void OverwriteWithOrthogonalBasis(BlasMatrix<double>* matrix) {
   matrix->Resize(height, rank);
 
   LAPACK_SYMBOL(dorgqr)
-  (&height, &rank, &rank, matrix->view.data, &leading_dim,
+  (&height, &rank, &rank, matrix->Data(), &leading_dim,
    reflector_scalars.Data(), work.Data(), &work_size, &info);
   if (info != 0) {
     std::cerr << "dorgqr info: " << info << std::endl;
@@ -915,7 +915,7 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
   // each additional edge should touch one new vertex.
   const Int expected_sample_size = x_size * y_size * z_size - 1;
   std::cout << "Expected rank: " << expected_sample_size << std::endl;
-  std::cout << "Ground set size: " << matrix.view.height << std::endl;
+  std::cout << "Ground set size: " << matrix.Height() << std::endl;
 
   std::mt19937 generator(random_seed);
   BlasMatrix<Field> matrix_copy;
@@ -924,7 +924,7 @@ void RunGridDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 #ifdef CATAMARI_OPENMP
     // Sample using the OpenMP DPP sampler.
     matrix_copy = matrix;
-    extra_buffer.Resize(matrix.view.height * matrix.view.height);
+    extra_buffer.Resize(matrix.Height() * matrix.Height());
     const std::vector<Int> omp_sample =
         ::OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
                           &matrix_copy.view, &generator, &extra_buffer);
@@ -999,7 +999,7 @@ void RunHexagonalDPPTests(bool maximum_likelihood, Int x_size, Int y_size,
 #ifdef CATAMARI_OPENMP
     // Sample using the OpenMP sampler.
     matrix_copy = matrix;
-    extra_buffer.Resize(matrix.view.height * matrix.view.height);
+    extra_buffer.Resize(matrix.Height() * matrix.Height());
     const std::vector<Int> omp_sample =
         ::OpenMPSampleDPP(tile_size, block_size, maximum_likelihood,
                           &matrix_copy.view, &generator, &extra_buffer);

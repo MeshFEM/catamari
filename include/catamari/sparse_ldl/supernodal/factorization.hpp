@@ -13,6 +13,10 @@
 #include "catamari/sparse_ldl/supernodal/lower_factor.hpp"
 #include "catamari/sparse_ldl/supernodal/supernode_utils.hpp"
 
+#ifdef CATAMARI_ENABLE_TIMERS
+#include "quotient/timer.hpp"
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
 namespace catamari {
 namespace supernodal_ldl {
 
@@ -26,7 +30,7 @@ struct Control {
 
   // The choice of either left-looking or right-looking LDL' factorization.
   // There is currently no supernodal up-looking support.
-  LDLAlgorithm algorithm = kRightLookingLDL;
+  LDLAlgorithm algorithm = kAdaptiveLDL;
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.
@@ -79,10 +83,118 @@ struct Control {
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 };
 
+#ifdef CATAMARI_ENABLE_TIMERS
+struct FactorizationProfile {
+  quotient::Timer scalar_elimination_forest;
+
+  quotient::Timer supernodal_elimination_forest;
+
+  quotient::Timer relax_supernodes;
+
+  quotient::Timer initialize_factors;
+
+  quotient::Timer gemm;
+  double gemm_gflops = 0;
+
+  quotient::Timer gemm_unpack;
+
+  quotient::Timer herk;
+  double herk_gflops = 0;
+
+  quotient::Timer herk_unpack;
+
+  quotient::Timer trsm;
+  double trsm_gflops = 0;
+
+  quotient::Timer cholesky;
+  double cholesky_gflops = 0;
+
+  quotient::Timer merge;
+
+  quotient::Timer left_looking;
+  quotient::Timer left_looking_allocate;
+  quotient::Timer left_looking_update;
+  quotient::Timer left_looking_finalize;
+
+  FactorizationProfile()
+      : scalar_elimination_forest("scalar_elimination_forest"),
+        supernodal_elimination_forest("supernodal_elimination_forest"),
+        relax_supernodes("relax_supernodes"),
+        initialize_factors("initialize_factors"),
+        gemm("gemm"),
+        gemm_unpack("gemm_unpack"),
+        herk("herk"),
+        herk_unpack("herk_unpack"),
+        trsm("trsm"),
+        cholesky("cholesky"),
+        merge("merge"),
+        left_looking("left_looking"),
+        left_looking_allocate("left_looking_allocate"),
+        left_looking_update("left_looking_update"),
+        left_looking_finalize("left_looking_finalize") {}
+
+  void Reset() {
+    scalar_elimination_forest.Reset(scalar_elimination_forest.Name());
+    supernodal_elimination_forest.Reset(supernodal_elimination_forest.Name());
+    relax_supernodes.Reset(relax_supernodes.Name());
+    initialize_factors.Reset(initialize_factors.Name());
+    gemm.Reset(gemm.Name());
+    gemm_gflops = 0;
+    gemm_unpack.Reset(gemm_unpack.Name());
+    herk.Reset(herk.Name());
+    herk_gflops = 0;
+    herk_unpack.Reset(herk_unpack.Name());
+    trsm.Reset(trsm.Name());
+    trsm_gflops = 0;
+    cholesky.Reset(cholesky.Name());
+    cholesky_gflops = 0;
+    merge.Reset(merge.Name());
+    left_looking.Reset(left_looking.Name());
+    left_looking_allocate.Reset(left_looking_allocate.Name());
+    left_looking_update.Reset(left_looking_update.Name());
+    left_looking_finalize.Reset(left_looking_finalize.Name());
+  }
+};
+
+std::ostream& operator<<(std::ostream& os,
+                         const FactorizationProfile& profile) {
+  os << profile.scalar_elimination_forest << "\n"
+     << profile.supernodal_elimination_forest << "\n"
+     << profile.relax_supernodes << "\n"
+     << profile.initialize_factors << "\n"
+     << profile.merge << "\n"
+     << profile.gemm << " (GFlops: " << profile.gemm_gflops
+     << ", GFlop/sec: " << profile.gemm_gflops / profile.gemm.TotalSeconds()
+     << ")\n"
+     << profile.gemm_unpack << "\n"
+     << profile.herk << " (GFlops: " << profile.herk_gflops
+     << ", GFlop/sec: " << profile.herk_gflops / profile.herk.TotalSeconds()
+     << ")\n"
+     << profile.herk_unpack << "\n"
+     << profile.trsm << " (GFlops: " << profile.trsm_gflops
+     << ", GFlop/sec: " << profile.trsm_gflops / profile.trsm.TotalSeconds()
+     << ")\n"
+     << profile.cholesky << " (GFlops: " << profile.cholesky_gflops
+     << ", GFlop/sec: "
+     << profile.cholesky_gflops / profile.cholesky.TotalSeconds() << ")\n";
+  if (profile.left_looking.TotalSeconds() > 0.) {
+    os << profile.left_looking << "\n"
+       << profile.left_looking_allocate << "\n"
+       << profile.left_looking_update << "\n"
+       << profile.left_looking_finalize << std::endl;
+  }
+  return os;
+}
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
 // The user-facing data structure for storing a supernodal LDL' factorization.
 template <class Field>
 class Factorization {
  public:
+#ifdef CATAMARI_ENABLE_TIMERS
+  FactorizationProfile profile;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
   // Factors the given matrix using the prescribed permutation.
   SparseLDLResult Factor(const CoordinateMatrix<Field>& matrix,
                          const SymmetricOrdering& manual_ordering,
@@ -149,14 +261,20 @@ class Factorization {
   // supernode containing column 'i'.
   Buffer<Int> supernode_member_to_index_;
 
-  // The largest supernode size in the factorization.
-  Int max_supernode_size_;
-
   // The largest degree of a supernode in the factorization.
   Int max_degree_;
 
   // The largest number of entries in any supernode's lower block.
   Int max_lower_block_size_;
+
+  // The maximum workspace needed for a diagonal or subdiagonal update of a
+  // block column of a supernode.
+  Int left_looking_workspace_size_;
+
+  // The maximum workspace needed for storing the scaled transpose of an
+  // intersection of a block column with an ancestor supernode.
+  // This is only nonzero for LDL^T and LDL^H factorizations.
+  Int left_looking_scaled_transpose_size_;
 
   // The subdiagonal-block portion of the lower-triangular factor.
   std::unique_ptr<LowerFactor<Field>> lower_factor_;
@@ -176,19 +294,25 @@ class Factorization {
 
   // Form the (possibly relaxed) supernodes for the factorization.
   void FormSupernodes(const CoordinateMatrix<Field>& matrix,
-                      AssemblyForest* forest, Buffer<Int>* supernode_degrees);
+                      Buffer<Int>* supernode_degrees);
 #ifdef CATAMARI_OPENMP
   void OpenMPFormSupernodes(const CoordinateMatrix<Field>& matrix,
-                            AssemblyForest* forest,
                             Buffer<Int>* supernode_degrees);
 #endif  // ifdef CATAMARI_OPENMP
 
+  // Initializes a supernodal block column of the factorization using the
+  // input matrix.
+  void InitializeBlockColumn(Int supernode,
+                             const CoordinateMatrix<Field>& matrix);
+#ifdef CATAMARI_OPENMP
+  void OpenMPInitializeBlockColumn(Int supernode,
+                                   const CoordinateMatrix<Field>& matrix);
+#endif  // ifdef CATAMARI_OPENMP
+
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
-                         const AssemblyForest& forest,
                          const Buffer<Int>& supernode_degrees);
 #ifdef CATAMARI_OPENMP
   void OpenMPInitializeFactors(const CoordinateMatrix<Field>& matrix,
-                               const AssemblyForest& forest,
                                const Buffer<Int>& supernode_degrees);
 #endif  // ifdef CATAMARI_OPENMP
 

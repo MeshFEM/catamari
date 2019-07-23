@@ -17,295 +17,20 @@ namespace catamari {
 namespace supernodal_ldl {
 
 template <class Field>
-void OpenMPFormFundamentalSupernodesRecursion(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    Int root, Buffer<Int>* flat_supernode_sizes,
-    scalar_ldl::LowerStructure* scalar_structure, Buffer<Int>* column_ptrs) {
-  const Int order_child_beg = ordering.assembly_forest.child_offsets[root];
-  const Int order_child_end = ordering.assembly_forest.child_offsets[root + 1];
-  #pragma omp taskgroup
-  for (Int index = order_child_beg; index < order_child_end; ++index) {
-    const Int child = ordering.assembly_forest.children[index];
-
-    #pragma omp task default(none) firstprivate(child)                   \
-        shared(matrix, ordering, flat_supernode_sizes, scalar_structure, \
-            column_ptrs)
-    OpenMPFormFundamentalSupernodesRecursion(matrix, ordering, child,
-                                             flat_supernode_sizes,
-                                             scalar_structure, column_ptrs);
-  }
-
-  const Int orig_supernode_size = ordering.supernode_sizes[root];
-  const Int orig_supernode_start = ordering.supernode_offsets[root];
-  Int supernode_start = orig_supernode_start;
-  (*flat_supernode_sizes)[supernode_start] = 1;
-  for (Int column = supernode_start + 1;
-       column < orig_supernode_start + orig_supernode_size; ++column) {
-    // Ensure that the diagonal block would be fully-connected. Due to the
-    // loop invariant, each column pointer in the current supernode would need
-    // to be pointing to index 'column'.
-    bool dense_diagonal_block = true;
-    for (Int j = supernode_start; j < column; ++j) {
-      const Int index = (*column_ptrs)[j];
-      const Int next_column_beg = scalar_structure->column_offsets[j + 1];
-      if (index < next_column_beg &&
-          scalar_structure->indices[index] == column) {
-        ++(*column_ptrs)[j];
-      } else {
-        dense_diagonal_block = false;
-        break;
-      }
-    }
-    if (!dense_diagonal_block) {
-      // This column begins a new supernode.
-      (*flat_supernode_sizes)[column] = 1;
-      supernode_start = column;
-      continue;
-    }
-
-    // Test if the structure of this supernode matches that of the previous
-    // column (with all indices up to this column removed). Because the
-    // diagonal blocks are dense, each column is a child of the next, so that
-    // its structures are nested and their external degrees being equal implies
-    // that their structures are as well.
-
-    // Test that the set sizes match.
-    const Int column_beg = (*column_ptrs)[column];
-    const Int structure_size = (*column_ptrs)[column + 1] - column_beg;
-    const Int prev_column_ptr = (*column_ptrs)[column - 1];
-    const Int prev_remaining_structure_size = column_beg - prev_column_ptr;
-    if (structure_size != prev_remaining_structure_size) {
-      // This column begins a new supernode.
-      (*flat_supernode_sizes)[column] = 1;
-      supernode_start = column;
-      continue;
-    }
-
-    // All tests passed, so we may extend the current supernode to incorporate
-    // this column.
-    ++(*flat_supernode_sizes)[supernode_start];
-    (*flat_supernode_sizes)[column] = 0;
-  }
-}
-
-template <class Field>
-void OpenMPFormFundamentalSupernodes(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    AssemblyForest* scalar_forest, Buffer<Int>* supernode_sizes,
-    scalar_ldl::LowerStructure* scalar_structure) {
-  const Int num_rows = matrix.NumRows();
-
-  // We will only fill the indices and offsets of the factorization.
-  #pragma omp taskgroup
-  scalar_ldl::OpenMPFillStructureIndices(matrix, ordering, scalar_forest,
-                                         scalar_structure);
-
-  supernode_sizes->Clear();
-  if (!num_rows) {
-    return;
-  }
-
-  // We will iterate down each column structure to determine the supernodes.
-  Buffer<Int> column_ptrs = scalar_structure->column_offsets;
-
-  // In order to allow for parallel decomposition of the reordering supernodes
-  // into fundamental supernodes, we mark the principal members of supernodes
-  // with the supernode size and non-principal members with zero. After filling
-  // this structure in parallel, we can easily reduce into the compressed form.
-  Buffer<Int> flat_supernode_sizes(num_rows);
-
-  #pragma omp taskgroup
-  for (const Int root : ordering.assembly_forest.roots) {
-    #pragma omp task default(none) firstprivate(root)                    \
-        shared(matrix, ordering, flat_supernode_sizes, scalar_structure, \
-            column_ptrs)
-    OpenMPFormFundamentalSupernodesRecursion(matrix, ordering, root,
-                                             &flat_supernode_sizes,
-                                             scalar_structure, &column_ptrs);
-  }
-
-  // Compress flat_supernode_sizes into supernode_sizes.
-  {
-    // Count the number of supernodes.
-    Int num_supernodes = 0;
-    Int index = 0;
-    while (index < num_rows) {
-      const Int supernode_size = flat_supernode_sizes[index];
-      index += supernode_size;
-      ++num_supernodes;
-    }
-
-    // Fill the supernode sizes.
-    supernode_sizes->Resize(num_supernodes);
-    index = 0;
-    num_supernodes = 0;
-    while (index < num_rows) {
-      const Int supernode_size = flat_supernode_sizes[index];
-      (*supernode_sizes)[num_supernodes++] = supernode_size;
-      index += supernode_size;
-    }
-  }
-
-#ifdef CATAMARI_DEBUG
-  if (!ValidFundamentalSupernodes(matrix, ordering, *supernode_sizes)) {
-    std::cerr << "Invalid fundamental supernodes." << std::endl;
-    return;
-  }
-#endif
-}
-
-template <class Field>
-void OpenMPSupernodalDegreesRecursion(
-    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
-    Int root, Buffer<Int>* supernode_degrees, Buffer<Buffer<Int>>* structures,
-    Buffer<Buffer<Int>>* private_pattern_flags,
-    Buffer<Buffer<Int>>* private_tmp_structures) {
-  const Int child_beg = ordering.assembly_forest.child_offsets[root];
-  const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
-  #pragma omp taskgroup
-  for (Int child_index = child_beg; child_index < child_end; ++child_index) {
-    const Int child = ordering.assembly_forest.children[child_index];
-    #pragma omp task default(none) firstprivate(child)              \
-        shared(matrix, ordering, forest, supernode_member_to_index, \
-            supernode_degrees, structures, private_pattern_flags,   \
-            private_tmp_structures)
-    OpenMPSupernodalDegreesRecursion(
-        matrix, ordering, forest, supernode_member_to_index, child,
-        supernode_degrees, structures, private_pattern_flags,
-        private_tmp_structures);
-  }
-
-  const int thread = omp_get_thread_num();
-  Buffer<Int>& pattern_flags = (*private_pattern_flags)[thread];
-  Buffer<Int>& tmp_structure = (*private_tmp_structures)[thread];
-
-  // Form this node's structure by unioning that of its direct children
-  // (removing portions that intersect this supernode).
-  const Int supernode_size = ordering.supernode_sizes[root];
-  const Int supernode_offset = ordering.supernode_offsets[root];
-  Int degree = 0;
-  for (Int child_index = child_beg; child_index < child_end; ++child_index) {
-    const Int child = ordering.assembly_forest.children[child_index];
-    Buffer<Int>& child_struct = (*structures)[child];
-    for (const Int row : child_struct) {
-      CATAMARI_ASSERT(row >= 0 && row < matrix.NumRows(), "Invalid row index.");
-      const Int row_supernode = supernode_member_to_index[row];
-      CATAMARI_ASSERT(row_supernode >= 0 &&
-                          row_supernode < static_cast<Int>(structures->Size()),
-                      "Invalid supernode index.");
-      if (row_supernode == root) {
-        continue;
-      }
-
-      if (pattern_flags[row] != root) {
-        CATAMARI_ASSERT(row_supernode > root, "row supernode was < root.");
-        pattern_flags[row] = root;
-        tmp_structure[degree++] = row;
-      }
-    }
-
-    // Free the memory of the child.
-    child_struct.Clear();
-  }
-
-  // Incorporate this supernode's structure.
-  const bool have_permutation = !ordering.permutation.Empty();
-  const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
-  for (Int column = supernode_offset;
-       column < supernode_offset + supernode_size; ++column) {
-    const Int orig_column =
-        have_permutation ? ordering.inverse_permutation[column] : column;
-    const Int column_beg = matrix.RowEntryOffset(orig_column);
-    const Int column_end = matrix.RowEntryOffset(orig_column + 1);
-    for (Int index = column_beg; index < column_end; ++index) {
-      const MatrixEntry<Field>& entry = entries[index];
-      const Int row =
-          have_permutation ? ordering.permutation[entry.column] : entry.column;
-      CATAMARI_ASSERT(row >= 0 && row < matrix.NumRows(), "Invalid row index.");
-      const Int row_supernode = supernode_member_to_index[row];
-      CATAMARI_ASSERT(row_supernode >= 0 &&
-                          row_supernode < static_cast<Int>(structures->Size()),
-                      "Invalid supernode index.");
-      if (row_supernode <= root) {
-        continue;
-      }
-
-      if (pattern_flags[row] != root) {
-        pattern_flags[row] = root;
-        tmp_structure[degree++] = row;
-      }
-    }
-  }
-
-  // Store the degree of the supernode.
-  Buffer<Int>& structure = (*structures)[root];
-  structure.Resize(degree);
-  std::copy(tmp_structure.begin(), tmp_structure.begin() + degree,
-            structure.begin());
-  (*supernode_degrees)[root] = degree;
-}
-
-template <class Field>
-void OpenMPSupernodalDegrees(const CoordinateMatrix<Field>& matrix,
-                             const SymmetricOrdering& ordering,
-                             const AssemblyForest& forest,
-                             const Buffer<Int>& supernode_member_to_index,
-                             Buffer<Int>* supernode_degrees) {
-  const Int num_rows = matrix.NumRows();
-  const Int num_supernodes = ordering.supernode_sizes.Size();
-  const int max_threads = omp_get_max_threads();
-
-  supernode_degrees->Resize(num_supernodes);
-
-  // A data structure for marking whether or not a node is in the pattern of
-  // the active row of the lower-triangular factor. Each thread potentially
-  // needs its own since different subtrees can have intersecting structure.
-  Buffer<Buffer<Int>> private_pattern_flags(max_threads);
-
-  Buffer<Buffer<Int>> private_tmp_structures(max_threads);
-
-  #pragma omp taskgroup
-  for (int t = 0; t < max_threads; ++t) {
-    #pragma omp task default(none) firstprivate(t, num_rows) \
-        shared(private_pattern_flags, private_tmp_structures)
-    {
-      private_pattern_flags[t].Resize(num_rows, -1);
-      private_tmp_structures[t].Resize(num_rows - 1);
-    }
-  }
-
-  // Only the structures of the active fronts will be maintained.
-  Buffer<Buffer<Int>> structures(num_supernodes);
-
-  #pragma omp taskgroup
-  for (const Int root : ordering.assembly_forest.roots) {
-    #pragma omp task default(none) firstprivate(root)               \
-        shared(matrix, ordering, forest, supernode_member_to_index, \
-            supernode_degrees, structures, private_pattern_flags,   \
-            private_tmp_structures)
-    OpenMPSupernodalDegreesRecursion(
-        matrix, ordering, forest, supernode_member_to_index, root,
-        supernode_degrees, &structures, &private_pattern_flags,
-        &private_tmp_structures);
-  }
-}
-
-template <class Field>
 void OpenMPFillStructureIndicesRecursion(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const AssemblyForest& forest, const Buffer<Int>& supernode_member_to_index,
-    Int root, LowerFactor<Field>* lower_factor,
+    const Buffer<Int>& supernode_member_to_index, Int root,
+    LowerFactor<Field>* lower_factor,
     Buffer<Buffer<Int>>* private_pattern_flags) {
   const Int child_beg = ordering.assembly_forest.child_offsets[root];
   const Int child_end = ordering.assembly_forest.child_offsets[root + 1];
   #pragma omp taskgroup
   for (Int child_index = child_beg; child_index < child_end; ++child_index) {
     const Int child = ordering.assembly_forest.children[child_index];
-    #pragma omp task default(none) firstprivate(child)               \
-        shared(matrix, ordering, forest, supernode_member_to_index,  \
-            lower_factor, private_pattern_flags)
-    OpenMPFillStructureIndicesRecursion(matrix, ordering, forest,
+    #pragma omp task default(none) firstprivate(child)                    \
+        shared(matrix, ordering, supernode_member_to_index, lower_factor, \
+            private_pattern_flags)
+    OpenMPFillStructureIndicesRecursion(matrix, ordering,
                                         supernode_member_to_index, child,
                                         lower_factor, private_pattern_flags);
   }
@@ -374,7 +99,6 @@ template <class Field>
 void OpenMPFillStructureIndices(Int sort_grain_size,
                                 const CoordinateMatrix<Field>& matrix,
                                 const SymmetricOrdering& ordering,
-                                const AssemblyForest& forest,
                                 const Buffer<Int>& supernode_member_to_index,
                                 LowerFactor<Field>* lower_factor) {
   const Int num_rows = matrix.NumRows();
@@ -394,10 +118,10 @@ void OpenMPFillStructureIndices(Int sort_grain_size,
 
   #pragma omp taskgroup
   for (const Int root : ordering.assembly_forest.roots) {
-    #pragma omp task default(none) firstprivate(root)               \
-        shared(matrix, ordering, forest, supernode_member_to_index, \
-            lower_factor, private_pattern_flags)
-    OpenMPFillStructureIndicesRecursion(matrix, ordering, forest,
+    #pragma omp task default(none) firstprivate(root)                     \
+        shared(matrix, ordering, supernode_member_to_index, lower_factor, \
+            private_pattern_flags)
+    OpenMPFillStructureIndicesRecursion(matrix, ordering,
                                         supernode_member_to_index, root,
                                         lower_factor, &private_pattern_flags);
   }

@@ -12,20 +12,6 @@
 
 namespace catamari {
 
-// Returns the absolute value of a real or complex number.
-// TODO(Jack Poulson): Extend this function beyond the datatypes of std.
-template <typename Field>
-ComplexBase<Field> Abs(const Field& value) {
-  return std::abs(value);
-}
-
-// Returns the square-root of a real or complex number.
-// TODO(Jack Poulson): Extend this function beyond the datatypes of std.
-template <typename Field>
-Field Sqrt(const Field& value) {
-  return std::sqrt(value);
-}
-
 // A helper function for computing the Euclidean norm of a matrix. Given an
 // implicit representation 'value = scale * sqrt(scaled_square)', it updates
 // 'scale' and 'scaled_square' so that
@@ -34,7 +20,7 @@ template <typename Field>
 void UpdateScaledSquare(const Field& update, ComplexBase<Field>* scale,
                         ComplexBase<Field>* scaled_square) {
   typedef ComplexBase<Field> Real;
-  const Real abs_update = Abs(update);
+  const Real abs_update = std::abs(update);
   if (abs_update == Real(0)) {
     return;
   }

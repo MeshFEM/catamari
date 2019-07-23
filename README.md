@@ -10,7 +10,8 @@ LDL^H factorizations. It similarly contains sequential and DAG-scheduled,
 dense and sparse-direct, real and complex,
 [Determinantal Point Process](https://en.wikipedia.org/wiki/Determinantal_point_process)
 sampling through modified LDL^H factorizations -- and a nonsymmetric dense DPP
-sampler based upon a modified LU factorization.
+sampler based upon a modified LU factorization. The supported precisions are
+`float`, `double`, and their double-mantissa extensions.
 
 [![Join the chat at https://gitter.im/hodge_star/community](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/hodge_star/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Documentation](https://readthedocs.org/projects/catamari/badge/?version=latest)](https://hodgestar.com/catamari/docs/master/)
@@ -22,8 +23,11 @@ on Catamari is now available, as are the
 preceding talk.
 
 ### Dependencies
-The only strict dependency for manually including the headers in your project
-is:
+The only strict dependencies for manually including the headers in your project
+are:
+
+* [mantis](https://gitlab.com/hodge_star/mantis): A C++14 header-only,
+MPL-licensed, implementation of real and complex double-mantissa arithmetic.
 
 * [quotient](https://gitlab.com/hodge_star/quotient): A C++14 header-only,
 MPL-licensed, implementation of the (Approximate) Minimum Degree reordering

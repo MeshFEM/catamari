@@ -214,7 +214,7 @@ Experiment RunShifted2DNegativeLaplacianTest(
     const double log_likelihood = dpp->LogLikelihood();
     std::cout << "  log-likelihood was: " << log_likelihood << std::endl;
     if (print_sample) {
-      quotient::PrintVector(sample, "sample", std::cout);
+      quotient::Print(sample, "sample", std::cout);
     }
     if (write_tiff) {
       const std::string filename =
@@ -258,12 +258,6 @@ int main(int argc, char** argv) {
       "sampled_char", "ASCII display for sampled index.", 'x');
   const bool relax_supernodes = parser.OptionalInput<bool>(
       "relax_supernodes", "Relax the supernodes?", true);
-  const Int allowable_supernode_zeros =
-      parser.OptionalInput<Int>("allowable_supernode_zeros",
-                                "Number of zeros allowed in relaxations.", 128);
-  const float allowable_supernode_zero_ratio = parser.OptionalInput<float>(
-      "allowable_supernode_zero_ratio",
-      "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const Int num_samples =
       parser.OptionalInput<Int>("num_samples", "The number of DPP samples.", 1);
   const bool print_progress = parser.OptionalInput<bool>(
@@ -278,10 +272,6 @@ int main(int argc, char** argv) {
   {
     auto& sn_control = dpp_control.supernodal_control;
     sn_control.relaxation_control.relax_supernodes = relax_supernodes;
-    sn_control.relaxation_control.allowable_supernode_zeros =
-        allowable_supernode_zeros;
-    sn_control.relaxation_control.allowable_supernode_zero_ratio =
-        allowable_supernode_zero_ratio;
   }
 
   const Experiment experiment = RunShifted2DNegativeLaplacianTest(

@@ -40,6 +40,21 @@ enum LDLAlgorithm {
 
   // A right-looking (multifrontal) factorization.
   kRightLookingLDL,
+
+  // An adaptive approach that chooses the LDL strategy based upon the
+  // supernodal strategy and the number of available OpenMP threads. The three
+  // primary choices are:
+  //
+  //  * If a supernodal strategy with more than one thread is requested, then
+  //    a multithreaded right-looking algorithm is employed.
+  //
+  //  * If a supernodal strategy with a single thread is requested, then a
+  //    left-looking algorithm is employed.
+  //
+  //  * If a scalar/simplicial strategy is used, then an up-looking algorithm
+  //    is run.
+  //
+  kAdaptiveLDL,
 };
 
 // Statistics from running an LDL' or Cholesky factorization.
@@ -89,9 +104,8 @@ struct Control {
   // The type of factorization to be performed.
   SymmetricFactorizationType factorization_type = kLDLAdjointFactorization;
 
-  // The choice of either left-looking or up-looking LDL' factorization.
-  // There is currently no scalar multifrontal support.
-  LDLAlgorithm algorithm = kUpLookingLDL;
+  // The type of loop invariant to use for the factorization.
+  LDLAlgorithm algorithm = kAdaptiveLDL;
 };
 
 // The nonzero patterns below the diagonal of the lower-triangular factor.

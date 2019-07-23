@@ -734,19 +734,25 @@ void PrintExperiment(const Experiment& experiment) {
             << std::endl;
 }
 
-// Returns the Experiment statistics for a single Matrix Market input matrix.
-Experiment RunTest(SpeedProfile profile, const double& omega,
-                   Int num_x_elements, Int num_y_elements,
-                   const double& pml_scale, const double& pml_exponent,
-                   int num_pml_elements,
-                   const Buffer<GaussianSource<double>>& sources,
-                   bool analytical_ordering,
-                   const catamari::SparseLDLControl& ldl_control,
-                   bool print_progress) {
-  typedef Complex<double> Field;
-  typedef catamari::ComplexBase<Field> Real;
+template <typename Real>
+Experiment SolveModel(SpeedProfile profile, Real omega, Int num_x_elements,
+                      Int num_y_elements, Real pml_scale, Real pml_exponent,
+                      int num_pml_elements,
+                      const Buffer<GaussianSource<double>>& double_sources,
+                      bool analytical_ordering,
+                      const catamari::SparseLDLControl& ldl_control,
+                      bool print_progress) {
+  typedef Complex<Real> Field;
   Experiment experiment;
   quotient::Timer timer;
+
+  Buffer<GaussianSource<Real>> sources(double_sources.Size());
+  for (unsigned index = 0; index < sources.Size(); ++index) {
+    sources[index].point.x = double_sources[index].point.x;
+    sources[index].point.y = double_sources[index].point.y;
+    sources[index].scale = double_sources[index].scale;
+    sources[index].stddev = double_sources[index].stddev;
+  }
 
   // Construct the problem.
   timer.Start();
@@ -799,19 +805,8 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     timer.Start();
     ldl.Solve(&solution.view);
     experiment.solve_seconds = timer.Stop();
-
     if (print_progress) {
-      // Print the solution.
-      std::cout << "X: \n";
-      const Int num_rhs = solution.view.width;
-      for (Int row = 0; row < num_rows; ++row) {
-        for (Int j = 0; j < num_rhs; ++j) {
-          const Complex<Real> entry = solution(row, j);
-          std::cout << entry.real() << " + " << entry.imag() << "i ";
-        }
-        std::cout << "\n";
-      }
-      std::cout << std::endl;
+      catamari::Print(solution, "X", std::cout);
     }
 
     // Compute the residual.
@@ -834,21 +829,11 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     }
     BlasMatrix<Field> solution = right_hand_sides;
     timer.Start();
-    ldl.RefinedSolve(matrix, refined_solve_control, &solution.view);
+    catamari::RefinedSolveStatus<Real> refined_solve_state =
+        ldl.RefinedSolve(matrix, refined_solve_control, &solution.view);
     experiment.refined_solve_seconds = timer.Stop();
-
     if (print_progress) {
-      // Print the refined solution.
-      std::cout << "XRefined: \n";
-      const Int num_rhs = solution.view.width;
-      for (Int row = 0; row < num_rows; ++row) {
-        for (Int j = 0; j < num_rhs; ++j) {
-          const Complex<Real> entry = solution(row, j);
-          std::cout << entry.real() << " + " << entry.imag() << "i ";
-        }
-        std::cout << "\n";
-      }
-      std::cout << std::endl;
+      catamari::Print(solution, "XRefined", std::cout);
     }
 
     // Compute the residual.
@@ -858,7 +843,12 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
     const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
     std::cout << "  Refined || B - A X ||_F / || B ||_F = "
               << residual_norm / right_hand_side_norm << std::endl;
+    std::cout << "  refined_solve_state.num_iterations: "
+              << refined_solve_state.num_iterations << "\n"
+              << "  refined_solve_state.residual_relative_max_norm: "
+              << refined_solve_state.residual_relative_max_norm << std::endl;
   }
+  PrintExperiment(experiment);
 
   return experiment;
 }
@@ -875,9 +865,9 @@ int main(int argc, char** argv) {
   const double omega = parser.OptionalInput<double>(
       "omega", "The angular frequency of the Helmholtz problem.", 471.2);
   const Int num_x_elements = parser.OptionalInput<Int>(
-      "num_x_elements", "The number of elements in the x direction.", 600);
+      "num_x_elements", "The number of elements in the x direction.", 300);
   const Int num_y_elements = parser.OptionalInput<Int>(
-      "num_y_elements", "The number of elements in the y direction.", 600);
+      "num_y_elements", "The number of elements in the y direction.", 300);
   const double pml_scale = parser.OptionalInput<double>(
       "pml_scale", "The scaling factor of the PML profile.", 500.);
   const double pml_exponent = parser.OptionalInput<double>(
@@ -931,17 +921,12 @@ int main(int argc, char** argv) {
                                 2);
   const bool relax_supernodes = parser.OptionalInput<bool>(
       "relax_supernodes", "Relax the supernodes?", true);
-  const Int allowable_supernode_zeros =
-      parser.OptionalInput<Int>("allowable_supernode_zeros",
-                                "Number of zeros allowed in relaxations.", 128);
-  const float allowable_supernode_zero_ratio = parser.OptionalInput<float>(
-      "allowable_supernode_zero_ratio",
-      "Ratio of explicit zeros allowed in a relaxed supernode.", 0.01f);
   const int ldl_algorithm_int =
       parser.OptionalInput<int>("ldl_algorithm_int",
                                 "The LDL algorithm type.\n"
-                                "0:left-looking, 1:up-looking, 2:right-looking",
-                                2);
+                                "0:left-looking, 1:up-looking, 2:right-looking,"
+                                "3:adaptive",
+                                3);
   const bool print_progress = parser.OptionalInput<bool>(
       "print_progress", "Print the progress of the experiments?", false);
   if (!parser.OK()) {
@@ -981,17 +966,18 @@ int main(int argc, char** argv) {
     sn_control.algorithm =
         static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
     sn_control.relaxation_control.relax_supernodes = relax_supernodes;
-    sn_control.relaxation_control.allowable_supernode_zeros =
-        allowable_supernode_zeros;
-    sn_control.relaxation_control.allowable_supernode_zero_ratio =
-        allowable_supernode_zero_ratio;
   }
 
-  const Experiment experiment =
-      RunTest(profile, omega, num_x_elements, num_y_elements, pml_scale,
-              pml_exponent, num_pml_elements, sources, analytical_ordering,
-              ldl_control, print_progress);
-  PrintExperiment(experiment);
+  std::cout << "Solving with double-precision..." << std::endl;
+  SolveModel<double>(profile, omega, num_x_elements, num_y_elements, pml_scale,
+                     pml_exponent, num_pml_elements, sources,
+                     analytical_ordering, ldl_control, print_progress);
+
+  std::cout << "Solving with double-double-precision..." << std::endl;
+  SolveModel<mantis::DoubleMantissa<double>>(
+      profile, omega, num_x_elements, num_y_elements, pml_scale, pml_exponent,
+      num_pml_elements, sources, analytical_ordering, ldl_control,
+      print_progress);
 
   return 0;
 }

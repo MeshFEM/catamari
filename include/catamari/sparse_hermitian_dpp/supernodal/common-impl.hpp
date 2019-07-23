@@ -53,16 +53,24 @@ SupernodalHermitianDPP<Field>::SupernodalHermitianDPP(
 
 template <class Field>
 void SupernodalHermitianDPP<Field>::FormSupernodes() {
-  // Greedily compute a supernodal partition using the original ordering.
-  AssemblyForest orig_scalar_forest;
+  Buffer<Int> scalar_parents;
+  Buffer<Int> scalar_degrees;
+  scalar_ldl::EliminationForestAndDegrees(matrix_, ordering_, &scalar_parents,
+                                          &scalar_degrees);
+
   SymmetricOrdering fund_ordering;
   fund_ordering.permutation = ordering_.permutation;
   fund_ordering.inverse_permutation = ordering_.inverse_permutation;
-  scalar_ldl::LowerStructure scalar_structure;
-  supernodal_ldl::FormFundamentalSupernodes(
-      matrix_, ordering_, &orig_scalar_forest, &fund_ordering.supernode_sizes,
-      &scalar_structure);
+  supernodal_ldl::FormFundamentalSupernodes(scalar_parents, scalar_degrees,
+                                            &fund_ordering.supernode_sizes);
   OffsetScan(fund_ordering.supernode_sizes, &fund_ordering.supernode_offsets);
+#ifdef CATAMARI_DEBUG
+  if (!supernodal_ldl::ValidFundamentalSupernodes(
+          matrix_, ordering_, fund_ordering.supernode_sizes)) {
+    std::cerr << "Invalid fundamental supernodes." << std::endl;
+    return;
+  }
+#endif  // ifdef CATAMARI_DEBUG
 
   Buffer<Int> fund_member_to_index;
   supernodal_ldl::MemberToIndex(matrix_.NumRows(),
@@ -71,30 +79,22 @@ void SupernodalHermitianDPP<Field>::FormSupernodes() {
 
   const Int num_fund_supernodes = fund_ordering.supernode_sizes.Size();
   supernodal_ldl::ConvertFromScalarToSupernodalEliminationForest(
-      num_fund_supernodes, orig_scalar_forest.parents, fund_member_to_index,
+      num_fund_supernodes, scalar_parents, fund_member_to_index,
       &fund_ordering.assembly_forest.parents);
-  fund_ordering.assembly_forest.FillFromParents();
 
-  Buffer<Int> fund_supernode_degrees;
-  supernodal_ldl::SupernodalDegrees(matrix_, fund_ordering, orig_scalar_forest,
-                                    fund_member_to_index,
-                                    &fund_supernode_degrees);
+  // Convert the scalar degrees into the supernodal degrees.
+  Buffer<Int> fund_supernode_degrees(num_fund_supernodes);
+  for (Int supernode = 0; supernode < num_fund_supernodes; ++supernode) {
+    const Int supernode_tail = fund_ordering.supernode_offsets[supernode] +
+                               fund_ordering.supernode_sizes[supernode] - 1;
+    fund_supernode_degrees[supernode] = scalar_degrees[supernode_tail];
+  }
 
   if (control_.relaxation_control.relax_supernodes) {
     supernodal_ldl::RelaxSupernodes(
-        orig_scalar_forest.parents, fund_ordering.supernode_sizes,
-        fund_ordering.supernode_offsets, fund_ordering.assembly_forest.parents,
-        fund_supernode_degrees, fund_member_to_index, scalar_structure,
-        control_.relaxation_control, &ordering_.permutation,
-        &ordering_.inverse_permutation, &forest_.parents,
-        &ordering_.assembly_forest.parents, &supernode_degrees_,
-        &ordering_.supernode_sizes, &ordering_.supernode_offsets,
-        &supernode_member_to_index_);
-    forest_.FillFromParents();
-    ordering_.assembly_forest.FillFromParents();
+        fund_ordering, fund_supernode_degrees, control_.relaxation_control,
+        &ordering_, &supernode_degrees_, &supernode_member_to_index_);
   } else {
-    forest_ = orig_scalar_forest;
-
     ordering_.supernode_sizes = fund_ordering.supernode_sizes;
     ordering_.supernode_offsets = fund_ordering.supernode_offsets;
     ordering_.assembly_forest.parents = fund_ordering.assembly_forest.parents;
@@ -118,13 +118,44 @@ void SupernodalHermitianDPP<Field>::FormStructure() {
   max_supernode_size_ = *std::max_element(ordering_.supernode_sizes.begin(),
                                           ordering_.supernode_sizes.end());
 
-  supernodal_ldl::FillStructureIndices(matrix_, ordering_, forest_,
-                                       supernode_member_to_index_,
-                                       lower_factor_.get());
+  supernodal_ldl::FillStructureIndices(
+      matrix_, ordering_, supernode_member_to_index_, lower_factor_.get());
 
   if (control_.algorithm == kLeftLookingLDL) {
     lower_factor_->FillIntersectionSizes(ordering_.supernode_sizes,
                                          supernode_member_to_index_);
+
+    // Compute the maximum of the diagonal and subdiagonal update sizes.
+    Int workspace_size = 0;
+    Int scaled_transpose_size = 0;
+    const Int num_supernodes = ordering_.supernode_sizes.Size();
+    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+      const Int supernode_size = ordering_.supernode_sizes[supernode];
+      Int degree_remaining = supernode_degrees_[supernode];
+      const Int* intersect_sizes_beg =
+          lower_factor_->IntersectionSizesBeg(supernode);
+      const Int* intersect_sizes_end =
+          lower_factor_->IntersectionSizesEnd(supernode);
+      for (const Int* iter = intersect_sizes_beg; iter != intersect_sizes_end;
+           ++iter) {
+        const Int intersect_size = *iter;
+        degree_remaining -= intersect_size;
+
+        // Handle the space for the diagonal block update.
+        workspace_size =
+            std::max(workspace_size, intersect_size * intersect_size);
+
+        // Handle the space for the lower update.
+        workspace_size =
+            std::max(workspace_size, intersect_size * degree_remaining);
+
+        // Increment the maximum scaled transpose size if necessary.
+        scaled_transpose_size =
+            std::max(scaled_transpose_size, supernode_size * intersect_size);
+      }
+    }
+    left_looking_workspace_size_ = workspace_size;
+    left_looking_scaled_transpose_size_ = scaled_transpose_size;
   }
 }
 
@@ -132,11 +163,7 @@ template <class Field>
 std::vector<Int> SupernodalHermitianDPP<Field>::Sample(
     bool maximum_likelihood) const {
   if (control_.algorithm == kLeftLookingLDL) {
-#ifdef CATAMARI_OPENMP
-    if (omp_get_max_threads() > 1) {
-      return OpenMPLeftLookingSample(maximum_likelihood);
-    }
-#endif  // ifdef CATAMARI_OPENMP
+    // We no longer support OpenMP for the left-looking sampling.
     return LeftLookingSample(maximum_likelihood);
   } else {
 #ifdef CATAMARI_OPENMP

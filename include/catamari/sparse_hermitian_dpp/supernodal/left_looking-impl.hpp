@@ -19,125 +19,200 @@ namespace catamari {
 
 template <class Field>
 void SupernodalHermitianDPP<Field>::LeftLookingSupernodeUpdate(
-    Int main_supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
+    Int supernode, supernodal_ldl::LeftLookingSharedState* shared_state,
     PrivateState* private_state) const {
   const SymmetricFactorizationType factorization_type =
       kLDLAdjointFactorization;
 
-  BlasMatrixView<Field>& main_diagonal_block =
-      diagonal_factor_->blocks[main_supernode];
-  BlasMatrixView<Field>& main_lower_block =
-      lower_factor_->blocks[main_supernode];
-  const Int main_supernode_size = ordering_.supernode_sizes[main_supernode];
+  BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
+  BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
+  const Int supernode_size = lower_block.width;
+  const Int supernode_degree = lower_block.height;
+  const Int supernode_offset = ordering_.supernode_offsets[supernode];
 
-  shared_state->rel_rows[main_supernode] = 0;
-  shared_state->intersect_ptrs[main_supernode] =
-      lower_factor_->IntersectionSizesBeg(main_supernode);
+  Int* pattern_flags = private_state->ldl_state.pattern_flags.Data();
+  Int* rel_ind = private_state->ldl_state.relative_indices.Data();
 
-  // Compute the supernodal row pattern.
-  private_state->ldl_state.pattern_flags[main_supernode] = main_supernode;
-  const Int num_packed = supernodal_ldl::ComputeRowPattern(
-      matrix_, ordering_.permutation, ordering_.inverse_permutation,
-      ordering_.supernode_sizes, ordering_.supernode_offsets,
-      supernode_member_to_index_, ordering_.assembly_forest.parents,
-      main_supernode, private_state->ldl_state.pattern_flags.Data(),
-      private_state->ldl_state.row_structure.Data());
+  // Scatter the pattern of this supernode into pattern_flags.
+  // TODO(Jack Poulson): Switch away from pointers to Int members.
+  const Int* structure = lower_factor_->StructureBeg(supernode);
+  for (Int i = 0; i < supernode_degree; ++i) {
+    pattern_flags[structure[i]] = i;
+  }
+
+  shared_state->rel_rows[supernode] = 0;
+  shared_state->intersect_ptrs[supernode] =
+      lower_factor_->IntersectionSizesBeg(supernode);
 
   // for J = find(L(K, :))
   //   L(K:n, K) -= L(K:n, J) * (D(J, J) * L(K, J)')
-  for (Int index = 0; index < num_packed; ++index) {
-    const Int descendant_supernode =
-        private_state->ldl_state.row_structure[index];
-    CATAMARI_ASSERT(descendant_supernode < main_supernode,
-                    "Looking into upper triangle.");
+  const Int head = shared_state->descendants.heads[supernode];
+  for (Int next_descendant = head; next_descendant >= 0;) {
+    const Int descendant = next_descendant;
+    CATAMARI_ASSERT(descendant < supernode, "Looking into upper triangle");
     const ConstBlasMatrixView<Field>& descendant_lower_block =
-        lower_factor_->blocks[descendant_supernode];
+        lower_factor_->blocks[descendant];
     const Int descendant_degree = descendant_lower_block.height;
-    const Int descendant_supernode_size = descendant_lower_block.width;
+    const Int descendant_size = descendant_lower_block.width;
 
-    const Int descendant_main_rel_row =
-        shared_state->rel_rows[descendant_supernode];
-    const Int descendant_main_intersect_size =
-        *shared_state->intersect_ptrs[descendant_supernode];
+    const Int descendant_main_rel_row = shared_state->rel_rows[descendant];
+    const Int intersect_size = *shared_state->intersect_ptrs[descendant];
+    CATAMARI_ASSERT(intersect_size > 0, "Non-positive intersection size.");
 
-    const ConstBlasMatrixView<Field> descendant_diag_block =
-        diagonal_factor_->blocks[descendant_supernode].ToConst();
+    const Int* descendant_structure =
+        lower_factor_->StructureBeg(descendant) + descendant_main_rel_row;
+    CATAMARI_ASSERT(
+        descendant_structure < lower_factor_->StructureEnd(descendant),
+        "Relative row exceeded end of structure.");
+    CATAMARI_ASSERT(
+        supernode_member_to_index_[*descendant_structure] == supernode,
+        "First member of structure was not intersecting supernode.");
+    CATAMARI_ASSERT(
+        supernode_member_to_index_[descendant_structure[intersect_size - 1]] ==
+            supernode,
+        "Last member of structure was not intersecting supernode.");
 
     const ConstBlasMatrixView<Field> descendant_main_matrix =
         descendant_lower_block.Submatrix(descendant_main_rel_row, 0,
-                                         descendant_main_intersect_size,
-                                         descendant_supernode_size);
+                                         intersect_size, descendant_size);
 
     BlasMatrixView<Field> scaled_transpose;
-    scaled_transpose.height = descendant_supernode_size;
-    scaled_transpose.width = descendant_main_intersect_size;
-    scaled_transpose.leading_dim = descendant_supernode_size;
+    scaled_transpose.height = descendant_size;
+    scaled_transpose.width = intersect_size;
+    scaled_transpose.leading_dim = descendant_size;
     scaled_transpose.data =
         private_state->ldl_state.scaled_transpose_buffer.Data();
-
     supernodal_ldl::FormScaledTranspose(
-        factorization_type, descendant_diag_block, descendant_main_matrix,
-        &scaled_transpose);
+        factorization_type, diagonal_factor_->blocks[descendant].ToConst(),
+        descendant_main_matrix, &scaled_transpose);
 
+    const Int descendant_below_main_rel_row =
+        shared_state->rel_rows[descendant] + intersect_size;
+    const Int descendant_main_degree =
+        descendant_degree - descendant_main_rel_row;
+    const Int descendant_degree_remaining =
+        descendant_degree - descendant_below_main_rel_row;
+
+    // Construct mapping of descendant structure to supernode structure.
+    const bool inplace_diag_update = intersect_size == supernode_size;
+    const bool inplace_subdiag_update =
+        inplace_diag_update && descendant_degree_remaining == supernode_degree;
+    if (!inplace_subdiag_update) {
+      // Store the relative indices of the diagonal block.
+      for (Int i_rel = 0; i_rel < intersect_size; ++i_rel) {
+        const Int i = descendant_structure[i_rel];
+        CATAMARI_ASSERT(
+            i >= supernode_offset && i < supernode_offset + supernode_size,
+            "Invalid relative diagonal block index.");
+        rel_ind[i_rel] = i - supernode_offset;
+      }
+    }
+
+    // Update the diagonal block.
     BlasMatrixView<Field> workspace_matrix;
-    workspace_matrix.height = descendant_main_intersect_size;
-    workspace_matrix.width = descendant_main_intersect_size;
-    workspace_matrix.leading_dim = descendant_main_intersect_size;
+    workspace_matrix.height = intersect_size;
+    workspace_matrix.width = intersect_size;
+    workspace_matrix.leading_dim = intersect_size;
     workspace_matrix.data = private_state->ldl_state.workspace_buffer.Data();
+    if (inplace_diag_update) {
+      // Apply the diagonal block update in-place.
+      MatrixMultiplyLowerNormalNormal(Field{-1}, descendant_main_matrix,
+                                      scaled_transpose.ToConst(), Field{1},
+                                      &diagonal_block);
+    } else {
+      // Form the diagonal block update out-of-place.
+      MatrixMultiplyLowerNormalNormal(Field{-1}, descendant_main_matrix,
+                                      scaled_transpose.ToConst(), Field{0},
+                                      &workspace_matrix);
 
-    supernodal_ldl::UpdateDiagonalBlock(
-        factorization_type, ordering_.supernode_offsets, *lower_factor_,
-        main_supernode, descendant_supernode, descendant_main_rel_row,
-        descendant_main_matrix, scaled_transpose.ToConst(),
-        &main_diagonal_block, &workspace_matrix);
+      // Apply the diagonal block update.
+      for (Int j_rel = 0; j_rel < intersect_size; ++j_rel) {
+        const Int j = rel_ind[j_rel];
+        Field* diag_col = diagonal_block.Pointer(0, j);
+        const Field* workspace_col = workspace_matrix.Pointer(0, j_rel);
+        for (Int i_rel = j_rel; i_rel < intersect_size; ++i_rel) {
+          const Int i = rel_ind[i_rel];
+          diag_col[i] += workspace_col[i_rel];
+        }
+      }
+    }
 
-    shared_state->intersect_ptrs[descendant_supernode]++;
-    shared_state->rel_rows[descendant_supernode] +=
-        descendant_main_intersect_size;
+    shared_state->intersect_ptrs[descendant]++;
+    shared_state->rel_rows[descendant] = descendant_below_main_rel_row;
 
-    // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
-    //                = L(KNext:n, J) * Z(J, K).
-    const Int* descendant_active_intersect_size_beg =
-        shared_state->intersect_ptrs[descendant_supernode];
-    Int descendant_active_rel_row =
-        shared_state->rel_rows[descendant_supernode];
-    const Int* main_active_intersect_sizes =
-        lower_factor_->IntersectionSizesBeg(main_supernode);
-    Int main_active_rel_row = 0;
-    while (descendant_active_rel_row != descendant_degree) {
-      const Int descendant_active_intersect_size =
-          *descendant_active_intersect_size_beg;
+    next_descendant = shared_state->descendants.lists[descendant];
+    if (descendant_degree_remaining > 0) {
+      const ConstBlasMatrixView<Field> descendant_below_main_matrix =
+          descendant_lower_block.Submatrix(descendant_below_main_rel_row, 0,
+                                           descendant_degree_remaining,
+                                           descendant_size);
 
-      const ConstBlasMatrixView<Field> descendant_active_matrix =
-          descendant_lower_block.Submatrix(descendant_active_rel_row, 0,
-                                           descendant_active_intersect_size,
-                                           descendant_supernode_size);
+      // L(KNext:n, K) -= L(KNext:n, J) * (D(J, J) * L(K, J)')
+      //                = L(KNext:n, J) * Z(J, K).
+      if (inplace_subdiag_update) {
+        // Apply the subdiagonal block update in-place.
+        MatrixMultiplyNormalNormal(Field{-1}, descendant_below_main_matrix,
+                                   scaled_transpose.ToConst(), Field{1},
+                                   &lower_block);
+      } else {
+        // Form the subdiagonal block update out-of-place.
+        workspace_matrix.height = descendant_degree_remaining;
+        workspace_matrix.width = intersect_size;
+        workspace_matrix.leading_dim = descendant_degree_remaining;
+        MatrixMultiplyNormalNormal(Field{-1}, descendant_below_main_matrix,
+                                   scaled_transpose.ToConst(), Field{0},
+                                   &workspace_matrix);
 
-      // The width of the workspace matrix and pointer are already correct.
-      workspace_matrix.height = descendant_active_intersect_size;
-      workspace_matrix.leading_dim = descendant_active_intersect_size;
+        // Store the relative indices on the lower structure.
+        for (Int i_rel = intersect_size; i_rel < descendant_main_degree;
+             ++i_rel) {
+          const Int i = descendant_structure[i_rel];
+          rel_ind[i_rel] = pattern_flags[i];
+          CATAMARI_ASSERT(
+              rel_ind[i_rel] >= 0 && rel_ind[i_rel] < supernode_degree,
+              "Invalid subdiagonal relative index.");
+        }
 
-      supernodal_ldl::SeekForMainActiveRelativeRow(
-          main_supernode, descendant_supernode, descendant_active_rel_row,
-          supernode_member_to_index_, *lower_factor_, &main_active_rel_row,
-          &main_active_intersect_sizes);
-      const Int main_active_intersect_size = *main_active_intersect_sizes;
+        // Apply the subdiagonal block update.
+        for (Int j_rel = 0; j_rel < intersect_size; ++j_rel) {
+          const Int j = rel_ind[j_rel];
+          CATAMARI_ASSERT(j >= 0 && j < supernode_size,
+                          "Invalid unpacked column index.");
+          CATAMARI_ASSERT(j + ordering_.supernode_offsets[supernode] ==
+                              descendant_structure[j_rel],
+                          "Mismatched unpacked column structure.");
 
-      BlasMatrixView<Field> main_active_block = main_lower_block.Submatrix(
-          main_active_rel_row, 0, main_active_intersect_size,
-          main_supernode_size);
+          Field* lower_col = lower_block.Pointer(0, j);
+          const Field* workspace_col = workspace_matrix.Pointer(0, j_rel);
+          for (Int i_rel = 0; i_rel < descendant_degree_remaining; ++i_rel) {
+            const Int i = rel_ind[i_rel + intersect_size];
+            CATAMARI_ASSERT(i >= 0 && i < supernode_degree,
+                            "Invalid row index.");
+            CATAMARI_ASSERT(
+                structure[i] == descendant_structure[i_rel + intersect_size],
+                "Mismatched row structure.");
+            lower_col[i] += workspace_col[i_rel];
+          }
+        }
+      }
 
-      supernodal_ldl::UpdateSubdiagonalBlock(
-          main_supernode, descendant_supernode, main_active_rel_row,
-          descendant_main_rel_row, descendant_active_rel_row,
-          ordering_.supernode_offsets, supernode_member_to_index_,
-          scaled_transpose.ToConst(), descendant_active_matrix, *lower_factor_,
-          &main_active_block, &workspace_matrix);
-
-      ++descendant_active_intersect_size_beg;
-      descendant_active_rel_row += descendant_active_intersect_size;
+      // Insert the descendant supernode into the list of its next ancestor.
+      // NOTE: We would need a lock for this in a multithreaded setting.
+      const Int next_ancestor =
+          supernode_member_to_index_[descendant_structure[intersect_size]];
+      shared_state->descendants.Insert(next_ancestor, descendant);
     }
   }
+
+  if (supernode_degree > 0) {
+    // Insert the supernode into the list of its parent.
+    // NOTE: We would need a lock for this in a multithreaded setting.
+    const Int parent = supernode_member_to_index_[structure[0]];
+    shared_state->descendants.Insert(parent, supernode);
+  }
+
+  // Clear the descendant list for this node.
+  shared_state->descendants.heads[supernode] = -1;
 }
 
 template <class Field>
@@ -179,18 +254,19 @@ std::vector<Int> SupernodalHermitianDPP<Field>::LeftLookingSample(
   supernodal_ldl::LeftLookingSharedState shared_state;
   shared_state.rel_rows.Resize(num_supernodes);
   shared_state.intersect_ptrs.Resize(num_supernodes);
+  shared_state.descendants.Initialize(num_supernodes);
 #ifdef CATAMARI_ENABLE_TIMERS
   shared_state.exclusive_timers.Resize(num_supernodes);
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   std::random_device random_device;
   PrivateState private_state;
-  private_state.ldl_state.row_structure.Resize(num_supernodes);
-  private_state.ldl_state.pattern_flags.Resize(num_supernodes);
+  private_state.ldl_state.pattern_flags.Resize(num_rows);
+  private_state.ldl_state.relative_indices.Resize(num_rows);
   private_state.ldl_state.scaled_transpose_buffer.Resize(
-      max_supernode_size_ * max_supernode_size_, Field{0});
-  private_state.ldl_state.workspace_buffer.Resize(
-      max_supernode_size_ * (max_supernode_size_ - 1), Field{0});
+      left_looking_scaled_transpose_size_, Field{0});
+  private_state.ldl_state.workspace_buffer.Resize(left_looking_workspace_size_,
+                                                  Field{0});
   private_state.generator.seed(random_device());
 
   // Note that any postordering of the supernodal elimination forest suffices.

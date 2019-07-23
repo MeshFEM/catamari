@@ -12,6 +12,8 @@
 #include "catamari/blas_matrix.hpp"
 #include "catamari/complex.hpp"
 #include "catamari/coordinate_matrix.hpp"
+#include "catamari/dense_dpp.hpp"
+#include "catamari/dense_factorizations.hpp"
 #include "catamari/integers.hpp"
 #include "catamari/macros.hpp"
 #include "catamari/norms.hpp"

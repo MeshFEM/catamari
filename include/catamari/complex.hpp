@@ -8,26 +8,26 @@
 #ifndef CATAMARI_COMPLEX_H_
 #define CATAMARI_COMPLEX_H_
 
-#include "quotient/complex.hpp"
+#include "mantis/complex.hpp"
 
 namespace catamari {
 
-using quotient::Complex;
-using quotient::ComplexBase;
-using quotient::IsComplex;
-using quotient::IsReal;
+using mantis::Complex;
+using mantis::ComplexBase;
+using mantis::IsComplex;
+using mantis::IsReal;
 
-using quotient::DisableIf;
-using quotient::EnableIf;
+using mantis::DisableIf;
+using mantis::EnableIf;
 
-using quotient::operator-;
-using quotient::operator+;
-using quotient::operator*;
-using quotient::operator/;
+using mantis::operator-;
+using mantis::operator+;
+using mantis::operator*;
+using mantis::operator/;
 
-using quotient::Conjugate;
-using quotient::ImagPart;
-using quotient::RealPart;
+using mantis::Conjugate;
+using mantis::ImagPart;
+using mantis::RealPart;
 
 }  // namespace catamari
 

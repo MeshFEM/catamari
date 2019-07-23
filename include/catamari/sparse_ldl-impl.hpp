@@ -11,9 +11,18 @@
 
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
+#include "catamari/flush_to_zero.hpp"
+
 #include "catamari/sparse_ldl.hpp"
 
 namespace catamari {
+
+template <class Field>
+SparseLDL<Field>::SparseLDL() {
+  // Avoid the potential for order-of-magnitude performance degradation from
+  // slow subnormal processing.
+  EnableFlushToZero();
+}
 
 template <class Field>
 SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
@@ -21,6 +30,10 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   scalar_factorization.reset();
   supernodal_factorization.reset();
 
+#ifdef CATAMARI_ENABLE_TIMERS
+  quotient::Timer timer;
+  timer.Start();
+#endif
   std::unique_ptr<quotient::QuotientGraph> quotient_graph(
       new quotient::QuotientGraph(matrix.NumRows(), matrix.Entries(),
                                   control.md_control));
@@ -32,11 +45,19 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
     std::cout << "  " << time.first << ": " << time.second << std::endl;
   }
 #endif  // ifdef QUOTIENT_TIMERS
+#ifdef CATAMARI_ENABLE_TIMERS
+  std::cout << "Reordering time: " << timer.Stop() << " seconds." << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
+  CATAMARI_START_TIMER(timer);
   SymmetricOrdering ordering;
   quotient_graph->ComputePostorder(&ordering.inverse_permutation);
   quotient::InvertPermutation(ordering.inverse_permutation,
                               &ordering.permutation);
+#ifdef CATAMARI_ENABLE_TIMERS
+  std::cout << "Postorder and invert: " << timer.Stop() << " seconds."
+            << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {
@@ -58,6 +79,7 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   is_supernodal = use_supernodal;
   SparseLDLResult result;
   if (use_supernodal) {
+    CATAMARI_START_TIMER(timer);
     Buffer<Int> member_to_supernode;
     quotient_graph->PermutedMemberToSupernode(ordering.inverse_permutation,
                                               &member_to_supernode);
@@ -71,6 +93,10 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
     quotient_graph->PermutedSupernodeSizes(ordering.inverse_permutation,
                                            &ordering.supernode_sizes);
     OffsetScan(ordering.supernode_sizes, &ordering.supernode_offsets);
+#ifdef CATAMARI_ENABLE_TIMERS
+    std::cout << "Ordering postprocessing: " << timer.Stop() << " seconds."
+              << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
 
     quotient_graph.release();
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
@@ -136,17 +162,15 @@ void SparseLDL<Field>::Solve(BlasMatrixView<Field>* right_hand_sides) const {
 }
 
 template <class Field>
-Int SparseLDL<Field>::RefinedSolve(
+RefinedSolveStatus<ComplexBase<Field>> SparseLDL<Field>::RefinedSolve(
     const CoordinateMatrix<Field>& matrix,
     const RefinedSolveControl<Real>& control,
     BlasMatrixView<Field>* right_hand_sides) const {
   const Int num_rows = matrix.NumRows();
   const Int num_rhs = right_hand_sides->width;
-  if (control.max_iters <= 0) {
-    Solve(right_hand_sides);
-    return 0;
-  }
+  RefinedSolveStatus<ComplexBase<Real>> state;
 
+  // Compute the original maximum norms.
   const BlasMatrix<Field> rhs_orig = *right_hand_sides;
   Buffer<Real> rhs_orig_norms(num_rhs);
   for (Int j = 0; j < num_rhs; ++j) {
@@ -176,8 +200,11 @@ Int SparseLDL<Field>::RefinedSolve(
 
     error_norms[j] = MaxNorm(column.ToConst());
     if (control.verbose) {
-      std::cout << "Original relative error " << j << ": "
-                << error_norms[j] / rhs_orig_norms[j] << std::endl;
+      const Real relative_error = rhs_orig_norms[j] == Real(0)
+                                      ? error_norms[j]
+                                      : error_norms[j] / rhs_orig_norms[j];
+      std::cout << "Original scaled error: " << j << ": " << relative_error
+                << std::endl;
     }
   }
 
@@ -188,7 +215,7 @@ Int SparseLDL<Field>::RefinedSolve(
     active_indices[j] = j;
   }
 
-  Int refine_iter = 0;
+  state.num_iterations = 0;
   BlasMatrix<Field> update, candidate_solution;
   while (true) {
     // Deflate any converged active right-hand sides.
@@ -270,8 +297,8 @@ Int SparseLDL<Field>::RefinedSolve(
     }
     active_indices.Resize(num_remaining);
 
-    ++refine_iter;
-    if (refine_iter >= control.max_iters || active_indices.Empty()) {
+    ++state.num_iterations;
+    if (state.num_iterations >= control.max_iters || active_indices.Empty()) {
       break;
     }
   }
@@ -283,7 +310,17 @@ Int SparseLDL<Field>::RefinedSolve(
     }
   }
 
-  return refine_iter;
+  // Compute the final maximum scaled residual max norm.
+  state.residual_relative_max_norm = 0;
+  for (Int j = 0; j < num_rhs; ++j) {
+    const Real relative_error = rhs_orig_norms[j] == Real(0)
+                                    ? error_norms[j]
+                                    : error_norms[j] / rhs_orig_norms[j];
+    state.residual_relative_max_norm =
+        std::max(state.residual_relative_max_norm, relative_error);
+  }
+
+  return state;
 }
 
 template <class Field>

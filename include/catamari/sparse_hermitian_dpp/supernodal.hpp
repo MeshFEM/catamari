@@ -99,9 +99,6 @@ class SupernodalHermitianDPP {
   // reordering choice for the DPP sampling.
   SymmetricOrdering ordering_;
 
-  // The scalar elimination forest.
-  AssemblyForest forest_;
-
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.
   Buffer<Int> supernode_member_to_index_;
@@ -111,6 +108,12 @@ class SupernodalHermitianDPP {
 
   // The size of the largest supernode of the factorization.
   Int max_supernode_size_;
+
+  // The size of the workspace buffer needed for left-looking updates.
+  Int left_looking_workspace_size_;
+
+  // The size of the scaled transpose matrix needed for left-looking updates.
+  Int left_looking_scaled_transpose_size_;
 
   // The subdiagonal-block portion of the lower-triangular factor.
   mutable std::unique_ptr<supernodal_ldl::LowerFactor<Field>> lower_factor_;

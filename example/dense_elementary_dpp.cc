@@ -68,8 +68,9 @@ void SampleDPP(Int block_size, bool maximum_likelihood,
   quotient::Timer timer;
   timer.Start();
 
-  catamari::SampleNonHermitianDPP(block_size, maximum_likelihood, matrix,
-                                  generator);
+  const std::vector<Int> sample = catamari::SampleNonHermitianDPP(
+      block_size, maximum_likelihood, matrix, generator);
+  std::cout << "NonHermitian sample.size(): " << sample.size() << std::endl;
 
   const double runtime = timer.Stop();
   const double flops =
@@ -94,8 +95,11 @@ void SampleElementaryHermitianDPP(Int block_size, Int rank,
   quotient::Timer timer;
   timer.Start();
 
-  catamari::SampleElementaryLowerHermitianDPP(
+  const std::vector<Int> sample = catamari::SampleElementaryLowerHermitianDPP(
       block_size, rank, maximum_likelihood, matrix, generator);
+  if (Int(sample.size()) != rank) {
+    std::cout << "ERROR: sample was of size " << sample.size() << std::endl;
+  }
 
   const double runtime = timer.Stop();
   const double flops =
@@ -121,8 +125,8 @@ void SampleHermitianDPP(Int block_size, bool maximum_likelihood,
   quotient::Timer timer;
   timer.Start();
 
-  catamari::SampleLowerHermitianDPP(block_size, maximum_likelihood, matrix,
-                                    generator);
+  const std::vector<Int> sample = catamari::SampleLowerHermitianDPP(
+      block_size, maximum_likelihood, matrix, generator);
 
   const double runtime = timer.Stop();
   const double flops =
@@ -215,6 +219,8 @@ void RunDPPTests(bool maximum_likelihood, Int matrix_size, Int rank,
   Buffer<Field> extra_buffer(matrix_size * matrix_size);
 
   std::mt19937 generator(random_seed);
+
+  std::cout << "rank: " << rank << std::endl;
 
   // Hermitian tests.
   for (Int round = 0; round < num_rounds; ++round) {
