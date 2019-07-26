@@ -62,13 +62,18 @@ void ApplyTransposeSparse(const Field& alpha,
   CATAMARI_ASSERT(input_matrix.width == result->width,
                   "result was the incorrect width.");
 
+  // Scale the input by beta.
+  if (beta != Field(1)) {
+    for (Int j = 0; j < num_rhs; ++j) {
+      for (Int i = 0; i < input_matrix.height; ++i) {
+        result->Entry(i, j) *= beta;
+      }
+    }
+  }
+
   // vec1 += alpha matrix vec0 + beta vec1
   const Buffer<MatrixEntry<Field>>& entries = sparse_matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
-    for (Int j = 0; j < num_rhs; ++j) {
-      result->Entry(row, j) *= beta;
-    }
-
     const Int row_beg = sparse_matrix.RowEntryOffset(row);
     const Int row_end = sparse_matrix.RowEntryOffset(row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
@@ -96,13 +101,18 @@ void ApplyAdjointSparse(const Field& alpha,
   CATAMARI_ASSERT(input_matrix.width == result->width,
                   "result was the incorrect width.");
 
+  // Scale the input by beta.
+  if (beta != Field(1)) {
+    for (Int j = 0; j < num_rhs; ++j) {
+      for (Int i = 0; i < input_matrix.height; ++i) {
+        result->Entry(i, j) *= beta;
+      }
+    }
+  }
+
   // vec1 += alpha matrix vec0 + beta vec1
   const Buffer<MatrixEntry<Field>>& entries = sparse_matrix.Entries();
   for (Int row = 0; row < num_rows; ++row) {
-    for (Int j = 0; j < num_rhs; ++j) {
-      result->Entry(row, j) *= beta;
-    }
-
     const Int row_beg = sparse_matrix.RowEntryOffset(row);
     const Int row_end = sparse_matrix.RowEntryOffset(row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
