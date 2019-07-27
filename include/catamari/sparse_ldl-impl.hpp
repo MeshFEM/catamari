@@ -180,6 +180,7 @@ RefinedSolveStatus<ComplexBase<Field>> SparseLDL<Field>::RefinedSolve(
   }
 
   // Compute the initial guesses.
+  // TODO(Jack Poulson): Avoid solving against all zero right-hand sides.
   BlasMatrix<Field> solution = rhs_orig;
   Solve(&solution.view);
 
@@ -189,31 +190,35 @@ RefinedSolveStatus<ComplexBase<Field>> SparseLDL<Field>::RefinedSolve(
   ApplySparse(Field{1}, matrix, solution.ConstView(), Field{1}, &image.view);
 
   // Compute the original residuals and their max norms.
+  //
+  // We will begin with each nonzero right-hand side being 'active' and deflate
+  // out each that has converged (or diverged) during iterative refinement.
+  Int num_nonzero = 0;
   Buffer<Real> error_norms(num_rhs);
+  Buffer<Int> active_indices(num_rhs);
   for (Int j = 0; j < num_rhs; ++j) {
     BlasMatrixView<Field> column =
         right_hand_sides->Submatrix(0, j, num_rows, 1);
+    if (rhs_orig_norms[j] == Real(0)) {
+      if (control.verbose) {
+        std::cout << "Right-hand side " << j << " was zero." << std::endl;
+      }
+      continue;
+    }
+    active_indices[num_nonzero++] = j;
 
     for (Int i = 0; i < num_rows; ++i) {
-      column(i, 0) -= image(i, j);
+      column(i) -= image(i, j);
     }
 
     error_norms[j] = MaxNorm(column.ToConst());
     if (control.verbose) {
-      const Real relative_error = rhs_orig_norms[j] == Real(0)
-                                      ? error_norms[j]
-                                      : error_norms[j] / rhs_orig_norms[j];
-      std::cout << "Original scaled error: " << j << ": " << relative_error
+      const Real relative_error = error_norms[j] / rhs_orig_norms[j];
+      std::cout << "Original relative error: " << j << ": " << relative_error
                 << std::endl;
     }
   }
-
-  // We will begin with each right-hand side being 'active' and deflate out
-  // each that has converged (or diverged) during iterative refinement.
-  Buffer<Int> active_indices(num_rhs);
-  for (Int j = 0; j < num_rhs; ++j) {
-    active_indices[j] = j;
-  }
+  active_indices.Resize(num_nonzero);
 
   state.num_iterations = 0;
   BlasMatrix<Field> update, candidate_solution;
@@ -224,9 +229,7 @@ RefinedSolveStatus<ComplexBase<Field>> SparseLDL<Field>::RefinedSolve(
       Int num_remaining = 0;
       for (Int j_active = 0; j_active < num_active; ++j_active) {
         const Int j = active_indices[j_active];
-        const Real error_norm = error_norms[j];
-        const Real rhs_orig_norm = rhs_orig_norms[j];
-        const Real relative_error = error_norm / rhs_orig_norm;
+        const Real relative_error = error_norms[j] / rhs_orig_norms[j];
         if (relative_error <= control.relative_tol) {
           if (control.verbose) {
             std::cout << "Relative error " << j << " (" << j_active
@@ -277,7 +280,7 @@ RefinedSolveStatus<ComplexBase<Field>> SparseLDL<Field>::RefinedSolve(
       BlasMatrixView<Field> column =
           right_hand_sides->Submatrix(0, j, num_rows, 1);
       for (Int i = 0; i < num_rows; ++i) {
-        column(i, 0) = rhs_orig(i, j) - image(i, j_active);
+        column(i) = rhs_orig(i, j) - image(i, j_active);
       }
       const Real new_error_norm = MaxNorm(column.ToConst());
       if (control.verbose) {
@@ -314,7 +317,7 @@ RefinedSolveStatus<ComplexBase<Field>> SparseLDL<Field>::RefinedSolve(
   state.residual_relative_max_norm = 0;
   for (Int j = 0; j < num_rhs; ++j) {
     const Real relative_error = rhs_orig_norms[j] == Real(0)
-                                    ? error_norms[j]
+                                    ? Real(0)
                                     : error_norms[j] / rhs_orig_norms[j];
     state.residual_relative_max_norm =
         std::max(state.residual_relative_max_norm, relative_error);
