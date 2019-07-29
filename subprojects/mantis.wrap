@@ -1,5 +1,5 @@
 [wrap-git]
 directory = mantis
 url = https://gitlab.com/hodge_star/mantis.git
-revision = e8c39f5cb5e8e2da5da167695b3416ff526f88a2
+revision = 7178c2ba404dcdc54f3d7aee839c5ec016c5540d
 clone-recursive = true
