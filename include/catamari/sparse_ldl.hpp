@@ -123,6 +123,21 @@ class SparseLDL {
       const RefinedSolveControl<Real>& control,
       BlasMatrixView<Field>* right_hand_sides) const;
 
+  // Solve with iterative refinement and a diagonal scaling:
+  //
+  //     (D A D) (inv(D) x) = (D b).
+  //
+  // This can be useful in situations where the right-hand side consists of
+  // several subgroups, and the relative accuracy of each subgroup is desired
+  // to be controlled. One can thus construct the diagonal matrix D to be
+  // piecewise constant, with each piece being set to the inverse of the norm
+  // of the subgroup of the right-hand side vector.
+  RefinedSolveStatus<ComplexBase<Field>> DiagonallyScaledRefinedSolve(
+      const CoordinateMatrix<Field>& matrix,
+      const ConstBlasMatrixView<Real>& scaling,
+      const RefinedSolveControl<Real>& control,
+      BlasMatrixView<Field>* right_hand_sides) const;
+
   // Solves a set of linear systems using the lower-triangular factor.
   void LowerTriangularSolve(BlasMatrixView<Field>* right_hand_sides) const;
 
