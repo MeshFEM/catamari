@@ -85,7 +85,6 @@ void LAPACK_SYMBOL(sorgqr)(const BlasInt* height, const BlasInt* width,
 
 namespace {
 
-#ifdef CATAMARI_HAVE_LIBTIFF
 // Returns whether the given value exists within a sorted list.
 template <typename Iterator, typename T>
 bool IndexExists(Iterator beg, Iterator end, T value) {
@@ -93,6 +92,7 @@ bool IndexExists(Iterator beg, Iterator end, T value) {
   return iter != end && *iter == value;
 }
 
+#ifdef CATAMARI_HAVE_LIBTIFF
 // Prints out an (x, y) slice of a Z^3 spanning tree.
 inline void WriteGridXYSliceToTIFF(const std::string& filename, Int x_size,
                                    Int y_size, Int z_size, Int z,

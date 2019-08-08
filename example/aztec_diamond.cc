@@ -572,6 +572,7 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
 
   const Int expected_sample_size = diamond_size * (diamond_size + 1);
 
+#ifdef CATAMARI_HAVE_LIBTIFF
   // Use the default of blue for west, red for east, yellow for north, and
   // green for south.
   DominoTIFFConfig config;
@@ -587,6 +588,7 @@ void DominoTilings(bool maximum_likelihood, Int diamond_size, Int block_size,
   dual_config.east_target_pixel = config.east_target_pixel;
   dual_config.west_source_pixel = config.east_source_pixel;
   dual_config.west_target_pixel = config.east_target_pixel;
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
 
   std::mt19937 generator(random_seed);
   BlasMatrix<Complex<Real>> kenyon_copy;

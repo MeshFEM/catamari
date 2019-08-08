@@ -216,12 +216,14 @@ Experiment RunShifted2DNegativeLaplacianTest(
     if (print_sample) {
       quotient::Print(sample, "sample", std::cout);
     }
+#ifdef CATAMARI_HAVE_LIBTIFF
     if (write_tiff) {
       const std::string filename =
           std::string("shifted_laplacian-") + std::to_string(run) + ".tif";
       WriteGridToTIFF(filename, x_size, y_size, sample, box_size,
                       background_pixel, active_pixel);
     }
+#endif  // ifdef CATAMARI_HAVE_LIBTIFF
     if (ascii_display) {
       AsciiDisplaySample(x_size, y_size, sample, missing_char, sampled_char);
     }
