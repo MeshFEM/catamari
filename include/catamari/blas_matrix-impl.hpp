@@ -22,23 +22,39 @@ BlasMatrix<T>::BlasMatrix() {
 
 template <typename T>
 BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width) {
+  view.height = 0;
+  view.width = 0;
+  view.leading_dim = 0;
+  view.data = nullptr;
   Resize(height, width);
 }
 
 template <typename T>
 BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width, const T& value) {
+  view.height = 0;
+  view.width = 0;
+  view.leading_dim = 0;
+  view.data = nullptr;
   Resize(height, width, value);
 }
 
 template <typename T>
 BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width,
                           const Int& leading_dim) {
+  view.height = 0;
+  view.width = 0;
+  view.leading_dim = 0;
+  view.data = nullptr;
   Resize(height, width, leading_dim);
 }
 
 template <typename T>
 BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width,
                           const Int& leading_dim, const T& value) {
+  view.height = 0;
+  view.width = 0;
+  view.leading_dim = 0;
+  view.data = nullptr;
   Resize(height, width, leading_dim, value);
 }
 
