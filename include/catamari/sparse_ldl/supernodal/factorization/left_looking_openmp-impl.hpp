@@ -48,6 +48,7 @@ bool Factorization<Field>::OpenMPLeftLookingSupernodeFinalize(
     num_supernode_pivots = PivotedFactorDiagonalBlock(
         control_.block_size, control_.factorization_type, &diagonal_block,
         &permutation);
+    result->num_successful_pivots += num_supernode_pivots;
   } else {
     #pragma omp taskgroup
     {

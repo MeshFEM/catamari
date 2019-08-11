@@ -59,6 +59,7 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     num_supernode_pivots = PivotedFactorDiagonalBlock(
         control_.block_size, control_.factorization_type, &diagonal_block,
         &permutation);
+    result->num_successful_pivots += num_supernode_pivots;
   } else {
     // TODO(Jack Poulson): Preallocate this buffer.
     Buffer<Field> multithreaded_buffer(supernode_size * supernode_size);
