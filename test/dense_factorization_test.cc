@@ -152,11 +152,11 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
   catamari::SetNumBlasThreads(1);
   #pragma omp parallel
   #pragma omp single
-  num_pivots = OpenMPLowerLDLAdjointFactorization(tile_size, block_size,
-                                                  &matrix->view, extra_buffer);
+  num_pivots = OpenMPLDLAdjointFactorization(tile_size, block_size,
+                                             &matrix->view, extra_buffer);
   catamari::SetNumBlasThreads(old_max_threads);
 #else
-  num_pivots = LowerLDLAdjointFactorization(block_size, &matrix->view);
+  num_pivots = LDLAdjointFactorization(block_size, &matrix->view);
 #endif
 
   const Int matrix_size = matrix->view.height;
@@ -187,6 +187,56 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
 }
 
 template <typename Field>
+void RunPivotedLDLAdjointFactorization(Int tile_size, Int block_size,
+                                       BlasMatrix<Field>* matrix,
+                                       Buffer<Field>* extra_buffer) {
+  typedef catamari::ComplexBase<Field> Real;
+  const BlasMatrix<Field> matrix_copy = *matrix;
+  const Int matrix_size = matrix->view.height;
+  BlasMatrix<Int> permutation(matrix_size, 1);
+
+  int num_pivots;
+#ifdef CATAMARI_OPENMP
+  const int old_max_threads = catamari::GetMaxBlasThreads();
+  catamari::SetNumBlasThreads(1);
+  #pragma omp parallel
+  #pragma omp single
+  num_pivots = OpenMPPivotedLDLAdjointFactorization(
+      tile_size, block_size, &matrix->view, &permutation.view);
+  catamari::SetNumBlasThreads(old_max_threads);
+#else
+  num_pivots = PivotedLDLAdjointFactorization(block_size, &matrix->view,
+                                              &permutation.view);
+#endif
+  REQUIRE(num_pivots == matrix_size);
+
+  BlasMatrix<Field> right_hand_side;
+  right_hand_side.Resize(matrix_size, 1, Field{0});
+  right_hand_side(matrix_size / 2, 0) = Field{1};
+  const Real right_hand_side_norm =
+      catamari::EuclideanNorm(right_hand_side.ConstView());
+
+  BlasMatrix<Field> solution = right_hand_side;
+  catamari::InversePermute(permutation.ConstView(), &solution.view);
+  catamari::LeftLowerUnitTriangularSolves(matrix->ConstView(), &solution.view);
+  for (Int i = 0; i < matrix_size; ++i) {
+    solution(i, 0) /= matrix->Entry(i, i);
+  }
+  catamari::LeftLowerAdjointUnitTriangularSolves(matrix->ConstView(),
+                                                 &solution.view);
+  catamari::Permute(permutation.ConstView(), &solution.view);
+
+  BlasMatrix<Field> residual = right_hand_side;
+  catamari::MatrixMultiplyNormalNormal(Field{-1}, matrix_copy.ConstView(),
+                                       solution.ConstView(), Field{1},
+                                       &residual.view);
+  const Real residual_norm = catamari::EuclideanNorm(residual.ConstView());
+  const Real relative_residual = residual_norm / right_hand_side_norm;
+  const Real tolerance = 100 * std::numeric_limits<Real>::epsilon();
+  REQUIRE(relative_residual <= tolerance);
+}
+
+template <typename Field>
 void RunLDLTransposeFactorization(Int tile_size, Int block_size,
                                   BlasMatrix<Field>* matrix,
                                   Buffer<Field>* extra_buffer) {
@@ -199,11 +249,11 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
   catamari::SetNumBlasThreads(1);
   #pragma omp parallel
   #pragma omp single
-  num_pivots = OpenMPLowerLDLTransposeFactorization(
-      tile_size, block_size, &matrix->view, extra_buffer);
+  num_pivots = OpenMPLDLTransposeFactorization(tile_size, block_size,
+                                               &matrix->view, extra_buffer);
   catamari::SetNumBlasThreads(old_max_threads);
 #else
-  num_pivots = LowerLDLTransposeFactorization(block_size, &matrix->view);
+  num_pivots = LDLTransposeFactorization(block_size, &matrix->view);
 #endif
 
   const Int matrix_size = matrix->view.height;
@@ -235,29 +285,8 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
 
 }  // anonymous namespace
 
-TEST_CASE("Float", "Float") {
-  const Int matrix_size = 400;
-  const Int tile_size = 128;
-  const Int block_size = 64;
-  const Int num_rounds = 2;
-
-  BlasMatrix<float> matrix;
-  Buffer<float> extra_buffer;
-
-  for (Int round = 0; round < num_rounds; ++round) {
-    InitializeHPD(matrix_size, &matrix);
-    RunCholeskyFactorization(tile_size, block_size, &matrix);
-
-    InitializeHermitian(matrix_size, &matrix);
-    RunLDLAdjointFactorization(tile_size, block_size, &matrix, &extra_buffer);
-
-    InitializeSymmetric(matrix_size, &matrix);
-    RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
-  }
-}
-
 TEST_CASE("Double", "Double") {
-  const Int matrix_size = 400;
+  const Int matrix_size = 300;
   const Int tile_size = 128;
   const Int block_size = 64;
   const Int num_rounds = 2;
@@ -274,11 +303,15 @@ TEST_CASE("Double", "Double") {
 
     InitializeSymmetric(matrix_size, &matrix);
     RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunPivotedLDLAdjointFactorization(tile_size, block_size, &matrix,
+                                      &extra_buffer);
   }
 }
 
 TEST_CASE("DoubleFloat", "DoubleFloat") {
-  const Int matrix_size = 400;
+  const Int matrix_size = 300;
   const Int tile_size = 128;
   const Int block_size = 64;
   const Int num_rounds = 2;
@@ -295,11 +328,15 @@ TEST_CASE("DoubleFloat", "DoubleFloat") {
 
     InitializeSymmetric(matrix_size, &matrix);
     RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunPivotedLDLAdjointFactorization(tile_size, block_size, &matrix,
+                                      &extra_buffer);
   }
 }
 
 TEST_CASE("DoubleDouble", "DoubleDouble") {
-  const Int matrix_size = 400;
+  const Int matrix_size = 300;
   const Int tile_size = 128;
   const Int block_size = 64;
   const Int num_rounds = 2;
@@ -316,32 +353,15 @@ TEST_CASE("DoubleDouble", "DoubleDouble") {
 
     InitializeSymmetric(matrix_size, &matrix);
     RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
-  }
-}
-
-TEST_CASE("ComplexFloat", "ComplexFloat") {
-  const Int matrix_size = 400;
-  const Int tile_size = 128;
-  const Int block_size = 64;
-  const Int num_rounds = 2;
-
-  BlasMatrix<Complex<float>> matrix;
-  Buffer<Complex<float>> extra_buffer;
-
-  for (Int round = 0; round < num_rounds; ++round) {
-    InitializeHPD(matrix_size, &matrix);
-    RunCholeskyFactorization(tile_size, block_size, &matrix);
 
     InitializeHermitian(matrix_size, &matrix);
-    RunLDLAdjointFactorization(tile_size, block_size, &matrix, &extra_buffer);
-
-    InitializeSymmetric(matrix_size, &matrix);
-    RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+    RunPivotedLDLAdjointFactorization(tile_size, block_size, &matrix,
+                                      &extra_buffer);
   }
 }
 
 TEST_CASE("ComplexDouble", "ComplexDouble") {
-  const Int matrix_size = 400;
+  const Int matrix_size = 300;
   const Int tile_size = 128;
   const Int block_size = 64;
   const Int num_rounds = 2;
@@ -358,6 +378,10 @@ TEST_CASE("ComplexDouble", "ComplexDouble") {
 
     InitializeSymmetric(matrix_size, &matrix);
     RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunPivotedLDLAdjointFactorization(tile_size, block_size, &matrix,
+                                      &extra_buffer);
   }
 }
 
@@ -379,6 +403,10 @@ TEST_CASE("ComplexDoubleFloat", "ComplexDoubleFloat") {
 
     InitializeSymmetric(matrix_size, &matrix);
     RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunPivotedLDLAdjointFactorization(tile_size, block_size, &matrix,
+                                      &extra_buffer);
   }
 }
 
@@ -400,5 +428,9 @@ TEST_CASE("ComplexDoubleDouble", "ComplexDoubleDouble") {
 
     InitializeSymmetric(matrix_size, &matrix);
     RunLDLTransposeFactorization(tile_size, block_size, &matrix, &extra_buffer);
+
+    InitializeHermitian(matrix_size, &matrix);
+    RunPivotedLDLAdjointFactorization(tile_size, block_size, &matrix,
+                                      &extra_buffer);
   }
 }

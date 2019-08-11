@@ -18,7 +18,7 @@
 namespace catamari {
 
 template <class Field>
-Int LowerUnblockedLDLAdjointFactorization(BlasMatrixView<Field>* matrix) {
+Int UnblockedLDLAdjointFactorization(BlasMatrixView<Field>* matrix) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
   for (Int i = 0; i < height; ++i) {
@@ -46,8 +46,8 @@ Int LowerUnblockedLDLAdjointFactorization(BlasMatrixView<Field>* matrix) {
 }
 
 template <class Field>
-Int LowerBlockedLDLAdjointFactorization(Int block_size,
-                                        BlasMatrixView<Field>* matrix) {
+Int BlockedLDLAdjointFactorization(Int block_size,
+                                   BlasMatrixView<Field>* matrix) {
   const Int height = matrix->height;
 
   Buffer<Field> buffer(std::max(height - block_size, Int(0)) * block_size);
@@ -61,7 +61,7 @@ Int LowerBlockedLDLAdjointFactorization(Int block_size,
     BlasMatrixView<Field> diagonal_block =
         matrix->Submatrix(i, i, bsize, bsize);
     const Int num_diag_pivots =
-        LowerUnblockedLDLAdjointFactorization(&diagonal_block);
+        UnblockedLDLAdjointFactorization(&diagonal_block);
     if (num_diag_pivots < bsize) {
       return i + num_diag_pivots;
     }
@@ -75,20 +75,14 @@ Int LowerBlockedLDLAdjointFactorization(Int block_size,
     RightLowerAdjointUnitTriangularSolves(diagonal_block.ToConst(),
                                           &subdiagonal);
 
-    // Copy the conjugate of the current factor.
+    // Copy the conjugate of the current factor and divide by the diagonal.
     factor.height = subdiagonal.height;
     factor.width = subdiagonal.width;
     factor.leading_dim = subdiagonal.height;
     for (Int j = 0; j < subdiagonal.width; ++j) {
-      for (Int k = 0; k < subdiagonal.height; ++k) {
-        factor(k, j) = Conjugate(subdiagonal(k, j));
-      }
-    }
-
-    // Solve against the diagonal.
-    for (Int j = 0; j < subdiagonal.width; ++j) {
       const ComplexBase<Field> delta = RealPart(diagonal_block(j, j));
       for (Int k = 0; k < subdiagonal.height; ++k) {
+        factor(k, j) = Conjugate(subdiagonal(k, j));
         subdiagonal(k, j) /= delta;
       }
     }
@@ -103,9 +97,8 @@ Int LowerBlockedLDLAdjointFactorization(Int block_size,
 }
 
 template <class Field>
-Int LowerLDLAdjointFactorization(Int block_size,
-                                 BlasMatrixView<Field>* matrix) {
-  return LowerBlockedLDLAdjointFactorization(block_size, matrix);
+Int LDLAdjointFactorization(Int block_size, BlasMatrixView<Field>* matrix) {
+  return BlockedLDLAdjointFactorization(block_size, matrix);
 }
 
 }  // namespace catamari

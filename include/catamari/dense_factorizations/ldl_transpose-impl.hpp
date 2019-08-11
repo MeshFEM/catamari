@@ -18,7 +18,7 @@
 namespace catamari {
 
 template <class Field>
-Int LowerUnblockedLDLTransposeFactorization(BlasMatrixView<Field>* matrix) {
+Int UnblockedLDLTransposeFactorization(BlasMatrixView<Field>* matrix) {
   const Int height = matrix->height;
   for (Int i = 0; i < height; ++i) {
     const Field& delta = matrix->Entry(i, i);
@@ -44,8 +44,8 @@ Int LowerUnblockedLDLTransposeFactorization(BlasMatrixView<Field>* matrix) {
 }
 
 template <class Field>
-Int LowerBlockedLDLTransposeFactorization(Int block_size,
-                                          BlasMatrixView<Field>* matrix) {
+Int BlockedLDLTransposeFactorization(Int block_size,
+                                     BlasMatrixView<Field>* matrix) {
   const Int height = matrix->height;
 
   Buffer<Field> buffer(std::max(height - block_size, Int(0)) * block_size);
@@ -59,7 +59,7 @@ Int LowerBlockedLDLTransposeFactorization(Int block_size,
     BlasMatrixView<Field> diagonal_block =
         matrix->Submatrix(i, i, bsize, bsize);
     const Int num_diag_pivots =
-        LowerUnblockedLDLTransposeFactorization(&diagonal_block);
+        UnblockedLDLTransposeFactorization(&diagonal_block);
     if (num_diag_pivots < bsize) {
       return i + num_diag_pivots;
     }
@@ -73,20 +73,14 @@ Int LowerBlockedLDLTransposeFactorization(Int block_size,
     RightLowerTransposeUnitTriangularSolves(diagonal_block.ToConst(),
                                             &subdiagonal);
 
-    // Copy the current factor.
+    // Copy the current factor and solve against the diagonal.
     factor.height = subdiagonal.height;
     factor.width = subdiagonal.width;
     factor.leading_dim = subdiagonal.height;
     for (Int j = 0; j < subdiagonal.width; ++j) {
-      for (Int k = 0; k < subdiagonal.height; ++k) {
-        factor(k, j) = subdiagonal(k, j);
-      }
-    }
-
-    // Solve against the diagonal.
-    for (Int j = 0; j < subdiagonal.width; ++j) {
       const Field delta = diagonal_block(j, j);
       for (Int k = 0; k < subdiagonal.height; ++k) {
+        factor(k, j) = subdiagonal(k, j);
         subdiagonal(k, j) /= delta;
       }
     }
@@ -101,9 +95,8 @@ Int LowerBlockedLDLTransposeFactorization(Int block_size,
 }
 
 template <class Field>
-Int LowerLDLTransposeFactorization(Int block_size,
-                                   BlasMatrixView<Field>* matrix) {
-  return LowerBlockedLDLTransposeFactorization(block_size, matrix);
+Int LDLTransposeFactorization(Int block_size, BlasMatrixView<Field>* matrix) {
+  return BlockedLDLTransposeFactorization(block_size, matrix);
 }
 
 }  // namespace catamari

@@ -30,7 +30,8 @@ struct SupernodalRelaxationControl {
   //
   // These constants match that of CHOLMOD (Davis et al.).
   std::vector<std::pair<Int, float>> cutoff_pairs{
-      std::make_pair(4, 1.f), std::make_pair(16, 0.8f),
+      std::make_pair(4, 1.f),
+      std::make_pair(16, 0.8f),
       std::make_pair(48, 0.1f),
       std::make_pair(std::numeric_limits<Int>::max(), 0.05f),
   };

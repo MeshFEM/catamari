@@ -108,7 +108,7 @@ A simple example combining all of these features is:
 
   // Print the entries.
   std::cout << "entries: ";
-  for (const float& entry : entries) { 
+  for (const float& entry : entries) {
     std::cout << entry << " ";
   }
   std::cout << std::endl;
@@ -253,7 +253,7 @@ dense Cholesky, :math:`LDL^T`, and :math:`LDL^H` factorizations (as one might
 infer, for both real and complex scalars).
 
 Sequential (perhaps using multithreaded BLAS calls) dense Cholesky
-factorizations can be easily performed using a call to 
+factorizations can be easily performed using a call to
 :samp:`catamari::LowerCholeskyFactorization` on a
 :samp:`catamari::BlasMatrixView<Field>`.
 
@@ -265,7 +265,7 @@ factorizations can be easily performed using a call to
   matrix.Resize(num_rows, num_rows);
   // Fill the matrix using commands of the form:
   //   matrix(row, column) = value;
-  
+
   // Perform the sequential, dense Cholesky factorization using a
   // user-determined algorithmic blocksize.
   const catamari::Int block_size = 64;
@@ -290,7 +290,7 @@ region.
   // Avoid BLAS thread oversubscription.
   const int old_max_threads = catamari::GetMaxBlasThreads();
   catamari::SetNumBlasThreads(1);
-  
+
   // Perform the sequential, dense Cholesky factorization using a
   // user-determined algorithmic blocksize.
   const catamari::Int tile_size = 128;
@@ -305,10 +305,10 @@ region.
 
 Real and complex :math:`LDL^T` and :math:`LDL^H` can be executed with nearly
 identical code by instead calling
-:samp:`catamari::LowerLDLTransposeFactorization`, 
-:samp:`catamari::OpenMPLowerLDLTransposeFactorization`, 
-:samp:`catamari::LowerLDLAdjointFactorization`,  or
-:samp:`catamari::OpenMPLowerLDLAdjointFactorization`.
+:samp:`catamari::LDLTransposeFactorization`,
+:samp:`catamari::OpenMPLDLTransposeFactorization`,
+:samp:`catamari::LDLAdjointFactorization`,  or
+:samp:`catamari::OpenMPLDLAdjointFactorization`.
 
 Please see
 `example/dense_factorization.cc <https://gitlab.com/hodge_star/catamari/blob/master/example/dense_factorization.cc>`_
@@ -404,7 +404,7 @@ samplers all operate directly on the *marginal kernel matrix*: if
 
 .. math::
 
-   P[A \subseteq \mathbf{Y}] = \text{det}(K_A), 
+   P[A \subseteq \mathbf{Y}] = \text{det}(K_A),
 
 where :math:`K_A` is the :math:`|A| \times |A|` restriction of the row and
 column indices of the marginal kernel matrix :math:`K` to :math:`A`.

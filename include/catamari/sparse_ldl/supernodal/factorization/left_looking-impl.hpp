@@ -270,8 +270,16 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(
   const Int supernode_size = lower_block.width;
 
   CATAMARI_START_TIMER(profile.cholesky);
-  const Int num_supernode_pivots = FactorDiagonalBlock(
-      control_.block_size, control_.factorization_type, &diagonal_block);
+  Int num_supernode_pivots;
+  if (control_.supernodal_pivoting) {
+    BlasMatrixView<Int> permutation = SupernodePermutation(supernode);
+    num_supernode_pivots = PivotedFactorDiagonalBlock(
+        control_.block_size, control_.factorization_type, &diagonal_block,
+        &permutation);
+  } else {
+    num_supernode_pivots = FactorDiagonalBlock(
+        control_.block_size, control_.factorization_type, &diagonal_block);
+  }
   CATAMARI_STOP_TIMER(profile.cholesky);
   result->num_successful_pivots += num_supernode_pivots;
   if (num_supernode_pivots < supernode_size) {
@@ -292,6 +300,13 @@ bool Factorization<Field>::LeftLookingSupernodeFinalize(
 
   CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
   CATAMARI_START_TIMER(profile.trsm);
+  if (control_.supernodal_pivoting) {
+    // Solve against P^T from the right, which is the same as applying P
+    // from the right, which is the same as applying P^T to each row.
+    const ConstBlasMatrixView<Int> permutation =
+        SupernodePermutation(supernode);
+    InversePermuteColumns(permutation, &lower_block);
+  }
   SolveAgainstDiagonalBlock(control_.factorization_type,
                             diagonal_block.ToConst(), &lower_block);
   CATAMARI_STOP_TIMER(profile.trsm);

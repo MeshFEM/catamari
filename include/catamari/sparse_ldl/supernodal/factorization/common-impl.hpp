@@ -201,6 +201,32 @@ void Factorization<Field>::InitializeFactors(
       max_lower_block_size_ = std::max(max_lower_block_size_, lower_block_size);
     }
   }
+
+  if (control_.factorization_type != kLDLAdjointFactorization) {
+    // We currently only support supernodal pivoting with LDL^H fact'ns.
+    control_.supernodal_pivoting = false;
+  }
+  if (control_.supernodal_pivoting) {
+    const Int num_rows = matrix.NumRows();
+    supernode_permutations_.Resize(num_rows, 1);
+  }
+}
+
+template <class Field>
+BlasMatrixView<Int> Factorization<Field>::SupernodePermutation(Int supernode) {
+  const Int supernode_offset = ordering_.supernode_offsets[supernode];
+  const Int supernode_size = ordering_.supernode_sizes[supernode];
+  return supernode_permutations_.Submatrix(supernode_offset, 0, supernode_size,
+                                           1);
+}
+
+template <class Field>
+ConstBlasMatrixView<Int> Factorization<Field>::SupernodePermutation(
+    Int supernode) const {
+  const Int supernode_offset = ordering_.supernode_offsets[supernode];
+  const Int supernode_size = ordering_.supernode_sizes[supernode];
+  return supernode_permutations_.Submatrix(supernode_offset, 0, supernode_size,
+                                           1);
 }
 
 template <class Field>

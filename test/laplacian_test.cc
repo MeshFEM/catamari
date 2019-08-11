@@ -242,6 +242,38 @@ TEST_CASE("2D right adjoint", "2D right adjoint") {
       num_x_elements, num_y_elements, analytical_ordering, ldl_control);
 }
 
+TEST_CASE("2D right adjoint pivoted", "2D right adjoint pivoted") {
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
+  const bool analytical_ordering = false;
+  const int ldl_algorithm_int = 2;
+
+  catamari::SparseLDLControl ldl_control;
+  ldl_control.SetFactorizationType(catamari::kLDLAdjointFactorization);
+  ldl_control.scalar_control.algorithm =
+      static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+  ldl_control.supernodal_control.algorithm =
+      static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+  ldl_control.supernodal_control.supernodal_pivoting = true;
+
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+}
+
 TEST_CASE("2D right transpose", "2D right transpose") {
   const Int num_x_elements = 80;
   const Int num_y_elements = 80;
@@ -316,6 +348,39 @@ TEST_CASE("2D left adjoint [analytical]", "2D left adjoint [analyt]") {
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
   ldl_control.supernodal_control.algorithm =
       static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+
+  RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
+                 ldl_control);
+  RunTest<double>(num_x_elements, num_y_elements, analytical_ordering,
+                  ldl_control);
+  RunTest<mantis::DoubleMantissa<float>>(num_x_elements, num_y_elements,
+                                         analytical_ordering, ldl_control);
+  RunTest<mantis::DoubleMantissa<double>>(num_x_elements, num_y_elements,
+                                          analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<float>>(num_x_elements, num_y_elements,
+                                  analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<double>>(num_x_elements, num_y_elements,
+                                   analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<float>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+  RunTest<mantis::Complex<mantis::DoubleMantissa<double>>>(
+      num_x_elements, num_y_elements, analytical_ordering, ldl_control);
+}
+
+TEST_CASE("2D left adjoint pivoted [analytical]",
+          "2D left adjoint pivoted [analyt]") {
+  const Int num_x_elements = 80;
+  const Int num_y_elements = 80;
+  const bool analytical_ordering = true;
+  const int ldl_algorithm_int = 0;
+
+  catamari::SparseLDLControl ldl_control;
+  ldl_control.SetFactorizationType(catamari::kLDLAdjointFactorization);
+  ldl_control.scalar_control.algorithm =
+      static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+  ldl_control.supernodal_control.algorithm =
+      static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+  ldl_control.supernodal_control.supernodal_pivoting = true;
 
   RunTest<float>(num_x_elements, num_y_elements, analytical_ordering,
                  ldl_control);

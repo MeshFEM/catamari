@@ -32,13 +32,6 @@ struct BlasMatrix {
   // Builds a height x width matrix with initialization.
   BlasMatrix(const Int& height, const Int& width, const T& value);
 
-  // Builds a height x width matrix without initialization.
-  BlasMatrix(const Int& height, const Int& width, const Int& leading_dim);
-
-  // Builds a height x width matrix with initialization.
-  BlasMatrix(const Int& height, const Int& width, const Int& leading_dim,
-             const T& value);
-
   // Copy constructs a BLAS matrix by reducing the leading dimension to the
   // height.
   BlasMatrix(const BlasMatrix<T>& matrix);
@@ -67,11 +60,12 @@ struct BlasMatrix {
   void Resize(const Int& height, const Int& width, const T& value);
 
   // Resizes the matrix with a particular leading dim without initialization.
-  void Resize(const Int& height, const Int& width, const Int& leading_dim);
+  void ResizeWithLeadingDimension(const Int& height, const Int& width,
+                                  const Int& leading_dim);
 
   // Resizes the matrix with a particular leading dim with initialization.
-  void Resize(const Int& height, const Int& width, const Int& leading_dim,
-              const T& value);
+  void ResizeWithLeadingDimension(const Int& height, const Int& width,
+                                  const Int& leading_dim, const T& value);
 
   // Returns the number of rows of the matrix.
   Int Height() const CATAMARI_NOEXCEPT;

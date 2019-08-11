@@ -39,26 +39,6 @@ BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width, const T& value) {
 }
 
 template <typename T>
-BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width,
-                          const Int& leading_dim) {
-  view.height = 0;
-  view.width = 0;
-  view.leading_dim = 0;
-  view.data = nullptr;
-  Resize(height, width, leading_dim);
-}
-
-template <typename T>
-BlasMatrix<T>::BlasMatrix(const Int& height, const Int& width,
-                          const Int& leading_dim, const T& value) {
-  view.height = 0;
-  view.width = 0;
-  view.leading_dim = 0;
-  view.data = nullptr;
-  Resize(height, width, leading_dim, value);
-}
-
-template <typename T>
 BlasMatrix<T>::BlasMatrix(const BlasMatrix<T>& matrix) {
   const Int height = matrix.view.height;
   const Int width = matrix.view.width;
@@ -158,8 +138,9 @@ void BlasMatrix<T>::Resize(const Int& height, const Int& width) {
 }
 
 template <typename T>
-void BlasMatrix<T>::Resize(const Int& height, const Int& width,
-                           const Int& leading_dim) {
+void BlasMatrix<T>::ResizeWithLeadingDimension(const Int& height,
+                                               const Int& width,
+                                               const Int& leading_dim) {
   if (height == view.height && width == view.width) {
     return;
   }
@@ -187,8 +168,10 @@ void BlasMatrix<T>::Resize(const Int& height, const Int& width,
 }
 
 template <typename T>
-void BlasMatrix<T>::Resize(const Int& height, const Int& width,
-                           const Int& leading_dim, const T& value) {
+void BlasMatrix<T>::ResizeWithLeadingDimension(const Int& height,
+                                               const Int& width,
+                                               const Int& leading_dim,
+                                               const T& value) {
   if (leading_dim < height) {
     throw std::invalid_argument(
         "The leading dimension must be at least as large as the height.");

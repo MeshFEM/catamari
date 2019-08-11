@@ -8,6 +8,7 @@
 #ifndef CATAMARI_SPARSE_LDL_SUPERNODAL_FACTORIZATION_H_
 #define CATAMARI_SPARSE_LDL_SUPERNODAL_FACTORIZATION_H_
 
+#include "catamari/blas_matrix.hpp"
 #include "catamari/buffer.hpp"
 #include "catamari/sparse_ldl/supernodal/diagonal_factor.hpp"
 #include "catamari/sparse_ldl/supernodal/lower_factor.hpp"
@@ -31,6 +32,9 @@ struct Control {
   // The choice of either left-looking or right-looking LDL' factorization.
   // There is currently no supernodal up-looking support.
   LDLAlgorithm algorithm = kAdaptiveLDL;
+
+  // Whether pivoting within each supernodal diagonal block should be enabled.
+  bool supernodal_pivoting = false;
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.
@@ -239,6 +243,14 @@ class Factorization {
   // Prints the unit lower-triangular matrix.
   void PrintLowerFactor(const std::string& label, std::ostream& os) const;
 
+  // Returns a view of the given supernode's permutation vector.
+  // NOTE: This is only valid when control.supernodal_pivoting is true.
+  BlasMatrixView<Int> SupernodePermutation(Int supernode);
+
+  // Returns a const view of the given supernode's permutation vector.
+  // NOTE: This is only valid when control.supernodal_pivoting is true.
+  ConstBlasMatrixView<Int> SupernodePermutation(Int supernode) const;
+
   // Incorporates the details and work required to process the supernode with
   // the given size and degree into the factorization result.
   static void IncorporateSupernodeIntoLDLResult(Int supernode_size, Int degree,
@@ -281,6 +293,10 @@ class Factorization {
 
   // The block-diagonal factor.
   std::unique_ptr<DiagonalFactor<Field>> diagonal_factor_;
+
+  // If supernodal_pivoting is enabled, all of the supernode permutation
+  // vectors are stored within this single buffer.
+  BlasMatrix<Int> supernode_permutations_;
 
   // Performs the initial analysis (and factorization initialization) for a
   // particular sparisty pattern. Subsequent factorizations with the same

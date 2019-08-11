@@ -261,6 +261,33 @@ void OpenMPLowerNormalHermitianOuterProduct(
 // Applies a row permutation to a dense matrix.
 template <class Field>
 void Permute(const Buffer<Int>& permutation, BlasMatrixView<Field>* matrix);
+template <class Field>
+void Permute(const ConstBlasMatrixView<Int>& permutation,
+             BlasMatrixView<Field>* matrix);
+
+// Applies a column permutation to a dense matrix.
+template <class Field>
+void PermuteColumn(const Buffer<Int>& permutation,
+                   BlasMatrixView<Field>* matrix);
+template <class Field>
+void PermuteColumn(const ConstBlasMatrixView<Int>& permutation,
+                   BlasMatrixView<Field>* matrix);
+
+// Applies a the inverse of a permutation to the rows of a dense matrix.
+template <class Field>
+void InversePermute(const Buffer<Int>& permutation,
+                    BlasMatrixView<Field>* matrix);
+template <class Field>
+void InversePermute(const ConstBlasMatrixView<Int>& permutation,
+                    BlasMatrixView<Field>* matrix);
+
+// Applies a the inverse of a permutation to the columns of a dense matrix.
+template <class Field>
+void InversePermuteColumns(const Buffer<Int>& permutation,
+                           BlasMatrixView<Field>* matrix);
+template <class Field>
+void InversePermuteColumns(const ConstBlasMatrixView<Int>& permutation,
+                           BlasMatrixView<Field>* matrix);
 
 }  // namespace catamari
 

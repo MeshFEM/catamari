@@ -43,15 +43,23 @@ bool Factorization<Field>::OpenMPLeftLookingSupernodeFinalize(
   const Int supernode_size = lower_block.width;
 
   Int num_supernode_pivots;
-  #pragma omp taskgroup
-  {
-    const int thread = omp_get_thread_num();
-    Buffer<Field>* buffer = &(*private_states)[thread].scaled_transpose_buffer;
+  if (control_.supernodal_pivoting) {
+    BlasMatrixView<Int> permutation = SupernodePermutation(supernode);
+    num_supernode_pivots = PivotedFactorDiagonalBlock(
+        control_.block_size, control_.factorization_type, &diagonal_block,
+        &permutation);
+  } else {
+    #pragma omp taskgroup
+    {
+      const int thread = omp_get_thread_num();
+      Buffer<Field>* buffer =
+          &(*private_states)[thread].scaled_transpose_buffer;
 
-    num_supernode_pivots = OpenMPFactorDiagonalBlock(
-        control_.factor_tile_size, control_.block_size,
-        control_.factorization_type, &diagonal_block, buffer);
-    result->num_successful_pivots += num_supernode_pivots;
+      num_supernode_pivots = OpenMPFactorDiagonalBlock(
+          control_.factor_tile_size, control_.block_size,
+          control_.factorization_type, &diagonal_block, buffer);
+      result->num_successful_pivots += num_supernode_pivots;
+    }
   }
   if (num_supernode_pivots < supernode_size) {
     return false;
@@ -62,6 +70,13 @@ bool Factorization<Field>::OpenMPLeftLookingSupernodeFinalize(
   }
 
   CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
+  if (control_.supernodal_pivoting) {
+    // Solve against P^T from the right, which is the same as applying P
+    // from the right, which is the same as applying P^T to each row.
+    const ConstBlasMatrixView<Int> permutation =
+        SupernodePermutation(supernode);
+    InversePermuteColumns(permutation, &lower_block);
+  }
   #pragma omp taskgroup
   OpenMPSolveAgainstDiagonalBlock(control_.outer_product_tile_size,
                                   control_.factorization_type,

@@ -85,14 +85,14 @@ void RunLDLAdjointFactorization(Int tile_size, Int block_size,
     catamari::SetNumBlasThreads(1);
     #pragma omp parallel
     #pragma omp single
-    num_pivots = catamari::OpenMPLowerLDLAdjointFactorization(
-        tile_size, block_size, matrix, extra_buffer);
+    num_pivots = catamari::OpenMPLDLAdjointFactorization(tile_size, block_size,
+                                                         matrix, extra_buffer);
     catamari::SetNumBlasThreads(old_max_threads);
   } else {
-    num_pivots = catamari::LowerLDLAdjointFactorization(block_size, matrix);
+    num_pivots = catamari::LDLAdjointFactorization(block_size, matrix);
   }
 #else
-  num_pivots = catamari::LowerLDLAdjointFactorization(block_size, matrix);
+  num_pivots = catamari::LDLAdjointFactorization(block_size, matrix);
 #endif
 
   if (num_pivots == matrix_size) {
@@ -123,14 +123,14 @@ void RunLDLTransposeFactorization(Int tile_size, Int block_size,
     catamari::SetNumBlasThreads(1);
     #pragma omp parallel
     #pragma omp single
-    num_pivots = catamari::OpenMPLowerLDLTransposeFactorization(
+    num_pivots = catamari::OpenMPLDLTransposeFactorization(
         tile_size, block_size, matrix, extra_buffer);
     catamari::SetNumBlasThreads(old_max_threads);
   } else {
-    num_pivots = catamari::LowerLDLTransposeFactorization(block_size, matrix);
+    num_pivots = catamari::LDLTransposeFactorization(block_size, matrix);
   }
 #else
-  num_pivots = catamari::LowerLDLTransposeFactorization(block_size, matrix);
+  num_pivots = catamari::LDLTransposeFactorization(block_size, matrix);
 #endif
 
   if (num_pivots == matrix_size) {

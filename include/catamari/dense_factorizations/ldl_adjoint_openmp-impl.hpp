@@ -19,9 +19,9 @@
 namespace catamari {
 
 template <class Field>
-Int OpenMPLowerLDLAdjointFactorization(Int tile_size, Int block_size,
-                                       BlasMatrixView<Field>* matrix,
-                                       Buffer<Field>* buffer) {
+Int OpenMPLDLAdjointFactorization(Int tile_size, Int block_size,
+                                  BlasMatrixView<Field>* matrix,
+                                  Buffer<Field>* buffer) {
   const Int height = matrix->height;
   if (buffer->Size() < static_cast<std::size_t>(height * height)) {
     buffer->Resize(height * height);
@@ -52,7 +52,7 @@ Int OpenMPLowerLDLAdjointFactorization(Int tile_size, Int block_size,
         depend(inout: matrix_data[i + i * leading_dim])
     {
       const Int num_diag_pivots =
-          LowerLDLAdjointFactorization(block_size, &diagonal_block);
+          LDLAdjointFactorization(block_size, &diagonal_block);
       num_pivots += num_diag_pivots;
       if (num_diag_pivots < diagonal_block.height) {
         failed_pivot = true;

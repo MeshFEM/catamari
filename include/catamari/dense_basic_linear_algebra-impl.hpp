@@ -2951,9 +2951,9 @@ inline void RightUpperTriangularSolves(
 
 template <class Field>
 void Permute(const Buffer<Int>& permutation, BlasMatrixView<Field>* matrix) {
+  Buffer<Field> column_copy(matrix->height);
   for (Int j = 0; j < matrix->width; ++j) {
     // Make a copy of the current column.
-    Buffer<Field> column_copy(matrix->height);
     for (Int i = 0; i < matrix->height; ++i) {
       column_copy[i] = matrix->Entry(i, j);
     }
@@ -2961,6 +2961,125 @@ void Permute(const Buffer<Int>& permutation, BlasMatrixView<Field>* matrix) {
     // Apply the permutation.
     for (Int i = 0; i < matrix->height; ++i) {
       matrix->Entry(permutation[i], j) = column_copy[i];
+    }
+  }
+}
+
+template <class Field>
+void Permute(const ConstBlasMatrixView<Int>& permutation,
+             BlasMatrixView<Field>* matrix) {
+  Buffer<Field> column_copy(matrix->height);
+  for (Int j = 0; j < matrix->width; ++j) {
+    // Make a copy of the current column.
+    for (Int i = 0; i < matrix->height; ++i) {
+      column_copy[i] = matrix->Entry(i, j);
+    }
+
+    // Apply the permutation.
+    for (Int i = 0; i < matrix->height; ++i) {
+      matrix->Entry(permutation(i), j) = column_copy[i];
+    }
+  }
+}
+
+template <class Field>
+void PermuteColumns(const Buffer<Int>& permutation,
+                    BlasMatrixView<Field>* matrix) {
+  Buffer<Field> row_copy(matrix->width);
+  for (Int i = 0; i < matrix->height; ++i) {
+    // Make a copy of the current row.
+    for (Int j = 0; j < matrix->width; ++j) {
+      row_copy[j] = matrix->Entry(i, j);
+    }
+
+    // Apply the permutation.
+    for (Int j = 0; j < matrix->width; ++j) {
+      matrix->Entry(i, permutation[j]) = row_copy[j];
+    }
+  }
+}
+
+template <class Field>
+void PermuteColumns(const ConstBlasMatrixView<Int>& permutation,
+                    BlasMatrixView<Field>* matrix) {
+  Buffer<Field> row_copy(matrix->width);
+  for (Int i = 0; i < matrix->height; ++i) {
+    // Make a copy of the current row.
+    for (Int j = 0; j < matrix->width; ++j) {
+      row_copy[j] = matrix->Entry(i, j);
+    }
+
+    // Apply the permutation.
+    for (Int j = 0; j < matrix->width; ++j) {
+      matrix->Entry(i, permutation(j)) = row_copy[j];
+    }
+  }
+}
+
+template <class Field>
+void InversePermute(const Buffer<Int>& permutation,
+                    BlasMatrixView<Field>* matrix) {
+  Buffer<Field> column_copy(matrix->height);
+  for (Int j = 0; j < matrix->width; ++j) {
+    // Make a copy of the current column.
+    for (Int i = 0; i < matrix->height; ++i) {
+      column_copy[i] = matrix->Entry(i, j);
+    }
+
+    // Apply the inverse permutation.
+    for (Int i = 0; i < matrix->height; ++i) {
+      matrix->Entry(i, j) = column_copy[permutation[i]];
+    }
+  }
+}
+
+template <class Field>
+void InversePermute(const ConstBlasMatrixView<Int>& permutation,
+                    BlasMatrixView<Field>* matrix) {
+  Buffer<Field> column_copy(matrix->height);
+  for (Int j = 0; j < matrix->width; ++j) {
+    // Make a copy of the current column.
+    for (Int i = 0; i < matrix->height; ++i) {
+      column_copy[i] = matrix->Entry(i, j);
+    }
+
+    // Apply the inverse permutation.
+    for (Int i = 0; i < matrix->height; ++i) {
+      matrix->Entry(i, j) = column_copy[permutation(i)];
+    }
+  }
+}
+
+template <class Field>
+void InversePermuteColumns(const Buffer<Int>& permutation,
+                           BlasMatrixView<Field>* matrix) {
+  Buffer<Field> row_copy(matrix->width);
+  for (Int i = 0; i < matrix->height; ++i) {
+    // Make a copy of the current row.
+    for (Int j = 0; j < matrix->width; ++j) {
+      row_copy[j] = matrix->Entry(i, j);
+    }
+
+    // Apply the inverse permutation.
+    for (Int j = 0; j < matrix->width; ++j) {
+      matrix->Entry(i, j) = row_copy[permutation[j]];
+    }
+  }
+}
+
+template <class Field>
+void InversePermuteColumns(const ConstBlasMatrixView<Int>& permutation,
+                           BlasMatrixView<Field>* matrix) {
+  Buffer<Field> row_copy(matrix->width);
+  for (Int i = 0; i < matrix->height; ++i) {
+    // Make a copy of the current row.
+    for (Int j = 0; j < matrix->width; ++j) {
+      row_copy[j] = matrix->Entry(i, j);
+    }
+
+    // Apply the inverse permutation.
+    for (Int j = 0; j < matrix->width; ++j) {
+      matrix->Entry(i, j) = row_copy[permutation(j)];
     }
   }
 }

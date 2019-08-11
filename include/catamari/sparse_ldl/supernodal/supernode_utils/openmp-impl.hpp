@@ -422,11 +422,11 @@ Int OpenMPFactorDiagonalBlock(Int tile_size, Int block_size,
     num_pivots =
         OpenMPLowerCholeskyFactorization(tile_size, block_size, diagonal_block);
   } else if (factorization_type == kLDLAdjointFactorization) {
-    num_pivots = OpenMPLowerLDLAdjointFactorization(tile_size, block_size,
-                                                    diagonal_block, buffer);
+    num_pivots = OpenMPLDLAdjointFactorization(tile_size, block_size,
+                                               diagonal_block, buffer);
   } else {
-    num_pivots = OpenMPLowerLDLTransposeFactorization(tile_size, block_size,
-                                                      diagonal_block, buffer);
+    num_pivots = OpenMPLDLTransposeFactorization(tile_size, block_size,
+                                                 diagonal_block, buffer);
   }
   return num_pivots;
 }

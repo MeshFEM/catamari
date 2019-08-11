@@ -36,6 +36,11 @@ void Factorization<Field>::OpenMPLowerSupernodalTrapezoidalSolve(
       right_hand_sides->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
   // Solve against the diagonal block of the supernode.
+  if (control_.supernodal_pivoting) {
+    const ConstBlasMatrixView<Int> permutation =
+        SupernodePermutation(supernode);
+    Permute(permutation, &right_hand_sides_supernode);
+  }
   if (is_cholesky) {
     LeftLowerTriangularSolves(triangular_right_hand_sides,
                               &right_hand_sides_supernode);
@@ -190,6 +195,7 @@ void Factorization<Field>::OpenMPLowerTransposeTriangularSolveRecursion(
     Int supernode, BlasMatrixView<Field>* right_hand_sides,
     Buffer<Buffer<Field>>* private_packed_input_bufs) const {
   // Perform this supernode's trapezoidal solve.
+  // TODO(Jack Poulson): Add OpenMP support into the trapezoidal solve.
   const int thread = omp_get_thread_num();
   Buffer<Field>* packed_input_buf = &(*private_packed_input_bufs)[thread];
   LowerTransposeSupernodalTrapezoidalSolve(supernode, right_hand_sides,

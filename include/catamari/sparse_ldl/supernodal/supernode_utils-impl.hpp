@@ -942,10 +942,22 @@ Int FactorDiagonalBlock(Int block_size,
   if (factorization_type == kCholeskyFactorization) {
     num_pivots = LowerCholeskyFactorization(block_size, diagonal_block);
   } else if (factorization_type == kLDLAdjointFactorization) {
-    num_pivots = LowerLDLAdjointFactorization(block_size, diagonal_block);
+    num_pivots = LDLAdjointFactorization(block_size, diagonal_block);
   } else {
-    num_pivots = LowerLDLTransposeFactorization(block_size, diagonal_block);
+    num_pivots = LDLTransposeFactorization(block_size, diagonal_block);
   }
+  return num_pivots;
+}
+
+template <class Field>
+Int PivotedFactorDiagonalBlock(Int block_size,
+                               SymmetricFactorizationType factorization_type,
+                               BlasMatrixView<Field>* diagonal_block,
+                               BlasMatrixView<Int>* permutation) {
+  CATAMARI_ASSERT(factorization_type == kLDLAdjointFactorization,
+                  "Pivoting is currently only supported for LDL^H fact'ns.");
+  Int num_pivots =
+      PivotedLDLAdjointFactorization(block_size, diagonal_block, permutation);
   return num_pivots;
 }
 

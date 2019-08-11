@@ -53,7 +53,13 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
                                    diagonal_factor_.get(), shared_state);
 
   Int num_supernode_pivots;
-  {
+  if (control_.supernodal_pivoting) {
+    // TODO(Jack Poulson): Add support for OpenMP supernodal pivoting.
+    BlasMatrixView<Int> permutation = SupernodePermutation(supernode);
+    num_supernode_pivots = PivotedFactorDiagonalBlock(
+        control_.block_size, control_.factorization_type, &diagonal_block,
+        &permutation);
+  } else {
     // TODO(Jack Poulson): Preallocate this buffer.
     Buffer<Field> multithreaded_buffer(supernode_size * supernode_size);
     #pragma omp taskgroup
@@ -75,6 +81,13 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
   }
 
   CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
+  if (control_.supernodal_pivoting) {
+    // Solve against P^T from the right, which is the same as applying P
+    // from the right, which is the same as applying P^T to each row.
+    const ConstBlasMatrixView<Int> permutation =
+        SupernodePermutation(supernode);
+    InversePermuteColumns(permutation, &lower_block);
+  }
   #pragma omp taskgroup
   OpenMPSolveAgainstDiagonalBlock(control_.outer_product_tile_size,
                                   control_.factorization_type,
