@@ -39,7 +39,7 @@ void Factorization<Field>::OpenMPLowerSupernodalTrapezoidalSolve(
   if (control_.supernodal_pivoting) {
     const ConstBlasMatrixView<Int> permutation =
         SupernodePermutation(supernode);
-    Permute(permutation, &right_hand_sides_supernode);
+    InversePermute(permutation, &right_hand_sides_supernode);
   }
   if (is_cholesky) {
     LeftLowerTriangularSolves(triangular_right_hand_sides,
