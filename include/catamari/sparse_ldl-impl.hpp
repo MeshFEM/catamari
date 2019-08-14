@@ -11,6 +11,7 @@
 
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
+#include "catamari/equilibrate_symmetric_matrix.hpp"
 #include "catamari/flush_to_zero.hpp"
 
 #include "catamari/sparse_ldl.hpp"
@@ -59,27 +60,37 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
             << std::endl;
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 
-  bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {
-    use_supernodal = false;
+    is_supernodal = false;
   } else if (control.supernodal_strategy == kSupernodalFactorization) {
-    use_supernodal = true;
+    is_supernodal = true;
   } else {
     const double intensity =
         analysis.num_cholesky_flops / analysis.num_cholesky_nonzeros;
-
-    // TODO(Jack Poulson): Make these configurable.
-    const double flop_threshold = 1e5;
-    const double intensity_threshold = 40;
-
-    use_supernodal = analysis.num_cholesky_flops >= flop_threshold &&
-                     intensity >= intensity_threshold;
+    is_supernodal =
+        analysis.num_cholesky_flops >= control.supernodal_flop_threshold &&
+        intensity >= control.supernodal_intensity_threshold;
   }
 
-  is_supernodal = use_supernodal;
+  // Optionally equilibrate the matrix.
+  const CoordinateMatrix<Field>* matrix_to_factor;
+  CoordinateMatrix<Field> equilibrated_matrix;
+  if (control.equilibrate) {
+    equilibrated_matrix = matrix;
+    EquilibrateSymmetricMatrix(
+        &equilibrated_matrix, &equilibration_, control.verbose);
+    matrix_to_factor = &equilibrated_matrix;
+    have_equilibration_ = true;
+  } else {
+    matrix_to_factor = &matrix;
+    have_equilibration_ = false;
+  }
+
   SparseLDLResult result;
-  if (use_supernodal) {
+  if (is_supernodal) {
     CATAMARI_START_TIMER(timer);
+
+    // TODO(Jack Poulson): Modify quotient to combine these into single routine.
     Buffer<Int> member_to_supernode;
     quotient_graph->PermutedMemberToSupernode(ordering.inverse_permutation,
                                               &member_to_supernode);
@@ -100,13 +111,14 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 
     quotient_graph.release();
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
-    result = supernodal_factorization->Factor(matrix, ordering,
+    result = supernodal_factorization->Factor(*matrix_to_factor, ordering,
                                               control.supernodal_control);
   } else {
     quotient_graph.release();
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
     result =
-        scalar_factorization->Factor(matrix, ordering, control.scalar_control);
+        scalar_factorization->Factor(
+            *matrix_to_factor, ordering, control.scalar_control);
   }
 
   return result;
@@ -119,25 +131,37 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   scalar_factorization.reset();
   supernodal_factorization.reset();
 
-  bool use_supernodal;
   if (control.supernodal_strategy == kScalarFactorization) {
-    use_supernodal = false;
+    is_supernodal = false;
   } else if (control.supernodal_strategy == kSupernodalFactorization) {
-    use_supernodal = true;
+    is_supernodal = true;
   } else {
     // TODO(Jack Poulson): Use a more intelligent means of selecting.
     // This routine should likely take in a flop count analysis.
-    use_supernodal = true;
+    is_supernodal = true;
   }
 
-  is_supernodal = use_supernodal;
-  if (use_supernodal) {
+  // Optionally equilibrate the matrix.
+  const CoordinateMatrix<Field>* matrix_to_factor;
+  CoordinateMatrix<Field> equilibrated_matrix;
+  if (control.equilibrate) {
+    equilibrated_matrix = matrix;
+    EquilibrateSymmetricMatrix(
+        &equilibrated_matrix, &equilibration_, control.verbose);
+    matrix_to_factor = &equilibrated_matrix;
+    have_equilibration_ = true;
+  } else {
+    matrix_to_factor = &matrix;
+    have_equilibration_ = false;
+  }
+
+  if (is_supernodal) {
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
-    return supernodal_factorization->Factor(matrix, ordering,
+    return supernodal_factorization->Factor(*matrix_to_factor, ordering,
                                             control.supernodal_control);
   } else {
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
-    return scalar_factorization->Factor(matrix, ordering,
+    return scalar_factorization->Factor(*matrix_to_factor, ordering,
                                         control.scalar_control);
   }
 }
@@ -145,19 +169,50 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 template <class Field>
 SparseLDLResult SparseLDL<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
-  if (is_supernodal) {
-    return supernodal_factorization->RefactorWithFixedSparsityPattern(matrix);
+  // Optionally equilibrate the matrix.
+  const CoordinateMatrix<Field>* matrix_to_factor;
+  CoordinateMatrix<Field> equilibrated_matrix;
+  if (have_equilibration_) {
+    const bool kVerboseEquil = false;
+    equilibrated_matrix = matrix;
+    EquilibrateSymmetricMatrix(
+        &equilibrated_matrix, &equilibration_, kVerboseEquil);
+    matrix_to_factor = &equilibrated_matrix;
   } else {
-    return scalar_factorization->RefactorWithFixedSparsityPattern(matrix);
+    matrix_to_factor = &matrix;
+  }
+
+  if (is_supernodal) {
+    return supernodal_factorization->RefactorWithFixedSparsityPattern(
+        *matrix_to_factor);
+  } else {
+    return scalar_factorization->RefactorWithFixedSparsityPattern(
+        *matrix_to_factor);
   }
 }
 
 template <class Field>
 void SparseLDL<Field>::Solve(BlasMatrixView<Field>* right_hand_sides) const {
+  if (have_equilibration_) {
+    // Apply the inverse of the equilibration matrix.
+    for (Int j = 0; j < right_hand_sides->width; ++j) {
+      for (Int i = 0; i < right_hand_sides->height; ++i) {
+        right_hand_sides->Entry(i) /= equilibration_(i);
+      }
+    }
+  }
   if (is_supernodal) {
     supernodal_factorization->Solve(right_hand_sides);
   } else {
     scalar_factorization->Solve(right_hand_sides);
+  }
+  if (have_equilibration_) {
+    // Apply the inverse of the equilibration matrix.
+    for (Int j = 0; j < right_hand_sides->width; ++j) {
+      for (Int i = 0; i < right_hand_sides->height; ++i) {
+        right_hand_sides->Entry(i) /= equilibration_(i);
+      }
+    }
   }
 }
 

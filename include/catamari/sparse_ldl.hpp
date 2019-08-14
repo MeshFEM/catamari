@@ -36,11 +36,26 @@ struct SparseLDLControl {
   // Whether or not a supernodal factorization should be used.
   SupernodalStrategy supernodal_strategy = kAdaptiveSupernodalStrategy;
 
+  // The minimum number of factorization flops before a supernodal approach will
+  // be selected by the kAdaptiveSupernodalStrategy approach.
+  double supernodal_flop_threshold = 1e5;
+
+  // The number of flops per factorization nonzero before a supernodal approach
+  // will be selected by the kAdaptiveSupernodalStrategy approach.
+  double supernodal_intensity_threshold = 40;
+
   // The configuration options for the scalar LDL factorization.
   scalar_ldl::Control scalar_control;
 
   // The configuration options for the supernodal LDL factorization.
   supernodal_ldl::Control supernodal_control;
+
+  // If Ruiz equilibration should be used to (hopefully) increase the accuracy
+  // of the factorization and solve.
+  bool equilibrate = false;
+
+  // If the high-level logic should print progress information.
+  bool verbose = false;
 
   // Sets the factorization type for both the scalar and supernodal control
   // structures.
@@ -154,6 +169,11 @@ class SparseLDL {
 
   // Prints the diagonal factor of the factorization.
   void PrintDiagonalFactor(const std::string& label, std::ostream& os) const;
+
+ private:
+  // An (optional) diagonal scaling meant to improve accuracy.
+  bool have_equilibration_;
+  BlasMatrix<Real> equilibration_;
 };
 
 }  // namespace catamari
