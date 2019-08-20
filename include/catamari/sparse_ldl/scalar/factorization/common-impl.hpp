@@ -65,13 +65,13 @@ void Factorization<Field>::FillNonzeros(const CoordinateMatrix<Field>& matrix)
 }
 
 template <class Field>
-SparseLDLResult Factorization<Field>::Factor(
+SparseLDLResult<Field> Factorization<Field>::Factor(
     const CoordinateMatrix<Field>& matrix,
-    const SymmetricOrdering& manual_ordering, const Control& control) {
+    const SymmetricOrdering& manual_ordering,
+    const Control<Field>& control_value) {
   ordering = manual_ordering;
-  factorization_type = control.factorization_type;
-  algorithm = control.algorithm;
-  if (algorithm == kLeftLookingLDL) {
+  control = control_value;
+  if (control.algorithm == kLeftLookingLDL) {
     LeftLookingSetup(matrix);
     return LeftLooking(matrix);
   } else {
@@ -81,14 +81,29 @@ SparseLDLResult Factorization<Field>::Factor(
 }
 
 template <class Field>
-SparseLDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
+SparseLDLResult<Field> Factorization<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
-  if (algorithm == kLeftLookingLDL) {
+  if (control.algorithm == kLeftLookingLDL) {
     FillNonzeros(matrix);
     return LeftLooking(matrix);
   } else {
     return UpLooking(matrix);
   }
+}
+
+template <class Field>
+Int Factorization<Field>::NumRows() const {
+  return diagonal_factor.values.Size();
+}
+
+template <class Field>
+const Buffer<Int>& Factorization<Field>::Permutation() const {
+  return ordering.permutation;
+}
+
+template <class Field>
+const Buffer<Int>& Factorization<Field>::InversePermutation() const {
+  return ordering.inverse_permutation;
 }
 
 }  // namespace scalar_ldl

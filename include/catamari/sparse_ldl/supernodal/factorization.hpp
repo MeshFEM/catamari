@@ -22,6 +22,7 @@ namespace catamari {
 namespace supernodal_ldl {
 
 // Configuration options for supernodal LDL' factorization.
+template <typename Field>
 struct Control {
   // Determines the style of the factorization.
   SymmetricFactorizationType factorization_type;
@@ -35,6 +36,9 @@ struct Control {
 
   // Whether pivoting within each supernodal diagonal block should be enabled.
   bool supernodal_pivoting = false;
+
+  // The amount of dynamic regularization -- if any -- to use.
+  DynamicRegularizationControl<Field> dynamic_regularization;
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.
@@ -200,14 +204,17 @@ class Factorization {
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   // Factors the given matrix using the prescribed permutation.
-  SparseLDLResult Factor(const CoordinateMatrix<Field>& matrix,
-                         const SymmetricOrdering& manual_ordering,
-                         const Control& control);
+  SparseLDLResult<Field> Factor(const CoordinateMatrix<Field>& matrix,
+                                const SymmetricOrdering& manual_ordering,
+                                const Control<Field>& control);
 
   // Factors the given matrix after having previously factored another matrix
   // with the same sparsity pattern.
-  SparseLDLResult RefactorWithFixedSparsityPattern(
+  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
       const CoordinateMatrix<Field>& matrix);
+
+  // Returns the number of rows in the last factored matrix.
+  Int NumRows() const;
 
   // Solve a set of linear systems using the factorization.
   void Solve(BlasMatrixView<Field>* right_hand_sides) const;
@@ -251,18 +258,26 @@ class Factorization {
   // NOTE: This is only valid when control.supernodal_pivoting is true.
   ConstBlasMatrixView<Int> SupernodePermutation(Int supernode) const;
 
+  // Returns an immutable reference to the permutation mapping the original
+  // matrix indices into those used for the factorization.
+  const Buffer<Int>& Permutation() const;
+
+  // Returns an immutable reference to the permutation mapping the factorization
+  // indices into those of the original matrix.
+  const Buffer<Int>& InversePermutation() const;
+
   // Incorporates the details and work required to process the supernode with
   // the given size and degree into the factorization result.
   static void IncorporateSupernodeIntoLDLResult(Int supernode_size, Int degree,
-                                                SparseLDLResult* result);
+                                                SparseLDLResult<Field>* result);
 
   // Adds in the contribution of a subtree into an overall result.
-  static void MergeContribution(const SparseLDLResult& contribution,
-                                SparseLDLResult* result);
+  static void MergeContribution(const SparseLDLResult<Field>& contribution,
+                                SparseLDLResult<Field>* result);
 
  private:
   // The control structure for the factorization.
-  Control control_;
+  Control<Field> control_;
 
   // The representation of the permutation matrix P so that P A P' should be
   // factored. Typically, this permutation is the composition of a
@@ -332,70 +347,57 @@ class Factorization {
                                const Buffer<Int>& supernode_degrees);
 #endif  // ifdef CATAMARI_OPENMP
 
-  SparseLDLResult LeftLooking(const CoordinateMatrix<Field>& matrix);
+  SparseLDLResult<Field> LeftLooking(const CoordinateMatrix<Field>& matrix);
+
+  SparseLDLResult<Field> RightLooking(const CoordinateMatrix<Field>& matrix);
 #ifdef CATAMARI_OPENMP
-  SparseLDLResult OpenMPLeftLooking(const CoordinateMatrix<Field>& matrix);
+  SparseLDLResult<Field> OpenMPRightLooking(
+      const CoordinateMatrix<Field>& matrix);
 #endif  // ifdef CATAMARI_OPENMP
 
-  SparseLDLResult RightLooking(const CoordinateMatrix<Field>& matrix);
-#ifdef CATAMARI_OPENMP
-  SparseLDLResult OpenMPRightLooking(const CoordinateMatrix<Field>& matrix);
-#endif  // ifdef CATAMARI_OPENMP
+  bool LeftLookingSubtree(
+      Int supernode, const CoordinateMatrix<Field>& matrix,
+      const DynamicRegularizationParams<Field>& dynamic_reg_params,
+      LeftLookingSharedState* shared_state, PrivateState<Field>* private_state,
+      SparseLDLResult<Field>* result);
 
-  bool LeftLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
-                          LeftLookingSharedState* shared_state,
-                          PrivateState<Field>* private_state,
-                          SparseLDLResult* result);
+  bool RightLookingSubtree(
+      Int supernode, const CoordinateMatrix<Field>& matrix,
+      const DynamicRegularizationParams<Field>& dynamic_reg_params,
+      RightLookingSharedState<Field>* shared_state,
+      PrivateState<Field>* private_state, SparseLDLResult<Field>* result);
 #ifdef CATAMARI_OPENMP
-  bool OpenMPLeftLookingSubtree(Int supernode,
-                                const CoordinateMatrix<Field>& matrix,
-                                const Buffer<double>& work_estimates,
-                                double min_parallel_work,
-                                LeftLookingSharedState* shared_state,
-                                Buffer<PrivateState<Field>>* private_states,
-                                SparseLDLResult* result);
-#endif  // ifdef CATAMARI_OPENMP
-
-  bool RightLookingSubtree(Int supernode, const CoordinateMatrix<Field>& matrix,
-                           RightLookingSharedState<Field>* shared_state,
-                           PrivateState<Field>* private_state,
-                           SparseLDLResult* result);
-#ifdef CATAMARI_OPENMP
-  bool OpenMPRightLookingSubtree(Int supernode,
-                                 const CoordinateMatrix<Field>& matrix,
-                                 const Buffer<double>& work_estimates,
-                                 double min_parallel_work,
-                                 RightLookingSharedState<Field>* shared_state,
-                                 Buffer<PrivateState<Field>>* private_states,
-                                 SparseLDLResult* result);
+  bool OpenMPRightLookingSubtree(
+      Int supernode, const CoordinateMatrix<Field>& matrix,
+      const DynamicRegularizationParams<Field>& dynamic_reg_params,
+      const Buffer<double>& work_estimates, double min_parallel_work,
+      RightLookingSharedState<Field>* shared_state,
+      Buffer<PrivateState<Field>>* private_states,
+      SparseLDLResult<Field>* result);
 #endif  // ifdef CATAMARI_OPENMP
 
   void LeftLookingSupernodeUpdate(Int main_supernode,
                                   const CoordinateMatrix<Field>& matrix,
                                   LeftLookingSharedState* shared_state,
                                   PrivateState<Field>* private_state);
-#ifdef CATAMARI_OPENMP
-  void OpenMPLeftLookingSupernodeUpdate(
-      Int main_supernode, const CoordinateMatrix<Field>& matrix,
-      LeftLookingSharedState* shared_state,
-      Buffer<PrivateState<Field>>* private_states);
-#endif  // ifdef CATAMARI_OPENMP
 
-  bool LeftLookingSupernodeFinalize(Int main_supernode,
-                                    SparseLDLResult* result);
-#ifdef CATAMARI_OPENMP
-  bool OpenMPLeftLookingSupernodeFinalize(
-      Int supernode, Buffer<PrivateState<Field>>* private_states,
-      SparseLDLResult* result);
-#endif  // ifdef CATAMARI_OPENMP
+  bool LeftLookingSupernodeFinalize(
+      Int main_supernode,
+      const DynamicRegularizationParams<Field>& dynamic_reg_params,
+      SparseLDLResult<Field>* result);
 
   bool RightLookingSupernodeFinalize(
-      Int supernode, RightLookingSharedState<Field>* shared_state,
-      PrivateState<Field>* private_state, SparseLDLResult* result);
+      Int supernode,
+      const DynamicRegularizationParams<Field>& dynamic_reg_params,
+      RightLookingSharedState<Field>* shared_state,
+      PrivateState<Field>* private_state, SparseLDLResult<Field>* result);
 #ifdef CATAMARI_OPENMP
   bool OpenMPRightLookingSupernodeFinalize(
-      Int supernode, RightLookingSharedState<Field>* shared_state,
-      Buffer<PrivateState<Field>>* private_state, SparseLDLResult* result);
+      Int supernode,
+      const DynamicRegularizationParams<Field>& dynamic_reg_params,
+      RightLookingSharedState<Field>* shared_state,
+      Buffer<PrivateState<Field>>* private_state,
+      SparseLDLResult<Field>* result);
 #endif  // ifdef CATAMARI_OPENMP
 
   // Performs the portion of the lower-triangular solve corresponding to the
@@ -443,7 +445,6 @@ class Factorization {
 #include "catamari/sparse_ldl/supernodal/factorization/common_openmp-impl.hpp"
 #include "catamari/sparse_ldl/supernodal/factorization/io-impl.hpp"
 #include "catamari/sparse_ldl/supernodal/factorization/left_looking-impl.hpp"
-#include "catamari/sparse_ldl/supernodal/factorization/left_looking_openmp-impl.hpp"
 #include "catamari/sparse_ldl/supernodal/factorization/right_looking-impl.hpp"
 #include "catamari/sparse_ldl/supernodal/factorization/right_looking_openmp-impl.hpp"
 #include "catamari/sparse_ldl/supernodal/factorization/solve-impl.hpp"

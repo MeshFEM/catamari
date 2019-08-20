@@ -935,14 +935,28 @@ void MergeChildSchurComplements(Int supernode,
 }
 
 template <class Field>
-Int FactorDiagonalBlock(Int block_size,
-                        SymmetricFactorizationType factorization_type,
-                        BlasMatrixView<Field>* diagonal_block) {
+Int FactorDiagonalBlock(
+    Int block_size, SymmetricFactorizationType factorization_type,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* diagonal_block,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization) {
   Int num_pivots;
   if (factorization_type == kCholeskyFactorization) {
-    num_pivots = LowerCholeskyFactorization(block_size, diagonal_block);
+    if (dynamic_reg_params.enabled) {
+      num_pivots = DynamicallyRegularizedLowerCholeskyFactorization(
+          block_size, dynamic_reg_params, diagonal_block,
+          dynamic_regularization);
+    } else {
+      num_pivots = LowerCholeskyFactorization(block_size, diagonal_block);
+    }
   } else if (factorization_type == kLDLAdjointFactorization) {
-    num_pivots = LDLAdjointFactorization(block_size, diagonal_block);
+    if (dynamic_reg_params.enabled) {
+      num_pivots = DynamicallyRegularizedLDLAdjointFactorization(
+          block_size, dynamic_reg_params, diagonal_block,
+          dynamic_regularization);
+    } else {
+      num_pivots = LDLAdjointFactorization(block_size, diagonal_block);
+    }
   } else {
     num_pivots = LDLTransposeFactorization(block_size, diagonal_block);
   }

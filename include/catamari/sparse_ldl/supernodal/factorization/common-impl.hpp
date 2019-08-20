@@ -20,7 +20,7 @@ namespace supernodal_ldl {
 
 template <class Field>
 void Factorization<Field>::IncorporateSupernodeIntoLDLResult(
-    Int supernode_size, Int degree, SparseLDLResult* result) {
+    Int supernode_size, Int degree, SparseLDLResult<Field>* result) {
   // Finish updating the result structure.
   result->largest_supernode =
       std::max(result->largest_supernode, supernode_size);
@@ -50,7 +50,8 @@ void Factorization<Field>::IncorporateSupernodeIntoLDLResult(
 
 template <class Field>
 void Factorization<Field>::MergeContribution(
-    const SparseLDLResult& contribution, SparseLDLResult* result) {
+    const SparseLDLResult<Field>& contribution,
+    SparseLDLResult<Field>* result) {
   result->num_successful_pivots += contribution.num_successful_pivots;
   result->largest_supernode =
       std::max(result->largest_supernode, contribution.largest_supernode);
@@ -293,9 +294,9 @@ void Factorization<Field>::InitializeBlockColumn(
 }
 
 template <class Field>
-SparseLDLResult Factorization<Field>::Factor(
+SparseLDLResult<Field> Factorization<Field>::Factor(
     const CoordinateMatrix<Field>& matrix,
-    const SymmetricOrdering& manual_ordering, const Control& control) {
+    const SymmetricOrdering& manual_ordering, const Control<Field>& control) {
   control_ = control;
   ordering_ = manual_ordering;
 
@@ -324,7 +325,7 @@ SparseLDLResult Factorization<Field>::Factor(
   InitialFactorizationSetup(matrix);
 #endif  // ifdef CATAMARI_OPENMP
 
-  SparseLDLResult result;
+  SparseLDLResult<Field> result;
   if (control_.algorithm == kLeftLookingLDL) {
     result = LeftLooking(matrix);
   } else {
@@ -341,12 +342,12 @@ SparseLDLResult Factorization<Field>::Factor(
 // TODO(Jack Poulson): Check that the previous factorization had an identical
 // sparsity pattern.
 template <class Field>
-SparseLDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
+SparseLDLResult<Field> Factorization<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
 #ifdef CATAMARI_ENABLE_TIMERS
   profile.Reset();
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
-  SparseLDLResult result;
+  SparseLDLResult<Field> result;
   if (control_.algorithm == kLeftLookingLDL) {
     result = LeftLooking(matrix);
   } else {
@@ -358,6 +359,21 @@ SparseLDLResult Factorization<Field>::RefactorWithFixedSparsityPattern(
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 
   return result;
+}
+
+template <class Field>
+Int Factorization<Field>::NumRows() const {
+  return supernode_member_to_index_.Size();
+}
+
+template <class Field>
+const Buffer<Int>& Factorization<Field>::Permutation() const {
+  return ordering_.permutation;
+}
+
+template <class Field>
+const Buffer<Int>& Factorization<Field>::InversePermutation() const {
+  return ordering_.inverse_permutation;
 }
 
 }  // namespace supernodal_ldl

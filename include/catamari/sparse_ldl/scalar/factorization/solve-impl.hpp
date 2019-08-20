@@ -45,7 +45,7 @@ void Factorization<Field>::LowerTriangularSolve(
   const Int num_rhs = right_hand_sides->width;
   const LowerStructure& lower_structure = lower_factor.structure;
   const Int num_rows = lower_structure.column_offsets.Size() - 1;
-  const bool is_cholesky = factorization_type == kCholeskyFactorization;
+  const bool is_cholesky = control.factorization_type == kCholeskyFactorization;
 
   CATAMARI_ASSERT(right_hand_sides->height == num_rows,
                   "matrix was an incorrect height.");
@@ -74,7 +74,7 @@ void Factorization<Field>::LowerTriangularSolve(
 template <class Field>
 void Factorization<Field>::DiagonalSolve(
     BlasMatrixView<Field>* right_hand_sides) const {
-  if (factorization_type == kCholeskyFactorization) {
+  if (control.factorization_type == kCholeskyFactorization) {
     return;
   }
 
@@ -97,8 +97,9 @@ void Factorization<Field>::LowerTransposeTriangularSolve(
   const Int num_rhs = right_hand_sides->width;
   const LowerStructure& lower_structure = lower_factor.structure;
   const Int num_rows = lower_structure.column_offsets.Size() - 1;
-  const bool is_cholesky = factorization_type == kCholeskyFactorization;
-  const bool is_selfadjoint = factorization_type != kLDLTransposeFactorization;
+  const bool is_cholesky = control.factorization_type == kCholeskyFactorization;
+  const bool is_selfadjoint =
+      control.factorization_type != kLDLTransposeFactorization;
 
   CATAMARI_ASSERT(right_hand_sides->height == num_rows,
                   "matrix was an incorrect height.");

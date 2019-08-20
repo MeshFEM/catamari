@@ -413,17 +413,31 @@ void OpenMPMergeChildSchurComplements(
 }
 
 template <class Field>
-Int OpenMPFactorDiagonalBlock(Int tile_size, Int block_size,
-                              SymmetricFactorizationType factorization_type,
-                              BlasMatrixView<Field>* diagonal_block,
-                              Buffer<Field>* buffer) {
+Int OpenMPFactorDiagonalBlock(
+    Int tile_size, Int block_size,
+    SymmetricFactorizationType factorization_type,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* diagonal_block, Buffer<Field>* buffer,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization) {
   Int num_pivots;
   if (factorization_type == kCholeskyFactorization) {
-    num_pivots =
-        OpenMPLowerCholeskyFactorization(tile_size, block_size, diagonal_block);
+    if (dynamic_reg_params.enabled) {
+      num_pivots = OpenMPDynamicallyRegularizedLowerCholeskyFactorization(
+          tile_size, block_size, dynamic_reg_params, diagonal_block,
+          dynamic_regularization);
+    } else {
+      num_pivots = OpenMPLowerCholeskyFactorization(tile_size, block_size,
+                                                    diagonal_block);
+    }
   } else if (factorization_type == kLDLAdjointFactorization) {
-    num_pivots = OpenMPLDLAdjointFactorization(tile_size, block_size,
-                                               diagonal_block, buffer);
+    if (dynamic_reg_params.enabled) {
+      num_pivots = OpenMPDynamicallyRegularizedLDLAdjointFactorization(
+          tile_size, block_size, dynamic_reg_params, diagonal_block, buffer,
+          dynamic_regularization);
+    } else {
+      num_pivots = OpenMPLDLAdjointFactorization(tile_size, block_size,
+                                                 diagonal_block, buffer);
+    }
   } else {
     num_pivots = OpenMPLDLTransposeFactorization(tile_size, block_size,
                                                  diagonal_block, buffer);

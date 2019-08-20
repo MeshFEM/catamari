@@ -735,13 +735,13 @@ void PrintExperiment(const Experiment& experiment) {
 }
 
 template <typename Real>
-Experiment SolveModel(SpeedProfile profile, Real omega, Int num_x_elements,
-                      Int num_y_elements, Real pml_scale, Real pml_exponent,
-                      int num_pml_elements,
-                      const Buffer<GaussianSource<double>>& double_sources,
-                      bool analytical_ordering,
-                      const catamari::SparseLDLControl& ldl_control,
-                      bool print_progress) {
+Experiment SolveModel(
+    SpeedProfile profile, Real omega, Int num_x_elements, Int num_y_elements,
+    Real pml_scale, Real pml_exponent, int num_pml_elements,
+    const Buffer<GaussianSource<double>>& double_sources,
+    bool analytical_ordering,
+    const catamari::SparseLDLControl<Complex<Real>>& ldl_control,
+    bool print_progress) {
   typedef Complex<Real> Field;
   Experiment experiment;
   quotient::Timer timer;
@@ -775,7 +775,7 @@ Experiment SolveModel(SpeedProfile profile, Real omega, Int num_x_elements,
   }
   timer.Start();
   catamari::SparseLDL<Field> ldl;
-  catamari::SparseLDLResult result;
+  catamari::SparseLDLResult<Field> result;
   if (analytical_ordering) {
     catamari::SymmetricOrdering ordering;
     catamari::UnitReachNestedDissection2D(num_x_elements, num_y_elements,
@@ -942,42 +942,75 @@ int main(int argc, char** argv) {
                              source_stddev1},
   };
 
-  catamari::SparseLDLControl ldl_control;
-  ldl_control.SetFactorizationType(catamari::kLDLTransposeFactorization);
-  ldl_control.supernodal_strategy =
-      static_cast<catamari::SupernodalStrategy>(supernodal_strategy_int);
-
-  // Set the minimum degree control options.
-  {
-    auto& md_control = ldl_control.md_control;
-    md_control.degree_type = static_cast<quotient::DegreeType>(degree_type_int);
-    md_control.aggressive_absorption = aggressive_absorption;
-    md_control.min_dense_threshold = min_dense_threshold;
-    md_control.dense_sqrt_multiple = dense_sqrt_multiple;
-  }
-
-  // Set the scalar control options.
-  ldl_control.scalar_control.algorithm =
-      static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
-
-  // Set the supernodal control options.
-  {
-    auto& sn_control = ldl_control.supernodal_control;
-    sn_control.algorithm =
-        static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
-    sn_control.relaxation_control.relax_supernodes = relax_supernodes;
-  }
-
   std::cout << "Solving with double-precision..." << std::endl;
-  SolveModel<double>(profile, omega, num_x_elements, num_y_elements, pml_scale,
-                     pml_exponent, num_pml_elements, sources,
-                     analytical_ordering, ldl_control, print_progress);
+  {
+    catamari::SparseLDLControl<Complex<double>> ldl_control;
+    ldl_control.SetFactorizationType(catamari::kLDLTransposeFactorization);
+    ldl_control.supernodal_strategy =
+        static_cast<catamari::SupernodalStrategy>(supernodal_strategy_int);
+
+    // Set the minimum degree control options.
+    {
+      auto& md_control = ldl_control.md_control;
+      md_control.degree_type =
+          static_cast<quotient::DegreeType>(degree_type_int);
+      md_control.aggressive_absorption = aggressive_absorption;
+      md_control.min_dense_threshold = min_dense_threshold;
+      md_control.dense_sqrt_multiple = dense_sqrt_multiple;
+    }
+
+    // Set the scalar control options.
+    ldl_control.scalar_control.algorithm =
+        static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+
+    // Set the supernodal control options.
+    {
+      auto& sn_control = ldl_control.supernodal_control;
+      sn_control.algorithm =
+          static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+      sn_control.relaxation_control.relax_supernodes = relax_supernodes;
+    }
+
+    SolveModel<double>(profile, omega, num_x_elements, num_y_elements,
+                       pml_scale, pml_exponent, num_pml_elements, sources,
+                       analytical_ordering, ldl_control, print_progress);
+  }
 
   std::cout << "Solving with double-double-precision..." << std::endl;
-  SolveModel<mantis::DoubleMantissa<double>>(
-      profile, omega, num_x_elements, num_y_elements, pml_scale, pml_exponent,
-      num_pml_elements, sources, analytical_ordering, ldl_control,
-      print_progress);
+  {
+    catamari::SparseLDLControl<Complex<mantis::DoubleMantissa<double>>>
+        ldl_control;
+    ldl_control.SetFactorizationType(catamari::kLDLTransposeFactorization);
+    ldl_control.supernodal_strategy =
+        static_cast<catamari::SupernodalStrategy>(supernodal_strategy_int);
+
+    // Set the minimum degree control options.
+    {
+      auto& md_control = ldl_control.md_control;
+      md_control.degree_type =
+          static_cast<quotient::DegreeType>(degree_type_int);
+      md_control.aggressive_absorption = aggressive_absorption;
+      md_control.min_dense_threshold = min_dense_threshold;
+      md_control.dense_sqrt_multiple = dense_sqrt_multiple;
+    }
+
+    // Set the scalar control options.
+    ldl_control.scalar_control.algorithm =
+        static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+
+    // Set the supernodal control options.
+    {
+      auto& sn_control = ldl_control.supernodal_control;
+      sn_control.algorithm =
+          static_cast<catamari::LDLAlgorithm>(ldl_algorithm_int);
+      sn_control.relaxation_control.relax_supernodes = relax_supernodes;
+    }
+
+    SolveModel<mantis::DoubleMantissa<double>>(
+        profile, omega, num_x_elements, num_y_elements, pml_scale, pml_exponent,
+        num_pml_elements, sources, analytical_ordering, ldl_control,
+        print_progress);
+  }
 
   return 0;
 }

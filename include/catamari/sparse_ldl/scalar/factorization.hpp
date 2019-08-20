@@ -13,6 +13,7 @@
 #include "catamari/blas_matrix_view.hpp"
 #include "catamari/buffer.hpp"
 #include "catamari/coordinate_matrix.hpp"
+#include "catamari/dynamic_regularization.hpp"
 #include "catamari/integers.hpp"
 #include "catamari/symmetric_ordering.hpp"
 
@@ -58,7 +59,10 @@ enum LDLAlgorithm {
 };
 
 // Statistics from running an LDL' or Cholesky factorization.
+template <typename Field>
 struct SparseLDLResult {
+  typedef ComplexBase<Field> Real;
+
   // The number of successive legal pivots that were encountered during the
   // (attempted) factorization. If the factorization was successful, this will
   // equal the number of rows in the matrix.
@@ -95,17 +99,27 @@ struct SparseLDLResult {
   // In the case of complex factorizations, this is in terms of the number of
   // real flops.
   double num_factorization_flops = 0;
+
+  // If dynamic regularization is enabled, this will hold the dynamically
+  // generated diagonal shifts. We require these modifications to be
+  // real-valued and store them as sparse corrections in the factorization
+  // ordering.
+  std::vector<std::pair<Int, Real>> dynamic_regularization;
 };
 
 namespace scalar_ldl {
 
 // Configuration options for non-supernodal LDL' factorization.
+template <typename Field>
 struct Control {
   // The type of factorization to be performed.
   SymmetricFactorizationType factorization_type = kLDLAdjointFactorization;
 
   // The type of loop invariant to use for the factorization.
   LDLAlgorithm algorithm = kAdaptiveLDL;
+
+  // The amount of dynamic regularization -- if any -- to use.
+  DynamicRegularizationControl<Field> dynamic_regularization;
 };
 
 // The nonzero patterns below the diagonal of the lower-triangular factor.
@@ -205,11 +219,8 @@ struct UpLookingState {
 template <class Field>
 class Factorization {
  public:
-  // Marks the type of factorization employed.
-  SymmetricFactorizationType factorization_type;
-
-  // The algorithm used for the factorization.
-  LDLAlgorithm algorithm;
+  // The control structure for the factorization.
+  Control<Field> control;
 
   // The unit lower-triangular factor, L.
   LowerFactor<Field> lower_factor;
@@ -222,13 +233,13 @@ class Factorization {
 
   // Set the factor to the L L^T, L D L^T, or L D L' factorization of the given
   // permutation of the given matrix.
-  SparseLDLResult Factor(const CoordinateMatrix<Field>& matrix,
-                         const SymmetricOrdering& ordering,
-                         const Control& control);
+  SparseLDLResult<Field> Factor(const CoordinateMatrix<Field>& matrix,
+                                const SymmetricOrdering& ordering,
+                                const Control<Field>& control_value);
 
   // Factors a matrix which has the same sparsity pattern as the previously
   // factored matrix.
-  SparseLDLResult RefactorWithFixedSparsityPattern(
+  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
       const CoordinateMatrix<Field>& matrix);
 
   // Pretty-prints the diagonal matrix.
@@ -250,6 +261,17 @@ class Factorization {
   void LowerTransposeTriangularSolve(
       BlasMatrixView<Field>* right_hand_sides) const;
 
+  // Returns the number of rows of the factored matrix.
+  Int NumRows() const;
+
+  // Returns an immutable reference to the permutation mapping from the original
+  // indices into the factorization's.
+  const Buffer<Int>& Permutation() const;
+
+  // Returns an immutable reference to the permutation mapping from the
+  // factorization indices back to the original matrix ones.
+  const Buffer<Int>& InversePermutation() const;
+
  private:
   // Performs a non-supernodal left-looking LDL' factorization.
   // Cf. Section 4.8 of Tim Davis, "Direct Methods for Sparse Linear Systems".
@@ -259,12 +281,12 @@ class Factorization {
   //     L(k, k) = sqrt(A(k, k) - L(k, 1:k-1) * L(k, 1:k-1)');
   //     L(k+1:n, k) = (A(k+1:n, k) - L(k+1:n, 1:k-1) * L(k, 1:k-1)') / L(k, k);
   //   end
-  SparseLDLResult LeftLooking(const CoordinateMatrix<Field>& matrix)
+  SparseLDLResult<Field> LeftLooking(const CoordinateMatrix<Field>& matrix)
       CATAMARI_NOEXCEPT;
 
   // Performs a non-supernodal up-looking LDL' factorization.
   // Cf. Section 4.7 of Tim Davis, "Direct Methods for Sparse Linear Systems".
-  SparseLDLResult UpLooking(const CoordinateMatrix<Field>& matrix)
+  SparseLDLResult<Field> UpLooking(const CoordinateMatrix<Field>& matrix)
       CATAMARI_NOEXCEPT;
 
   // Fill the factorization with the nonzeros from the (permuted) input matrix.

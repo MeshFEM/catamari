@@ -205,12 +205,12 @@ void GenerateRightHandSide(Int num_rows, BlasMatrix<Field>* right_hand_side) {
 }
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
-Experiment RunMatrixMarketTest(const std::string& filename,
-                               bool skip_explicit_zeros,
-                               quotient::EntryMask mask, bool force_symmetry,
-                               double relative_shift, double drop_tolerance,
-                               const catamari::SparseLDLControl& ldl_control,
-                               bool print_progress) {
+Experiment RunMatrixMarketTest(
+    const std::string& filename, bool skip_explicit_zeros,
+    quotient::EntryMask mask, bool force_symmetry, double relative_shift,
+    double drop_tolerance,
+    const catamari::SparseLDLControl<double>& ldl_control,
+    bool print_progress) {
   typedef double Field;
   typedef catamari::ComplexBase<Field> Real;
   Experiment experiment;
@@ -233,7 +233,8 @@ Experiment RunMatrixMarketTest(const std::string& filename,
   quotient::Timer factorization_timer;
   factorization_timer.Start();
   catamari::SparseLDL<Field> ldl;
-  const catamari::SparseLDLResult result = ldl.Factor(*matrix, ldl_control);
+  const catamari::SparseLDLResult<Field> result =
+      ldl.Factor(*matrix, ldl_control);
   experiment.factorization_seconds = factorization_timer.Stop();
   if (result.num_successful_pivots < num_rows) {
     std::cout << "  Failed factorization after " << result.num_successful_pivots
@@ -289,7 +290,8 @@ Experiment RunMatrixMarketTest(const std::string& filename,
 std::unordered_map<std::string, Experiment> RunCustomTests(
     const std::string& matrix_market_directory, bool skip_explicit_zeros,
     quotient::EntryMask mask, double relative_shift, double drop_tolerance,
-    const catamari::SparseLDLControl& ldl_control, bool print_progress) {
+    const catamari::SparseLDLControl<double>& ldl_control,
+    bool print_progress) {
   // The list of matrices tested in:
   //
   //   J.D. Hogg, J.K. Reid, and J.A. Scott,
@@ -450,7 +452,7 @@ int main(int argc, char** argv) {
   const quotient::EntryMask mask =
       static_cast<quotient::EntryMask>(entry_mask_int);
 
-  catamari::SparseLDLControl ldl_control;
+  catamari::SparseLDLControl<double> ldl_control;
   ldl_control.SetFactorizationType(
       static_cast<catamari::SymmetricFactorizationType>(
           factorization_type_int));

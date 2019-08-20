@@ -13,6 +13,7 @@
 #include "catamari/blas_matrix_view.hpp"
 #include "catamari/buffer.hpp"
 #include "catamari/complex.hpp"
+#include "catamari/dynamic_regularization.hpp"
 #include "catamari/integers.hpp"
 
 namespace catamari {
@@ -31,6 +32,22 @@ Int OpenMPLowerCholeskyFactorization(Int tile_size, Int block_size,
                                      BlasMatrixView<Field>* matrix);
 #endif  // ifdef CATAMARI_OPENMP
 
+template <class Field>
+Int DynamicallyRegularizedLowerCholeskyFactorization(
+    Int block_size,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* matrix,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization);
+
+#ifdef CATAMARI_OPENMP
+template <class Field>
+Int OpenMPDynamicallyRegularizedLowerCholeskyFactorization(
+    Int tile_size, Int block_size,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* matrix,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization);
+#endif  // ifdef CATAMARI_OPENMP
+
 // Attempts to overwrite the lower triangle of an (implicitly) Hermitian
 // matrix with its L D L^H factorization, where L is lower-triangular with
 // unit diagonal and D is diagonal (D is stored in place of the implicit
@@ -45,6 +62,22 @@ template <class Field>
 Int OpenMPLDLAdjointFactorization(Int tile_size, Int block_size,
                                   BlasMatrixView<Field>* matrix,
                                   Buffer<Field>* buffer);
+#endif  // ifdef CATAMARI_OPENMP
+
+template <class Field>
+Int DynamicallyRegularizedLDLAdjointFactorization(
+    Int block_size,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* matrix,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization);
+
+#ifdef CATAMARI_OPENMP
+template <class Field>
+Int OpenMPDynamicallyRegularizedLDLAdjointFactorization(
+    Int tile_size, Int block_size,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* matrix, Buffer<Field>* buffer,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization);
 #endif  // ifdef CATAMARI_OPENMP
 
 // Attempts to overwrite the lower triangle of an (implicitly) symmetric

@@ -26,8 +26,9 @@ SparseLDL<Field>::SparseLDL() {
 }
 
 template <class Field>
-SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
-                                         const SparseLDLControl& control) {
+SparseLDLResult<Field> SparseLDL<Field>::Factor(
+    const CoordinateMatrix<Field>& matrix,
+    const SparseLDLControl<Field>& control) {
   scalar_factorization.reset();
   supernodal_factorization.reset();
 
@@ -77,8 +78,8 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   CoordinateMatrix<Field> equilibrated_matrix;
   if (control.equilibrate) {
     equilibrated_matrix = matrix;
-    EquilibrateSymmetricMatrix(
-        &equilibrated_matrix, &equilibration_, control.verbose);
+    EquilibrateSymmetricMatrix(&equilibrated_matrix, &equilibration_,
+                               control.verbose);
     matrix_to_factor = &equilibrated_matrix;
     have_equilibration_ = true;
   } else {
@@ -86,7 +87,7 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
     have_equilibration_ = false;
   }
 
-  SparseLDLResult result;
+  SparseLDLResult<Field> result;
   if (is_supernodal) {
     CATAMARI_START_TIMER(timer);
 
@@ -116,18 +117,17 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   } else {
     quotient_graph.release();
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
-    result =
-        scalar_factorization->Factor(
-            *matrix_to_factor, ordering, control.scalar_control);
+    result = scalar_factorization->Factor(*matrix_to_factor, ordering,
+                                          control.scalar_control);
   }
 
   return result;
 }
 
 template <class Field>
-SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
-                                         const SymmetricOrdering& ordering,
-                                         const SparseLDLControl& control) {
+SparseLDLResult<Field> SparseLDL<Field>::Factor(
+    const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
+    const SparseLDLControl<Field>& control) {
   scalar_factorization.reset();
   supernodal_factorization.reset();
 
@@ -146,8 +146,8 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
   CoordinateMatrix<Field> equilibrated_matrix;
   if (control.equilibrate) {
     equilibrated_matrix = matrix;
-    EquilibrateSymmetricMatrix(
-        &equilibrated_matrix, &equilibration_, control.verbose);
+    EquilibrateSymmetricMatrix(&equilibrated_matrix, &equilibration_,
+                               control.verbose);
     matrix_to_factor = &equilibrated_matrix;
     have_equilibration_ = true;
   } else {
@@ -167,7 +167,55 @@ SparseLDLResult SparseLDL<Field>::Factor(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
-SparseLDLResult SparseLDL<Field>::RefactorWithFixedSparsityPattern(
+Int SparseLDL<Field>::NumRows() const {
+  if (is_supernodal) {
+    return supernodal_factorization->NumRows();
+  } else {
+    return scalar_factorization->NumRows();
+  }
+}
+
+template <class Field>
+const Buffer<Int>& SparseLDL<Field>::Permutation() const {
+  if (is_supernodal) {
+    return supernodal_factorization->Permutation();
+  } else {
+    return scalar_factorization->Permutation();
+  }
+}
+
+template <class Field>
+const Buffer<Int>& SparseLDL<Field>::InversePermutation() const {
+  if (is_supernodal) {
+    return supernodal_factorization->InversePermutation();
+  } else {
+    return scalar_factorization->InversePermutation();
+  }
+}
+
+template <class Field>
+void SparseLDL<Field>::DynamicRegularizationDiagonal(
+    const SparseLDLResult<Field>& result,
+    BlasMatrix<ComplexBase<Field>>* diagonal) const {
+  typedef ComplexBase<Field> Real;
+  const Int height = NumRows();
+  const Buffer<Int>& inverse_permutation = InversePermutation();
+
+  diagonal->Resize(height, 1, Real(0));
+
+  for (const auto& perturbation : result.dynamic_regularization) {
+    const Int index = perturbation.first;
+    const Real regularization = perturbation.second;
+    if (inverse_permutation.Empty()) {
+      diagonal->Entry(index) = regularization;
+    } else {
+      diagonal->Entry(inverse_permutation[index]) = regularization;
+    }
+  }
+}
+
+template <class Field>
+SparseLDLResult<Field> SparseLDL<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
   // Optionally equilibrate the matrix.
   const CoordinateMatrix<Field>* matrix_to_factor;
@@ -175,8 +223,8 @@ SparseLDLResult SparseLDL<Field>::RefactorWithFixedSparsityPattern(
   if (have_equilibration_) {
     const bool kVerboseEquil = false;
     equilibrated_matrix = matrix;
-    EquilibrateSymmetricMatrix(
-        &equilibrated_matrix, &equilibration_, kVerboseEquil);
+    EquilibrateSymmetricMatrix(&equilibrated_matrix, &equilibration_,
+                               kVerboseEquil);
     matrix_to_factor = &equilibrated_matrix;
   } else {
     matrix_to_factor = &matrix;
@@ -638,6 +686,24 @@ void SparseLDL<Field>::PrintDiagonalFactor(const std::string& label,
     supernodal_factorization->PrintDiagonalFactor(label, os);
   } else {
     scalar_factorization->PrintDiagonalFactor(label, os);
+  }
+}
+
+template <class Field>
+void MergeDynamicRegularizations(
+    const Buffer<SparseLDLResult<Field>>& children_results,
+    SparseLDLResult<Field>* result) {
+  Int reg_offset = result->dynamic_regularization.size();
+  Int num_regularizations = reg_offset;
+  for (const SparseLDLResult<Field>& child_result : children_results) {
+    num_regularizations += child_result.dynamic_regularization.size();
+  }
+  result->dynamic_regularization.resize(num_regularizations);
+  for (const SparseLDLResult<Field>& child_result : children_results) {
+    std::copy(child_result.dynamic_regularization.begin(),
+              child_result.dynamic_regularization.end(),
+              result->dynamic_regularization.begin() + reg_offset);
+    reg_offset += child_result.dynamic_regularization.size();
   }
 }
 

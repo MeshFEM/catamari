@@ -32,7 +32,7 @@ void Factorization<Field>::PrintLowerFactor(const std::string& label,
   os << label << ":\n";
   const Int num_columns = lower_structure.column_offsets.Size() - 1;
   for (Int column = 0; column < num_columns; ++column) {
-    if (factorization_type == kCholeskyFactorization) {
+    if (control.factorization_type == kCholeskyFactorization) {
       print_entry(column, column, diagonal_factor.values[column]);
     } else {
       print_entry(column, column, Field{1});
@@ -52,7 +52,7 @@ void Factorization<Field>::PrintLowerFactor(const std::string& label,
 template <class Field>
 void Factorization<Field>::PrintDiagonalFactor(const std::string& label,
                                                std::ostream& os) const {
-  if (factorization_type == kCholeskyFactorization) {
+  if (control.factorization_type == kCholeskyFactorization) {
     // TODO(Jack Poulson): Print the identity.
     return;
   }

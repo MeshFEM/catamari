@@ -18,7 +18,7 @@
 namespace catamari {
 
 template <class Field>
-Int LowerUnblockedCholeskyFactorization(BlasMatrixView<Field>* matrix) {
+Int UnblockedLowerCholeskyFactorization(BlasMatrixView<Field>* matrix) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
   for (Int i = 0; i < height; ++i) {
@@ -39,7 +39,52 @@ Int LowerUnblockedCholeskyFactorization(BlasMatrixView<Field>* matrix) {
     }
 
     // Perform the Hermitian rank-one update.
-    // TODO(Jack Poulson): Replace with a call to HER.
+    for (Int j = i + 1; j < height; ++j) {
+      const Field eta = Conjugate(matrix->Entry(j, i));
+      for (Int k = j; k < height; ++k) {
+        const Field& lambda_left = matrix->Entry(k, i);
+        matrix->Entry(k, j) -= lambda_left * eta;
+      }
+    }
+  }
+  return height;
+}
+
+// TODO(Jack Poulson): Also implement specializations which call BLAS for the
+// rank-one updates.
+template <class Field>
+Int UnblockedDynamicallyRegularizedLowerCholeskyFactorization(
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* matrix,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization) {
+  typedef ComplexBase<Field> Real;
+  const Int height = matrix->height;
+  const Int offset = dynamic_reg_params.offset;
+
+  for (Int i = 0; i < height; ++i) {
+    Real delta = RealPart(matrix->Entry(i, i));
+    CATAMARI_ASSERT(dynamic_reg_params.signatures[i + offset],
+                    "Spurious negative pivot.");
+    if (delta < dynamic_reg_params.positive_threshold) {
+      const Real regularization = dynamic_reg_params.positive_threshold - delta;
+      dynamic_regularization->emplace_back(offset + i, regularization);
+      delta = dynamic_reg_params.positive_threshold;
+    }
+    if (delta <= Real{0}) {
+      return i;
+    }
+
+    // TODO(Jack Poulson): Switch to a custom square-root function so that
+    // more general datatypes can be supported.
+    const Real delta_sqrt = std::sqrt(delta);
+    matrix->Entry(i, i) = delta_sqrt;
+
+    // Solve for the remainder of the i'th column of L.
+    for (Int k = i + 1; k < height; ++k) {
+      matrix->Entry(k, i) /= delta_sqrt;
+    }
+
+    // Perform the Hermitian rank-one update.
     for (Int j = i + 1; j < height; ++j) {
       const Field eta = Conjugate(matrix->Entry(j, i));
       for (Int k = j; k < height; ++k) {
@@ -53,7 +98,7 @@ Int LowerUnblockedCholeskyFactorization(BlasMatrixView<Field>* matrix) {
 
 #ifdef CATAMARI_HAVE_BLAS
 template <>
-inline Int LowerUnblockedCholeskyFactorization(BlasMatrixView<float>* matrix) {
+inline Int UnblockedLowerCholeskyFactorization(BlasMatrixView<float>* matrix) {
   const Int height = matrix->height;
   const Int leading_dim = matrix->leading_dim;
   for (Int i = 0; i < height; ++i) {
@@ -86,7 +131,7 @@ inline Int LowerUnblockedCholeskyFactorization(BlasMatrixView<float>* matrix) {
 }
 
 template <>
-inline Int LowerUnblockedCholeskyFactorization(BlasMatrixView<double>* matrix) {
+inline Int UnblockedLowerCholeskyFactorization(BlasMatrixView<double>* matrix) {
   const Int height = matrix->height;
   const Int leading_dim = matrix->leading_dim;
   for (Int i = 0; i < height; ++i) {
@@ -119,7 +164,7 @@ inline Int LowerUnblockedCholeskyFactorization(BlasMatrixView<double>* matrix) {
 }
 
 template <>
-inline Int LowerUnblockedCholeskyFactorization(
+inline Int UnblockedLowerCholeskyFactorization(
     BlasMatrixView<Complex<float>>* matrix) {
   const Int height = matrix->height;
   const Int leading_dim = matrix->leading_dim;
@@ -156,7 +201,7 @@ inline Int LowerUnblockedCholeskyFactorization(
 }
 
 template <>
-inline Int LowerUnblockedCholeskyFactorization(
+inline Int UnblockedLowerCholeskyFactorization(
     BlasMatrixView<Complex<double>>* matrix) {
   const Int height = matrix->height;
   const Int leading_dim = matrix->leading_dim;
@@ -194,7 +239,7 @@ inline Int LowerUnblockedCholeskyFactorization(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
-Int LowerBlockedCholeskyFactorization(Int block_size,
+Int BlockedLowerCholeskyFactorization(Int block_size,
                                       BlasMatrixView<Field>* matrix) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
@@ -205,7 +250,49 @@ Int LowerBlockedCholeskyFactorization(Int block_size,
     BlasMatrixView<Field> diagonal_block =
         matrix->Submatrix(i, i, bsize, bsize);
     const Int num_diag_pivots =
-        LowerUnblockedCholeskyFactorization(&diagonal_block);
+        UnblockedLowerCholeskyFactorization(&diagonal_block);
+    if (num_diag_pivots < bsize) {
+      return i + num_diag_pivots;
+    }
+    if (height == i + bsize) {
+      break;
+    }
+
+    // Solve for the remainder of the block column of L.
+    BlasMatrixView<Field> subdiagonal =
+        matrix->Submatrix(i + bsize, i, height - (i + bsize), bsize);
+    RightLowerAdjointTriangularSolves(diagonal_block.ToConst(), &subdiagonal);
+
+    // Perform the Hermitian rank-bsize update.
+    BlasMatrixView<Field> submatrix = matrix->Submatrix(
+        i + bsize, i + bsize, height - (i + bsize), height - (i + bsize));
+    LowerNormalHermitianOuterProduct(Real{-1}, subdiagonal.ToConst(), Real{1},
+                                     &submatrix);
+  }
+  return height;
+}
+
+template <class Field>
+Int BlockedDynamicallyRegularizedLowerCholeskyFactorization(
+    Int block_size,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* matrix,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization) {
+  typedef ComplexBase<Field> Real;
+  const Int height = matrix->height;
+
+  DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
+
+  for (Int i = 0; i < height; i += block_size) {
+    const Int bsize = std::min(height - i, block_size);
+    subparams.offset = dynamic_reg_params.offset + i;
+
+    // Overwrite the diagonal block with its Cholesky factor.
+    BlasMatrixView<Field> diagonal_block =
+        matrix->Submatrix(i, i, bsize, bsize);
+    const Int num_diag_pivots =
+        UnblockedDynamicallyRegularizedLowerCholeskyFactorization(
+            subparams, &diagonal_block, dynamic_regularization);
     if (num_diag_pivots < bsize) {
       return i + num_diag_pivots;
     }
@@ -229,7 +316,7 @@ Int LowerBlockedCholeskyFactorization(Int block_size,
 
 template <class Field>
 Int LowerCholeskyFactorization(Int block_size, BlasMatrixView<Field>* matrix) {
-  return LowerBlockedCholeskyFactorization(block_size, matrix);
+  return BlockedLowerCholeskyFactorization(block_size, matrix);
 }
 
 #ifdef CATAMARI_HAVE_LAPACK
@@ -311,6 +398,16 @@ inline Int LowerCholeskyFactorization(Int block_size,
   }
 }
 #endif  // ifdef CATAMARI_HAVE_LAPACK
+
+template <class Field>
+Int DynamicallyRegularizedLowerCholeskyFactorization(
+    Int block_size,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* matrix,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization) {
+  return BlockedDynamicallyRegularizedLowerCholeskyFactorization(
+      block_size, dynamic_reg_params, matrix, dynamic_regularization);
+}
 
 }  // namespace catamari
 

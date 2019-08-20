@@ -29,6 +29,7 @@ enum SupernodalStrategy {
 };
 
 // Configuration options for LDL' factorization.
+template <typename Field>
 struct SparseLDLControl {
   // The configuration options for the Minimum Degree reordering.
   quotient::MinimumDegreeControl md_control;
@@ -45,10 +46,10 @@ struct SparseLDLControl {
   double supernodal_intensity_threshold = 40;
 
   // The configuration options for the scalar LDL factorization.
-  scalar_ldl::Control scalar_control;
+  scalar_ldl::Control<Field> scalar_control;
 
   // The configuration options for the supernodal LDL factorization.
-  supernodal_ldl::Control supernodal_control;
+  supernodal_ldl::Control<Field> supernodal_control;
 
   // If Ruiz equilibration should be used to (hopefully) increase the accuracy
   // of the factorization and solve.
@@ -62,6 +63,14 @@ struct SparseLDLControl {
   void SetFactorizationType(SymmetricFactorizationType type) {
     scalar_control.factorization_type = type;
     supernodal_control.factorization_type = type;
+  }
+
+  // Sets the dynamic regularization control parameters in both the scalar and
+  // supernodal control structures to the given settings.
+  void SetDynamicRegularization(
+      const DynamicRegularizationControl<Field>& dynamic_regularization) {
+    scalar_control.dynamic_regularization = dynamic_regularization;
+    supernodal_control.dynamic_regularization = dynamic_regularization;
   }
 };
 
@@ -116,18 +125,27 @@ class SparseLDL {
   SparseLDL();
 
   // Performs the factorization using an automatically determined ordering.
-  SparseLDLResult Factor(const CoordinateMatrix<Field>& matrix,
-                         const SparseLDLControl& control);
+  SparseLDLResult<Field> Factor(const CoordinateMatrix<Field>& matrix,
+                                const SparseLDLControl<Field>& control);
 
   // Performs the factorization using a prescribed ordering.
-  SparseLDLResult Factor(const CoordinateMatrix<Field>& matrix,
-                         const SymmetricOrdering& ordering,
-                         const SparseLDLControl& control);
+  SparseLDLResult<Field> Factor(const CoordinateMatrix<Field>& matrix,
+                                const SymmetricOrdering& ordering,
+                                const SparseLDLControl<Field>& control);
+
+  // Returns the diagonal perturbation -- in the original ordering -- given
+  // the list of diagonal dynamic regularization permutations in the
+  // factorization ordering.
+  void DynamicRegularizationDiagonal(const SparseLDLResult<Field>& result,
+                                     BlasMatrix<Real>* diagonal) const;
 
   // Factors a new matrix with the same sparsity pattern as a previous
   // factorization.
-  SparseLDLResult RefactorWithFixedSparsityPattern(
+  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
       const CoordinateMatrix<Field>& matrix);
+
+  // Returns the number of rows of the last factored matrix.
+  Int NumRows() const;
 
   // Solves a set of linear systems using the factorization.
   void Solve(BlasMatrixView<Field>* right_hand_sides) const;
@@ -170,11 +188,25 @@ class SparseLDL {
   // Prints the diagonal factor of the factorization.
   void PrintDiagonalFactor(const std::string& label, std::ostream& os) const;
 
+  // Returns an immutable reference to the permutation mapping from the original
+  // indices into the factorization's.
+  const Buffer<Int>& Permutation() const;
+
+  // Returns an immutable reference to the permutation mapping from the
+  // factorization indices back to the original matrix ones.
+  const Buffer<Int>& InversePermutation() const;
+
  private:
   // An (optional) diagonal scaling meant to improve accuracy.
   bool have_equilibration_;
   BlasMatrix<Real> equilibration_;
 };
+
+// Append the children's dynamic regularizations.
+template <class Field>
+void MergeDynamicRegularizations(
+    const Buffer<SparseLDLResult<Field>>& children_results,
+    SparseLDLResult<Field>* result);
 
 }  // namespace catamari
 

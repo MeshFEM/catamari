@@ -910,14 +910,13 @@ void PrintExperiment(const Experiment& experiment) {
 }
 
 // Returns the Experiment statistics for a single Matrix Market input matrix.
-Experiment RunTest(SpeedProfile profile, const double& omega,
-                   Int num_x_elements, Int num_y_elements, Int num_z_elements,
-                   const double& pml_scale, const double& pml_exponent,
-                   int num_pml_elements,
-                   const Buffer<GaussianSource<double>>& sources,
-                   bool analytical_ordering,
-                   const catamari::SparseLDLControl& ldl_control,
-                   bool print_progress) {
+Experiment RunTest(
+    SpeedProfile profile, const double& omega, Int num_x_elements,
+    Int num_y_elements, Int num_z_elements, const double& pml_scale,
+    const double& pml_exponent, int num_pml_elements,
+    const Buffer<GaussianSource<double>>& sources, bool analytical_ordering,
+    const catamari::SparseLDLControl<Complex<double>>& ldl_control,
+    bool print_progress) {
   typedef Complex<double> Field;
   typedef catamari::ComplexBase<Field> Real;
   Experiment experiment;
@@ -944,7 +943,7 @@ Experiment RunTest(SpeedProfile profile, const double& omega,
   }
   timer.Start();
   catamari::SparseLDL<Field> ldl;
-  catamari::SparseLDLResult result;
+  catamari::SparseLDLResult<Field> result;
   if (analytical_ordering) {
     catamari::SymmetricOrdering ordering;
     catamari::UnitReachNestedDissection3D(num_x_elements, num_y_elements,
@@ -1220,7 +1219,7 @@ int main(int argc, char** argv) {
                              source_scale1, source_stddev1},
   };
 
-  catamari::SparseLDLControl ldl_control;
+  catamari::SparseLDLControl<Complex<double>> ldl_control;
   ldl_control.SetFactorizationType(catamari::kLDLTransposeFactorization);
   ldl_control.supernodal_strategy =
       static_cast<catamari::SupernodalStrategy>(supernodal_strategy_int);

@@ -333,17 +333,21 @@ void UpdateSubdiagonalBlock(
 
 // Perform an in-place LDL' factorization of the supernodal diagonal block.
 template <class Field>
-Int FactorDiagonalBlock(Int block_size,
-                        SymmetricFactorizationType factorization_type,
-                        BlasMatrixView<Field>* diagonal_block);
+Int FactorDiagonalBlock(
+    Int block_size, SymmetricFactorizationType factorization_type,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* diagonal_block,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization);
 
 #ifdef CATAMARI_OPENMP
 // Perform an in-place LDL' factorization of the supernodal diagonal block.
 template <class Field>
-Int OpenMPFactorDiagonalBlock(Int tile_size, Int block_size,
-                              SymmetricFactorizationType factorization_type,
-                              BlasMatrixView<Field>* diagonal_block,
-                              Buffer<Field>* buffer);
+Int OpenMPFactorDiagonalBlock(
+    Int tile_size, Int block_size,
+    SymmetricFactorizationType factorization_type,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    BlasMatrixView<Field>* diagonal_block, Buffer<Field>* buffer,
+    std::vector<std::pair<Int, ComplexBase<Field>>>* dynamic_regularization);
 #endif  // ifdef CATAMARI_OPENMP
 
 // L(KNext:n, K) /= D(K, K) L(K, K)', or /= D(K, K) L(K, K)^T.

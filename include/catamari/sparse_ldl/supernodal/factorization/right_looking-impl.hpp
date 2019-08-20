@@ -21,8 +21,9 @@ namespace supernodal_ldl {
 
 template <class Field>
 bool Factorization<Field>::RightLookingSupernodeFinalize(
-    Int supernode, RightLookingSharedState<Field>* shared_state,
-    PrivateState<Field>* private_state, SparseLDLResult* result) {
+    Int supernode, const DynamicRegularizationParams<Field>& dynamic_reg_params,
+    RightLookingSharedState<Field>* shared_state,
+    PrivateState<Field>* private_state, SparseLDLResult<Field>* result) {
   typedef ComplexBase<Field> Real;
   BlasMatrixView<Field>& diagonal_block = diagonal_factor_->blocks[supernode];
   BlasMatrixView<Field>& lower_block = lower_factor_->blocks[supernode];
@@ -54,7 +55,8 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
         &permutation);
   } else {
     num_supernode_pivots = FactorDiagonalBlock(
-        control_.block_size, control_.factorization_type, &diagonal_block);
+        control_.block_size, control_.factorization_type, dynamic_reg_params,
+        &diagonal_block, &result->dynamic_regularization);
   }
   CATAMARI_STOP_TIMER(profile.cholesky);
 #ifdef CATAMARI_ENABLE_TIMERS
@@ -114,8 +116,9 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
 template <class Field>
 bool Factorization<Field>::RightLookingSubtree(
     Int supernode, const CoordinateMatrix<Field>& matrix,
+    const DynamicRegularizationParams<Field>& dynamic_reg_params,
     RightLookingSharedState<Field>* shared_state,
-    PrivateState<Field>* private_state, SparseLDLResult* result) {
+    PrivateState<Field>* private_state, SparseLDLResult<Field>* result) {
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
@@ -123,7 +126,10 @@ bool Factorization<Field>::RightLookingSubtree(
   CATAMARI_START_TIMER(shared_state->inclusive_timers[supernode]);
 
   Buffer<int> successes(num_children);
-  Buffer<SparseLDLResult> result_contributions(num_children);
+  Buffer<SparseLDLResult<Field>> result_contributions(num_children);
+
+  // Set up a dynamic regularization structure for the children.
+  DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
 
   // Recurse on the children.
   for (Int child_index = 0; child_index < num_children; ++child_index) {
@@ -131,9 +137,13 @@ bool Factorization<Field>::RightLookingSubtree(
         ordering_.assembly_forest.children[child_beg + child_index];
     CATAMARI_ASSERT(ordering_.assembly_forest.parents[child] == supernode,
                     "Incorrect child index");
-    SparseLDLResult& result_contribution = result_contributions[child_index];
-    successes[child_index] = RightLookingSubtree(
-        child, matrix, shared_state, private_state, &result_contribution);
+    SparseLDLResult<Field>& result_contribution =
+        result_contributions[child_index];
+
+    subparams.offset = ordering_.supernode_offsets[child];
+    successes[child_index] =
+        RightLookingSubtree(child, matrix, subparams, shared_state,
+                            private_state, &result_contribution);
   }
 
   CATAMARI_START_TIMER(shared_state->exclusive_timers[supernode]);
@@ -147,11 +157,14 @@ bool Factorization<Field>::RightLookingSubtree(
     }
     MergeContribution(result_contributions[child_index], result);
   }
+  if (succeeded && dynamic_reg_params.enabled) {
+    MergeDynamicRegularizations(result_contributions, result);
+  }
 
   if (succeeded) {
     InitializeBlockColumn(supernode, matrix);
-    succeeded = RightLookingSupernodeFinalize(supernode, shared_state,
-                                              private_state, result);
+    succeeded = RightLookingSupernodeFinalize(
+        supernode, dynamic_reg_params, shared_state, private_state, result);
   } else {
     // Clear the child fronts.
     for (Int child_index = 0; child_index < num_children; ++child_index) {
@@ -175,8 +188,10 @@ bool Factorization<Field>::RightLookingSubtree(
 }
 
 template <class Field>
-SparseLDLResult Factorization<Field>::RightLooking(
+SparseLDLResult<Field> Factorization<Field>::RightLooking(
     const CoordinateMatrix<Field>& matrix) {
+  typedef ComplexBase<Field> Real;
+
 #ifdef CATAMARI_OPENMP
   if (omp_get_max_threads() > 1) {
     return OpenMPRightLooking(matrix);
@@ -198,25 +213,49 @@ SparseLDLResult Factorization<Field>::RightLooking(
     private_state.scaled_transpose_buffer.Resize(max_lower_block_size_);
   }
 
-  SparseLDLResult result;
+  SparseLDLResult<Field> result;
 
   Buffer<int> successes(num_roots);
-  Buffer<SparseLDLResult> result_contributions(num_roots);
+  Buffer<SparseLDLResult<Field>> result_contributions(num_roots);
 
-  // Merge the child results (stopping if a failure is detected).
+  // Set up the base state of the dynamic regularization parameters. We only
+  // need to update the offset for each child.
+  static const Real kEpsilon = std::numeric_limits<Real>::epsilon();
+  const Real matrix_max_norm = MaxNorm(matrix);
+  DynamicRegularizationParams<Field> dynamic_reg_params;
+  dynamic_reg_params.enabled = control_.dynamic_regularization.enabled;
+  dynamic_reg_params.positive_threshold =
+      matrix_max_norm *
+      std::pow(kEpsilon,
+               control_.dynamic_regularization.positive_threshold_exponent);
+  dynamic_reg_params.negative_threshold =
+      matrix_max_norm *
+      std::pow(kEpsilon,
+               control_.dynamic_regularization.negative_threshold_exponent);
+  dynamic_reg_params.signatures = &control_.dynamic_regularization.signatures;
+
+  // Factor the children.
   for (Int root_index = 0; root_index < num_roots; ++root_index) {
     const Int root = ordering_.assembly_forest.roots[root_index];
-    SparseLDLResult& result_contribution = result_contributions[root_index];
-    successes[root_index] = RightLookingSubtree(
-        root, matrix, &shared_state, &private_state, &result_contribution);
+    SparseLDLResult<Field>& result_contribution =
+        result_contributions[root_index];
+    dynamic_reg_params.offset = ordering_.supernode_offsets[root];
+    successes[root_index] =
+        RightLookingSubtree(root, matrix, dynamic_reg_params, &shared_state,
+                            &private_state, &result_contribution);
   }
 
-  // Merge the child results (stopping if a failure is detected).
+  // Merge the children's results (stopping if a failure is detected).
+  bool succeeded = true;
   for (Int index = 0; index < num_roots; ++index) {
     if (!successes[index]) {
+      succeeded = false;
       break;
     }
     MergeContribution(result_contributions[index], &result);
+  }
+  if (succeeded && dynamic_reg_params.enabled) {
+    MergeDynamicRegularizations(result_contributions, &result);
   }
 
 #ifdef CATAMARI_ENABLE_TIMERS

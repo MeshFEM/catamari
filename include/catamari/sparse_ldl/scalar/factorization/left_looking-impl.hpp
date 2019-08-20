@@ -38,19 +38,36 @@ void Factorization<Field>::LeftLookingSetup(
 }
 
 template <class Field>
-SparseLDLResult Factorization<Field>::LeftLooking(
+SparseLDLResult<Field> Factorization<Field>::LeftLooking(
     const CoordinateMatrix<Field>& matrix) CATAMARI_NOEXCEPT {
   typedef ComplexBase<Field> Real;
   const Int num_rows = matrix.NumRows();
   const Buffer<Int>& parents = ordering.assembly_forest.parents;
   const LowerStructure& lower_structure = lower_factor.structure;
 
+  // Fill the dynamic regularization instance.
+  // TODO(Jack Poulson): Move this outside of this routine.
+  const Real kEpsilon = std::numeric_limits<Real>::epsilon();
+  const Real matrix_max_norm = MaxNorm(matrix);
+  DynamicRegularizationParams<Field> reg_params;
+  reg_params.enabled = control.dynamic_regularization.enabled;
+  reg_params.offset = 0;
+  reg_params.positive_threshold =
+      matrix_max_norm *
+      std::pow(kEpsilon,
+               control.dynamic_regularization.positive_threshold_exponent);
+  reg_params.negative_threshold =
+      matrix_max_norm *
+      std::pow(kEpsilon,
+               control.dynamic_regularization.negative_threshold_exponent);
+  reg_params.signatures = &control.dynamic_regularization.signatures;
+
   LeftLookingState state;
   state.column_update_ptrs.Resize(num_rows);
   state.row_structure.Resize(num_rows);
   state.pattern_flags.Resize(num_rows);
 
-  SparseLDLResult result;
+  SparseLDLResult<Field> result;
   for (Int column = 0; column < num_rows; ++column) {
     state.pattern_flags[column] = column;
     state.column_update_ptrs[column] = lower_structure.ColumnOffset(column);
@@ -75,9 +92,9 @@ SparseLDLResult Factorization<Field>::LeftLooking(
 
       const Field lambda_k_j = lower_factor.values[j_ptr];
       Field eta;
-      if (factorization_type == kCholeskyFactorization) {
+      if (control.factorization_type == kCholeskyFactorization) {
         eta = Conjugate(lambda_k_j);
-      } else if (factorization_type == kLDLAdjointFactorization) {
+      } else if (control.factorization_type == kLDLAdjointFactorization) {
         eta = diagonal_factor.values[j] * Conjugate(lambda_k_j);
       } else {
         eta = diagonal_factor.values[j] * lambda_k_j;
@@ -116,15 +133,38 @@ SparseLDLResult Factorization<Field>::LeftLooking(
       }
     }
 
-    // Early exit if solving would involve division by zero.
+    // Perform diagonal equilibration if requested and needed.
     Field pivot = diagonal_factor.values[column];
-    if (factorization_type == kCholeskyFactorization) {
+    if (reg_params.enabled) {
+      const Real real_pivot = std::real(pivot);
+      const Buffer<bool>& signatures = *reg_params.signatures;
+      if (signatures[column]) {
+        // Handle a positive pivot.
+        if (real_pivot < reg_params.positive_threshold) {
+          const Real regularization =
+              reg_params.positive_threshold - real_pivot;
+          result.dynamic_regularization.emplace_back(column, regularization);
+          pivot = reg_params.positive_threshold;
+        }
+      } else {
+        // Handle a negative pivot.
+        if (real_pivot > -reg_params.negative_threshold) {
+          const Real regularization =
+              reg_params.negative_threshold - (-real_pivot);
+          result.dynamic_regularization.emplace_back(column, -regularization);
+          pivot = -reg_params.negative_threshold;
+        }
+      }
+    }
+
+    // Early exit if solving would involve division by zero.
+    if (control.factorization_type == kCholeskyFactorization) {
       if (RealPart(pivot) <= Real{0}) {
         return result;
       }
       pivot = std::sqrt(RealPart(pivot));
       diagonal_factor.values[column] = pivot;
-    } else if (factorization_type == kLDLAdjointFactorization) {
+    } else if (control.factorization_type == kLDLAdjointFactorization) {
       if (RealPart(pivot) == Real{0}) {
         return result;
       }

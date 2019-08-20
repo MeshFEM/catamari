@@ -325,6 +325,15 @@ laplacian_test_exe = executable(
     cpp_args : cxx_args)
 test('Laplacian tests', laplacian_test_exe)
 
+# A test of factoring and solving with dynamic regularization.
+dynamic_regularization_test_exe = executable(
+    'dynamic_regularization_test',
+    ['test/dynamic_regularization_test.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps + test_deps,
+    cpp_args : cxx_args)
+test('Dynamic regularization tests', dynamic_regularization_test_exe)
+
 # A performance test for multithreaded dense outer products.
 dense_outer_product_exe = executable(
     'dense_outer_product',

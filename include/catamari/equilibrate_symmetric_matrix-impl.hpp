@@ -31,7 +31,6 @@ void EquilibrateSymmetricMatrix(CoordinateMatrix<Field>* matrix,
     const Int j = entry.column;
     const Real value_abs = std::abs(entry.value);
     column_max_abs[j] = std::max(column_max_abs[j], value_abs);
-
   }
   for (Int i = 0; i < num_rows; ++i) {
     new_scaling[i] = std::sqrt(column_max_abs[i]);
