@@ -154,14 +154,7 @@ TEST_CASE("2D right Cholesky", "2D right Cholesky") {
   const catamari::LDLAlgorithm ldl_algorithm = catamari::kRightLookingLDL;
   const bool analytical_ordering = false;
   const bool dynamically_regularize = true;
-  Buffer<bool> signatures(num_rows);
-  for (Int i = 0; i < num_rows; ++i) {
-    if (i % 6) {
-      signatures[i] = false;
-    } else {
-      signatures[i] = true;
-    }
-  }
+  Buffer<bool> signatures(num_rows, true);
   const double positive_threshold_exponent = 0.5;
   const double negative_threshold_exponent = 0.5;
 
@@ -177,14 +170,7 @@ TEST_CASE("2D left Cholesky", "2D left Cholesky") {
   const catamari::LDLAlgorithm ldl_algorithm = catamari::kLeftLookingLDL;
   const bool analytical_ordering = false;
   const bool dynamically_regularize = true;
-  Buffer<bool> signatures(num_rows);
-  for (Int i = 0; i < num_rows; ++i) {
-    if (i % 6) {
-      signatures[i] = false;
-    } else {
-      signatures[i] = true;
-    }
-  }
+  Buffer<bool> signatures(num_rows, true);
   const double positive_threshold_exponent = 0.5;
   const double negative_threshold_exponent = 0.5;
 

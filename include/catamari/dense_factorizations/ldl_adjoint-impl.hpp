@@ -57,28 +57,32 @@ Int UnblockedDynamicallyRegularizedLDLAdjointFactorization(
 
   for (Int i = 0; i < height; ++i) {
     Real delta = RealPart(matrix->Entry(i, i));
-    if (signatures[i + offset]) {
+    const Int orig_index =
+        dynamic_reg_params.inverse_permutation
+            ? (*dynamic_reg_params.inverse_permutation)[i + offset]
+            : i + offset;
+    if (signatures[orig_index]) {
       // Handle a positive pivot.
-      if (delta < dynamic_reg_params.positive_threshold) {
+      if (delta <= Real{0}) {
+        return i;
+      } else if (delta < dynamic_reg_params.positive_threshold) {
         const Real regularization =
             dynamic_reg_params.positive_threshold - delta;
-        dynamic_regularization->emplace_back(offset + i, regularization);
+        dynamic_regularization->emplace_back(orig_index, regularization);
         delta = dynamic_reg_params.positive_threshold;
       }
     } else {
       // Handle a negative pivot.
-      if (delta > -dynamic_reg_params.negative_threshold) {
+      if (delta >= Real{0}) {
+        return i;
+      } else if (delta > -dynamic_reg_params.negative_threshold) {
         const Real regularization =
             dynamic_reg_params.negative_threshold - (-delta);
-        dynamic_regularization->emplace_back(offset + i, -regularization);
+        dynamic_regularization->emplace_back(orig_index, -regularization);
         delta = -dynamic_reg_params.negative_threshold;
       }
     }
-
     matrix->Entry(i, i) = delta;
-    if (delta == Real{0}) {
-      return i;
-    }
 
     // Solve for the remainder of the i'th column of L.
     for (Int k = i + 1; k < height; ++k) {

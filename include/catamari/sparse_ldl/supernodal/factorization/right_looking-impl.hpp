@@ -221,18 +221,21 @@ SparseLDLResult<Field> Factorization<Field>::RightLooking(
   // Set up the base state of the dynamic regularization parameters. We only
   // need to update the offset for each child.
   static const Real kEpsilon = std::numeric_limits<Real>::epsilon();
-  const Real matrix_max_norm = MaxNorm(matrix);
   DynamicRegularizationParams<Field> dynamic_reg_params;
   dynamic_reg_params.enabled = control_.dynamic_regularization.enabled;
-  dynamic_reg_params.positive_threshold =
-      matrix_max_norm *
-      std::pow(kEpsilon,
-               control_.dynamic_regularization.positive_threshold_exponent);
-  dynamic_reg_params.negative_threshold =
-      matrix_max_norm *
-      std::pow(kEpsilon,
-               control_.dynamic_regularization.negative_threshold_exponent);
+  dynamic_reg_params.positive_threshold = std::pow(
+      kEpsilon, control_.dynamic_regularization.positive_threshold_exponent);
+  dynamic_reg_params.negative_threshold = std::pow(
+      kEpsilon, control_.dynamic_regularization.negative_threshold_exponent);
+  if (control_.dynamic_regularization.relative) {
+    const Real matrix_max_norm = MaxNorm(matrix);
+    dynamic_reg_params.positive_threshold *= matrix_max_norm;
+    dynamic_reg_params.negative_threshold *= matrix_max_norm;
+  }
   dynamic_reg_params.signatures = &control_.dynamic_regularization.signatures;
+  dynamic_reg_params.inverse_permutation = ordering_.inverse_permutation.Empty()
+                                               ? nullptr
+                                               : &ordering_.inverse_permutation;
 
   // Factor the children.
   for (Int root_index = 0; root_index < num_roots; ++root_index) {

@@ -362,6 +362,45 @@ SparseLDLResult<Field> Factorization<Field>::RefactorWithFixedSparsityPattern(
 }
 
 template <class Field>
+SparseLDLResult<Field> Factorization<Field>::RefactorWithFixedSparsityPattern(
+    const CoordinateMatrix<Field>& matrix, const Control<Field>& control) {
+  // TODO(Jack Poulson): Ensure that there were no fundamental changes to the
+  // control structure -- such as the algorithmic choice.
+  control_ = control;
+#ifdef CATAMARI_OPENMP
+  if (omp_get_max_threads() > 1) {
+    if (control_.algorithm == kAdaptiveLDL) {
+      control_.algorithm = kRightLookingLDL;
+    }
+  } else {
+    if (control_.algorithm == kAdaptiveLDL) {
+      control_.algorithm = kLeftLookingLDL;
+    }
+  }
+#else
+  if (control_.algorithm == kAdaptiveLDL) {
+    control_.algorithm = kLeftLookingLDL;
+  }
+#endif  // ifdef CATAMARI_OPENMP
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  profile.Reset();
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+  SparseLDLResult<Field> result;
+  if (control_.algorithm == kLeftLookingLDL) {
+    result = LeftLooking(matrix);
+  } else {
+    result = RightLooking(matrix);
+  }
+
+#ifdef CATAMARI_ENABLE_TIMERS
+  std::cout << profile << std::endl;
+#endif  // ifdef CATAMARI_ENABLE_TIMERS
+
+  return result;
+}
+
+template <class Field>
 Int Factorization<Field>::NumRows() const {
   return supernode_member_to_index_.Size();
 }

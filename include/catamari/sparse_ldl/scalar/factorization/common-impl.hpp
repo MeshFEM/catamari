@@ -92,6 +92,19 @@ SparseLDLResult<Field> Factorization<Field>::RefactorWithFixedSparsityPattern(
 }
 
 template <class Field>
+SparseLDLResult<Field> Factorization<Field>::RefactorWithFixedSparsityPattern(
+    const CoordinateMatrix<Field>& matrix,
+    const Control<Field>& control_value) {
+  control = control_value;
+  if (control.algorithm == kLeftLookingLDL) {
+    FillNonzeros(matrix);
+    return LeftLooking(matrix);
+  } else {
+    return UpLooking(matrix);
+  }
+}
+
+template <class Field>
 Int Factorization<Field>::NumRows() const {
   return diagonal_factor.values.Size();
 }

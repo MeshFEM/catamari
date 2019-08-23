@@ -144,6 +144,13 @@ class SparseLDL {
   SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
       const CoordinateMatrix<Field>& matrix);
 
+  // Factors a new matrix with the same sparsity pattern as a previous
+  // factorization -- the control structure is allowed to change in minor ways,
+  // for example, in its dynamic regularization choices.
+  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
+      const CoordinateMatrix<Field>& matrix,
+      const SparseLDLControl<Field>& control);
+
   // Returns the number of rows of the last factored matrix.
   Int NumRows() const;
 

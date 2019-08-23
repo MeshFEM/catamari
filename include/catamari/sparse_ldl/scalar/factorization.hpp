@@ -103,7 +103,7 @@ struct SparseLDLResult {
   // If dynamic regularization is enabled, this will hold the dynamically
   // generated diagonal shifts. We require these modifications to be
   // real-valued and store them as sparse corrections in the factorization
-  // ordering.
+  // ordering. The indexing is with respect to the *original* matrix ordering.
   std::vector<std::pair<Int, Real>> dynamic_regularization;
 };
 
@@ -241,6 +241,13 @@ class Factorization {
   // factored matrix.
   SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
       const CoordinateMatrix<Field>& matrix);
+
+  // Factors a matrix which has the same sparsity pattern as the previously
+  // factored matrix -- the control structure is allowed to change in minor
+  // ways.
+  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
+      const CoordinateMatrix<Field>& matrix,
+      const Control<Field>& control_value);
 
   // Pretty-prints the diagonal matrix.
   void PrintDiagonalFactor(const std::string& label, std::ostream& os) const;

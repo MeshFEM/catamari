@@ -112,18 +112,18 @@ SparseLDLResult<Field> Factorization<Field>::UpLooking(
   // Fill the dynamic regularization instance.
   // TODO(Jack Poulson): Move this outside of this routine.
   const Real kEpsilon = std::numeric_limits<Real>::epsilon();
-  const Real matrix_max_norm = MaxNorm(matrix);
   DynamicRegularizationParams<Field> reg_params;
   reg_params.enabled = control.dynamic_regularization.enabled;
   reg_params.offset = 0;
-  reg_params.positive_threshold =
-      matrix_max_norm *
-      std::pow(kEpsilon,
-               control.dynamic_regularization.positive_threshold_exponent);
-  reg_params.negative_threshold =
-      matrix_max_norm *
-      std::pow(kEpsilon,
-               control.dynamic_regularization.negative_threshold_exponent);
+  reg_params.positive_threshold = std::pow(
+      kEpsilon, control.dynamic_regularization.positive_threshold_exponent);
+  reg_params.negative_threshold = std::pow(
+      kEpsilon, control.dynamic_regularization.negative_threshold_exponent);
+  if (control.dynamic_regularization.relative) {
+    const Real matrix_max_norm = MaxNorm(matrix);
+    reg_params.positive_threshold *= matrix_max_norm;
+    reg_params.negative_threshold *= matrix_max_norm;
+  }
   reg_params.signatures = &control.dynamic_regularization.signatures;
 
   UpLookingState<Field> state;
@@ -159,20 +159,29 @@ SparseLDLResult<Field> Factorization<Field>::UpLooking(
     if (reg_params.enabled) {
       const Real real_pivot = std::real(pivot);
       const Buffer<bool>& signatures = *reg_params.signatures;
-      if (signatures[row]) {
+      const Int orig_index = ordering.inverse_permutation.Empty()
+                                 ? row
+                                 : ordering.inverse_permutation[row];
+      if (signatures[orig_index]) {
         // Handle a positive pivot.
-        if (real_pivot < reg_params.positive_threshold) {
+        if (real_pivot <= Real{0}) {
+          return result;
+        } else if (real_pivot < reg_params.positive_threshold) {
           const Real regularization =
               reg_params.positive_threshold - real_pivot;
-          result.dynamic_regularization.emplace_back(row, regularization);
+          result.dynamic_regularization.emplace_back(orig_index,
+                                                     regularization);
           pivot = reg_params.positive_threshold;
         }
       } else {
         // Handle a negative pivot.
-        if (real_pivot > -reg_params.negative_threshold) {
+        if (real_pivot >= Real{0}) {
+          return result;
+        } else if (real_pivot > -reg_params.negative_threshold) {
           const Real regularization =
               reg_params.negative_threshold - (-real_pivot);
-          result.dynamic_regularization.emplace_back(row, -regularization);
+          result.dynamic_regularization.emplace_back(orig_index,
+                                                     -regularization);
           pivot = -reg_params.negative_threshold;
         }
       }

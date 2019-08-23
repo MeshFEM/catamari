@@ -199,24 +199,19 @@ void SparseLDL<Field>::DynamicRegularizationDiagonal(
     BlasMatrix<ComplexBase<Field>>* diagonal) const {
   typedef ComplexBase<Field> Real;
   const Int height = NumRows();
-  const Buffer<Int>& inverse_permutation = InversePermutation();
-
   diagonal->Resize(height, 1, Real(0));
-
   for (const auto& perturbation : result.dynamic_regularization) {
     const Int index = perturbation.first;
     const Real regularization = perturbation.second;
-    if (inverse_permutation.Empty()) {
-      diagonal->Entry(index) = regularization;
-    } else {
-      diagonal->Entry(inverse_permutation[index]) = regularization;
-    }
+    diagonal->Entry(index) = regularization;
   }
 }
 
 template <class Field>
 SparseLDLResult<Field> SparseLDL<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
+  typedef ComplexBase<Field> Real;
+
   // Optionally equilibrate the matrix.
   const CoordinateMatrix<Field>* matrix_to_factor;
   CoordinateMatrix<Field> equilibrated_matrix;
@@ -230,13 +225,62 @@ SparseLDLResult<Field> SparseLDL<Field>::RefactorWithFixedSparsityPattern(
     matrix_to_factor = &matrix;
   }
 
+  SparseLDLResult<Field> result;
   if (is_supernodal) {
-    return supernodal_factorization->RefactorWithFixedSparsityPattern(
+    result = supernodal_factorization->RefactorWithFixedSparsityPattern(
         *matrix_to_factor);
   } else {
-    return scalar_factorization->RefactorWithFixedSparsityPattern(
+    result = scalar_factorization->RefactorWithFixedSparsityPattern(
         *matrix_to_factor);
   }
+  if (have_equilibration_) {
+    // We factored inv(D) A inv(D), so the regularization needs to be wrapped
+    // with D . D.
+    for (std::pair<Int, Real>& reg : result.dynamic_regularization) {
+      reg.second *= equilibration_(reg.first) * equilibration_(reg.first);
+    }
+  }
+  return result;
+}
+
+template <class Field>
+SparseLDLResult<Field> SparseLDL<Field>::RefactorWithFixedSparsityPattern(
+    const CoordinateMatrix<Field>& matrix,
+    const SparseLDLControl<Field>& control) {
+  typedef ComplexBase<Field> Real;
+
+  // TODO(Jack Poulson): Add sanity checks here that, for example, the algorithm
+  // hasn't changed.
+
+  // Optionally equilibrate the matrix.
+  const CoordinateMatrix<Field>* matrix_to_factor;
+  CoordinateMatrix<Field> equilibrated_matrix;
+  if (have_equilibration_) {
+    const bool kVerboseEquil = false;
+    equilibrated_matrix = matrix;
+    EquilibrateSymmetricMatrix(&equilibrated_matrix, &equilibration_,
+                               kVerboseEquil);
+    matrix_to_factor = &equilibrated_matrix;
+  } else {
+    matrix_to_factor = &matrix;
+  }
+
+  SparseLDLResult<Field> result;
+  if (is_supernodal) {
+    result = supernodal_factorization->RefactorWithFixedSparsityPattern(
+        *matrix_to_factor, control.supernodal_control);
+  } else {
+    result = scalar_factorization->RefactorWithFixedSparsityPattern(
+        *matrix_to_factor, control.scalar_control);
+  }
+  if (have_equilibration_) {
+    // We factored inv(D) A inv(D), so the regularization needs to be wrapped
+    // with D . D.
+    for (std::pair<Int, Real>& reg : result.dynamic_regularization) {
+      reg.second *= equilibration_(reg.first) * equilibration_(reg.first);
+    }
+  }
+  return result;
 }
 
 template <class Field>
@@ -453,17 +497,15 @@ SparseLDL<Field>::DynamicallyRegularizedRefinedSolve(
   BlasMatrix<Field> solution = rhs_orig;
   Solve(&solution.view);
 
-  // Compute the dynamic regularization vector.
-  BlasMatrix<Real> diagonal_reg;
-  DynamicRegularizationDiagonal(result, &diagonal_reg);
-
   // image := (matrix + diagonal_reg) * solution
   BlasMatrix<Field> image;
   image.Resize(num_rows, num_rhs, Field{0});
   ApplySparse(Field{1}, matrix, solution.ConstView(), Field{1}, &image.view);
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      image(i, j) += diagonal_reg(i) * solution(i, j);
+  for (const std::pair<Int, Real>& perturb : result.dynamic_regularization) {
+    const Int i = perturb.first;
+    const Real regularization = perturb.second;
+    for (Int j = 0; j < num_rhs; ++j) {
+      image(i, j) += regularization * solution(i, j);
     }
   }
 
@@ -548,9 +590,11 @@ SparseLDL<Field>::DynamicallyRegularizedRefinedSolve(
     image.Resize(num_rows, num_active);
     ApplySparse(Field{1}, matrix, candidate_solution.ConstView(), Field{0},
                 &image.view);
-    for (Int j_active = 0; j_active < num_active; ++j_active) {
-      for (Int i = 0; i < num_rows; ++i) {
-        image(i, j_active) += diagonal_reg(i) * candidate_solution(i, j_active);
+    for (const std::pair<Int, Real>& perturb : result.dynamic_regularization) {
+      const Int i = perturb.first;
+      const Real regularization = perturb.second;
+      for (Int j_active = 0; j_active < num_active; ++j_active) {
+        image(i, j_active) += regularization * candidate_solution(i, j_active);
       }
     }
 
@@ -864,19 +908,21 @@ SparseLDL<Field>::DiagonallyScaledDynamicallyRegularizedRefinedSolve(
     }
   }
 
-  // Compute the dynamic regularization vector.
-  BlasMatrix<Real> diagonal_reg;
-  DynamicRegularizationDiagonal(result, &diagonal_reg);
-
   // image := (matrix + diagonal_reg) * solution
   // TODO(Jack Poulson): Avoid unnecessary extra scalings.
   BlasMatrix<Field> image;
   image.Resize(num_rows, num_rhs, Field{0});
   ApplySparse(Field{1}, matrix, scaled_solution.ConstView(), Field{1},
               &image.view);
+  for (const std::pair<Int, Real>& perturb : result.dynamic_regularization) {
+    const Int i = perturb.first;
+    const Real regularization = perturb.second;
+    for (Int j = 0; j < num_rhs; ++j) {
+      image(i, j) += regularization * scaled_solution(i, j);
+    }
+  }
   for (Int j = 0; j < num_rhs; ++j) {
     for (Int i = 0; i < num_rows; ++i) {
-      image(i, j) += diagonal_reg(i) * scaled_solution(i, j);
       image(i, j) *= scaling(i);
     }
   }
@@ -973,9 +1019,15 @@ SparseLDL<Field>::DiagonallyScaledDynamicallyRegularizedRefinedSolve(
     }
     ApplySparse(Field{1}, matrix, scaled_solution.ConstView(), Field{0},
                 &image.view);
+    for (const std::pair<Int, Real>& perturb : result.dynamic_regularization) {
+      const Int i = perturb.first;
+      const Real regularization = perturb.second;
+      for (Int j_active = 0; j_active < num_active; ++j_active) {
+        image(i, j_active) += regularization * scaled_solution(i, j_active);
+      }
+    }
     for (Int j_active = 0; j_active < num_active; ++j_active) {
       for (Int i = 0; i < num_rows; ++i) {
-        image(i, j_active) += diagonal_reg(i) * scaled_solution(i, j_active);
         image(i, j_active) *= scaling(i);
       }
     }

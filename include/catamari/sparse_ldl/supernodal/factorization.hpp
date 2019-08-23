@@ -213,6 +213,12 @@ class Factorization {
   SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
       const CoordinateMatrix<Field>& matrix);
 
+  // Factors the given matrix after having previously factored another matrix
+  // with the same sparsity pattern -- the control structure is allowed to
+  // change in minor ways.
+  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
+      const CoordinateMatrix<Field>& matrix, const Control<Field>& control);
+
   // Returns the number of rows in the last factored matrix.
   Int NumRows() const;
 

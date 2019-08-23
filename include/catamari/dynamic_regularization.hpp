@@ -24,6 +24,10 @@ struct DynamicRegularizationControl {
   // Whether dynamic regularization is enabled.
   bool enabled = false;
 
+  // If true, the dynamic regularization is scaled by the max norm of the
+  // sparse matrix to be factored.
+  bool relative = false;
+
   // A map from the factorization indices to whether the pivot should be
   // enforced as positive or negative.
   Buffer<bool> signatures;
@@ -58,10 +62,16 @@ struct DynamicRegularizationParams {
   // signature of a pivot or inserting a new regularization entry.
   Int offset = 0;
 
-  // A pointer to the global specification of whether each index should be
-  // interpreted as a positive or negative pivot. The sibling 'offset' parameter
-  // is needed to access this diagonal block's indices.
+  // A pointer to the global specification of whether each index, in the
+  // *original* ordering, should be interpreted as a positive or negative pivot.
+  // The sibling 'offset' parameter is needed to access this diagonal block's
+  // indices.
   const Buffer<bool>* signatures;
+
+  // A pointer to a permutation from the reordered indices back to the original
+  // matrices indices, over which 'signatures' is defined. If it is null, then
+  // the permutation is trivial.
+  const Buffer<Int>* inverse_permutation;
 };
 
 }  // namespace catamari
