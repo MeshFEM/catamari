@@ -84,6 +84,10 @@ struct RefinedSolveControl {
   // The maximum number of iterations of iterative refinement to perform.
   Int max_iters = 3;
 
+  // Whether (typically) higher-precision arithmetic should be used for the
+  // iterative refinement.
+  bool promote = false;
+
   // Whether convergence progress information should be printed.
   bool verbose = false;
 };
@@ -233,6 +237,103 @@ class SparseLDL {
   // An (optional) diagonal scaling meant to improve accuracy.
   bool have_equilibration_;
   BlasMatrix<Real> equilibration_;
+
+  // Solves a set of linear systems using iterative refinement.
+  RefinedSolveStatus<Real> RefinedSolveHelper(
+      const CoordinateMatrix<Field>& matrix,
+      const RefinedSolveControl<Real>& control,
+      BlasMatrixView<Field>* right_hand_sides) const;
+
+  // Solves a set of linear systems using iterative refinement with
+  // higher-precision forward multiplies.
+  RefinedSolveStatus<Real> PromotedRefinedSolveHelper(
+      const CoordinateMatrix<Field>& matrix,
+      const RefinedSolveControl<Real>& control,
+      BlasMatrixView<Field>* right_hand_sides_lower) const;
+
+  // Solve with iterative refinement and a diagonal scaling:
+  //
+  //     (D A D) (inv(D) x) = (D b).
+  //
+  // This can be useful in situations where the right-hand side consists of
+  // several subgroups, and the relative accuracy of each subgroup is desired
+  // to be controlled. One can thus construct the diagonal matrix D to be
+  // piecewise constant, with each piece being set to the inverse of the norm
+  // of the subgroup of the right-hand side vector.
+  RefinedSolveStatus<ComplexBase<Field>> DiagonallyScaledRefinedSolveHelper(
+      const CoordinateMatrix<Field>& matrix,
+      const ConstBlasMatrixView<Real>& scaling,
+      const RefinedSolveControl<Real>& control,
+      BlasMatrixView<Field>* right_hand_sides) const;
+
+  // Uses a higher-precision to solve with iterative refinement and a diagonal
+  // scaling:
+  //
+  //     (D A D) (inv(D) x) = (D b).
+  //
+  // This can be useful in situations where the right-hand side consists of
+  // several subgroups, and the relative accuracy of each subgroup is desired
+  // to be controlled. One can thus construct the diagonal matrix D to be
+  // piecewise constant, with each piece being set to the inverse of the norm
+  // of the subgroup of the right-hand side vector.
+  RefinedSolveStatus<ComplexBase<Field>>
+  PromotedDiagonallyScaledRefinedSolveHelper(
+      const CoordinateMatrix<Field>& matrix,
+      const ConstBlasMatrixView<Real>& scaling,
+      const RefinedSolveControl<Real>& control,
+      BlasMatrixView<Field>* right_hand_sides_lower) const;
+
+  // Solves a set of linear systems using iterative refinement in the presence
+  // of dynamic regularization.
+  RefinedSolveStatus<Real> DynamicallyRegularizedRefinedSolveHelper(
+      const CoordinateMatrix<Field>& matrix,
+      const SparseLDLResult<Field>& result,
+      const RefinedSolveControl<Real>& control,
+      BlasMatrixView<Field>* right_hand_sides) const;
+
+  // Solves a set of linear systems using iterative refinement in the presence
+  // of dynamic regularization.
+  RefinedSolveStatus<Real> PromotedDynamicallyRegularizedRefinedSolveHelper(
+      const CoordinateMatrix<Field>& matrix,
+      const SparseLDLResult<Field>& result,
+      const RefinedSolveControl<Real>& control,
+      BlasMatrixView<Field>* right_hand_sides_lower) const;
+
+  // Solve with iterative refinement and a diagonal scaling in the presence of
+  // dynamic regularization:
+  //
+  //     (D (A + regularization) D) (inv(D) x) = (D b).
+  //
+  // This can be useful in situations where the right-hand side consists of
+  // several subgroups, and the relative accuracy of each subgroup is desired
+  // to be controlled. One can thus construct the diagonal matrix D to be
+  // piecewise constant, with each piece being set to the inverse of the norm
+  // of the subgroup of the right-hand side vector.
+  RefinedSolveStatus<ComplexBase<Field>>
+  DiagonallyScaledDynamicallyRegularizedRefinedSolveHelper(
+      const CoordinateMatrix<Field>& matrix,
+      const SparseLDLResult<Field>& result,
+      const ConstBlasMatrixView<Real>& scaling,
+      const RefinedSolveControl<Real>& control,
+      BlasMatrixView<Field>* right_hand_sides) const;
+
+  // Solve with higher-precision iterative refinement and a diagonal scaling in
+  // the presence of dynamic regularization:
+  //
+  //     (D (A + regularization) D) (inv(D) x) = (D b).
+  //
+  // This can be useful in situations where the right-hand side consists of
+  // several subgroups, and the relative accuracy of each subgroup is desired
+  // to be controlled. One can thus construct the diagonal matrix D to be
+  // piecewise constant, with each piece being set to the inverse of the norm
+  // of the subgroup of the right-hand side vector.
+  RefinedSolveStatus<ComplexBase<Field>>
+  PromotedDiagonallyScaledDynamicallyRegularizedRefinedSolveHelper(
+      const CoordinateMatrix<Field>& matrix,
+      const SparseLDLResult<Field>& result,
+      const ConstBlasMatrixView<Real>& scaling,
+      const RefinedSolveControl<Real>& control,
+      BlasMatrixView<Field>* right_hand_sides_lower) const;
 };
 
 // Append the children's dynamic regularizations.
