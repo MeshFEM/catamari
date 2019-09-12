@@ -18,6 +18,63 @@
 
 namespace catamari {
 
+namespace promote {
+
+template <typename Field>
+void HigherToLower(const ConstBlasMatrixView<Promote<Field>>& higher,
+                   BlasMatrixView<Field>* lower) {
+  for (Int j = 0; j < higher.width; ++j) {
+    for (Int i = 0; i < higher.height; ++i) {
+      lower->Entry(i, j) = higher(i, j);
+    }
+  }
+}
+
+template <typename Field>
+void HigherToLower(const BlasMatrix<Promote<Field>>& higher,
+                   BlasMatrix<Field>* lower) {
+  lower->Resize(higher.Height(), higher.Width());
+  for (Int j = 0; j < higher.Width(); ++j) {
+    for (Int i = 0; i < higher.Height(); ++i) {
+      lower->Entry(i, j) = higher(i, j);
+    }
+  }
+}
+
+template <typename Field>
+void LowerToHigher(const ConstBlasMatrixView<Field>& lower,
+                   BlasMatrixView<Promote<Field>>* higher) {
+  for (Int j = 0; j < lower.width; ++j) {
+    for (Int i = 0; i < lower.height; ++i) {
+      higher->Entry(i, j) = lower(i, j);
+    }
+  }
+}
+
+template <typename Field>
+void LowerToHigher(const ConstBlasMatrixView<Field>& lower,
+                   BlasMatrix<Promote<Field>>* higher) {
+  higher->Resize(lower.height, lower.width);
+  for (Int j = 0; j < lower.width; ++j) {
+    for (Int i = 0; i < lower.height; ++i) {
+      higher->Entry(i, j) = lower(i, j);
+    }
+  }
+}
+
+template <typename Field>
+void LowerToHigher(const BlasMatrix<Field>& lower,
+                   BlasMatrix<Promote<Field>>* higher) {
+  higher->Resize(lower.Height(), lower.Width());
+  for (Int j = 0; j < lower.Width(); ++j) {
+    for (Int i = 0; i < lower.Height(); ++i) {
+      higher->Entry(i, j) = lower(i, j);
+    }
+  }
+}
+
+}  // namespace promote
+
 template <class Field>
 SparseLDL<Field>::SparseLDL() {
   // Avoid the potential for order-of-magnitude performance degradation from
@@ -496,12 +553,8 @@ SparseLDL<Field>::PromotedRefinedSolveHelper(
   // TODO(Jack Poulson): Avoid solving against all zero right-hand sides.
   BlasMatrix<Field> solution_lower = rhs_orig_lower;
   Solve(&solution_lower.view);
-  BlasMatrix<Promote<Field>> solution_higher(num_rows, num_rhs);
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      solution_higher(i, j) = solution_lower(i, j);
-    }
-  }
+  BlasMatrix<Promote<Field>> solution_higher;
+  promote::LowerToHigher(solution_lower, &solution_higher);
 
   // image := matrix * solution
   BlasMatrix<Promote<Field>> image_higher;
@@ -510,12 +563,9 @@ SparseLDL<Field>::PromotedRefinedSolveHelper(
               Promote<Field>{1}, &image_higher.view);
 
   // Convert the right-hand sides into higher precision.
-  BlasMatrix<Promote<Field>> right_hand_sides_higher(num_rows, num_rhs);
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      right_hand_sides_higher(i, j) = right_hand_sides_lower->Entry(i, j);
-    }
-  }
+  BlasMatrix<Promote<Field>> right_hand_sides_higher;
+  promote::LowerToHigher(right_hand_sides_lower->ToConst(),
+                         &right_hand_sides_higher);
 
   // Compute the original residuals and their max norms.
   //
@@ -585,12 +635,7 @@ SparseLDL<Field>::PromotedRefinedSolveHelper(
       }
     }
     Solve(&update_lower.view);
-    update_higher.Resize(num_rows, num_active);
-    for (Int j_active = 0; j_active < num_active; ++j_active) {
-      for (Int i = 0; i < num_rows; ++i) {
-        update_higher(i, j_active) = update_lower(i, j_active);
-      }
-    }
+    promote::LowerToHigher(update_lower, &update_higher);
 
     // candidate_solution = solution + update
     candidate_solution_higher.Resize(num_rows, num_active);
@@ -645,11 +690,7 @@ SparseLDL<Field>::PromotedRefinedSolveHelper(
   }
 
   // *right_hand_sides := solution
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      right_hand_sides_lower->Entry(i, j) = solution_higher(i, j);
-    }
-  }
+  promote::HigherToLower(solution_higher.ConstView(), right_hand_sides_lower);
 
   // Compute the final maximum scaled residual max norm.
   state.residual_relative_max_norm = 0;
@@ -879,12 +920,8 @@ SparseLDL<Field>::PromotedDynamicallyRegularizedRefinedSolveHelper(
   // TODO(Jack Poulson): Avoid solving against all zero right-hand sides.
   BlasMatrix<Field> solution_lower = rhs_orig_lower;
   Solve(&solution_lower.view);
-  BlasMatrix<Promote<Field>> solution_higher(num_rows, num_rhs);
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      solution_higher(i, j) = solution_lower(i, j);
-    }
-  }
+  BlasMatrix<Promote<Field>> solution_higher;
+  promote::LowerToHigher(solution_lower, &solution_higher);
 
   // image := (matrix + diagonal_reg) * solution
   BlasMatrix<Promote<Field>> image_higher;
@@ -900,12 +937,9 @@ SparseLDL<Field>::PromotedDynamicallyRegularizedRefinedSolveHelper(
   }
 
   // Convert the right-hand sides into higher precision.
-  BlasMatrix<Promote<Field>> right_hand_sides_higher(num_rows, num_rhs);
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      right_hand_sides_higher(i, j) = right_hand_sides_lower->Entry(i, j);
-    }
-  }
+  BlasMatrix<Promote<Field>> right_hand_sides_higher;
+  promote::LowerToHigher(right_hand_sides_lower->ToConst(),
+                         &right_hand_sides_higher);
 
   // Compute the original residuals and their max norms.
   //
@@ -916,7 +950,7 @@ SparseLDL<Field>::PromotedDynamicallyRegularizedRefinedSolveHelper(
   Buffer<Int> active_indices(num_rhs);
   for (Int j = 0; j < num_rhs; ++j) {
     BlasMatrixView<Promote<Field>> column =
-        right_hand_sides_higher->Submatrix(0, j, num_rows, 1);
+        right_hand_sides_higher.Submatrix(0, j, num_rows, 1);
     if (rhs_orig_norms[j] == Real(0)) {
       if (control.verbose) {
         std::cout << "Right-hand side " << j << " was zero." << std::endl;
@@ -975,12 +1009,7 @@ SparseLDL<Field>::PromotedDynamicallyRegularizedRefinedSolveHelper(
       }
     }
     Solve(&update_lower.view);
-    update_higher.Resize(num_rows, num_active);
-    for (Int j_active = 0; j_active < num_active; ++j_active) {
-      for (Int i = 0; i < num_rows; ++i) {
-        update_higher(i, j_active) = update_lower(i, j_active);
-      }
-    }
+    promote::LowerToHigher(update_lower, &update_higher);
 
     // candidate_solution = solution + update
     candidate_solution_higher.Resize(num_rows, num_active);
@@ -1043,11 +1072,7 @@ SparseLDL<Field>::PromotedDynamicallyRegularizedRefinedSolveHelper(
   }
 
   // *right_hand_sides := solution
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      right_hand_sides_lower->Entry(i, j) = solution_higher(i, j);
-    }
-  }
+  promote::HigherToLower(solution_higher.ConstView(), right_hand_sides_lower);
 
   // Compute the final maximum scaled residual max norm.
   state.residual_relative_max_norm = 0;
@@ -1304,6 +1329,7 @@ SparseLDL<Field>::PromotedDiagonallyScaledRefinedSolveHelper(
     for (Int i = 0; i < num_rows; ++i) {
       right_hand_sides_higher(i, j) =
           right_hand_sides_lower->Entry(i, j) * Promote<Real>(scaling(i));
+      right_hand_sides_lower->Entry(i, j) = right_hand_sides_higher(i, j);
     }
   }
 
@@ -1320,24 +1346,17 @@ SparseLDL<Field>::PromotedDiagonallyScaledRefinedSolveHelper(
   // TODO(Jack Poulson): Avoid solving against all zero right-hand sides.
   BlasMatrix<Field> solution_lower;
   BlasMatrix<Promote<Field>> solution_higher;
-  solution_lower.Resize(num_rows, num_rhs);
+  // NOTE: We are just undoing the previously applied scaling...
   solution_higher.Resize(num_rows, num_rhs);
   for (Int j = 0; j < num_rhs; ++j) {
     for (Int i = 0; i < num_rows; ++i) {
-      solution_higher(i, j) = rhs_orig_lower(i, j) / Promote<Real>(scaling(i));
+      solution_higher(i, j) =
+          right_hand_sides_higher(i, j) / Promote<Real>(scaling(i));
     }
   }
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      solution_lower(i, j) = solution_higher(i, j);
-    }
-  }
+  promote::HigherToLower(solution_higher, &solution_lower);
   Solve(&solution_lower.view);
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      solution_higher(i, j) = solution_lower(i, j);
-    }
-  }
+  promote::LowerToHigher(solution_lower, &solution_higher);
   BlasMatrix<Promote<Field>> scaled_solution_higher = solution_higher;
   for (Int j = 0; j < num_rhs; ++j) {
     for (Int i = 0; i < num_rows; ++i) {
@@ -1366,7 +1385,7 @@ SparseLDL<Field>::PromotedDiagonallyScaledRefinedSolveHelper(
   Buffer<Int> active_indices(num_rhs);
   for (Int j = 0; j < num_rhs; ++j) {
     BlasMatrixView<Promote<Field>> column =
-        right_hand_sides_higher->Submatrix(0, j, num_rows, 1);
+        right_hand_sides_higher.Submatrix(0, j, num_rows, 1);
     if (rhs_orig_norms[j] == Real(0)) {
       if (control.verbose) {
         std::cout << "Right-hand side " << j << " was zero." << std::endl;
@@ -1426,17 +1445,9 @@ SparseLDL<Field>::PromotedDiagonallyScaledRefinedSolveHelper(
             right_hand_sides_higher(i, j) / Promote<Real>(scaling(i));
       }
     }
-    for (Int j_active = 0; j_active < num_active; ++j_active) {
-      for (Int i = 0; i < num_rows; ++i) {
-        update_lower(i, j_active) = update_higher(i, j_active);
-      }
-    }
+    promote::HigherToLower(update_higher, &update_lower);
     Solve(&update_lower.view);
-    for (Int j_active = 0; j_active < num_active; ++j_active) {
-      for (Int i = 0; i < num_rows; ++i) {
-        update_higher(i, j_active) = update_lower(i, j_active);
-      }
-    }
+    promote::LowerToHigher(update_lower, &update_higher);
     for (Int j_active = 0; j_active < num_active; ++j_active) {
       for (Int i = 0; i < num_rows; ++i) {
         update_higher(i, j_active) /= Promote<Real>(scaling(i));
@@ -1784,6 +1795,7 @@ RefinedSolveStatus<ComplexBase<Field>> SparseLDL<Field>::
     for (Int i = 0; i < num_rows; ++i) {
       right_hand_sides_higher(i, j) =
           right_hand_sides_lower->Entry(i, j) * Promote<Field>(scaling(i));
+      right_hand_sides_lower->Entry(i, j) = right_hand_sides_higher(i, j);
     }
   }
 
@@ -1800,24 +1812,17 @@ RefinedSolveStatus<ComplexBase<Field>> SparseLDL<Field>::
   // TODO(Jack Poulson): Avoid solving against all zero right-hand sides.
   BlasMatrix<Field> solution_lower;
   BlasMatrix<Promote<Field>> solution_higher;
-  solution_lower.Resize(num_rows, num_rhs);
+  // NOTE: We are just undoing the previously applied scaling...
   solution_higher.Resize(num_rows, num_rhs);
   for (Int j = 0; j < num_rhs; ++j) {
     for (Int i = 0; i < num_rows; ++i) {
-      solution_higher(i, j) = rhs_orig_lower(i, j) / Promote<Field>(scaling(i));
+      solution_higher(i, j) =
+          right_hand_sides_higher(i, j) / Promote<Field>(scaling(i));
     }
   }
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      solution_lower(i, j) = solution_higher(i, j);
-    }
-  }
+  promote::HigherToLower(solution_higher, &solution_lower);
   Solve(&solution_lower.view);
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < num_rows; ++i) {
-      solution_higher(i, j) = solution_lower(i, j);
-    }
-  }
+  promote::LowerToHigher(solution_lower, &solution_higher);
   BlasMatrix<Promote<Field>> scaled_solution_higher = solution_higher;
   for (Int j = 0; j < num_rhs; ++j) {
     for (Int i = 0; i < num_rows; ++i) {
@@ -1913,17 +1918,9 @@ RefinedSolveStatus<ComplexBase<Field>> SparseLDL<Field>::
             right_hand_sides_higher(i, j) / Promote<Field>(scaling(i));
       }
     }
-    for (Int j_active = 0; j_active < num_active; ++j_active) {
-      for (Int i = 0; i < num_rows; ++i) {
-        update_lower(i, j_active) = update_higher(i, j_active);
-      }
-    }
+    promote::HigherToLower(update_higher, &update_lower);
     Solve(&update_lower.view);
-    for (Int j_active = 0; j_active < num_active; ++j_active) {
-      for (Int i = 0; i < num_rows; ++i) {
-        update_higher(i, j_active) = update_lower(i, j_active);
-      }
-    }
+    promote::LowerToHigher(update_lower, &update_higher);
     for (Int j_active = 0; j_active < num_active; ++j_active) {
       for (Int i = 0; i < num_rows; ++i) {
         update_higher(i, j_active) /= Promote<Field>(scaling(i));

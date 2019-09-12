@@ -192,7 +192,7 @@ void ApplyAdjointSparse(const Field& alpha,
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       CATAMARI_ASSERT(entry.row == row, "Invalid entry row index.");
-      const Field value = std::conj(entry.value);
+      const Field value = mantis::Conjugate(entry.value);
       for (Int j = 0; j < num_rhs; ++j) {
         result->Entry(entry.column, j) += alpha * value * input_matrix(row, j);
       }
@@ -232,7 +232,7 @@ void ApplyAdjointSparse(const Promote<Field>& alpha,
     for (Int index = row_beg; index < row_end; ++index) {
       const MatrixEntry<Field>& entry = entries[index];
       CATAMARI_ASSERT(entry.row == row, "Invalid entry row index.");
-      const Promote<Field> value = std::conj(entry.value);
+      const Promote<Field> value = mantis::Conjugate(entry.value);
       for (Int j = 0; j < num_rhs; ++j) {
         result->Entry(entry.column, j) +=
             alpha * (input_matrix(row, j) * value);
