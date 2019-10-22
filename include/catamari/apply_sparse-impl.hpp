@@ -99,8 +99,8 @@ void ApplyTransposeSparse(const Field& alpha,
 
   // Scale the input by beta.
   if (beta != Field(1)) {
-    for (Int j = 0; j < num_rhs; ++j) {
-      for (Int i = 0; i < input_matrix.height; ++i) {
+    for (Int j = 0; j < result->width; ++j) {
+      for (Int i = 0; i < result->height; ++i) {
         result->Entry(i, j) *= beta;
       }
     }
@@ -138,8 +138,8 @@ void ApplyTransposeSparse(
 
   // Scale the input by beta.
   if (beta != Field(1)) {
-    for (Int j = 0; j < num_rhs; ++j) {
-      for (Int i = 0; i < input_matrix.height; ++i) {
+    for (Int j = 0; j < result->width; ++j) {
+      for (Int i = 0; i < result->height; ++i) {
         result->Entry(i, j) *= beta;
       }
     }
@@ -177,8 +177,8 @@ void ApplyAdjointSparse(const Field& alpha,
 
   // Scale the input by beta.
   if (beta != Field(1)) {
-    for (Int j = 0; j < num_rhs; ++j) {
-      for (Int i = 0; i < input_matrix.height; ++i) {
+    for (Int j = 0; j < result->width; ++j) {
+      for (Int i = 0; i < result->height; ++i) {
         result->Entry(i, j) *= beta;
       }
     }
@@ -217,8 +217,8 @@ void ApplyAdjointSparse(const Promote<Field>& alpha,
 
   // Scale the input by beta.
   if (beta != Field(1)) {
-    for (Int j = 0; j < num_rhs; ++j) {
-      for (Int i = 0; i < input_matrix.height; ++i) {
+    for (Int j = 0; j < result->width; ++j) {
+      for (Int i = 0; i < result->height; ++i) {
         result->Entry(i, j) *= beta;
       }
     }
