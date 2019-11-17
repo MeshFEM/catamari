@@ -63,7 +63,7 @@ Int UnblockedDynamicallyRegularizedLDLAdjointFactorization(
             : i + offset;
     if (signatures[orig_index]) {
       // Handle a positive pivot.
-      if (delta <= Real{0}) {
+      if (delta <= -dynamic_reg_params.positive_threshold) {
         return i;
       } else if (delta < dynamic_reg_params.positive_threshold) {
         const Real regularization =
@@ -73,7 +73,7 @@ Int UnblockedDynamicallyRegularizedLDLAdjointFactorization(
       }
     } else {
       // Handle a negative pivot.
-      if (delta >= Real{0}) {
+      if (delta >= dynamic_reg_params.negative_threshold) {
         return i;
       } else if (delta > -dynamic_reg_params.negative_threshold) {
         const Real regularization =

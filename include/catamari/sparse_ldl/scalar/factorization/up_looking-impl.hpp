@@ -164,7 +164,7 @@ SparseLDLResult<Field> Factorization<Field>::UpLooking(
                                  : ordering.inverse_permutation[row];
       if (signatures[orig_index]) {
         // Handle a positive pivot.
-        if (real_pivot <= Real{0}) {
+        if (real_pivot <= -reg_params.positive_threshold) {
           return result;
         } else if (real_pivot < reg_params.positive_threshold) {
           const Real regularization =
@@ -175,7 +175,7 @@ SparseLDLResult<Field> Factorization<Field>::UpLooking(
         }
       } else {
         // Handle a negative pivot.
-        if (real_pivot >= Real{0}) {
+        if (real_pivot >= reg_params.negative_threshold) {
           return result;
         } else if (real_pivot > -reg_params.negative_threshold) {
           const Real regularization =

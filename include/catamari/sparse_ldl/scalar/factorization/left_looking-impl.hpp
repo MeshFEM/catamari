@@ -133,7 +133,7 @@ SparseLDLResult<Field> Factorization<Field>::LeftLooking(
       }
     }
 
-    // Perform diagonal equilibration if requested and needed.
+    // Perform dynamic regularization if requested and needed.
     Field pivot = diagonal_factor.values[column];
     if (reg_params.enabled) {
       const Real real_pivot = std::real(pivot);
@@ -143,10 +143,7 @@ SparseLDLResult<Field> Factorization<Field>::LeftLooking(
                                  : ordering.inverse_permutation[column];
       if (signatures[orig_index]) {
         // Handle a positive pivot.
-        // DO_NOT_SUBMIT
-        std::cout << "Scalar left-looking positive of " << real_pivot
-                  << std::endl;
-        if (real_pivot <= Real{0}) {
+        if (real_pivot <= -reg_params.positive_threshold) {
           return result;
         } else if (real_pivot < reg_params.positive_threshold) {
           const Real regularization =
@@ -157,10 +154,7 @@ SparseLDLResult<Field> Factorization<Field>::LeftLooking(
         }
       } else {
         // Handle a negative pivot.
-        // DO_NOT_SUBMIT
-        std::cout << "Scalar left-looking negative of " << real_pivot
-                  << std::endl;
-        if (real_pivot >= Real{0}) {
+        if (real_pivot >= reg_params.negative_threshold) {
           return result;
         } else if (real_pivot > -reg_params.negative_threshold) {
           const Real regularization =

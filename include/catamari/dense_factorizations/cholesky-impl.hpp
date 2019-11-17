@@ -63,15 +63,15 @@ Int UnblockedDynamicallyRegularizedLowerCholeskyFactorization(
 
   for (Int i = 0; i < height; ++i) {
     Real delta = RealPart(matrix->Entry(i, i));
-    const Int orig_index =
-        dynamic_reg_params.inverse_permutation
-            ? (*dynamic_reg_params.inverse_permutation)[i + offset]
-            : i + offset;
-    CATAMARI_ASSERT((*dynamic_reg_params.signatures)[orig_index],
-                    "Spurious negative pivot.");
-    if (delta <= Real{0}) {
+    if (delta <= -dynamic_reg_params.positive_threshold) {
       return i;
     } else if (delta < dynamic_reg_params.positive_threshold) {
+      const Int orig_index =
+          dynamic_reg_params.inverse_permutation
+              ? (*dynamic_reg_params.inverse_permutation)[i + offset]
+              : i + offset;
+      CATAMARI_ASSERT((*dynamic_reg_params.signatures)[orig_index],
+                      "Spurious negative pivot.");
       const Real regularization = dynamic_reg_params.positive_threshold - delta;
       dynamic_regularization->emplace_back(orig_index, regularization);
       delta = dynamic_reg_params.positive_threshold;

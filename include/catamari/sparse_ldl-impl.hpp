@@ -156,15 +156,24 @@ SparseLDLResult<Field> SparseLDL<Field>::Factor(
     have_equilibration_ = false;
   }
 
+  SparseLDLResult<Field> result;
   if (is_supernodal) {
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
-    return supernodal_factorization->Factor(*matrix_to_factor, ordering,
-                                            control.supernodal_control);
+    result = supernodal_factorization->Factor(*matrix_to_factor, ordering,
+                                              control.supernodal_control);
   } else {
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
-    return scalar_factorization->Factor(*matrix_to_factor, ordering,
-                                        control.scalar_control);
+    result = scalar_factorization->Factor(*matrix_to_factor, ordering,
+                                          control.scalar_control);
   }
+  if (have_equilibration_) {
+    // We factored inv(D) A inv(D), so the regularization needs to be wrapped
+    // with D . D.
+    for (std::pair<Int, Real>& reg : result.dynamic_regularization) {
+      reg.second *= equilibration_(reg.first) * equilibration_(reg.first);
+    }
+  }
+  return result;
 }
 
 template <class Field>
@@ -369,7 +378,7 @@ SparseLDL<Field>::DynamicallyRegularizedRefinedSolveHelper(
       const Int i = perturb.first;
       const Real regularization = perturb.second;
       for (Int j = 0; j < output->width; ++j) {
-        output->Entry(i, j) += regularization * input(i, j);
+        output->Entry(i, j) += alpha * regularization * input(i, j);
       }
     }
   };
@@ -395,7 +404,7 @@ SparseLDL<Field>::PromotedDynamicallyRegularizedRefinedSolveHelper(
       const Int i = perturb.first;
       const Promote<Real> regularization = perturb.second;
       for (Int j = 0; j < output->width; ++j) {
-        output->Entry(i, j) += regularization * input(i, j);
+        output->Entry(i, j) += alpha * regularization * input(i, j);
       }
     }
   };
@@ -576,7 +585,7 @@ SparseLDL<Field>::DiagonallyScaledDynamicallyRegularizedRefinedSolveHelper(
       const Int i = perturb.first;
       const Real regularization = perturb.second;
       for (Int j = 0; j < output->width; ++j) {
-        output->Entry(i, j) += regularization * scaled_input(i, j);
+        output->Entry(i, j) += alpha * regularization * scaled_input(i, j);
       }
     }
     for (Int j = 0; j < output->width; ++j) {
@@ -644,7 +653,7 @@ RefinedSolveStatus<ComplexBase<Field>> SparseLDL<Field>::
       const Int i = perturb.first;
       const Promote<Real> regularization = perturb.second;
       for (Int j = 0; j < output->width; ++j) {
-        output->Entry(i, j) += regularization * scaled_input(i, j);
+        output->Entry(i, j) += alpha * regularization * scaled_input(i, j);
       }
     }
     for (Int j = 0; j < output->width; ++j) {
