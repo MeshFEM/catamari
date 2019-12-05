@@ -1,7 +1,7 @@
 ![](./images/aztec-40-20pct.png)
 
 [**catamari**](https://hodgestar.com/catamari/) is a
-[C++14](https://en.wikipedia.org/wiki/C%2B%2B14), header-only implementations of
+[C++14](https://en.wikipedia.org/wiki/C%2B%2B14), header-only implementation of
 sequential and
 [DAG-scheduled](https://en.wikipedia.org/wiki/Directed_acyclic_graph), real and
 complex, supernodal sparse-direct
