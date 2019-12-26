@@ -60,6 +60,12 @@ using quotient::SwapClearVector;
 // contain the entry sequence:
 //   (2, 0, -1.), (3, 2, 4.), (3, 4, 1.), (4, 2, -2.), (4, 4, 3.).
 //
+// We also allow entry-wise value access via
+//
+//   Field CoordinateMatrix<Field>::Value(Int row, Int column) const,
+//
+// which returns zero if there is no nonzero entry in the given location.
+//
 // TODO(Jack Poulson): Add support for 'END' index marker so that ranges
 // can be easily incorporated.
 template <class Field>
@@ -172,8 +178,11 @@ class CoordinateMatrix {
   // Returns true if there is an entry at position (row, column).
   bool EntryExists(Int row, Int column) const CATAMARI_NOEXCEPT;
 
+  // Returns the (non-modifiable) value of the sparse matrix's given entry.
+  Field Value(Int row, Int column) const CATAMARI_NOEXCEPT;
+
   // Returns the number of columns where the given row has entries.
-  Int NumRowNonzeros(Int row) const CATAMARI_NOEXCEPT;
+  Int NumRowEntries(Int row) const CATAMARI_NOEXCEPT;
 
   // Returns a CoordinateGraph representing the nonzero pattern of the sparse
   // matrix.

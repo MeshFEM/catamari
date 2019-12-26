@@ -107,8 +107,8 @@ std::pair<Int, Int> DensestRow(
   Int densest_row_size = 0;
   Int densest_row_index = -1;
   for (Int i = 0; i < matrix.NumRows(); ++i) {
-    if (matrix.NumRowNonzeros(i) > densest_row_size) {
-      densest_row_size = matrix.NumRowNonzeros(i);
+    if (matrix.NumRowEntries(i) > densest_row_size) {
+      densest_row_size = matrix.NumRowEntries(i);
       densest_row_index = i;
     }
   }

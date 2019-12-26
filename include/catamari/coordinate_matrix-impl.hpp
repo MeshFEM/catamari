@@ -443,12 +443,33 @@ template <class Field>
 bool CoordinateMatrix<Field>::EntryExists(Int row,
                                           Int column) const CATAMARI_NOEXCEPT {
   const Int index = EntryOffset(row, column);
+  if (index >= Int(entries_.Size())) {
+    return false;
+  }
   const MatrixEntry<Field>& entry = Entry(index);
   return entry.row == row && entry.column == column;
 }
 
 template <class Field>
-Int CoordinateMatrix<Field>::NumRowNonzeros(Int row) const CATAMARI_NOEXCEPT {
+Field CoordinateMatrix<Field>::Value(Int row,
+                                     Int column) const CATAMARI_NOEXCEPT {
+  const Int index = EntryOffset(row, column);
+  if (index >= Int(entries_.Size())) {
+    // We have requested beyond the last entry.
+    return Field(0);
+  }
+  const MatrixEntry<Field>& entry = Entry(index);
+  if (entry.row == row && entry.column == column) {
+    // We requested an existing entry.
+    return entry.value;
+  } else {
+    // We requested an entry between two entries.
+    return Field(0);
+  }
+}
+
+template <class Field>
+Int CoordinateMatrix<Field>::NumRowEntries(Int row) const CATAMARI_NOEXCEPT {
   return RowEntryOffset(row + 1) - RowEntryOffset(row);
 }
 

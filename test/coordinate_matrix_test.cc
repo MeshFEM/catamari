@@ -29,6 +29,23 @@ TEST_CASE("Basic", "[Basic]") {
       {3, 4, 1.f},  {4, 2, -2.f}, {4, 4, 3.f},
   };
   REQUIRE(entries == expected_entries);
+  REQUIRE(matrix.Value(0, 0) == 0.f);
+  REQUIRE(matrix.Value(0, 1) == 0.f);
+  REQUIRE(matrix.Value(0, 2) == 0.f);
+  REQUIRE(matrix.Value(0, 3) == 0.f);
+  REQUIRE(matrix.Value(0, 4) == 0.f);
+  REQUIRE(matrix.Value(1, 0) == 0.f);
+  REQUIRE(matrix.Value(1, 1) == 0.f);
+  REQUIRE(matrix.Value(2, 0) == -1.f);
+  REQUIRE(matrix.Value(2, 1) == 0.f);
+  REQUIRE(matrix.Value(2, 2) == 0.f);
+  REQUIRE(matrix.Value(2, 3) == 2.f);
+  REQUIRE(matrix.Value(2, 4) == 0.f);
+  REQUIRE(matrix.Value(3, 0) == 0.f);
+  REQUIRE(matrix.Value(3, 3) == 0.f);
+  REQUIRE(matrix.Value(3, 4) == 1.f);
+  REQUIRE(matrix.Value(3, 5) == 0.f);
+  REQUIRE(matrix.Value(4, 4) == 3.f);
 
   matrix.ReserveEntryRemovals(2);
   matrix.QueueEntryRemoval(2, 3);
