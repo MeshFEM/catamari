@@ -21,7 +21,7 @@ using quotient::MatrixEntry;
 using quotient::SwapClearVector;
 
 // A coordinate-format sparse matrix data structure. The primary storage is a
-// lexicographically sorted Buffer<MatrixEntry<Field>> and an associated
+// lexicographically sorted Buffer<MatrixEntry<Ring>> and an associated
 // Buffer<Int> of row offsets (which serve the same role as in a Compressed
 // Sparse Row (CSR) format). Thus, this storage scheme is a superset of the CSR
 // format that explicitly stores both row and column indices for each entry.
@@ -62,26 +62,26 @@ using quotient::SwapClearVector;
 //
 // We also allow entry-wise value access via
 //
-//   Field CoordinateMatrix<Field>::Value(Int row, Int column) const,
+//   Ring CoordinateMatrix<Ring>::Value(Int row, Int column) const,
 //
 // which returns zero if there is no nonzero entry in the given location.
 //
 // TODO(Jack Poulson): Add support for 'END' index marker so that ranges
 // can be easily incorporated.
-template <class Field>
+template <class Ring>
 class CoordinateMatrix {
  public:
   // The trivial constructor.
   CoordinateMatrix();
 
   // The copy constructor.
-  CoordinateMatrix(const CoordinateMatrix<Field>& matrix);
+  CoordinateMatrix(const CoordinateMatrix<Ring>& matrix);
 
   // The assignment operator.
-  CoordinateMatrix<Field>& operator=(const CoordinateMatrix<Field>& matrix);
+  CoordinateMatrix<Ring>& operator=(const CoordinateMatrix<Ring>& matrix);
 
   // Builds and returns a CoordinateMatrix from a Matrix Market description.
-  static std::unique_ptr<CoordinateMatrix<Field>> FromMatrixMarket(
+  static std::unique_ptr<CoordinateMatrix<Ring>> FromMatrixMarket(
       const std::string& filename, bool skip_explicit_zeros,
       EntryMask mask = EntryMask::kEntryMaskFull);
 
@@ -110,9 +110,15 @@ class CoordinateMatrix {
   // 'QueueEntryAddition' can be performed without another memory allocation.
   void ReserveEntryAdditions(Int max_entry_additions);
 
-  // Appends the entry to the list without putting the entry list in
-  // lexicographic order or updating the row offsets.
-  void QueueEntryAddition(Int row, Int column, const Field& value);
+  // Appends the entry to the entry addition list without putting the entry
+  // list in lexicographic order or updating the row offsets.
+  void QueueEntryAddition(Int row, Int column, const Ring& value);
+  void QueueEntryAddition(const MatrixEntry<Ring>& entry);
+
+  // Appends a list of entries to the entry addition list without putting the
+  // entry list in lexicographic order or updating the row offsets.
+  void QueueEntryAdditions(const std::vector<MatrixEntry<Ring>>& entries);
+  void QueueEntryAdditions(const Buffer<MatrixEntry<Ring>>& entries);
 
   // Allocates space so that up to 'max_entry_removals' calls to
   // 'QueueEntryRemoval' can be performed without another memory allocation.
@@ -134,7 +140,16 @@ class CoordinateMatrix {
   // NOTE: This routine involves a merge sort involving all of the entries. It
   // is preferable to amortize this cost by batching together several entry
   // additions.
-  void AddEntry(Int row, Int column, const Field& value);
+  void AddEntry(Int row, Int column, const Ring& value);
+  void AddEntry(const MatrixEntry<Ring>& entry);
+
+  // Adds a set of entries into the matrix.
+  //
+  // NOTE: This routine involves a merge sort involving all of the entries. If
+  // multiple calls are to be performed in sequence, it is preferable to
+  // amortize this cost by batching together several entry additions.
+  void AddEntries(const std::vector<MatrixEntry<Ring>>& entries);
+  void AddEntries(const Buffer<MatrixEntry<Ring>>& entries);
 
   // Removed the entry (row, column) from the matrix.
   //
@@ -144,20 +159,29 @@ class CoordinateMatrix {
   void RemoveEntry(Int row, Int column);
 
   // Changes a pre-existing entry at position (row, column) to the new value.
-  void ReplaceEntry(Int row, Int column, const Field& value);
+  void ReplaceEntry(Int row, Int column, const Ring& value);
+  void ReplaceEntry(const MatrixEntry<Ring>& entry);
+
+  // Changes a set of entries to the given values. Note that pre-existing
+  // entries at positions not in the following list are unchanged, and that
+  // the behavior is undefined if duplicate replacements are applied to the same
+  // position.
+  void ReplaceEntries(const std::vector<MatrixEntry<Ring>>& entries);
+  void ReplaceEntries(const Buffer<MatrixEntry<Ring>>& entries);
 
   // Adds the given value to a pre-existing entry at position (row, column).
-  void AddToEntry(Int row, Int column, const Field& value);
+  void AddToEntry(Int row, Int column, const Ring& value);
+  void AddToEntry(const MatrixEntry<Ring>& entry);
 
   // Returns a reference to the entry with the given index.
-  const MatrixEntry<Field>& Entry(Int entry_index) const CATAMARI_NOEXCEPT;
+  const MatrixEntry<Ring>& Entry(Int entry_index) const CATAMARI_NOEXCEPT;
 
   // Returns a reference to the underlying vector of entries.
   // NOTE: Only the values are meant to be directly modified.
-  Buffer<MatrixEntry<Field>>& Entries() CATAMARI_NOEXCEPT;
+  Buffer<MatrixEntry<Ring>>& Entries() CATAMARI_NOEXCEPT;
 
   // Returns a reference to the underlying vector of entries.
-  const Buffer<MatrixEntry<Field>>& Entries() const CATAMARI_NOEXCEPT;
+  const Buffer<MatrixEntry<Ring>>& Entries() const CATAMARI_NOEXCEPT;
 
   // Direct access to the row entry offsets vector.
   // NOTE: Not recommended for typical usage.
@@ -179,7 +203,7 @@ class CoordinateMatrix {
   bool EntryExists(Int row, Int column) const CATAMARI_NOEXCEPT;
 
   // Returns the (non-modifiable) value of the sparse matrix's given entry.
-  Field Value(Int row, Int column) const CATAMARI_NOEXCEPT;
+  Ring Value(Int row, Int column) const CATAMARI_NOEXCEPT;
 
   // Returns the number of columns where the given row has entries.
   Int NumRowEntries(Int row) const CATAMARI_NOEXCEPT;
@@ -199,7 +223,7 @@ class CoordinateMatrix {
   // The (lexicographically sorted) list of entries in the sparse matrix.
   // TODO(Jack Poulson): Avoid unnecessary traversals of this array due to
   // MatrixEntry not satisfying std::is_trivially_copy_constructible.
-  Buffer<MatrixEntry<Field>> entries_;
+  Buffer<MatrixEntry<Ring>> entries_;
 
   // A list of length 'num_rows_ + 1', where 'row_entry_offsets_[row]' indicates
   // the location in 'entries_' where an entry with indices (row, column) would
@@ -207,7 +231,7 @@ class CoordinateMatrix {
   Buffer<Int> row_entry_offsets_;
 
   // The list of entries currently queued for addition into the sparse matrix.
-  std::vector<MatrixEntry<Field>> entries_to_add_;
+  std::vector<MatrixEntry<Ring>> entries_to_add_;
 
   // The list of entries currently queued for removal from the sparse matrix.
   std::vector<GraphEdge> entries_to_remove_;
@@ -225,16 +249,16 @@ class CoordinateMatrix {
 
   // Packs a sorted list of entries by summing the floating-point values of
   // entries with the same indices.
-  static void CombineSortedEntries(std::vector<MatrixEntry<Field>>* entries);
-  static void CombineSortedEntries(Buffer<MatrixEntry<Field>>* entries);
+  static void CombineSortedEntries(std::vector<MatrixEntry<Ring>>* entries);
+  static void CombineSortedEntries(Buffer<MatrixEntry<Ring>>* entries);
 };
 
 // Pretty-prints the CoordinateMatrix.
-template <class Field>
+template <class Ring>
 std::ostream& operator<<(std::ostream& os,
-                         const CoordinateMatrix<Field>& matrix);
-template <class Field>
-void Print(const CoordinateMatrix<Field>& matrix, const std::string& label,
+                         const CoordinateMatrix<Ring>& matrix);
+template <class Ring>
+void Print(const CoordinateMatrix<Ring>& matrix, const std::string& label,
            std::ostream& os);
 
 }  // namespace catamari

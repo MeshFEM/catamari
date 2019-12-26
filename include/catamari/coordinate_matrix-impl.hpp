@@ -25,21 +25,20 @@
 
 namespace catamari {
 
-template <class Field>
-CoordinateMatrix<Field>::CoordinateMatrix() : num_rows_(0), num_columns_(0) {}
+template <class Ring>
+CoordinateMatrix<Ring>::CoordinateMatrix() : num_rows_(0), num_columns_(0) {}
 
-template <class Field>
-CoordinateMatrix<Field>::CoordinateMatrix(
-    const CoordinateMatrix<Field>& matrix) {
+template <class Ring>
+CoordinateMatrix<Ring>::CoordinateMatrix(const CoordinateMatrix<Ring>& matrix) {
   if (&matrix == this) {
     return;
   }
   *this = matrix;
 }
 
-template <class Field>
-CoordinateMatrix<Field>& CoordinateMatrix<Field>::operator=(
-    const CoordinateMatrix<Field>& matrix) {
+template <class Ring>
+CoordinateMatrix<Ring>& CoordinateMatrix<Ring>::operator=(
+    const CoordinateMatrix<Ring>& matrix) {
   if (&matrix == this) {
     return *this;
   }
@@ -54,12 +53,12 @@ CoordinateMatrix<Field>& CoordinateMatrix<Field>::operator=(
   return *this;
 }
 
-template <class Field>
-std::unique_ptr<CoordinateMatrix<Field>>
-CoordinateMatrix<Field>::FromMatrixMarket(const std::string& filename,
-                                          bool skip_explicit_zeros,
-                                          EntryMask mask) {
-  std::unique_ptr<CoordinateMatrix<Field>> result;
+template <class Ring>
+std::unique_ptr<CoordinateMatrix<Ring>>
+CoordinateMatrix<Ring>::FromMatrixMarket(const std::string& filename,
+                                         bool skip_explicit_zeros,
+                                         EntryMask mask) {
+  std::unique_ptr<CoordinateMatrix<Ring>> result;
   std::ifstream file(filename);
   if (!file.is_open()) {
     std::cerr << "Could not open " << filename << std::endl;
@@ -72,7 +71,7 @@ CoordinateMatrix<Field>::FromMatrixMarket(const std::string& filename,
     return result;
   }
 
-  result.reset(new CoordinateMatrix<Field>);
+  result.reset(new CoordinateMatrix<Ring>);
   if (description.format == quotient::kMatrixMarketFormatArray) {
     // Read the size of the matrix.
     Int num_rows, num_columns;
@@ -87,7 +86,7 @@ CoordinateMatrix<Field>::FromMatrixMarket(const std::string& filename,
     result->ReserveEntryAdditions(num_rows * num_columns);
     for (Int column = 0; column < num_columns; ++column) {
       for (Int row = 0; row < num_rows; ++row) {
-        Field value;
+        Ring value;
         if (!ReadMatrixMarketArrayValue(description, file, &value)) {
           result.reset();
           return result;
@@ -118,7 +117,7 @@ CoordinateMatrix<Field>::FromMatrixMarket(const std::string& filename,
   result->ReserveEntryAdditions(num_entries_bound);
   for (Int entry_index = 0; entry_index < num_entries; ++entry_index) {
     Int row, column;
-    Field value;
+    Ring value;
     if (!ReadMatrixMarketCoordinateEntry(description, file, &row, &column,
                                          &value)) {
       result.reset();
@@ -132,7 +131,7 @@ CoordinateMatrix<Field>::FromMatrixMarket(const std::string& filename,
 
     if (skip_explicit_zeros) {
       // Skip this entry if it is numerically zero.
-      if (value == Field(0)) {
+      if (value == Ring(0)) {
         ++num_skipped_entries;
         continue;
       }
@@ -161,9 +160,8 @@ CoordinateMatrix<Field>::FromMatrixMarket(const std::string& filename,
   return result;
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::ToMatrixMarket(
-    const std::string& filename) const {
+template <class Ring>
+void CoordinateMatrix<Ring>::ToMatrixMarket(const std::string& filename) const {
   std::ofstream file(filename);
   if (!file.is_open()) {
     std::cerr << "Could not open " << filename << std::endl;
@@ -173,8 +171,8 @@ void CoordinateMatrix<Field>::ToMatrixMarket(
   // Write the header.
   {
     const std::string field_string =
-        IsComplex<Field>::value ? quotient::kMatrixMarketFieldComplexString
-                                : quotient::kMatrixMarketFieldRealString;
+        IsComplex<Ring>::value ? quotient::kMatrixMarketFieldComplexString
+                               : quotient::kMatrixMarketFieldRealString;
     std::ostringstream os;
     os << quotient::kMatrixMarketStampString << " "
        << quotient::kMatrixMarketObjectMatrixString << " "
@@ -191,12 +189,12 @@ void CoordinateMatrix<Field>::ToMatrixMarket(
   }
 
   // Write out the entries.
-  const Buffer<MatrixEntry<Field>>& entries = Entries();
-  for (const MatrixEntry<Field>& entry : entries) {
+  const Buffer<MatrixEntry<Ring>>& entries = Entries();
+  for (const MatrixEntry<Ring>& entry : entries) {
     // We must convert from 0-based to 1-based indexing.
     std::ostringstream os;
     os << entry.row + 1 << " " << entry.column + 1 << " ";
-    if (IsComplex<Field>::value) {
+    if (IsComplex<Ring>::value) {
       os << RealPart(entry.value) << " " << ImagPart(entry.value) << "\n";
     } else {
       os << RealPart(entry.value) << "\n";
@@ -205,26 +203,26 @@ void CoordinateMatrix<Field>::ToMatrixMarket(
   }
 }
 
-template <class Field>
-CoordinateMatrix<Field>::~CoordinateMatrix() {}
+template <class Ring>
+CoordinateMatrix<Ring>::~CoordinateMatrix() {}
 
-template <class Field>
-Int CoordinateMatrix<Field>::NumRows() const CATAMARI_NOEXCEPT {
+template <class Ring>
+Int CoordinateMatrix<Ring>::NumRows() const CATAMARI_NOEXCEPT {
   return num_rows_;
 }
 
-template <class Field>
-Int CoordinateMatrix<Field>::NumColumns() const CATAMARI_NOEXCEPT {
+template <class Ring>
+Int CoordinateMatrix<Ring>::NumColumns() const CATAMARI_NOEXCEPT {
   return num_columns_;
 }
 
-template <class Field>
-Int CoordinateMatrix<Field>::NumEntries() const CATAMARI_NOEXCEPT {
+template <class Ring>
+Int CoordinateMatrix<Ring>::NumEntries() const CATAMARI_NOEXCEPT {
   return entries_.Size();
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::Empty() {
+template <class Ring>
+void CoordinateMatrix<Ring>::Empty() {
   entries_.Clear();
   row_entry_offsets_.Clear();
   SwapClearVector(&entries_to_add_);
@@ -237,8 +235,8 @@ void CoordinateMatrix<Field>::Empty() {
   row_entry_offsets_[0] = 0;
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::Resize(Int num_rows, Int num_columns) {
+template <class Ring>
+void CoordinateMatrix<Ring>::Resize(Int num_rows, Int num_columns) {
   if (num_rows == num_rows_ && num_columns == num_columns_) {
     return;
   }
@@ -256,14 +254,14 @@ void CoordinateMatrix<Field>::Resize(Int num_rows, Int num_columns) {
   }
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::ReserveEntryAdditions(Int max_entry_additions) {
+template <class Ring>
+void CoordinateMatrix<Ring>::ReserveEntryAdditions(Int max_entry_additions) {
   entries_to_add_.reserve(max_entry_additions);
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::QueueEntryAddition(Int row, Int column,
-                                                 const Field& value) {
+template <class Ring>
+void CoordinateMatrix<Ring>::QueueEntryAddition(Int row, Int column,
+                                                const Ring& value) {
   CATAMARI_ASSERT(entries_to_add_.size() != entries_to_add_.capacity(),
                   "WARNING: Pushing back without first reserving space.");
   CATAMARI_ASSERT(row >= 0 && row < num_rows_,
@@ -273,8 +271,28 @@ void CoordinateMatrix<Field>::QueueEntryAddition(Int row, Int column,
   entries_to_add_.emplace_back(row, column, value);
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::FlushEntryAdditionQueue(
+template <class Ring>
+void CoordinateMatrix<Ring>::QueueEntryAddition(
+    const MatrixEntry<Ring>& entry) {
+  QueueEntryAddition(entry.row, entry.column, entry.value);
+}
+
+template <class Ring>
+void CoordinateMatrix<Ring>::QueueEntryAdditions(
+    const std::vector<MatrixEntry<Ring>>& entries) {
+  // NOTE: We do not do entry-wise error-checking as in the single entry case.
+  entries_to_add_.insert(entries_to_add_.end(), entries.begin(), entries.end());
+}
+
+template <class Ring>
+void CoordinateMatrix<Ring>::QueueEntryAdditions(
+    const Buffer<MatrixEntry<Ring>>& entries) {
+  // NOTE: We do not do entry-wise error-checking as in the single entry case.
+  entries_to_add_.insert(entries_to_add_.end(), entries.begin(), entries.end());
+}
+
+template <class Ring>
+void CoordinateMatrix<Ring>::FlushEntryAdditionQueue(
     bool update_row_entry_offsets) {
   if (!entries_to_add_.empty()) {
     // Sort and combine the list of entries to add.
@@ -282,7 +300,7 @@ void CoordinateMatrix<Field>::FlushEntryAdditionQueue(
     CombineSortedEntries(&entries_to_add_);
 
     // Perform a merge sort and then combine entries with the same indices.
-    const Buffer<MatrixEntry<Field>> entries_copy(entries_);
+    const Buffer<MatrixEntry<Ring>> entries_copy(entries_);
     entries_.Resize(entries_copy.Size() + entries_to_add_.size());
     std::merge(entries_copy.begin(), entries_copy.end(),
                entries_to_add_.begin(), entries_to_add_.end(),
@@ -296,13 +314,13 @@ void CoordinateMatrix<Field>::FlushEntryAdditionQueue(
   }
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::ReserveEntryRemovals(Int max_entry_removals) {
+template <class Ring>
+void CoordinateMatrix<Ring>::ReserveEntryRemovals(Int max_entry_removals) {
   entries_to_remove_.reserve(max_entry_removals);
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::QueueEntryRemoval(Int row, Int column) {
+template <class Ring>
+void CoordinateMatrix<Ring>::QueueEntryRemoval(Int row, Int column) {
   CATAMARI_ASSERT(row >= 0 && row < num_rows_,
                   "ERROR: Row index was out of bounds.");
   CATAMARI_ASSERT(column >= 0 && column < num_columns_,
@@ -310,8 +328,8 @@ void CoordinateMatrix<Field>::QueueEntryRemoval(Int row, Int column) {
   entries_to_remove_.emplace_back(row, column);
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::FlushEntryRemovalQueue(
+template <class Ring>
+void CoordinateMatrix<Ring>::FlushEntryRemovalQueue(
     bool update_row_entry_offsets) {
   if (!entries_to_remove_.empty()) {
     // Sort and erase duplicates from the list of edges to be removed.
@@ -338,8 +356,8 @@ void CoordinateMatrix<Field>::FlushEntryRemovalQueue(
   }
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::FlushEntryQueues() {
+template <class Ring>
+void CoordinateMatrix<Ring>::FlushEntryQueues() {
   if (EntryQueuesAreEmpty()) {
     // Skip the recomputation of the row offsets.
     return;
@@ -348,29 +366,49 @@ void CoordinateMatrix<Field>::FlushEntryQueues() {
   FlushEntryAdditionQueue(true /* update_row_entry_offsets */);
 }
 
-template <class Field>
-bool CoordinateMatrix<Field>::EntryQueuesAreEmpty() const CATAMARI_NOEXCEPT {
+template <class Ring>
+bool CoordinateMatrix<Ring>::EntryQueuesAreEmpty() const CATAMARI_NOEXCEPT {
   return entries_to_add_.empty() && entries_to_remove_.empty();
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::AddEntry(Int row, Int column,
-                                       const Field& value) {
+template <class Ring>
+void CoordinateMatrix<Ring>::AddEntry(Int row, Int column, const Ring& value) {
   ReserveEntryAdditions(1);
   QueueEntryAddition(row, column, value);
   FlushEntryQueues();
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::RemoveEntry(Int row, Int column) {
+template <class Ring>
+void CoordinateMatrix<Ring>::AddEntry(const MatrixEntry<Ring>& entry) {
+  AddEntry(entry.row, entry.column, entry.value);
+}
+
+template <class Ring>
+void CoordinateMatrix<Ring>::AddEntries(
+    const std::vector<MatrixEntry<Ring>>& entries) {
+  ReserveEntryAdditions(entries.size());
+  QueueEntryAdditions(entries);
+  FlushEntryQueues();
+}
+
+template <class Ring>
+void CoordinateMatrix<Ring>::AddEntries(
+    const Buffer<MatrixEntry<Ring>>& entries) {
+  ReserveEntryAdditions(entries.Size());
+  QueueEntryAdditions(entries);
+  FlushEntryQueues();
+}
+
+template <class Ring>
+void CoordinateMatrix<Ring>::RemoveEntry(Int row, Int column) {
   ReserveEntryRemovals(1);
   QueueEntryRemoval(row, column);
   FlushEntryQueues();
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::ReplaceEntry(Int row, Int column,
-                                           const Field& value) {
+template <class Ring>
+void CoordinateMatrix<Ring>::ReplaceEntry(Int row, Int column,
+                                          const Ring& value) {
   const Int entry_index = EntryOffset(row, column);
   if (entry_index == RowEntryOffset(row + 1) ||
       entries_[entry_index].column != column) {
@@ -379,9 +417,30 @@ void CoordinateMatrix<Field>::ReplaceEntry(Int row, Int column,
   entries_[entry_index].value = value;
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::AddToEntry(Int row, Int column,
-                                         const Field& value) {
+template <class Ring>
+void CoordinateMatrix<Ring>::ReplaceEntry(const MatrixEntry<Ring>& entry) {
+  ReplaceEntry(entry.row, entry.column, entry.value);
+}
+
+template <class Ring>
+void CoordinateMatrix<Ring>::ReplaceEntries(
+    const std::vector<MatrixEntry<Ring>>& entries) {
+  for (const auto& entry : entries) {
+    ReplaceEntry(entry);
+  }
+}
+
+template <class Ring>
+void CoordinateMatrix<Ring>::ReplaceEntries(
+    const Buffer<MatrixEntry<Ring>>& entries) {
+  for (const auto& entry : entries) {
+    ReplaceEntry(entry);
+  }
+}
+
+template <class Ring>
+void CoordinateMatrix<Ring>::AddToEntry(Int row, Int column,
+                                        const Ring& value) {
   const Int entry_index = EntryOffset(row, column);
   if (entry_index == RowEntryOffset(row + 1) ||
       entries_[entry_index].column != column) {
@@ -390,105 +449,109 @@ void CoordinateMatrix<Field>::AddToEntry(Int row, Int column,
   entries_[entry_index].value += value;
 }
 
-template <class Field>
-const MatrixEntry<Field>& CoordinateMatrix<Field>::Entry(Int entry_index) const
+template <class Ring>
+void CoordinateMatrix<Ring>::AddToEntry(const MatrixEntry<Ring>& entry) {
+  AddToEntry(entry.row, entry.column, entry.value);
+}
+
+template <class Ring>
+const MatrixEntry<Ring>& CoordinateMatrix<Ring>::Entry(Int entry_index) const
     CATAMARI_NOEXCEPT {
   return entries_[entry_index];
 }
 
-template <class Field>
-Buffer<MatrixEntry<Field>>& CoordinateMatrix<Field>::Entries()
+template <class Ring>
+Buffer<MatrixEntry<Ring>>& CoordinateMatrix<Ring>::Entries() CATAMARI_NOEXCEPT {
+  return entries_;
+}
+
+template <class Ring>
+const Buffer<MatrixEntry<Ring>>& CoordinateMatrix<Ring>::Entries() const
     CATAMARI_NOEXCEPT {
   return entries_;
 }
 
-template <class Field>
-const Buffer<MatrixEntry<Field>>& CoordinateMatrix<Field>::Entries() const
-    CATAMARI_NOEXCEPT {
-  return entries_;
-}
-
-template <class Field>
-Buffer<Int>& CoordinateMatrix<Field>::RowEntryOffsets() CATAMARI_NOEXCEPT {
+template <class Ring>
+Buffer<Int>& CoordinateMatrix<Ring>::RowEntryOffsets() CATAMARI_NOEXCEPT {
   return row_entry_offsets_;
 }
 
-template <class Field>
-const Buffer<Int>& CoordinateMatrix<Field>::RowEntryOffsets() const
+template <class Ring>
+const Buffer<Int>& CoordinateMatrix<Ring>::RowEntryOffsets() const
     CATAMARI_NOEXCEPT {
   return row_entry_offsets_;
 }
 
-template <class Field>
-Int CoordinateMatrix<Field>::RowEntryOffset(Int row) const CATAMARI_NOEXCEPT {
+template <class Ring>
+Int CoordinateMatrix<Ring>::RowEntryOffset(Int row) const CATAMARI_NOEXCEPT {
   CATAMARI_ASSERT(
       EntryQueuesAreEmpty(),
       "Tried to retrieve a row edge offset when entry queues weren't empty");
   return row_entry_offsets_[row];
 }
 
-template <class Field>
-Int CoordinateMatrix<Field>::EntryOffset(Int row,
-                                         Int column) const CATAMARI_NOEXCEPT {
+template <class Ring>
+Int CoordinateMatrix<Ring>::EntryOffset(Int row,
+                                        Int column) const CATAMARI_NOEXCEPT {
   const Int row_entry_offset = RowEntryOffset(row);
   const Int next_row_entry_offset = RowEntryOffset(row + 1);
-  const MatrixEntry<Field> target_entry{row, column, Field{0}};
+  const MatrixEntry<Ring> target_entry{row, column, Ring{0}};
   auto iter =
       std::lower_bound(entries_.begin() + row_entry_offset,
                        entries_.begin() + next_row_entry_offset, target_entry);
   return iter - entries_.begin();
 }
 
-template <class Field>
-bool CoordinateMatrix<Field>::EntryExists(Int row,
-                                          Int column) const CATAMARI_NOEXCEPT {
+template <class Ring>
+bool CoordinateMatrix<Ring>::EntryExists(Int row,
+                                         Int column) const CATAMARI_NOEXCEPT {
   const Int index = EntryOffset(row, column);
   if (index >= Int(entries_.Size())) {
     return false;
   }
-  const MatrixEntry<Field>& entry = Entry(index);
+  const MatrixEntry<Ring>& entry = Entry(index);
   return entry.row == row && entry.column == column;
 }
 
-template <class Field>
-Field CoordinateMatrix<Field>::Value(Int row,
-                                     Int column) const CATAMARI_NOEXCEPT {
+template <class Ring>
+Ring CoordinateMatrix<Ring>::Value(Int row,
+                                   Int column) const CATAMARI_NOEXCEPT {
   const Int index = EntryOffset(row, column);
   if (index >= Int(entries_.Size())) {
     // We have requested beyond the last entry.
-    return Field(0);
+    return Ring(0);
   }
-  const MatrixEntry<Field>& entry = Entry(index);
+  const MatrixEntry<Ring>& entry = Entry(index);
   if (entry.row == row && entry.column == column) {
     // We requested an existing entry.
     return entry.value;
   } else {
     // We requested an entry between two entries.
-    return Field(0);
+    return Ring(0);
   }
 }
 
-template <class Field>
-Int CoordinateMatrix<Field>::NumRowEntries(Int row) const CATAMARI_NOEXCEPT {
+template <class Ring>
+Int CoordinateMatrix<Ring>::NumRowEntries(Int row) const CATAMARI_NOEXCEPT {
   return RowEntryOffset(row + 1) - RowEntryOffset(row);
 }
 
-template <class Field>
+template <class Ring>
 std::unique_ptr<quotient::CoordinateGraph>
-CoordinateMatrix<Field>::CoordinateGraph() const CATAMARI_NOEXCEPT {
+CoordinateMatrix<Ring>::CoordinateGraph() const CATAMARI_NOEXCEPT {
   std::unique_ptr<quotient::CoordinateGraph> graph(
       new quotient::CoordinateGraph);
   graph->AsymmetricResize(NumRows(), NumColumns());
   graph->ReserveEdgeAdditions(NumEntries());
-  for (const MatrixEntry<Field>& entry : Entries()) {
+  for (const MatrixEntry<Ring>& entry : Entries()) {
     graph->QueueEdgeAddition(entry.row, entry.column);
   }
   graph->FlushEdgeQueues();
   return graph;
 }
 
-template <class Field>
-void CoordinateMatrix<Field>::UpdateRowEntryOffsets() {
+template <class Ring>
+void CoordinateMatrix<Ring>::UpdateRowEntryOffsets() {
   const Int num_entries = entries_.Size();
   row_entry_offsets_.Resize(num_rows_ + 1);
   Int row_entry_offset = 0;
@@ -509,13 +572,13 @@ void CoordinateMatrix<Field>::UpdateRowEntryOffsets() {
   }
 }
 
-template <typename Field>
-void CoordinateMatrix<Field>::CombineSortedEntries(
-    std::vector<MatrixEntry<Field>>* entries) {
+template <typename Ring>
+void CoordinateMatrix<Ring>::CombineSortedEntries(
+    std::vector<MatrixEntry<Ring>>* entries) {
   Int last_row = -1, last_column = -1;
   Int num_packed = 0;
   for (std::size_t index = 0; index < entries->size(); ++index) {
-    const MatrixEntry<Field>& entry = (*entries)[index];
+    const MatrixEntry<Ring>& entry = (*entries)[index];
 
     if (entry.row == last_row && entry.column == last_column) {
       (*entries)[num_packed - 1].value += entry.value;
@@ -528,13 +591,13 @@ void CoordinateMatrix<Field>::CombineSortedEntries(
   entries->resize(num_packed);
 }
 
-template <typename Field>
-void CoordinateMatrix<Field>::CombineSortedEntries(
-    Buffer<MatrixEntry<Field>>* entries) {
+template <typename Ring>
+void CoordinateMatrix<Ring>::CombineSortedEntries(
+    Buffer<MatrixEntry<Ring>>* entries) {
   Int last_row = -1, last_column = -1;
   Int num_packed = 0;
   for (std::size_t index = 0; index < entries->Size(); ++index) {
-    const MatrixEntry<Field>& entry = (*entries)[index];
+    const MatrixEntry<Ring>& entry = (*entries)[index];
 
     if (entry.row == last_row && entry.column == last_column) {
       (*entries)[num_packed - 1].value += entry.value;
@@ -547,20 +610,20 @@ void CoordinateMatrix<Field>::CombineSortedEntries(
   entries->Resize(num_packed);
 }
 
-template <class Field>
+template <class Ring>
 std::ostream& operator<<(std::ostream& os,
-                         const CoordinateMatrix<Field>& matrix) {
-  for (const MatrixEntry<Field>& entry : matrix.Entries()) {
+                         const CoordinateMatrix<Ring>& matrix) {
+  for (const MatrixEntry<Ring>& entry : matrix.Entries()) {
     os << entry.row << " " << entry.column << " " << entry.value << "\n";
   }
   return os;
 }
 
-template <class Field>
-void Print(const CoordinateMatrix<Field>& matrix, const std::string& label,
+template <class Ring>
+void Print(const CoordinateMatrix<Ring>& matrix, const std::string& label,
            std::ostream& os) {
   os << label << ":\n";
-  for (const MatrixEntry<Field>& entry : matrix.Entries()) {
+  for (const MatrixEntry<Ring>& entry : matrix.Entries()) {
     os << entry.row << " " << entry.column << " " << entry.value << "\n";
   }
   os << std::endl;

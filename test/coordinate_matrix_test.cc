@@ -15,12 +15,14 @@ TEST_CASE("Basic", "[Basic]") {
 
   matrix.Resize(5, 5);
   matrix.ReserveEntryAdditions(6);
-  matrix.QueueEntryAddition(3, 4, 1.f);
-  matrix.QueueEntryAddition(2, 3, 2.f);
-  matrix.QueueEntryAddition(2, 0, -1.f);
-  matrix.QueueEntryAddition(4, 2, -2.f);
-  matrix.QueueEntryAddition(4, 4, 3.f);
-  matrix.QueueEntryAddition(3, 2, 4.f);
+  matrix.QueueEntryAdditions(std::vector<catamari::MatrixEntry<float>>{
+      {3, 4, 1.f},
+      {2, 3, 2.f},
+      {2, 0, -1.f},
+      {4, 2, -2.f},
+      {4, 4, 3.f},
+      {3, 2, 4.f},
+  });
   matrix.FlushEntryQueues();
   const catamari::Buffer<catamari::MatrixEntry<float>>& entries =
       matrix.Entries();
