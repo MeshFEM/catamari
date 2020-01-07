@@ -25,7 +25,7 @@ namespace supernodal_ldl {
 template <typename Field>
 struct Control {
   // Determines the style of the factorization.
-  SymmetricFactorizationType factorization_type;
+  SymmetricFactorizationType factorization_type = kLDLAdjointFactorization;
 
   // Configuration for the supernodal relaxation.
   SupernodalRelaxationControl relaxation_control;

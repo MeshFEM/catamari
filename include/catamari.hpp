@@ -14,6 +14,7 @@
 #include "catamari/coordinate_matrix.hpp"
 #include "catamari/dense_dpp.hpp"
 #include "catamari/dense_factorizations.hpp"
+#include "catamari/fgmres.hpp"
 #include "catamari/givens_rotation.hpp"
 #include "catamari/integers.hpp"
 #include "catamari/macros.hpp"

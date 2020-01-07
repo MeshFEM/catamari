@@ -584,6 +584,83 @@ inline void TriangularSolveLeftLowerAdjointUnit(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
+void TriangularSolveLeftUpper(
+    const ConstBlasMatrixView<Field>& triangular_matrix, Field* vector) {
+  for (Int j = triangular_matrix.height - 1; j >= 0; --j) {
+    const Field* triangular_column = triangular_matrix.Pointer(0, j);
+    Field& eta = vector[j];
+    eta /= triangular_column[j];
+    for (Int i = 0; i < j; ++i) {
+      vector[i] -= eta * triangular_column[i];
+    }
+  }
+}
+
+#ifdef CATAMARI_HAVE_BLAS
+template <>
+inline void TriangularSolveLeftUpper(
+    const ConstBlasMatrixView<float>& triangular_matrix, float* vector) {
+  const char uplo = 'U';
+  const char trans = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = triangular_matrix.height;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt unit_stride_blas = 1;
+  BLAS_SYMBOL(strsv)
+  (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
+   &triang_leading_dim_blas, vector, &unit_stride_blas);
+}
+
+template <>
+inline void TriangularSolveLeftUpper(
+    const ConstBlasMatrixView<double>& triangular_matrix, double* vector) {
+  const char uplo = 'U';
+  const char trans = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = triangular_matrix.height;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt unit_stride_blas = 1;
+  BLAS_SYMBOL(dtrsv)
+  (&uplo, &trans, &diag, &height_blas, triangular_matrix.data,
+   &triang_leading_dim_blas, vector, &unit_stride_blas);
+}
+
+template <>
+inline void TriangularSolveLeftUpper(
+    const ConstBlasMatrixView<Complex<float>>& triangular_matrix,
+    Complex<float>* vector) {
+  const char uplo = 'U';
+  const char trans = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = triangular_matrix.height;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt unit_stride_blas = 1;
+  BLAS_SYMBOL(ctrsv)
+  (&uplo, &trans, &diag, &height_blas,
+   reinterpret_cast<const BlasComplexFloat*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexFloat*>(vector),
+   &unit_stride_blas);
+}
+
+template <>
+inline void TriangularSolveLeftUpper(
+    const ConstBlasMatrixView<Complex<double>>& triangular_matrix,
+    Complex<double>* vector) {
+  const char uplo = 'U';
+  const char trans = 'N';
+  const char diag = 'N';
+  const BlasInt height_blas = triangular_matrix.height;
+  const BlasInt triang_leading_dim_blas = triangular_matrix.leading_dim;
+  const BlasInt unit_stride_blas = 1;
+  BLAS_SYMBOL(ztrsv)
+  (&uplo, &trans, &diag, &height_blas,
+   reinterpret_cast<const BlasComplexDouble*>(triangular_matrix.data),
+   &triang_leading_dim_blas, reinterpret_cast<BlasComplexDouble*>(vector),
+   &unit_stride_blas);
+}
+#endif  // ifdef CATAMARI_HAVE_BLAS
+
+template <class Field>
 void MatrixMultiplyNormalNormal(const Field& alpha,
                                 const ConstBlasMatrixView<Field>& left_matrix,
                                 const ConstBlasMatrixView<Field>& right_matrix,

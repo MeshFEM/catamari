@@ -66,6 +66,12 @@ template <class Field>
 void TriangularSolveLeftLowerAdjointUnit(
     const ConstBlasMatrixView<Field>& triangular_matrix, Field* vector);
 
+// Updates 'vector := inv(triangular_matrix) vector', where 'vector' is a
+// (unit-stride) vector and 'triangular_matrix' is assumed upper-triangular.
+template <class Field>
+void TriangularSolveLeftUpper(
+    const ConstBlasMatrixView<Field>& triangular_matrix, Field* vector);
+
 // Updates
 //
 //   output_matrix := alpha left_matrix right_matrix + beta output_matrix
