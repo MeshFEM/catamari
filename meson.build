@@ -298,6 +298,15 @@ complex_test_exe = executable(
     cpp_args : cxx_args)
 test('Complex tests', complex_test_exe)
 
+# Tests for the GivensRotation class.
+givens_rotation_test_exe = executable(
+    'givens_rotation_test',
+    ['test/givens_rotation_test.cc', 'include/catamari.hpp'],
+    include_directories : include_dir,
+    dependencies : deps + test_deps,
+    cpp_args : cxx_args)
+test('GivensRotation tests', givens_rotation_test_exe)
+
 # Tests for the CoordinateMatrix class.
 coordinate_matrix_test_exe = executable(
     'coordinate_matrix_test',
