@@ -17,10 +17,10 @@ sampler based upon a modified LU factorization. The supported precisions are
 [![Documentation](https://readthedocs.org/projects/catamari/badge/?version=latest)](https://hodgestar.com/catamari/docs/master/)
 
 ### Preprint on the techniques behind Catamari
-A [preprint](https://hodgestar.com/storage/hpc_dpp_preprint-April30-2019.pdf)
-on Catamari is now available, as are the
+A [preprint](https://arxiv.org/abs/1905.00165)
+on Catamari is available, as are the
 [slides](https://hodgestar.com/catamari/April8-2019-RoyalSociety.pdf) from a
-preceding talk.
+preceding talk. The paper has been accepted to a special issue of [Philosophical Transactions of the Royal Society A](https://royalsocietypublishing.org/journal/rsta).
 
 ### Dependencies
 The only strict dependencies for manually including the headers in your project
