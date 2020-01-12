@@ -62,7 +62,7 @@ FGMRESStatus<ComplexBase<Field>> SingleSolve(
     return status;
   }
 
-  bool converged = false;
+  bool finished = false;
   std::vector<GivensRotation<Field>> givens_rotations(max_inner_iterations);
   BlasMatrix<Field> arnoldi_matrix;
   BlasMatrix<Field> arnoldi_vectors;
@@ -74,7 +74,7 @@ FGMRESStatus<ComplexBase<Field>> SingleSolve(
   BlasMatrix<Field> initial_solution;
   BlasMatrix<Field> solution_image;
   BlasMatrix<Field> initial_solution_image;
-  while (!converged) {
+  while (!finished) {
     if (control.verbose) {
       std::cout << "Starting outer FGMRES iteration "
                 << status.num_outer_iterations << std::endl;
@@ -155,8 +155,10 @@ FGMRESStatus<ComplexBase<Field>> SingleSolve(
           std::cout << "Non-finite projected image norm in FGMRES."
                     << std::endl;
         }
-        // TODO(Jack Poulson): Handle this failure mode by returning the
-        // current solution.
+        if (inner_iter == 0) {
+          finished = true;
+        }
+        ++status.num_iterations;
         break;
       }
       if (projected_image_norm == Real(0)) {
@@ -184,13 +186,19 @@ FGMRESStatus<ComplexBase<Field>> SingleSolve(
           !std::isfinite(std::imag(eta_j_j))) {
         std::cout << "H(" << inner_iter << ", " << inner_iter
                   << ") was non-finite." << std::endl;
-        // TODO(Jack Poulson): Handle this edge case.
+        if (inner_iter == 0) {
+          finished = true;
+        }
+        ++status.num_iterations;
         break;
       }
       if (!std::isfinite(eta_jp1_j)) {
         std::cout << "H(" << inner_iter + 1 << ", " << inner_iter << ") was "
                   << "non-finite." << std::endl;
-        // TODO(Jack Poulson): Handle this edge case.
+        if (inner_iter == 0) {
+          finished = true;
+        }
+        ++status.num_iterations;
         break;
       }
       GivensRotation<Field>& new_rotation = givens_rotations[inner_iter];
@@ -199,13 +207,15 @@ FGMRESStatus<ComplexBase<Field>> SingleSolve(
           !std::isfinite(std::imag(combined_entry))) {
         std::cout << "Givens rotation generation produced non-finite combined "
                   << "entry." << std::endl;
-        // TODO(Jack Poulson): Handle this edge case.
+        if (inner_iter == 0) {
+          finished = true;
+        }
+        ++status.num_iterations;
         break;
       }
       arnoldi_matrix(inner_iter, inner_iter) = combined_entry;
 
       // Apply the new Givens rotation to the projected residual.
-      // HERE
       new_rotation.Apply(&projected_residual(inner_iter),
                          &projected_residual(inner_iter + 1));
 
@@ -260,7 +270,7 @@ FGMRESStatus<ComplexBase<Field>> SingleSolve(
                     << status.relative_error << " < " << relative_tolerance
                     << std::endl;
         }
-        converged = true;
+        finished = true;
         break;
       } else if (control.verbose) {
         std::cout << "  FGMRES inner iter finished with relative_error = "
@@ -271,6 +281,7 @@ FGMRESStatus<ComplexBase<Field>> SingleSolve(
         if (control.verbose) {
           std::cout << "FGMRES did not converge." << std::endl;
         }
+        finished = true;
         break;
       }
     }
