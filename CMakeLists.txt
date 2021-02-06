@@ -24,6 +24,9 @@ if (NOT TARGET catamari)
 
     # trigger meson to download the subprojects
     message("running meson in ${CMAKE_CURRENT_SOURCE_DIR}")
+    set(OLD_CXX "$ENV{CXX}")
+    set(ENV{CXX} "")
     execute_process(COMMAND meson setup build
                     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    set(ENV{CXX} ${OLD_CXX})
 endif()
