@@ -171,10 +171,10 @@ if not get_option('disable_blas')
     else
       mkl_dirs = [mkl_lib_dir,]
     endif
-    mkl_lib = cxx.find_library('libmkl_rt', dirs : mkl_dirs, required : false)
+    mkl_lib = cxx.find_library('mkl_rt', dirs : mkl_dirs, required : false)
     if mkl_lib.found()
       if have_openmp
-        mkl_intel_thread_lib = cxx.find_library('libmkl_intel_thread', \
+        mkl_intel_thread_lib = cxx.find_library('mkl_intel_thread', \
             dirs : mkl_dirs, required : false)
         iomp5_lib = cxx.find_library('iomp5', dirs : mkl_dirs, required : false)
         if mkl_intel_thread_lib.found() and iomp5_lib.found()
@@ -183,7 +183,7 @@ if not get_option('disable_blas')
           deps += mkl_intel_thread_lib
           deps += iomp5_lib
         else
-          message('Found libmkl_rt but not mkl_intel_thread and iomp5')
+          message('Found mkl_rt but not mkl_intel_thread and iomp5')
           have_mkl = false
         endif
       else
@@ -201,7 +201,7 @@ if not get_option('disable_blas')
   endif
 
   if not have_blas and not get_option('disable_openblas')
-    openblas_lib = cxx.find_library('libopenblas', required : false)
+    openblas_lib = cxx.find_library('openblas', required : false)
     if openblas_lib.found()
       message('Found OpenBLAS')
       have_blas = true
@@ -210,7 +210,7 @@ if not get_option('disable_blas')
       cxx_args += '-DCATAMARI_HAVE_BLAS'
       deps += openblas_lib
 
-      lapack_lib = cxx.find_library('liblapack', required : false)
+      lapack_lib = cxx.find_library('lapack', required : false)
       if lapack_lib.found()
         message('Found LAPACK')
         cxx_args += '-DCATAMARI_HAVE_LAPACK'
@@ -220,12 +220,12 @@ if not get_option('disable_blas')
   endif
 endif
 
-# Look for libtiff
-libtiff = cxx.find_library('libtiff', required : false)
-if libtiff.found()
-  cxx_args += '-DCATAMARI_HAVE_LIBTIFF'
-  example_deps += libtiff
-endif
+# # Look for libtiff
+# libtiff = cxx.find_library('tiff', required : false)
+# if libtiff.found()
+#   cxx_args += '-DCATAMARI_HAVE_LIBTIFF'
+#   example_deps += libtiff
+# endif
 
 # Test if mantis is installed.
 found_mantis = cxx.has_header('mantis.hpp')

@@ -18,7 +18,11 @@
 
 #include "catamari/blas/openblas.hpp"
 
-#endif  // ifdef CATAMARI_HAVE_MKL
+#elif defined(CATAMARI_HAVE_BLAS)
+
+#include "catamari/blas/genericblas.hpp"
+
+#endif
 
 #if defined(CATAMARI_HAVE_BLAS) && !defined(CATAMARI_HAVE_BLAS_PROTOS)
 
