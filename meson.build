@@ -164,41 +164,48 @@ if not get_option('disable_blas')
   have_mkl = false
   have_openblas = false
 
+
   if not get_option('disable_mkl')
-    mkl_lib_dir = get_option('mkl_lib')
-    if mkl_lib_dir == ''
-      mkl_dirs = []
-    else
-      mkl_dirs = [mkl_lib_dir,]
-    endif
-    mkl_lib = cxx.find_library('mkl_rt', dirs : mkl_dirs, required : false)
-    if mkl_lib.found()
-      if have_openmp
-        mkl_intel_thread_lib = cxx.find_library('mkl_intel_thread', \
-            dirs : mkl_dirs, required : false)
-        iomp5_lib = cxx.find_library('iomp5', dirs : mkl_dirs, required : false)
-        if mkl_intel_thread_lib.found() and iomp5_lib.found()
-          have_mkl = true
-          deps += mkl_lib
-          deps += mkl_intel_thread_lib
-          deps += iomp5_lib
-        else
-          message('Found mkl_rt but not mkl_intel_thread and iomp5')
-          have_mkl = false
-        endif
-      else
-        have_mkl = true
-        deps += mkl_lib
-      endif
-      if have_mkl
-        message('Found MKL')
-        have_blas = true
-        cxx_args += '-DCATAMARI_HAVE_MKL'
-        cxx_args += '-DCATAMARI_HAVE_BLAS'
-        cxx_args += '-DCATAMARI_HAVE_LAPACK'
-      endif
+    mkl_dep = dependency('mkl-dynamic-lp64-iomp')
+    if (mkl_dep.found())
+      have_mkl = true
+      deps += mkl_dep
+      have_blas = true
+      cxx_args += '-DCATAMARI_HAVE_MKL'
+      cxx_args += '-DCATAMARI_HAVE_BLAS'
+      cxx_args += '-DCATAMARI_HAVE_LAPACK'
     endif
   endif
+
+  # if not get_option('disable_mkl')
+  #   mkl_dirs = get_option('mkl_dirs')
+  #   mkl_lib = cxx.find_library('libmkl_rt', dirs : mkl_dirs, required : false)
+  #   if mkl_lib.found()
+  #     if have_openmp
+  #       mkl_intel_thread_lib = cxx.find_library('libmkl_intel_thread', dirs : mkl_dirs, required : false)
+  #       iomp5_lib = cxx.find_library('iomp5', dirs : mkl_dirs, required : false)
+  #       if mkl_intel_thread_lib.found() and iomp5_lib.found()
+  #         have_mkl = true
+  #         deps += mkl_lib
+  #         deps += mkl_intel_thread_lib
+  #         deps += iomp5_lib
+  #       else
+  #         message('Found mkl_rt but not mkl_intel_thread and iomp5')
+  #         have_mkl = false
+  #       endif
+  #     else
+  #       have_mkl = true
+  #       deps += mkl_lib
+  #     endif
+  #     if have_mkl
+  #       message('Found MKL')
+  #       have_blas = true
+  #       cxx_args += '-DCATAMARI_HAVE_MKL'
+  #       cxx_args += '-DCATAMARI_HAVE_BLAS'
+  #       cxx_args += '-DCATAMARI_HAVE_LAPACK'
+  #     endif
+  #   endif
+  # endif
 
   if not have_blas and not get_option('disable_openblas')
     openblas_lib = cxx.find_library('openblas', required : false)

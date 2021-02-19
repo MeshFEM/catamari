@@ -82,8 +82,8 @@ void OpenMPLowerNormalHermitianOuterProduct(
 
   #pragma omp taskgroup
   for (Int j = 0; j < height; j += tile_size) {
-    #pragma omp task default(none)                                  \
-        firstprivate(tile_size, j, left_matrix_copy, output_matrix, \
+    #pragma omp task default(none)                                                \
+        firstprivate(tile_size, j, height, rank, left_matrix_copy, output_matrix, \
             alpha_copy, beta_copy)
     {
       const Int tsize = std::min(height - j, tile_size);
@@ -96,8 +96,8 @@ void OpenMPLowerNormalHermitianOuterProduct(
     }
 
     for (Int i = j + tile_size; i < height; i += tile_size) {
-      #pragma omp task default(none)                                     \
-          firstprivate(tile_size, i, j, left_matrix_copy, output_matrix, \
+      #pragma omp task default(none)                                                   \
+          firstprivate(tile_size, i, j, height, rank, left_matrix_copy, output_matrix, \
               alpha_copy, beta_copy)
       {
         const Int row_tsize = std::min(height - i, tile_size);

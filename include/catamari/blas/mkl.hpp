@@ -28,6 +28,6 @@ typedef std::complex<double> BlasComplexDouble;
 #define MKL_INT BlasInt
 #define MKL_Complex8 BlasComplexFloat
 #define MKL_Complex16 BlasComplexDouble
-#include "mkl.h"
+#include <mkl.h>
 
 #endif  // ifndef CATAMARI_BLAS_MKL_H_

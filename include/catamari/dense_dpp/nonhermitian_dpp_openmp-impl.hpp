@@ -62,8 +62,8 @@ std::vector<Int> OpenMPBlockedSampleNonHermitianDPP(
 
     // Solve for the remainder of the block column of L.
     for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
-      #pragma omp task default(none)                                  \
-          firstprivate(i, i_sub, matrix, const_diagonal_block, tsize) \
+      #pragma omp task default(none)                                          \
+          firstprivate(i, i_sub, height, matrix, const_diagonal_block, tsize) \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
         // Solve agains the upper-triangle of the diagonal block.
@@ -76,8 +76,8 @@ std::vector<Int> OpenMPBlockedSampleNonHermitianDPP(
 
     // Solve for the remainder of the block row of U.
     for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
-      #pragma omp task default(none)                                  \
-          firstprivate(i, i_sub, matrix, const_diagonal_block, tsize) \
+      #pragma omp task default(none)                                          \
+          firstprivate(i, i_sub, height, matrix, const_diagonal_block, tsize) \
           depend(inout: matrix_data[i + i_sub * leading_dim])
       {
         // Solve agains the unit lower-triangle of the diagonal block.
@@ -92,10 +92,10 @@ std::vector<Int> OpenMPBlockedSampleNonHermitianDPP(
     // Perform the rank-tsize update.
     for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
       for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
-        #pragma omp task default(none)                     \
-          firstprivate(i, i_sub, j_sub, matrix, tsize)     \
-          depend(in: matrix_data[i_sub + i * leading_dim], \
-              matrix_data[i + j_sub * leading_dim])        \
+        #pragma omp task default(none)                         \
+          firstprivate(i, i_sub, j_sub, height, matrix, tsize) \
+          depend(in: matrix_data[i_sub + i * leading_dim],     \
+              matrix_data[i + j_sub * leading_dim])            \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
         {
           const Int row_tsize = std::min(height - i_sub, tsize);

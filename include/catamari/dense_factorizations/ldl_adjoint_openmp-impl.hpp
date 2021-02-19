@@ -66,9 +66,9 @@ Int OpenMPLDLAdjointFactorization(Int tile_size, Int block_size,
     // Solve for the remainder of the block column of L and then simultaneously
     // copy its conjugate into 'factor' and the solve against the diagonal.
     for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
-      #pragma omp task default(none)                                  \
-          firstprivate(i, i_sub, matrix, const_diagonal_block, tsize) \
-          shared(factor)                                              \
+      #pragma omp task default(none)                                          \
+          shared(factor)                                                      \
+          firstprivate(i, i_sub, height, matrix, const_diagonal_block, tsize) \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
         // Solve agains the unit lower-triangle of the diagonal block.
@@ -93,9 +93,10 @@ Int OpenMPLDLAdjointFactorization(Int tile_size, Int block_size,
 
     // Perform the Hermitian rank-bsize update.
     for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
-      #pragma omp task default(none) firstprivate(i, j_sub, matrix, tsize) \
-          shared(factor)                                                   \
-          depend(in: matrix_data[j_sub + i * leading_dim])                 \
+      #pragma omp task default(none)                       \
+          firstprivate(i, j_sub, height, matrix, tsize)    \
+          shared(factor)                                   \
+          depend(in: matrix_data[j_sub + i * leading_dim]) \
           depend(inout: matrix_data[j_sub + j_sub * leading_dim])
       {
         const Int column_tsize = std::min(height - j_sub, tsize);
@@ -110,11 +111,11 @@ Int OpenMPLDLAdjointFactorization(Int tile_size, Int block_size,
       }
 
       for (Int i_sub = j_sub + tsize; i_sub < height; i_sub += tile_size) {
-        #pragma omp task default(none)                     \
-          firstprivate(i, i_sub, j_sub, matrix, tsize)     \
-          shared(factor)                                   \
-          depend(in: matrix_data[i_sub + i * leading_dim], \
-              matrix_data[j_sub + i * leading_dim])        \
+        #pragma omp task default(none)                         \
+          firstprivate(i, i_sub, j_sub, height, matrix, tsize) \
+          shared(factor)                                       \
+          depend(in: matrix_data[i_sub + i * leading_dim],     \
+              matrix_data[j_sub + i * leading_dim])            \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
         {
           const Int row_tsize = std::min(height - i_sub, tsize);
@@ -191,7 +192,7 @@ Int OpenMPDynamicallyRegularizedLDLAdjointFactorization(
     for (Int i_sub = i + tsize; i_sub < height; i_sub += tile_size) {
       #pragma omp task default(none)                                  \
           firstprivate(i, i_sub, matrix, const_diagonal_block, tsize) \
-          shared(factor)                                              \
+          shared(factor, height)                                      \
           depend(inout: matrix_data[i_sub + i * leading_dim])
       {
         // Solve agains the unit lower-triangle of the diagonal block.
@@ -217,7 +218,7 @@ Int OpenMPDynamicallyRegularizedLDLAdjointFactorization(
     // Perform the Hermitian rank-bsize update.
     for (Int j_sub = i + tsize; j_sub < height; j_sub += tile_size) {
       #pragma omp task default(none) firstprivate(i, j_sub, matrix, tsize) \
-          shared(factor)                                                   \
+          shared(factor, height)                                           \
           depend(in: matrix_data[j_sub + i * leading_dim])                 \
           depend(inout: matrix_data[j_sub + j_sub * leading_dim])
       {
@@ -235,7 +236,7 @@ Int OpenMPDynamicallyRegularizedLDLAdjointFactorization(
       for (Int i_sub = j_sub + tsize; i_sub < height; i_sub += tile_size) {
         #pragma omp task default(none)                     \
           firstprivate(i, i_sub, j_sub, matrix, tsize)     \
-          shared(factor)                                   \
+          shared(factor, height)                           \
           depend(in: matrix_data[i_sub + i * leading_dim], \
               matrix_data[j_sub + i * leading_dim])        \
           depend(inout: matrix_data[i_sub + j_sub * leading_dim])
