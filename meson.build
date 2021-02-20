@@ -166,7 +166,7 @@ if not get_option('disable_blas')
 
 
   if not get_option('disable_mkl')
-    mkl_dep = dependency('mkl-dynamic-lp64-iomp')
+    mkl_dep = dependency('mkl-dynamic-lp64-iomp', required: false)
     if (mkl_dep.found())
       have_mkl = true
       deps += mkl_dep
