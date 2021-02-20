@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.16)
 project(Catamari)
 
 # CMP0063: Honor visibility properties for all target types.
@@ -17,8 +17,8 @@ if (NOT TARGET catamari)
     target_include_directories(catamari INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/subprojects/quotient/include)
     target_include_directories(catamari INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/subprojects/mantis/include)
     target_include_directories(catamari INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/subprojects/specify/include)
-    if (OpenMP_FOUND)
-        target_link_libraries(catamari INTERFACE OpenMP::OpenMP)
+    if (OpenMP_CXX_FOUND)
+        target_link_libraries(catamari INTERFACE OpenMP::OpenMP_CXX)
     endif()
     set_target_properties(catamari PROPERTIES INTERFACE_COMPILE_FEATURES cxx_std_14)
 
