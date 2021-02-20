@@ -92,7 +92,7 @@ const Int* LowerFactor<Field>::IntersectionSizesEnd(Int supernode) const {
 
 template <class Field>
 void LowerFactor<Field>::FillIntersectionSizes(
-    const Buffer<Int>& supernode_sizes,
+    const Buffer<Int>& /* supernode_sizes */,
     const Buffer<Int>& supernode_member_to_index) {
   const Int num_supernodes = blocks.Size();
 

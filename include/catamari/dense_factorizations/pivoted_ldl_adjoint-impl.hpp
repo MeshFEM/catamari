@@ -25,7 +25,7 @@ namespace dense_pivoted_ldl {
 
 // Return the index of the maximum absolute value on the remaining diagonal.
 template <class Field>
-Int PanelPivotSelection(Int rel_index, const ConstBlasMatrixView<Field>& panel,
+Int PanelPivotSelection(Int rel_index, const ConstBlasMatrixView<Field>& /* panel */,
                         const Buffer<ComplexBase<Field>>& diagonal) {
   typedef ComplexBase<Field> Real;
   const Int diag_length = diagonal.Size();

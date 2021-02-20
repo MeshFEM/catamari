@@ -324,7 +324,7 @@ Int LowerCholeskyFactorization(Int block_size, BlasMatrixView<Field>* matrix) {
 
 #ifdef CATAMARI_HAVE_LAPACK
 template <>
-inline Int LowerCholeskyFactorization(Int block_size,
+inline Int LowerCholeskyFactorization(Int /* block_size */,
                                       BlasMatrixView<float>* matrix) {
   const char uplo = 'L';
   const BlasInt height_blas = matrix->height;
@@ -343,7 +343,7 @@ inline Int LowerCholeskyFactorization(Int block_size,
 }
 
 template <>
-inline Int LowerCholeskyFactorization(Int block_size,
+inline Int LowerCholeskyFactorization(Int /* block_size */,
                                       BlasMatrixView<double>* matrix) {
   const char uplo = 'L';
   const BlasInt height_blas = matrix->height;
@@ -362,7 +362,7 @@ inline Int LowerCholeskyFactorization(Int block_size,
 }
 
 template <>
-inline Int LowerCholeskyFactorization(Int block_size,
+inline Int LowerCholeskyFactorization(Int /* block_size */,
                                       BlasMatrixView<Complex<float>>* matrix) {
   const char uplo = 'L';
   const BlasInt height_blas = matrix->height;
@@ -382,7 +382,7 @@ inline Int LowerCholeskyFactorization(Int block_size,
 }
 
 template <>
-inline Int LowerCholeskyFactorization(Int block_size,
+inline Int LowerCholeskyFactorization(Int /* block_size */,
                                       BlasMatrixView<Complex<double>>* matrix) {
   const char uplo = 'L';
   const BlasInt height_blas = matrix->height;

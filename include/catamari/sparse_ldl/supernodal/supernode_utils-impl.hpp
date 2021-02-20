@@ -236,8 +236,8 @@ inline MergableStatus MergableSupernode(
   return status;
 }
 
-inline void MergeChildren(Int parent, const Buffer<Int>& orig_supernode_starts,
-                          const Buffer<Int>& orig_supernode_sizes,
+inline void MergeChildren(Int parent, const Buffer<Int>& /* orig_supernode_starts */,
+                          const Buffer<Int>& /* orig_supernode_sizes */,
                           const Buffer<Int>& orig_supernode_degrees,
                           const Buffer<Int>& child_list_heads,
                           const Buffer<Int>& child_lists,
