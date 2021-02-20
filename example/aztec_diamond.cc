@@ -55,22 +55,22 @@ extern "C" {
 
 void LAPACK_SYMBOL(cgetrf)(const BlasInt* height, const BlasInt* width,
                            BlasComplexFloat* matrix, const BlasInt* leading_dim,
-                           BlasInt* pivots, BlasInt* info);
+                           BlasInt* pivots, BlasInt* info) noexcept;
 
 void LAPACK_SYMBOL(zgetrf)(const BlasInt* height, const BlasInt* width,
                            BlasComplexDouble* matrix,
                            const BlasInt* leading_dim, BlasInt* pivots,
-                           BlasInt* info);
+                           BlasInt* info) noexcept;
 
 void LAPACK_SYMBOL(cgetri)(const BlasInt* height, BlasComplexFloat* matrix,
                            const BlasInt* leading_dim, const BlasInt* pivots,
                            BlasComplexFloat* work, const BlasInt* work_size,
-                           BlasInt* info);
+                           BlasInt* info) noexcept;
 
 void LAPACK_SYMBOL(zgetri)(const BlasInt* height, BlasComplexDouble* matrix,
                            const BlasInt* leading_dim, const BlasInt* pivots,
                            BlasComplexDouble* work, const BlasInt* work_size,
-                           BlasInt* info);
+                           BlasInt* info) noexcept;
 
 }  // extern "C"
 

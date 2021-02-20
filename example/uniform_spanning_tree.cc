@@ -68,7 +68,7 @@ void LAPACK_SYMBOL(dorgqr)(const BlasInt* height, const BlasInt* width,
                            const BlasInt* num_reflectors, double* matrix,
                            const BlasInt* leading_dim,
                            const double* reflector_scalars, double* work,
-                           const BlasInt* work_size, BlasInt* info);
+                           const BlasInt* work_size, BlasInt* info) noexcept;
 
 void LAPACK_SYMBOL(sgeqpf)(const BlasInt* height, const BlasInt* width,
                            float* matrix, const BlasInt* leading_dim,
@@ -79,7 +79,7 @@ void LAPACK_SYMBOL(sorgqr)(const BlasInt* height, const BlasInt* width,
                            const BlasInt* num_reflectors, float* matrix,
                            const BlasInt* leading_dim,
                            const float* reflector_scalars, float* work,
-                           const BlasInt* work_size, BlasInt* info);
+                           const BlasInt* work_size, BlasInt* info) noexcept;
 
 }  // extern "C"
 
