@@ -305,7 +305,7 @@ SparseLDLResult<Field> Factorization<Field>::Factor(
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 
 #ifdef CATAMARI_OPENMP
-  if (omp_get_max_threads() > 1) {
+  if ((manual_ordering.supernode_sizes.Size() > 0) && omp_get_max_threads() > 1) {
     if (control_.algorithm == kAdaptiveLDL) {
       control_.algorithm = kRightLookingLDL;
     }
