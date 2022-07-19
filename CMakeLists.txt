@@ -6,18 +6,26 @@ if(POLICY CMP0063)
     cmake_policy(SET CMP0063 NEW)
 endif()
 
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    set(BLA_VENDOR Apple)
+else()
 set(BLA_VENDOR Intel10_64_dyn)
+endif()
+
 find_package(BLAS REQUIRED)
+find_package(OpenMP QUIET)
 
 if (NOT TARGET catamari)
     add_library(catamari INTERFACE)
     # TODO: actually detect the proper flags here rather than hard-coding for
     # M1-based Mac and x86-based Linux.
     if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-        target_compile_definitions(catamari INTERFACE -DDARWIN -DCATAMARI_HAVE_FENV_DISABLE_DENORMS -DCATAMARI_HAVE_BLAS -DCATAMARI_HAVE_LAPACK -DQUOTIENT_USE_64BIT)
+        target_compile_definitions(catamari INTERFACE -DDARWIN -DARM -DCATAMARI_HAVE_FENV_DISABLE_DENORMS -DCATAMARI_HAVE_BLAS -DCATAMARI_HAVE_LAPACK -DQUOTIENT_USE_64BIT -DCATAMARI_OPENMP)
+        target_compile_options(catamari INTERFACE -fopenmp)
     elseif  (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         target_compile_definitions(catamari INTERFACE -DMANTIS_GCC_FUSED_MULTIPLY_ADD -DX86 -DLINUX -DCATAMARI_HAVE_XMMINTRIN -DMANTIS_GCC_FUSED_MULTIPLY_ADD -DCATAMARI_OPENMP -DCATAMARI_HAVE_MKL -DCATAMARI_HAVE_BLAS -DCATAMARI_HAVE_LAPACK -DQUOTIENT_USE_64BIT)
         target_link_libraries(catamari INTERFACE /opt/intel/lib/intel64/libiomp5.so)
+        target_compile_options(catamari INTERFACE -fopenmp)
     else()
         message(FATAL_ERROR "Unrecognized CMAKE_SYSTEM_NAME")
     endif()
@@ -26,8 +34,14 @@ if (NOT TARGET catamari)
     target_include_directories(catamari SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/subprojects/quotient/include)
     target_include_directories(catamari SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/subprojects/mantis/include)
     target_include_directories(catamari SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/subprojects/specify/include)
-    target_compile_options(catamari INTERFACE -fopenmp)
     set_target_properties(catamari PROPERTIES INTERFACE_COMPILE_FEATURES cxx_std_14)
+
+    if (OpenMP_CXX_FOUND)
+        target_link_libraries(catamari INTERFACE OpenMP::OpenMP_CXX)
+        message("OpenMP found")
+    else()
+        message("OpenMP NOT found")
+    endif()
 
     # trigger meson to download the subprojects
     message("running meson in ${CMAKE_CURRENT_SOURCE_DIR}")
