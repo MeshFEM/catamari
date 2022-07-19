@@ -26,9 +26,9 @@ inline void EnableFlushToZero() {
 #elif CATAMARI_HAVE_FENV_DISABLE_DENORMS
 #pragma FENV_ACCESS ON
 #ifdef X86
-  fsetenv(FE_DFL_DISABLE_SSE_DENORMS_ENV);
+  fesetenv(FE_DFL_DISABLE_SSE_DENORMS_ENV);
 #elif defined(ARM)
-  fsetenv(FE_DFL_DISABLE_DENORMS_ENV);
+  fesetenv(FE_DFL_DISABLE_DENORMS_ENV);
 #endif  // ifdef X86
 #endif  // ifdef CATAMARI_HAVE_XMMINTRIN
 }
