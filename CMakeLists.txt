@@ -48,6 +48,10 @@ if (NOT TARGET catamari)
     set(OLD_CXX "$ENV{CXX}")
     set(ENV{CXX} "")
     execute_process(COMMAND meson setup build
-                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                    RESULT_VARIABLE ret)
+    if (ret AND NOT ret EQUAL 0)
+        message(FATAL_ERROR "Meson build failed -- is meson installed?")
+    endif()
     set(ENV{CXX} ${OLD_CXX})
 endif()

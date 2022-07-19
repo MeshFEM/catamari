@@ -17,6 +17,8 @@
 
 #include "catamari/sparse_ldl/supernodal/factorization.hpp"
 
+#define FINEGRAINED_PARALLELISM 0
+
 namespace catamari {
 namespace supernodal_ldl {
 
@@ -31,9 +33,6 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
   BlasMatrixView<Field> lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
-
-  const int thread = omp_get_thread_num();
-  PrivateState<Field>* private_state = &(*private_states)[thread];
 
   // Initialize this supernode's Schur complement as the zero matrix.
   Buffer<Field>& schur_complement_buffer =
@@ -50,9 +49,16 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
   BlasMatrixView<Field> schur_complement =
       shared_state->schur_complements[supernode];
 
+#if FINEGRAINED_PARALLELISM
+  #pragma omp taskgroup
   OpenMPMergeChildSchurComplements(control_.merge_grain_size, supernode,
                                    ordering_, lower_factor_.get(),
                                    diagonal_factor_.get(), shared_state);
+#else
+  MergeChildSchurComplements(supernode,
+                             ordering_, lower_factor_.get(),
+                             diagonal_factor_.get(), shared_state);
+#endif
 
   Int num_supernode_pivots;
   if (control_.supernodal_pivoting) {
@@ -64,14 +70,25 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     result->num_successful_pivots += num_supernode_pivots;
   } else {
     // TODO(Jack Poulson): Preallocate this buffer.
-    Buffer<Field> multithreaded_buffer(supernode_size * supernode_size);
-    #pragma omp taskgroup
+    Buffer<Field> multithreaded_buffer;
+    // Buffer is not for Cholesky...
+    if (control_.factorization_type != kCholeskyFactorization)
+        multithreaded_buffer.Resize(supernode_size * supernode_size);
     {
+#if FINEGRAINED_PARALLELISM
+      #pragma omp taskgroup
       num_supernode_pivots = OpenMPFactorDiagonalBlock(
           control_.factor_tile_size, control_.block_size,
           control_.factorization_type, dynamic_reg_params, &diagonal_block,
           &multithreaded_buffer, &result->dynamic_regularization);
+#else
+      num_supernode_pivots = FactorDiagonalBlock(
+          control_.block_size,
+          control_.factorization_type, dynamic_reg_params, &diagonal_block,
+          &result->dynamic_regularization);
+#endif
       result->num_successful_pivots += num_supernode_pivots;
+
     }
   }
   if (num_supernode_pivots < supernode_size) {
@@ -92,22 +109,29 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
         SupernodePermutation(supernode);
     InversePermuteColumns(permutation, &lower_block);
   }
-  #pragma omp taskgroup
-  OpenMPSolveAgainstDiagonalBlock(control_.outer_product_tile_size,
-                                  control_.factorization_type,
-                                  diagonal_block.ToConst(), &lower_block);
+  SolveAgainstDiagonalBlock(control_.factorization_type,
+                            diagonal_block.ToConst(), &lower_block);
 
   if (control_.factorization_type == kCholeskyFactorization) {
+     // This appears to always be *slightly* worth parallelizing...
+#if 1
     #pragma omp taskgroup
     OpenMPLowerNormalHermitianOuterProduct(control_.outer_product_tile_size,
                                            Real{-1}, lower_block.ToConst(),
                                            Real{1}, &schur_complement);
+#else
+    LowerNormalHermitianOuterProduct(
+                                     Real{-1}, lower_block.ToConst(),
+                                     Real{1}, &schur_complement);
+#endif
   } else {
+    const int thread = omp_get_thread_num();
+    PrivateState<Field> &private_state = (*private_states)[thread];
     BlasMatrixView<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;
     scaled_transpose.width = degree;
     scaled_transpose.leading_dim = supernode_size;
-    scaled_transpose.data = private_state->scaled_transpose_buffer.Data();
+    scaled_transpose.data = private_state.scaled_transpose_buffer.Data();
 
     #pragma omp taskgroup
     OpenMPFormScaledTranspose(
@@ -146,8 +170,10 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
 
   CATAMARI_START_TIMER(shared_state->inclusive_timers[supernode]);
 
-  Buffer<int> successes(num_children);
   Buffer<SparseLDLResult<Field>> result_contributions(num_children);
+
+  std::atomic_flag fail;
+  fail.clear();
 
   // Recurse on the children.
   #pragma omp taskgroup
@@ -159,34 +185,35 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
     #pragma omp task default(none)                                        \
       firstprivate(supernode, child, child_index, child_offset,           \
           min_parallel_work, shared_state, private_states)                \
-      shared(successes, matrix, dynamic_reg_params, result_contributions, \
+      shared(fail, matrix, dynamic_reg_params, result_contributions, \
              work_estimates)
     {
       DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
       subparams.offset = child_offset;
-      successes[child_index] = OpenMPRightLookingSubtree(
+      bool success = OpenMPRightLookingSubtree(
           child, matrix, subparams, work_estimates, min_parallel_work,
           shared_state, private_states, &result_contributions[child_index]);
+      if (!success) fail.test_and_set();
     }
   }
 
   CATAMARI_START_TIMER(shared_state->exclusive_timers[supernode]);
 
   // Merge the child results (stopping if a failure is detected).
-  bool succeeded = true;
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    if (!successes[child_index]) {
-      succeeded = false;
-      break;
-    }
-    MergeContribution(result_contributions[child_index], result);
-  }
-  if (succeeded && dynamic_reg_params.enabled) {
-    MergeDynamicRegularizations(result_contributions, result);
-  }
+  bool succeeded = !fail.test();
 
   if (succeeded) {
+    for (Int child_index = 0; child_index < num_children; ++child_index) {
+      MergeContribution(result_contributions[child_index], result);
+    }
+    if (dynamic_reg_params.enabled) {
+      MergeDynamicRegularizations(result_contributions, result);
+    }
+#if FINEGRAINED_PARALLELISM
     OpenMPInitializeBlockColumn(supernode, matrix);
+#else
+    InitializeBlockColumn(supernode, matrix);
+#endif
     #pragma omp taskgroup
     succeeded = OpenMPRightLookingSupernodeFinalize(
         supernode, dynamic_reg_params, shared_state, private_states, result);
@@ -275,7 +302,9 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
 
   SparseLDLResult<Field> result;
 
-  Buffer<int> successes(num_roots);
+  std::atomic_flag fail;
+  fail.clear();
+
   Buffer<SparseLDLResult<Field>> result_contributions(num_roots);
 
   // Recurse on each tree in the elimination forest.
@@ -285,9 +314,10 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
       const Int root = ordering_.assembly_forest.roots[root_index];
       DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
       subparams.offset = ordering_.supernode_offsets[root_index];
-      successes[root_index] = RightLookingSubtree(
+      bool success = RightLookingSubtree(
           root, matrix, subparams, &shared_state, &private_states[thread],
           &result_contributions[root_index]);
+      if (!success) fail.test_and_set();
     }
   } else {
     const int old_max_threads = GetMaxBlasThreads();
@@ -306,30 +336,29 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
       //
       #pragma omp task default(none) \
           firstprivate(root, root_index, root_offset, min_parallel_work)      \
-          shared(successes, matrix, dynamic_reg_params, result_contributions, \
+          shared(fail, matrix, dynamic_reg_params, result_contributions, \
               shared_state, private_states, work_estimates)
       {
         DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
         subparams.offset = root_offset;
-        successes[root_index] = OpenMPRightLookingSubtree(
+        bool success = OpenMPRightLookingSubtree(
             root, matrix, subparams, work_estimates, min_parallel_work,
             &shared_state, &private_states, &result_contributions[root_index]);
+        if (!success) fail.test_and_set();
       }
     }
 
     SetNumBlasThreads(old_max_threads);
   }
 
-  bool succeeded = true;
-  for (Int index = 0; index < num_roots; ++index) {
-    if (!successes[index]) {
-      succeeded = false;
-      break;
+  bool succeeded = !fail.test();
+  if (succeeded) {
+    for (Int index = 0; index < num_roots; ++index) {
+      MergeContribution(result_contributions[index], &result);
     }
-    MergeContribution(result_contributions[index], &result);
-  }
-  if (succeeded && dynamic_reg_params.enabled) {
-    MergeDynamicRegularizations(result_contributions, &result);
+    if (dynamic_reg_params.enabled) {
+      MergeDynamicRegularizations(result_contributions, &result);
+    }
   }
 
 #ifdef CATAMARI_ENABLE_TIMERS
