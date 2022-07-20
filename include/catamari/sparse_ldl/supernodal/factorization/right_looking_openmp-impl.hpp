@@ -172,8 +172,7 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
 
   Buffer<SparseLDLResult<Field>> result_contributions(num_children);
 
-  std::atomic_flag fail;
-  fail.clear();
+  bool fail = false;
 
   // Recurse on the children.
   #pragma omp taskgroup
@@ -193,14 +192,14 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
       bool success = OpenMPRightLookingSubtree(
           child, matrix, subparams, work_estimates, min_parallel_work,
           shared_state, private_states, &result_contributions[child_index]);
-      if (!success) fail.test_and_set();
+      if (!success) fail = true;
     }
   }
 
   CATAMARI_START_TIMER(shared_state->exclusive_timers[supernode]);
 
   // Merge the child results (stopping if a failure is detected).
-  bool succeeded = !fail.test();
+  bool succeeded = !fail;
 
   if (succeeded) {
     for (Int child_index = 0; child_index < num_children; ++child_index) {
@@ -302,8 +301,7 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
 
   SparseLDLResult<Field> result;
 
-  std::atomic_flag fail;
-  fail.clear();
+  bool fail = false;
 
   Buffer<SparseLDLResult<Field>> result_contributions(num_roots);
 
@@ -317,7 +315,7 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
       bool success = RightLookingSubtree(
           root, matrix, subparams, &shared_state, &private_states[thread],
           &result_contributions[root_index]);
-      if (!success) fail.test_and_set();
+      if (!success) fail = true;
     }
   } else {
     const int old_max_threads = GetMaxBlasThreads();
@@ -344,14 +342,14 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
         bool success = OpenMPRightLookingSubtree(
             root, matrix, subparams, work_estimates, min_parallel_work,
             &shared_state, &private_states, &result_contributions[root_index]);
-        if (!success) fail.test_and_set();
+        if (!success) fail = true;
       }
     }
 
     SetNumBlasThreads(old_max_threads);
   }
 
-  bool succeeded = !fail.test();
+  bool succeeded = !fail;
   if (succeeded) {
     for (Int index = 0; index < num_roots; ++index) {
       MergeContribution(result_contributions[index], &result);
