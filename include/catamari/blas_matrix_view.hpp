@@ -54,6 +54,10 @@ struct ConstBlasMatrixView {
   // Returns a const reference to the entry in position (row, column).
   const T& operator()(Int row, Int column = 0) const;
 
+  // Enable ConstBlasMatrixView to masquerade as a const Buffer or some other 1D array
+  // to avoid code duplication in function templates (potentially dangerous).
+  const T& operator[](Int row) const{ return data[row]; }
+
   // Returns a const reference to the entry in position (row, column).
   const T& Entry(Int row, Int column = 0) const;
 
@@ -117,6 +121,11 @@ struct BlasMatrixView {
 
   // Returns a const reference to the entry in position (row, column).
   const T& operator()(Int row, Int column = 0) const;
+
+  // Enable BlasMatrixView to masquerade as a Buffer or some other 1D array
+  // to avoid code duplication in function templates (potentially dangerous).
+        T& operator[](Int row)      { return data[row]; }
+  const T& operator[](Int row) const{ return data[row]; }
 
   // Returns a reference to the entry in position (row, column).
   T& Entry(Int row, Int column = 0);

@@ -12,6 +12,7 @@
 
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/dense_factorizations.hpp"
+#include "../../../../../../../src/lib/MeshFEM/GlobalBenchmark.hh"
 
 #include "catamari/sparse_ldl/supernodal/factorization.hpp"
 
@@ -66,6 +67,7 @@ void Factorization<Field>::MergeContribution(
 template <class Field>
 void Factorization<Field>::FormSupernodes(const CoordinateMatrix<Field>& matrix,
                                           Buffer<Int>* supernode_degrees) {
+  BENCHMARK_SCOPED_TIMER_SECTION timer("FormSupernodes");
   CATAMARI_START_TIMER(profile.scalar_elimination_forest);
   Buffer<Int> scalar_parents;
   Buffer<Int> scalar_degrees;
@@ -141,6 +143,7 @@ template <class Field>
 void Factorization<Field>::InitializeFactors(
     const CoordinateMatrix<Field>& matrix,
     const Buffer<Int>& supernode_degrees) {
+  BENCHMARK_SCOPED_TIMER_SECTION timer("InitializeFactors");
   lower_factor_.reset(
       new LowerFactor<Field>(ordering_.supernode_sizes, supernode_degrees));
   diagonal_factor_.reset(new DiagonalFactor<Field>(ordering_.supernode_sizes));
@@ -233,6 +236,7 @@ ConstBlasMatrixView<Int> Factorization<Field>::SupernodePermutation(
 template <class Field>
 void Factorization<Field>::InitialFactorizationSetup(
     const CoordinateMatrix<Field>& matrix) {
+  BENCHMARK_SCOPED_TIMER_SECTION timer("FormSupernodes");
   Buffer<Int> supernode_degrees;
   FormSupernodes(matrix, &supernode_degrees);
   CATAMARI_START_TIMER(profile.initialize_factors);
@@ -251,21 +255,24 @@ void Factorization<Field>::InitializeBlockColumn(
   const bool have_permutation = !ordering_.permutation.Empty();
   const Int supernode_start = ordering_.supernode_offsets[supernode];
   const Int supernode_size = ordering_.supernode_sizes[supernode];
+  const Int supernode_end  = supernode_start + supernode_size;
   const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
   const Int* index_beg = lower_factor_->StructureBeg(supernode);
   const Int* index_end = lower_factor_->StructureEnd(supernode);
-  for (Int j = supernode_start; j < supernode_start + supernode_size; ++j) {
+  assert(index_beg <= index_end);
+
+#if !LOAD_MATRIX_OUTSIDE
+  eigenMap(diagonal_block).setZero();
+  eigenMap(lower_block).setZero();
+#endif
+
+  for (Int j = supernode_start; j < supernode_end; ++j) {
     const Int j_rel = j - supernode_start;
     const Int j_orig = have_permutation ? ordering_.inverse_permutation[j] : j;
 
-    // Fill the diagonal block's column with zeros.
-    Field* diag_column_ptr = diagonal_block.Pointer(0, j_rel);
-    std::fill(diag_column_ptr, diag_column_ptr + supernode_size, Field{0});
-
-    // Fill the lower block's column with zeros.
-    Field* lower_column_ptr = lower_block.Pointer(0, j_rel);
-    std::fill(lower_column_ptr, lower_column_ptr + lower_block.height,
-              Field{0});
+    // Zero-initialize the diagonal and lower blocks' columns
+    Field*  diag_column_ptr = diagonal_block.Pointer(0, j_rel);
+    Field* lower_column_ptr =    lower_block.Pointer(0, j_rel);
 
     // Insert the entries from the sparse matrix into this column.
     const Int row_beg = matrix.RowEntryOffset(j_orig);
@@ -278,7 +285,7 @@ void Factorization<Field>::InitializeBlockColumn(
         continue;
       }
       const Field value = self_adjoint ? Conjugate(entry.value) : entry.value;
-      if (row < supernode_start + supernode_size) {
+      if (row < supernode_end) {
         diag_column_ptr[row - supernode_start] = value;
       } else {
         const Int* iter = std::lower_bound(index_beg, index_end, row);
@@ -297,6 +304,7 @@ template <class Field>
 SparseLDLResult<Field> Factorization<Field>::Factor(
     const CoordinateMatrix<Field>& matrix,
     const SymmetricOrdering& manual_ordering, const Control<Field>& control) {
+  BENCHMARK_SCOPED_TIMER_SECTION timer("Factor");
   control_ = control;
   ordering_ = manual_ordering;
 

@@ -857,7 +857,6 @@ void MergeChildSchurComplements(Int supernode,
                                 RightLookingSharedState<Field>* shared_state) {
   const Int child_beg = ordering.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering.assembly_forest.child_offsets[supernode + 1];
-  const Int num_children = child_end - child_beg;
   BlasMatrixView<Field> lower_block = lower_factor->blocks[supernode];
   BlasMatrixView<Field> diagonal_block = diagonal_factor->blocks[supernode];
   BlasMatrixView<Field> schur_complement =
@@ -865,72 +864,72 @@ void MergeChildSchurComplements(Int supernode,
 
   const Int supernode_size = ordering.supernode_sizes[supernode];
   const Int supernode_start = ordering.supernode_offsets[supernode];
-  const Int* main_indices = lower_factor->StructureBeg(supernode);
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child =
-        ordering.assembly_forest.children[child_beg + child_index];
+  for (Int child_index = child_beg; child_index < child_end; ++child_index) {
+    const Int child = ordering.assembly_forest.children[child_index];
     const Int* child_indices = lower_factor->StructureBeg(child);
-    Buffer<Field>& child_schur_complement_buffer =
-        shared_state->schur_complement_buffers[child];
-    BlasMatrixView<Field>& child_schur_complement =
-        shared_state->schur_complements[child];
+    BlasMatrixView<Field>& child_schur_complement = shared_state->schur_complements[child];
     const Int child_degree = child_schur_complement.height;
 
-    // Fill the mapping from the child structure into the parent front.
+#if 1
+    auto &ncdi = const_cast<Buffer<Int> &>(ordering.assembly_forest.num_child_diag_indices);
+    auto &cri = const_cast<Buffer<Buffer<Int>> &>(ordering.assembly_forest.child_rel_indices);
+    Int &num_child_diag_indices = ncdi[child];
+    auto &child_rel_indices     = cri[child];
+#else
     Int num_child_diag_indices = 0;
-    Buffer<Int> child_rel_indices(child_degree);
-    {
-      Int i_rel = supernode_size;
-      for (Int i = 0; i < child_degree; ++i) {
-        const Int row = child_indices[i];
-        if (row < supernode_start + supernode_size) {
-          child_rel_indices[i] = row - supernode_start;
-          ++num_child_diag_indices;
-        } else {
-          while (main_indices[i_rel - supernode_size] != row) {
-            ++i_rel;
-            CATAMARI_ASSERT(i_rel < supernode_size + schur_complement.height,
-                            "Relative index is out-of-bounds.");
+    Buffer<Int> child_rel_indices;
+#endif
+    if (child_rel_indices.Size() == 0) {
+        const Int supernode_end = supernode_start + supernode_size;
+        const Int* main_indices = lower_factor->StructureBeg(supernode);
+        // Fill the mapping from the child structure into the parent front.
+        child_rel_indices.Resize(child_degree);
+        num_child_diag_indices = 0;
+        {
+          Int i_rel = 0;
+          for (Int i = 0; i < child_degree; ++i) {
+            const Int row = child_indices[i];
+            if (row < supernode_end) {
+              child_rel_indices[i] = row - supernode_start;
+              ++num_child_diag_indices;
+            } else {
+              while (main_indices[i_rel] != row) {
+                ++i_rel;
+                CATAMARI_ASSERT(i_rel < schur_complement.height,
+                                "Relative index is out-of-bounds.");
+              }
+              child_rel_indices[i] = i_rel;
+            }
           }
-          child_rel_indices[i] = i_rel;
         }
-      }
     }
 
     // Add the child Schur complement into this supernode's front.
-    for (Int j = 0; j < child_degree; ++j) {
-      const Int j_rel = child_rel_indices[j];
-      const Field* child_column = child_schur_complement.Pointer(0, j);
+    for (Int j = 0; j < num_child_diag_indices; ++j) {
+        const Int j_rel = child_rel_indices[j];
+        const Field* child_column = child_schur_complement.Pointer(0, j);
 
-      if (j < num_child_diag_indices) {
         // Contribute into the upper-left diagonal block of the front.
         Field* diag_column = diagonal_block.Pointer(0, j_rel);
         for (Int i = j; i < num_child_diag_indices; ++i) {
-          const Int i_rel = child_rel_indices[i];
-          diag_column[i_rel] += child_column[i];
+            const Int i_rel = child_rel_indices[i];
+            diag_column[i_rel] += child_column[i];
         }
 
         // Contribute into the lower-left block of the front.
         Field* lower_column = lower_block.Pointer(0, j_rel);
         for (Int i = num_child_diag_indices; i < child_degree; ++i) {
-          const Int i_rel = child_rel_indices[i];
-          lower_column[i_rel - supernode_size] += child_column[i];
+            const Int i_rel = child_rel_indices[i];
+            lower_column[i_rel] += child_column[i];
         }
-      } else {
-        // Contribute into the bottom-right block of the front.
-        Field* schur_column =
-            schur_complement.Pointer(0, j_rel - supernode_size);
-        for (Int i = j; i < child_degree; ++i) {
-          const Int i_rel = child_rel_indices[i];
-          schur_column[i_rel - supernode_size] += child_column[i];
-        }
-      }
     }
-
-    child_schur_complement.height = 0;
-    child_schur_complement.width = 0;
-    child_schur_complement.data = nullptr;
-    child_schur_complement_buffer.Clear();
+    for (Int j = num_child_diag_indices; j < child_degree; ++j) {
+        const Field* child_column = child_schur_complement.Pointer(0, j);
+        // Contribute into the bottom-right block of the front.
+        Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j]);
+        for (Int i = j; i < child_degree; ++i)
+            schur_column[child_rel_indices[i]] += child_column[i];
+    }
   }
 }
 

@@ -156,23 +156,24 @@ bool Factorization<Field>::RightLookingSubtree(
   if (succeeded) {
       if (dynamic_reg_params.enabled)
         MergeDynamicRegularizations(result_contributions, result);
+#if !LOAD_MATRIX_OUTSIDE
       InitializeBlockColumn(supernode, matrix);
+#endif
       succeeded = RightLookingSupernodeFinalize(
           supernode, dynamic_reg_params, shared_state, private_state, result);
-  } else {
-    // Clear the child fronts.
-    for (Int child_index = 0; child_index < num_children; ++child_index) {
-      const Int child =
-          ordering_.assembly_forest.children[child_beg + child_index];
-      Buffer<Field>& child_schur_complement_buffer =
-          shared_state->schur_complement_buffers[child];
-      BlasMatrixView<Field>& child_schur_complement =
-          shared_state->schur_complements[child];
-      child_schur_complement.height = 0;
-      child_schur_complement.width = 0;
-      child_schur_complement.data = nullptr;
-      child_schur_complement_buffer.Clear();
-    }
+  }
+
+  // Clear the child fronts.
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child = ordering_.assembly_forest.children[child_beg + child_index];
+    Buffer<Field>& child_schur_complement_buffer =
+        shared_state->schur_complement_buffers[child];
+    BlasMatrixView<Field>& child_schur_complement =
+        shared_state->schur_complements[child];
+    child_schur_complement.height = 0;
+    child_schur_complement.width = 0;
+    child_schur_complement.data = nullptr;
+    child_schur_complement_buffer.Clear();
   }
 
   CATAMARI_STOP_TIMER(shared_state->inclusive_timers[supernode]);
@@ -186,11 +187,10 @@ SparseLDLResult<Field> Factorization<Field>::RightLooking(
     const CoordinateMatrix<Field>& matrix) {
   typedef ComplexBase<Field> Real;
 
-#ifdef CATAMARI_OPENMP
-  if (omp_get_max_threads() > 1) {
+  const Int max_threads = tbb::this_task_arena::max_concurrency();
+  if (max_threads > 1) {
     return OpenMPRightLooking(matrix);
   }
-#endif  // ifdef CATAMARI_OPENMP
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
 
@@ -206,6 +206,28 @@ SparseLDLResult<Field> Factorization<Field>::RightLooking(
   if (control_.factorization_type != kCholeskyFactorization) {
     private_state.scaled_transpose_buffer.Resize(max_lower_block_size_);
   }
+
+  // Allocate the map from child structures to parent fronts.
+  auto &ncdi = ordering_.assembly_forest.num_child_diag_indices;
+  auto &cri =  ordering_.assembly_forest.child_rel_indices;
+  if ( cri.Size() != num_supernodes) {
+      cri.Resize(num_supernodes);
+      ncdi.Resize(num_supernodes);
+  }
+
+  #if LOAD_MATRIX_OUTSIDE
+  {
+      BENCHMARK_SCOPED_TIMER_SECTION initTimer("InitializeBlockColumn");
+      {
+          BENCHMARK_SCOPED_TIMER_SECTION initTimer("SetZero");
+          setZeroParallel(eigenMap(diagonal_factor_->values_));
+          setZeroParallel(eigenMap(lower_factor_->values_));
+      }
+      parallel_for_range(num_supernodes, [&](Int supernode) {
+          InitializeBlockColumn(supernode, matrix);
+      });
+  }
+#endif
 
   SparseLDLResult<Field> result;
 

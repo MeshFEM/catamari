@@ -265,11 +265,13 @@ void OpenMPLowerNormalHermitianOuterProduct(
 #endif  // ifdef CATAMARI_OPENMP
 
 // Applies a row permutation to a dense matrix.
-template <class Field>
-void Permute(const Buffer<Int>& permutation, BlasMatrixView<Field>* matrix);
-template <class Field>
-void Permute(const ConstBlasMatrixView<Int>& permutation,
-             BlasMatrixView<Field>* matrix);
+// Perm can be, e.g., Buffer<Int>, ConstBlasMatrixView<Int>
+template <class Perm, class Field>
+void Permute(const Perm &permutation, BlasMatrixView<Field>* matrix);
+
+// Out-of-place permutation
+template <class Perm, class Field>
+void Permute(const Perm &permutation, const BlasMatrixView<Field> &in, BlasMatrixView<Field> *out);
 
 // Applies a column permutation to a dense matrix.
 template <class Field>

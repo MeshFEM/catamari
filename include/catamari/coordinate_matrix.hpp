@@ -132,6 +132,16 @@ class CoordinateMatrix {
   // and the row offsets are updated.
   void FlushEntryQueues();
 
+  void SetSortedEntries(const Buffer<MatrixEntry<Ring>> &sortedEntries) {
+      entries_ = sortedEntries;
+      UpdateRowEntryOffsets();
+  }
+
+  void SetSortedEntries(Buffer<MatrixEntry<Ring>> &&sortedEntries) {
+      entries_ = std::move(sortedEntries);
+      UpdateRowEntryOffsets();
+  }
+
   // Returns true if there are no entries queued for addition or removal.
   bool EntryQueuesAreEmpty() const CATAMARI_NOEXCEPT;
 

@@ -33,6 +33,10 @@ struct AssemblyForest {
   // The indices of the root supernodes in the forest.
   Buffer<Int> roots;
 
+  // Julian Panetta: mapping from each child structure to its parent front.
+  Buffer<Buffer<Int>> child_rel_indices;
+  Buffer<Int> num_child_diag_indices;
+
   // Fills the children and root list from the parent list.
   void FillFromParents();
 

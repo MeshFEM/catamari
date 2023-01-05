@@ -15,6 +15,10 @@
 
 #include "catamari/sparse_ldl/supernodal/factorization.hpp"
 
+// Avoid repeated memory allocation/deallocation when applying permutations
+// (at the cost of `right_hand_sides` worth of memory).
+#define SOLVE_PERMUTE_SCRATCH 1 
+
 namespace catamari {
 namespace supernodal_ldl {
 
@@ -23,38 +27,108 @@ void Factorization<Field>::Solve(
     BlasMatrixView<Field>* right_hand_sides) const {
   const bool have_permutation = !ordering_.permutation.Empty();
   // Reorder the input into the permutation of the factorization.
+
+  BlasMatrixView<Field> permuted_right_hand_sides = *right_hand_sides;
   if (have_permutation) {
+    BENCHMARK_SCOPED_TIMER_SECTION timer("Permute");
+#if SOLVE_PERMUTE_SCRATCH
+    const Int size = right_hand_sides->width * right_hand_sides->height;
+    if (permute_scratch_.Size() < size)
+        permute_scratch_.Resize(size);
+    permuted_right_hand_sides.data = permute_scratch_.Data();
+    Permute(ordering_.permutation, *right_hand_sides, &permuted_right_hand_sides);
+#else
     Permute(ordering_.permutation, right_hand_sides);
+#endif
   }
 
-#ifdef CATAMARI_OPENMP
-  if (omp_get_max_threads() > 1) {
+  const Int max_threads = tbb::this_task_arena::max_concurrency();
+  if (max_threads > 1) {
     const int old_max_threads = GetMaxBlasThreads();
     SetNumBlasThreads(1);
 
-    #pragma omp parallel
-    #pragma omp single
+    // Set up the shared state holding the "supernode rhs" arrays.
+    // In order to allow the number of rhs to change without updating
+    // the offsets, we use a "column major" storage  where all
+    // supdernodes' data for the first rhs column comes first, followed
+    // by the data for the second column (if any), and so on.
+    const Int num_supernodes = ordering_.supernode_sizes.Size();
+    RightLookingSharedState<Field> &shared_state = solve_shared_state_;
+
     {
-      OpenMPLowerTriangularSolve(right_hand_sides);
-      OpenMPDiagonalSolve(right_hand_sides);
-      OpenMPLowerTransposeTriangularSolve(right_hand_sides);
+        // BENCHMARK_SCOPED_TIMER_SECTION timer("Allocate");
+        const Int num_rhs = right_hand_sides->width;
+
+        auto &scb = shared_state.schur_complement_buffers;
+        Int total_degree;
+        if (scb.Size() != 1) {
+            // First time allocating
+            scb.Resize(1);
+
+            total_degree = 0;
+            for (Int supernode = 0; supernode < num_supernodes; ++supernode)
+                total_degree += lower_factor_->blocks[supernode].height;
+
+            shared_state.schur_complements.Resize(num_supernodes);
+            for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+                auto &supernode_rhs = shared_state.schur_complements[supernode];
+                supernode_rhs.height = lower_factor_->blocks[supernode].height;
+                supernode_rhs.width = 0;
+                supernode_rhs.leading_dim = total_degree;
+            }
+        }
+        else {
+            // The leading dimension of each schur_complements matrix view
+            // is the total degree...
+            if (shared_state.schur_complements.Size() != num_supernodes) throw std::runtime_error("Unexpected size change");
+            total_degree = shared_state.schur_complements[0].leading_dim;
+        }
+
+        Int total_size = total_degree * num_rhs;
+        Buffer<Field> &workspace_buffer = scb[0];
+        bool realloc = (total_size > workspace_buffer.Size());
+        if (realloc) workspace_buffer.Resize(total_size);
+        bool num_rhs_changed = shared_state.schur_complements[0].width != num_rhs;
+
+        if (realloc) {
+            Int offset = 0;
+            for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+                const Int degree = lower_factor_->blocks[supernode].height;
+                auto &supernode_rhs = shared_state.schur_complements[supernode];
+                supernode_rhs.width = num_rhs; // num_rhs must also have changed to trigger a realloc!
+                supernode_rhs.data = workspace_buffer.Data() + offset;
+                offset += degree;
+            }
+        }
+        else if (num_rhs_changed) {
+            // num_rhs has shrunk, meaning we must update each supernode_rhs.width
+            for (Int supernode = 0; supernode < num_supernodes; ++supernode)
+                shared_state.schur_complements[supernode].width = num_rhs;
+        }
+    }
+
+    {
+        OpenMPLowerTriangularSolve(&permuted_right_hand_sides, &shared_state);
+        OpenMPDiagonalSolve(&permuted_right_hand_sides);
+        OpenMPLowerTransposeTriangularSolve(&permuted_right_hand_sides, &shared_state);
     }
 
     SetNumBlasThreads(old_max_threads);
+
   } else {
-    LowerTriangularSolve(right_hand_sides);
-    DiagonalSolve(right_hand_sides);
-    LowerTransposeTriangularSolve(right_hand_sides);
+      LowerTriangularSolve(&permuted_right_hand_sides);
+      DiagonalSolve(&permuted_right_hand_sides);
+      LowerTransposeTriangularSolve(&permuted_right_hand_sides);
   }
-#else
-  LowerTriangularSolve(right_hand_sides);
-  DiagonalSolve(right_hand_sides);
-  LowerTransposeTriangularSolve(right_hand_sides);
-#endif  // ifdef CATAMARI_OPENMP
 
   // Reverse the factorization permutation.
   if (have_permutation) {
+    BENCHMARK_SCOPED_TIMER_SECTION timer("IPermute");
+#if SOLVE_PERMUTE_SCRATCH
+    Permute(ordering_.inverse_permutation, permuted_right_hand_sides, right_hand_sides);
+#else
     Permute(ordering_.inverse_permutation, right_hand_sides);
+#endif
   }
 }
 
@@ -198,6 +272,22 @@ template <class Field>
 void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
     Int supernode, BlasMatrixView<Field>* right_hand_sides,
     Buffer<Field>* packed_input_buf) const {
+  const ConstBlasMatrixView<Field> subdiagonal = lower_factor_->blocks[supernode];
+  const Int num_rhs = right_hand_sides->width;
+
+  BlasMatrixView<Field> work_right_hand_sides;
+  work_right_hand_sides.height = subdiagonal.height;
+  work_right_hand_sides.width = num_rhs;
+  work_right_hand_sides.leading_dim = subdiagonal.height;
+  work_right_hand_sides.data = packed_input_buf->Data();
+
+  LowerTransposeSupernodalTrapezoidalSolve(supernode, right_hand_sides, work_right_hand_sides);
+}
+
+template <class Field>
+void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
+    Int supernode, BlasMatrixView<Field>* right_hand_sides,
+    BlasMatrixView<Field> &work_right_hand_sides) const {
   const Int num_rhs = right_hand_sides->width;
   const bool is_selfadjoint =
       control_.factorization_type != kLDLTransposeFactorization;
@@ -215,11 +305,6 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
     if (supernode_size >=
         control_.backward_solve_out_of_place_supernode_threshold) {
       // Fill the work right_hand_sides.
-      BlasMatrixView<Field> work_right_hand_sides;
-      work_right_hand_sides.height = subdiagonal.height;
-      work_right_hand_sides.width = num_rhs;
-      work_right_hand_sides.leading_dim = subdiagonal.height;
-      work_right_hand_sides.data = packed_input_buf->Data();
       for (Int j = 0; j < num_rhs; ++j) {
         for (Int i = 0; i < subdiagonal.height; ++i) {
           const Int row = indices[i];

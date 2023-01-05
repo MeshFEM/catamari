@@ -25,7 +25,7 @@ class DiagonalFactor {
 
   DiagonalFactor(const Buffer<Int>& supernode_sizes);
 
- private:
+ // private:
   // The concatenation of the numerical values of the supernodal diagonal
   // blocks (stored in a column-major manner in each block).
   Buffer<Field> values_;

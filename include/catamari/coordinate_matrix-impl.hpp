@@ -22,6 +22,7 @@
 #include "catamari/matrix_market.hpp"
 
 #include "catamari/coordinate_matrix.hpp"
+#include "../../../../../src/lib/MeshFEM/GlobalBenchmark.hh"
 
 namespace catamari {
 
@@ -294,6 +295,7 @@ void CoordinateMatrix<Ring>::QueueEntryAdditions(
 template <class Ring>
 void CoordinateMatrix<Ring>::FlushEntryAdditionQueue(
     bool update_row_entry_offsets) {
+  BENCHMARK_SCOPED_TIMER_SECTION timer("FlushEntryAdditionQueue");
   if (!entries_to_add_.empty()) {
     // Sort and combine the list of entries to add.
     std::sort(entries_to_add_.begin(), entries_to_add_.end());

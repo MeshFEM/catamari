@@ -12,6 +12,7 @@
 #include "catamari/macros.hpp"
 
 #include "catamari/dense_basic_linear_algebra.hpp"
+#include "../../../../../src/lib/MeshFEM/Parallelism.hh"
 
 namespace catamari {
 
@@ -3026,8 +3027,10 @@ inline void RightUpperTriangularSolves(
 }
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
-template <class Field>
-void Permute(const Buffer<Int>& permutation, BlasMatrixView<Field>* matrix) {
+// In-place permutation
+// Perm can be, e.g., Buffer<Int>, ConstBlasMatrixView<Int>
+template <class Perm, class Field>
+void Permute(const Perm &permutation, BlasMatrixView<Field>* matrix) {
   Buffer<Field> column_copy(matrix->height);
   for (Int j = 0; j < matrix->width; ++j) {
     // Make a copy of the current column.
@@ -3042,21 +3045,20 @@ void Permute(const Buffer<Int>& permutation, BlasMatrixView<Field>* matrix) {
   }
 }
 
-template <class Field>
-void Permute(const ConstBlasMatrixView<Int>& permutation,
-             BlasMatrixView<Field>* matrix) {
-  Buffer<Field> column_copy(matrix->height);
-  for (Int j = 0; j < matrix->width; ++j) {
-    // Make a copy of the current column.
-    for (Int i = 0; i < matrix->height; ++i) {
-      column_copy[i] = matrix->Entry(i, j);
+// Out-of-place permutation
+// Perm can be, e.g., Buffer<Int>, ConstBlasMatrixView<Int>
+template <class Perm, class Field>
+void Permute(const Perm &permutation, const BlasMatrixView<Field> &in, BlasMatrixView<Field> *out) {
+    if (in.width != out->width || in.height != out->height) throw std::runtime_error("Size mismatch");
+    for (Int j = 0; j < out->width; ++j) {
+        // Apply the permutation.
+        const Field *in_ptr = in.Pointer(0, j);
+        Field *out_ptr = out->Pointer(0, j);
+        //parallel_for_range(out->height, [&](Int i) {
+        for (Int i = 0; i < out->height; ++i)
+            out_ptr[permutation[i]] = in_ptr[i];
+        //});
     }
-
-    // Apply the permutation.
-    for (Int i = 0; i < matrix->height; ++i) {
-      matrix->Entry(permutation(i), j) = column_copy[i];
-    }
-  }
 }
 
 template <class Field>

@@ -13,6 +13,34 @@
 namespace catamari {
 namespace scalar_ldl {
 
+inline void ProcessEdge(Int row, Int column, Buffer<Int>* parents, Buffer<Int>* ancestors) {
+  // We are traversing the strict lower triangle.
+  if (column >= row) {
+    return;
+  }
+
+  while (true) {
+    const Int ancestor = (*ancestors)[column];
+    if (ancestor == row) {
+      // We reached the root of the subtree rooted at 'row', so there
+      // was no change to the elimination tree.
+      break;
+    }
+
+    // Compress the path from column to row.
+    (*ancestors)[column] = row;
+
+    if (ancestor == -1) {
+      // We found a new edge in the elimination tree.
+      (*parents)[column] = row;
+      break;
+    }
+
+    // Move one more step up the tree.
+    column = ancestor;
+  }
+}
+
 template <class Field>
 void EliminationForest(const CoordinateMatrix<Field>& matrix,
                        Buffer<Int>* parents, Buffer<Int>* ancestors) {
@@ -29,35 +57,7 @@ void EliminationForest(const CoordinateMatrix<Field>& matrix,
     const Int row_beg = matrix.RowEntryOffset(row);
     const Int row_end = matrix.RowEntryOffset(row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
-      const MatrixEntry<Field>& entry = entries[index];
-      Int column = entry.column;
-
-      // We are traversing the strictly lower triangle and know that the
-      // indices are sorted.
-      if (column >= row) {
-        continue;
-      }
-
-      while (true) {
-        const Int ancestor = (*ancestors)[column];
-        if (ancestor == row) {
-          // We reached the root of the subtree rooted at 'row', so there
-          // was no change to the elimination tree.
-          break;
-        }
-
-        // Compress the path from column to row.
-        (*ancestors)[column] = row;
-
-        if (ancestor == -1) {
-          // We found a new edge in the elimination tree.
-          (*parents)[column] = row;
-          break;
-        }
-
-        // Move one more step up the tree.
-        column = ancestor;
-      }
+      ProcessEdge(row, entries[index].column, parents, ancestors);
     }
   }
 }
@@ -67,8 +67,7 @@ void EliminationForest(const CoordinateMatrix<Field>& matrix,
                        const SymmetricOrdering& ordering, Buffer<Int>* parents,
                        Buffer<Int>* ancestors) {
   if (ordering.permutation.Empty()) {
-    EliminationForest(matrix, parents, ancestors);
-    return;
+    return EliminationForest(matrix, parents, ancestors);
   }
   const Int num_rows = matrix.NumRows();
 
@@ -84,35 +83,10 @@ void EliminationForest(const CoordinateMatrix<Field>& matrix,
     const Int row_beg = matrix.RowEntryOffset(orig_row);
     const Int row_end = matrix.RowEntryOffset(orig_row + 1);
     for (Int index = row_beg; index < row_end; ++index) {
-      const MatrixEntry<Field>& entry = entries[index];
-      Int column = ordering.permutation[entry.column];
-
-      // We are traversing the strictly lower triangle and know that the
-      // indices are sorted.
-      if (column >= row) {
-        continue;
-      }
-
-      while (true) {
-        const Int ancestor = (*ancestors)[column];
-        if (ancestor == row) {
-          // We reached the root of the subtree rooted at 'row', so there
-          // was no change to the elimination tree.
-          break;
-        }
-
-        // Compress the path from column to row.
-        (*ancestors)[column] = row;
-
-        if (ancestor == -1) {
-          // We found a new edge in the elimination tree.
-          (*parents)[column] = row;
-          break;
-        }
-
-        // Move one more step up the tree.
-        column = ancestor;
-      }
+      const Int orig_col = entries[index].column;
+      // if (orig_col >= orig_row) continue; // Skip upper triangle
+      ProcessEdge(row, ordering.permutation[orig_col], parents, ancestors);
+      // ProcessEdge(ordering.permutation[entries[index].column], row, parents, ancestors); // JP: Symmetry
     }
   }
 }

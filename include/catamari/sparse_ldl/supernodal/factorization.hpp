@@ -13,12 +13,38 @@
 #include "catamari/sparse_ldl/supernodal/diagonal_factor.hpp"
 #include "catamari/sparse_ldl/supernodal/lower_factor.hpp"
 #include "catamari/sparse_ldl/supernodal/supernode_utils.hpp"
+#include <tbb/task_group.h>
 
 #ifdef CATAMARI_ENABLE_TIMERS
 #include "quotient/timer.hpp"
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 
+#include <Eigen/Dense>
+
+#define LOAD_MATRIX_OUTSIDE 1
+
 namespace catamari {
+
+template<class Field>
+auto eigenMap(BlasMatrixView<Field> &bm) {
+    return Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, Eigen::Dynamic>>(bm.Data(), bm.height, bm.width);
+}
+
+template<class Field>
+auto eigenMap(Buffer<Field> &b) {
+    return Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>(b.Data(), b.Size());
+}
+
+template<class Field>
+auto eigenMap(const ConstBlasMatrixView<Field> &bm) {
+    return Eigen::Map<const Eigen::Matrix<Field, Eigen::Dynamic, Eigen::Dynamic>>(bm.Data(), bm.height, bm.width);
+}
+template<class Field>
+
+auto eigenMap(Field *ptr, int size) {
+    return Eigen::Map<Eigen::Array<Field, Eigen::Dynamic, 1>>(ptr, size);
+}
+
 namespace supernodal_ldl {
 
 // Configuration options for supernodal LDL' factorization.
@@ -51,7 +77,6 @@ struct Control {
   // The algorithmic block size for the factorization.
   Int block_size = 64;
 
-#ifdef CATAMARI_OPENMP
   // The size of the matrix tiles for factorization OpenMP tasks.
   Int factor_tile_size = 128;
 
@@ -74,7 +99,6 @@ struct Control {
   // The minimum number of flops in a subtree before OpenMP subtasks are
   // generated.
   double min_parallel_threshold = 1e5;
-#endif  // ifdef CATAMARI_OPENMP
 
 #ifdef CATAMARI_ENABLE_TIMERS
   // The max number of levels of the supernodal tree to visualize timings of.
@@ -228,27 +252,23 @@ class Factorization {
   // Solves a set of linear systems using the lower-triangular factor.
   void LowerTriangularSolve(BlasMatrixView<Field>* right_hand_sides) const;
 
-#ifdef CATAMARI_OPENMP
   void OpenMPLowerTriangularSolve(
-      BlasMatrixView<Field>* right_hand_sides) const;
-#endif  // ifdef CATAMARI_OPENMP
+      BlasMatrixView<Field>* right_hand_sides,
+      RightLookingSharedState<Field>* shared_state) const;
 
   // Solves a set of linear systems using the diagonal factor.
   void DiagonalSolve(BlasMatrixView<Field>* right_hand_sides) const;
 
-#ifdef CATAMARI_OPENMP
   void OpenMPDiagonalSolve(BlasMatrixView<Field>* right_hand_sides) const;
-#endif  // ifdef CATAMARI_OPENMP
 
   // Solves a set of linear systems using the trasnpose (or adjoint) of the
   // lower-triangular factor.
   void LowerTransposeTriangularSolve(
       BlasMatrixView<Field>* right_hand_sides) const;
 
-#ifdef CATAMARI_OPENMP
   void OpenMPLowerTransposeTriangularSolve(
-      BlasMatrixView<Field>* right_hand_sides) const;
-#endif  // ifdef CATAMARI_OPENMP
+      BlasMatrixView<Field>* right_hand_sides,
+      RightLookingSharedState<Field>* shared_state) const;
 
   // Prints the diagonal of the factorization.
   void PrintDiagonalFactor(const std::string& label, std::ostream& os) const;
@@ -319,6 +339,15 @@ class Factorization {
   // vectors are stored within this single buffer.
   BlasMatrix<Int> supernode_permutations_;
 
+  // Julian Panetta: cache work estimates
+  Buffer<double> work_estimates_;
+  double total_work_;
+  mutable Buffer<Field> permute_scratch_;
+  mutable RightLookingSharedState<Field> solve_shared_state_;
+
+  // Julian Panetta: cache right-looking shared state
+  RightLookingSharedState<Field> shared_state_;
+
   // Performs the initial analysis (and factorization initialization) for a
   // particular sparisty pattern. Subsequent factorizations with the same
   // sparsity pattern can reuse the symbolic analysis.
@@ -356,10 +385,8 @@ class Factorization {
   SparseLDLResult<Field> LeftLooking(const CoordinateMatrix<Field>& matrix);
 
   SparseLDLResult<Field> RightLooking(const CoordinateMatrix<Field>& matrix);
-#ifdef CATAMARI_OPENMP
   SparseLDLResult<Field> OpenMPRightLooking(
       const CoordinateMatrix<Field>& matrix);
-#endif  // ifdef CATAMARI_OPENMP
 
   bool LeftLookingSubtree(
       Int supernode, const CoordinateMatrix<Field>& matrix,
@@ -372,7 +399,6 @@ class Factorization {
       const DynamicRegularizationParams<Field>& dynamic_reg_params,
       RightLookingSharedState<Field>* shared_state,
       PrivateState<Field>* private_state, SparseLDLResult<Field>* result);
-#ifdef CATAMARI_OPENMP
   bool OpenMPRightLookingSubtree(
       Int supernode, const CoordinateMatrix<Field>& matrix,
       const DynamicRegularizationParams<Field>& dynamic_reg_params,
@@ -380,7 +406,6 @@ class Factorization {
       RightLookingSharedState<Field>* shared_state,
       Buffer<PrivateState<Field>>* private_states,
       SparseLDLResult<Field>* result);
-#endif  // ifdef CATAMARI_OPENMP
 
   void LeftLookingSupernodeUpdate(Int main_supernode,
                                   const CoordinateMatrix<Field>& matrix,
@@ -397,51 +422,47 @@ class Factorization {
       const DynamicRegularizationParams<Field>& dynamic_reg_params,
       RightLookingSharedState<Field>* shared_state,
       PrivateState<Field>* private_state, SparseLDLResult<Field>* result);
-#ifdef CATAMARI_OPENMP
   bool OpenMPRightLookingSupernodeFinalize(
       Int supernode,
       const DynamicRegularizationParams<Field>& dynamic_reg_params,
       RightLookingSharedState<Field>* shared_state,
       Buffer<PrivateState<Field>>* private_state,
       SparseLDLResult<Field>* result);
-#endif  // ifdef CATAMARI_OPENMP
 
   // Performs the portion of the lower-triangular solve corresponding to the
   // subtree with the given root supernode.
   void LowerTriangularSolveRecursion(Int supernode,
                                      BlasMatrixView<Field>* right_hand_sides,
                                      Buffer<Field>* workspace) const;
-#ifdef CATAMARI_OPENMP
   void OpenMPLowerTriangularSolveRecursion(
       Int supernode, BlasMatrixView<Field>* right_hand_sides,
-      RightLookingSharedState<Field>* shared_state) const;
-#endif  // ifdef CATAMARI_OPENMP
+      RightLookingSharedState<Field>* shared_state, int level) const;
 
   // Performs the trapezoidal solve associated with a particular supernode.
   void LowerSupernodalTrapezoidalSolve(Int supernode,
                                        BlasMatrixView<Field>* right_hand_sides,
                                        Buffer<Field>* workspace) const;
-#ifdef CATAMARI_OPENMP
   void OpenMPLowerSupernodalTrapezoidalSolve(
       Int supernode, BlasMatrixView<Field>* right_hand_sides,
-      RightLookingSharedState<Field>* shared_state) const;
-#endif  // ifdef CATAMARI_OPENMP
+      BlasMatrixView<Field> *supernode_schur_complement) const;
 
   // Performs the portion of the transposed lower-triangular solve
   // corresponding to the subtree with the given root supernode.
   void LowerTransposeTriangularSolveRecursion(
       Int supernode, BlasMatrixView<Field>* right_hand_sides,
       Buffer<Field>* packed_input_buf) const;
-#ifdef CATAMARI_OPENMP
   void OpenMPLowerTransposeTriangularSolveRecursion(
       Int supernode, BlasMatrixView<Field>* right_hand_sides,
-      Buffer<Buffer<Field>>* private_packed_input_bufs) const;
-#endif  // ifdef CATAMARI_OPENMP
+      RightLookingSharedState<Field>* shared_state, int level, tbb::task_group &tg) const;
 
   // Performs the trapezoidal solve associated with a particular supernode.
   void LowerTransposeSupernodalTrapezoidalSolve(
       Int supernode, BlasMatrixView<Field>* right_hand_sides,
       Buffer<Field>* workspace) const;
+
+  void LowerTransposeSupernodalTrapezoidalSolve(
+      Int supernode, BlasMatrixView<Field>* right_hand_sides,
+      BlasMatrixView<Field> &work_right_hand_sides) const;
 };
 
 }  // namespace supernodal_ldl

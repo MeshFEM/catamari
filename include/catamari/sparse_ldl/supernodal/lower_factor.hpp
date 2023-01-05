@@ -59,6 +59,11 @@ class LowerFactor {
   void FillIntersectionSizes(const Buffer<Int>& supernode_sizes,
                              const Buffer<Int>& supernode_member_to_index);
 
+  // The concatenation of the numerical values of the supernodal structures.
+  // The entries of supernode j are stored between indices value_offsets[j] and
+  // value_offsets[j + 1] in a column-major manner.
+  Buffer<Field> values_;
+
  private:
   // The concatenation of the structures of the supernodes. The structure of
   // supernode j is stored between indices index_offsets[j] and
@@ -78,11 +83,6 @@ class LowerFactor {
   // number of supernodes that supernodes 0 through j - 1 individually intersect
   // with.
   Buffer<Int> intersect_size_offsets_;
-
-  // The concatenation of the numerical values of the supernodal structures.
-  // The entries of supernode j are stored between indices value_offsets[j] and
-  // value_offsets[j + 1] in a column-major manner.
-  Buffer<Field> values_;
 };
 
 }  // namespace supernodal_ldl
