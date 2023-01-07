@@ -306,10 +306,10 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
         control_.backward_solve_out_of_place_supernode_threshold) {
       // Fill the work right_hand_sides.
       for (Int j = 0; j < num_rhs; ++j) {
-        for (Int i = 0; i < subdiagonal.height; ++i) {
-          const Int row = indices[i];
-          work_right_hand_sides(i, j) = right_hand_sides->Entry(row, j);
-        }
+        Field *wrhs_ptr = work_right_hand_sides. Pointer(0, j);
+        Field * rhs_ptr =      right_hand_sides->Pointer(0, j);
+        for (Int i = 0; i < subdiagonal.height; ++i)
+          wrhs_ptr[i] = rhs_ptr[indices[i]];
       }
 
       if (is_selfadjoint) {
@@ -322,17 +322,17 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
                                       &right_hand_sides_supernode);
       }
     } else {
-      for (Int k = 0; k < supernode_size; ++k) {
-        for (Int i = 0; i < subdiagonal.height; ++i) {
-          const Int row = indices[i];
-          for (Int j = 0; j < num_rhs; ++j) {
+      for (Int j = 0; j < num_rhs; ++j) {
+        const Field * rhs_ptr = right_hand_sides         ->Pointer(0, j);
+              Field *srhs_ptr = right_hand_sides_supernode.Pointer(0, j);
+        for (Int k = 0; k < supernode_size; ++k) {
+          const Field *subdiagonal_ptr = subdiagonal.Pointer(0, k);
+          for (Int i = 0; i < subdiagonal.height; ++i) {
+            const Int row = indices[i];
             if (is_selfadjoint) {
-              right_hand_sides_supernode(k, j) -=
-                  Conjugate(subdiagonal(i, k)) *
-                  right_hand_sides->Entry(row, j);
+              srhs_ptr[k] -= Conjugate(subdiagonal_ptr[i]) * rhs_ptr[row];
             } else {
-              right_hand_sides_supernode(k, j) -=
-                  subdiagonal(i, k) * right_hand_sides->Entry(row, j);
+              srhs_ptr[k] -=           subdiagonal_ptr[i]  * rhs_ptr[row];
             }
           }
         }

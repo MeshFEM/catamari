@@ -308,7 +308,9 @@ class Factorization {
   // The representation of the permutation matrix P so that P A P' should be
   // factored. Typically, this permutation is the composition of a
   // fill-reducing ordering and a supernodal relaxation permutation.
+public:
   SymmetricOrdering ordering_;
+private:
 
   // An array of length 'num_rows'; the i'th member is the index of the
   // supernode containing column 'i'.
@@ -329,11 +331,13 @@ class Factorization {
   // This is only nonzero for LDL^T and LDL^H factorizations.
   Int left_looking_scaled_transpose_size_;
 
+public:
   // The subdiagonal-block portion of the lower-triangular factor.
   std::unique_ptr<LowerFactor<Field>> lower_factor_;
 
   // The block-diagonal factor.
   std::unique_ptr<DiagonalFactor<Field>> diagonal_factor_;
+private:
 
   // If supernodal_pivoting is enabled, all of the supernode permutation
   // vectors are stored within this single buffer.
@@ -368,8 +372,10 @@ class Factorization {
 
   // Initializes a supernodal block column of the factorization using the
   // input matrix.
+public:
   void InitializeBlockColumn(Int supernode,
                              const CoordinateMatrix<Field>& matrix);
+private:
 #ifdef CATAMARI_OPENMP
   void OpenMPInitializeBlockColumn(Int supernode,
                                    const CoordinateMatrix<Field>& matrix);

@@ -20,7 +20,11 @@
 #include "../../../../../../../src/lib/MeshFEM/ParallelVectorOps.hh"
 
 #define FINEGRAINED_PARALLELISM 0
+
+// On-the-fly construction and zeroing of the Schur complement buffers
+// (setting both to 1 obtains the original implementation, which is slower but saves memory).
 #define ALLOCATE_SCHUR_COMPLEMENT_OTF 0
+#define ZERO_SCHUR_COMPLEMENT_OTF 1 // faster in the case of early-failed (indefinite) factorization, slightly slower in successful case.
 
 namespace catamari {
 namespace supernodal_ldl {
@@ -48,6 +52,8 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     schur_complement.leading_dim = degree;
     schur_complement.data = schur_complement_buffer.Data();
   }
+#elif ZERO_SCHUR_COMPLEMENT_OTF
+  eigenMap(schur_complement).setZero();
 #endif
 
 #if FINEGRAINED_PARALLELISM
@@ -311,17 +317,17 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
   }
 
 #if LOAD_MATRIX_OUTSIDE
-  {
-      BENCHMARK_SCOPED_TIMER_SECTION initTimer("InitializeBlockColumn");
-      {
-          BENCHMARK_SCOPED_TIMER_SECTION initTimer("SetZero");
-          setZeroParallel(eigenMap(diagonal_factor_->values_));
-          setZeroParallel(eigenMap(lower_factor_->values_));
-      }
-      parallel_for_range(num_supernodes, [&](Int supernode) {
-          InitializeBlockColumn(supernode, matrix);
-      });
-  }
+  // {
+  //     BENCHMARK_SCOPED_TIMER_SECTION initTimer("InitializeBlockColumn");
+  //     {
+  //         BENCHMARK_SCOPED_TIMER_SECTION initTimer("SetZero");
+  //         setZeroParallel(eigenMap(diagonal_factor_->values_));
+  //         setZeroParallel(eigenMap(lower_factor_->values_));
+  //     }
+  //     parallel_for_range(num_supernodes, [&](Int supernode) {
+  //         InitializeBlockColumn(supernode, matrix);
+  //     });
+  // }
 #endif
 
   RightLookingSharedState<Field> &shared_state = shared_state_;
@@ -360,7 +366,7 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
 #endif
   }
 
-#if !ALLOCATE_SCHUR_COMPLEMENT_OTF
+#if !(ALLOCATE_SCHUR_COMPLEMENT_OTF || ZERO_SCHUR_COMPLEMENT_OTF)
   {
       // Existing data in the pre-allocated schur_complements buffer must be cleared.
       BENCHMARK_SCOPED_TIMER_SECTION sztimer("setZeroParallel");

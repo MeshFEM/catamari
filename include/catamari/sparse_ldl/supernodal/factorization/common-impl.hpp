@@ -254,8 +254,7 @@ void Factorization<Field>::InitializeBlockColumn(
       control_.factorization_type != kLDLTransposeFactorization;
   const bool have_permutation = !ordering_.permutation.Empty();
   const Int supernode_start = ordering_.supernode_offsets[supernode];
-  const Int supernode_size = ordering_.supernode_sizes[supernode];
-  const Int supernode_end  = supernode_start + supernode_size;
+  const Int supernode_end   = ordering_.supernode_offsets[supernode + 1];
   const Buffer<MatrixEntry<Field>>& entries = matrix.Entries();
   const Int* index_beg = lower_factor_->StructureBeg(supernode);
   const Int* index_end = lower_factor_->StructureEnd(supernode);
@@ -270,7 +269,6 @@ void Factorization<Field>::InitializeBlockColumn(
     const Int j_rel = j - supernode_start;
     const Int j_orig = have_permutation ? ordering_.inverse_permutation[j] : j;
 
-    // Zero-initialize the diagonal and lower blocks' columns
     Field*  diag_column_ptr = diagonal_block.Pointer(0, j_rel);
     Field* lower_column_ptr =    lower_block.Pointer(0, j_rel);
 

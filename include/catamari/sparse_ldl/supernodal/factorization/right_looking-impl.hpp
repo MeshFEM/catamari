@@ -215,20 +215,6 @@ SparseLDLResult<Field> Factorization<Field>::RightLooking(
       ncdi.Resize(num_supernodes);
   }
 
-  #if LOAD_MATRIX_OUTSIDE
-  {
-      BENCHMARK_SCOPED_TIMER_SECTION initTimer("InitializeBlockColumn");
-      {
-          BENCHMARK_SCOPED_TIMER_SECTION initTimer("SetZero");
-          setZeroParallel(eigenMap(diagonal_factor_->values_));
-          setZeroParallel(eigenMap(lower_factor_->values_));
-      }
-      parallel_for_range(num_supernodes, [&](Int supernode) {
-          InitializeBlockColumn(supernode, matrix);
-      });
-  }
-#endif
-
   SparseLDLResult<Field> result;
 
   Buffer<SparseLDLResult<Field>> result_contributions(num_roots);
