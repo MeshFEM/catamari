@@ -14,6 +14,8 @@
 #include "catamari/lapack.hpp"
 
 #include "catamari/dense_factorizations.hpp"
+#include <stdexcept>
+#include <type_traits>
 
 namespace catamari {
 
@@ -22,28 +24,30 @@ Int UnblockedLowerCholeskyFactorization(BlasMatrixView<Field>* matrix) {
   typedef ComplexBase<Field> Real;
   const Int height = matrix->height;
   for (Int i = 0; i < height; ++i) {
-    const Real delta = RealPart(matrix->Entry(i, i));
-    matrix->Entry(i, i) = delta;
+    Field *col_i = matrix->Pointer(0, i);
+    const Real delta = RealPart(col_i[i]);
     if (delta <= Real{0}) {
+      if constexpr (!std::is_same<Real, Field>::value)
+          col_i[i] = delta;
       return i;
     }
 
     // TODO(Jack Poulson): Switch to a custom square-root function so that
     // more general datatypes can be supported.
     const Real delta_sqrt = std::sqrt(delta);
-    matrix->Entry(i, i) = delta_sqrt;
+    col_i[i] = delta_sqrt;
 
     // Solve for the remainder of the i'th column of L.
     for (Int k = i + 1; k < height; ++k) {
-      matrix->Entry(k, i) /= delta_sqrt;
+      col_i[k] /= delta_sqrt;
     }
 
     // Perform the Hermitian rank-one update.
     for (Int j = i + 1; j < height; ++j) {
-      const Field eta = Conjugate(matrix->Entry(j, i));
+      const Field eta = Conjugate(col_i[j]);
+      Field * col_j = matrix->Pointer(0, j);
       for (Int k = j; k < height; ++k) {
-        const Field& lambda_left = matrix->Entry(k, i);
-        matrix->Entry(k, j) -= lambda_left * eta;
+        col_j[k] -= col_i[k] * eta;
       }
     }
   }
@@ -99,7 +103,8 @@ Int UnblockedDynamicallyRegularizedLowerCholeskyFactorization(
   return height;
 }
 
-#ifdef CATAMARI_HAVE_BLAS
+#if 0 // The unblocked versions are only called for matrices so small that the BLAS overhead is not worth it...
+      // TODO(Julian Panetta): experiment with dynamically dispatching to BLAS' `*syr` below...
 template <>
 inline Int UnblockedLowerCholeskyFactorization(BlasMatrixView<float>* matrix) {
   const Int height = matrix->height;
@@ -318,7 +323,17 @@ Int BlockedDynamicallyRegularizedLowerCholeskyFactorization(
 }
 
 template <class Field>
-Int LowerCholeskyFactorization(Int block_size, BlasMatrixView<Field>* matrix) {
+Int LowerCholeskyFactorizationDynamicBLASDispatch(Int block_size, BlasMatrixView<Field>* matrix) {
+  if (matrix->height < block_size / 2)
+      return UnblockedLowerCholeskyFactorization(matrix);
+  return LowerCholeskyFactorization(block_size, matrix);
+}
+
+template <class Field>
+inline Int LowerCholeskyFactorization(Int block_size,
+                                      BlasMatrixView<float>* matrix) {
+  if (matrix->height < 2 * block_size)
+      return UnblockedLowerCholeskyFactorization(matrix);
   return BlockedLowerCholeskyFactorization(block_size, matrix);
 }
 

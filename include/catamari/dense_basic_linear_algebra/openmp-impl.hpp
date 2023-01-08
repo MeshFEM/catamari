@@ -12,6 +12,9 @@
 #include "catamari/macros.hpp"
 
 #include "catamari/dense_basic_linear_algebra.hpp"
+#include "../../../src/lib/MeshFEM/ParallelVectorOps.hh"
+
+#include <tbb/task_group.h>
 
 namespace catamari {
 

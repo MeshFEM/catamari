@@ -8,6 +8,7 @@
 #ifndef CATAMARI_SPARSE_LDL_SUPERNODAL_SUPERNODE_UTILS_IMPL_H_
 #define CATAMARI_SPARSE_LDL_SUPERNODAL_SUPERNODE_UTILS_IMPL_H_
 
+#include "catamari/dense_factorizations/cholesky-impl.hpp"
 #include "catamari/sparse_ldl/supernodal/supernode_utils.hpp"
 
 #include "quotient/index_utils.hpp"
@@ -946,7 +947,7 @@ Int FactorDiagonalBlock(
           block_size, dynamic_reg_params, diagonal_block,
           dynamic_regularization);
     } else {
-      num_pivots = LowerCholeskyFactorization(block_size, diagonal_block);
+      num_pivots = LowerCholeskyFactorizationDynamicBLASDispatch(block_size, diagonal_block);
     }
   } else if (factorization_type == kLDLAdjointFactorization) {
     if (dynamic_reg_params.enabled) {
