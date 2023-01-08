@@ -8,6 +8,7 @@
 #define CATAMARI_SPARSE_LDL_IMPL_H_
 
 #include <memory>
+#include <stdexcept>
 
 #include "catamari/apply_sparse.hpp"
 #include "catamari/blas_matrix.hpp"
@@ -294,7 +295,7 @@ SparseLDLResult<Field> SparseLDL<Field>::RefactorWithFixedSparsityPattern(
 }
 
 template <class Field>
-void SparseLDL<Field>::Solve(BlasMatrixView<Field>* right_hand_sides) const {
+void SparseLDL<Field>::Solve(BlasMatrixView<Field>* right_hand_sides, bool already_permuted) const {
   if (have_equilibration_) {
     // Apply the inverse of the equilibration matrix.
     for (Int j = 0; j < right_hand_sides->width; ++j) {
@@ -304,8 +305,9 @@ void SparseLDL<Field>::Solve(BlasMatrixView<Field>* right_hand_sides) const {
     }
   }
   if (is_supernodal) {
-    supernodal_factorization->Solve(right_hand_sides);
+    supernodal_factorization->Solve(right_hand_sides, already_permuted);
   } else {
+    if (already_permuted) throw std::runtime_error("Unimplemented");
     scalar_factorization->Solve(right_hand_sides);
   }
   if (have_equilibration_) {

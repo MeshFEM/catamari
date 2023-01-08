@@ -187,8 +187,8 @@ SparseLDLResult<Field> Factorization<Field>::RightLooking(
     const CoordinateMatrix<Field>& matrix) {
   typedef ComplexBase<Field> Real;
 
-  const Int max_threads = tbb::this_task_arena::max_concurrency();
-  if (max_threads > 1) {
+  const Int max_threads = get_max_num_tbb_threads();
+  if (true || (max_threads > 1)) { // the tbb implementation is even faster in the single-threaded case...
     return OpenMPRightLooking(matrix);
   }
   const Int num_supernodes = ordering_.supernode_sizes.Size();

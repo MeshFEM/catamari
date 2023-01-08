@@ -9,11 +9,15 @@
 #define CATAMARI_SPARSE_LDL_SUPERNODAL_FACTORIZATION_SOLVE_IMPL_H_
 
 #include <algorithm>
+#include <stdexcept>
 
+#include "MeshFEM/GlobalBenchmark.hh"
+#include <catamari/dense_basic_linear_algebra-impl.hpp>
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/dense_factorizations.hpp"
 
 #include "catamari/sparse_ldl/supernodal/factorization.hpp"
+#include <MeshFEM/Parallelism.hh>
 
 // Avoid repeated memory allocation/deallocation when applying permutations
 // (at the cost of `right_hand_sides` worth of memory).
@@ -24,12 +28,12 @@ namespace supernodal_ldl {
 
 template <class Field>
 void Factorization<Field>::Solve(
-    BlasMatrixView<Field>* right_hand_sides) const {
-  const bool have_permutation = !ordering_.permutation.Empty();
+    BlasMatrixView<Field>* right_hand_sides, bool already_permuted) const {
+  const bool needs_permutation = !(ordering_.permutation.Empty() || already_permuted);
   // Reorder the input into the permutation of the factorization.
 
   BlasMatrixView<Field> permuted_right_hand_sides = *right_hand_sides;
-  if (have_permutation) {
+  if (needs_permutation) {
     BENCHMARK_SCOPED_TIMER_SECTION timer("Permute");
 #if SOLVE_PERMUTE_SCRATCH
     const Int size = right_hand_sides->width * right_hand_sides->height;
@@ -42,7 +46,7 @@ void Factorization<Field>::Solve(
 #endif
   }
 
-  const Int max_threads = tbb::this_task_arena::max_concurrency();
+  const Int max_threads = get_max_num_tbb_threads();
   if (max_threads > 1) {
     const int old_max_threads = GetMaxBlasThreads();
     SetNumBlasThreads(1);
@@ -73,7 +77,6 @@ void Factorization<Field>::Solve(
             for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
                 auto &supernode_rhs = shared_state.schur_complements[supernode];
                 supernode_rhs.height = lower_factor_->blocks[supernode].height;
-                supernode_rhs.width = 0;
                 supernode_rhs.leading_dim = total_degree;
             }
         }
@@ -101,7 +104,7 @@ void Factorization<Field>::Solve(
             }
         }
         else if (num_rhs_changed) {
-            // num_rhs has shrunk, meaning we must update each supernode_rhs.width
+            // num_rhs has shrunk, meaning we just must update each supernode_rhs.width
             for (Int supernode = 0; supernode < num_supernodes; ++supernode)
                 shared_state.schur_complements[supernode].width = num_rhs;
         }
@@ -122,7 +125,7 @@ void Factorization<Field>::Solve(
   }
 
   // Reverse the factorization permutation.
-  if (have_permutation) {
+  if (needs_permutation) {
     BENCHMARK_SCOPED_TIMER_SECTION timer("IPermute");
 #if SOLVE_PERMUTE_SCRATCH
     Permute(ordering_.inverse_permutation, permuted_right_hand_sides, right_hand_sides);
@@ -155,8 +158,8 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
     InversePermute(permutation, &right_hand_sides_supernode);
   }
   if (is_cholesky) {
-    LeftLowerTriangularSolves(triangular_right_hand_sides,
-                              &right_hand_sides_supernode);
+    LeftLowerTriangularSolvesDynamicBLASDispatch(triangular_right_hand_sides,
+                                                 &right_hand_sides_supernode);
   } else {
     LeftLowerUnitTriangularSolves(triangular_right_hand_sides,
                                   &right_hand_sides_supernode);
@@ -170,8 +173,7 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
 
   // Handle the external updates for this supernode.
   const Int* indices = lower_factor_->StructureBeg(supernode);
-  if (supernode_size >=
-      control_.forward_solve_out_of_place_supernode_threshold) {
+  if (supernode_size >= control_.forward_solve_out_of_place_supernode_threshold) {
     // Perform an out-of-place GEMM.
     BlasMatrixView<Field> work_right_hand_sides;
     work_right_hand_sides.height = subdiagonal.height;
@@ -180,26 +182,38 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
     work_right_hand_sides.data = workspace->Data();
 
     // Store the updates in the workspace.
-    MatrixMultiplyNormalNormal(Field{-1}, subdiagonal,
+    MatrixMultiplyNormalNormal(Field{1}, subdiagonal,
                                right_hand_sides_supernode.ToConst(), Field{0},
                                &work_right_hand_sides);
 
     // Accumulate the workspace into the solution right_hand_sides.
     for (Int j = 0; j < num_rhs; ++j) {
+            Field * rhs_ptr = right_hand_sides->Pointer(0, j);
+      const Field *wrhs_ptr = work_right_hand_sides.Pointer(0, j);
       for (Int i = 0; i < subdiagonal.height; ++i) {
-        const Int row = indices[i];
-        right_hand_sides->Entry(row, j) += work_right_hand_sides(i, j);
+        rhs_ptr[indices[i]] -= wrhs_ptr[i];
       }
     }
   } else {
     for (Int j = 0; j < num_rhs; ++j) {
+      const Field *srhs_ptr = right_hand_sides_supernode.Pointer(0, j);
+            Field * rhs_ptr = right_hand_sides->         Pointer(0, j);
+#if 0
       for (Int k = 0; k < supernode_size; ++k) {
-        const Field& eta = right_hand_sides_supernode(k, j);
-        for (Int i = 0; i < subdiagonal.height; ++i) {
-          const Int row = indices[i];
-          right_hand_sides->Entry(row, j) -= subdiagonal(i, k) * eta;
-        }
+        const Field eta = srhs_ptr[k];
+        const Field *subdiag_ptr = subdiagonal.Pointer(0, k);
+        for (Int i = 0; i < subdiagonal.height; ++i)
+          rhs_ptr[indices[i]] -= subdiag_ptr[i] * eta;
       }
+#else
+      // Julian Panetta: this ordering is measurably faster...
+      for (Int i = 0; i < subdiagonal.height; ++i) {
+        Field val = 0;
+        for (Int k = 0; k < supernode_size; ++k)
+          val += subdiagonal(i, k) * srhs_ptr[k];
+        rhs_ptr[indices[i]] -= val;
+      }
+#endif
     }
   }
 }
@@ -225,6 +239,8 @@ void Factorization<Field>::LowerTriangularSolveRecursion(
 template <class Field>
 void Factorization<Field>::LowerTriangularSolve(
     BlasMatrixView<Field>* right_hand_sides) const {
+  BENCHMARK_SCOPED_TIMER_SECTION timer("LowerTriangularSolve");
+
   // Allocate the workspace.
   const Int workspace_size = max_degree_ * right_hand_sides->width;
   Buffer<Field> workspace(workspace_size, Field{0});
@@ -302,8 +318,7 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
       lower_factor_->blocks[supernode];
   if (subdiagonal.height) {
     // Handle the external updates for this supernode.
-    if (supernode_size >=
-        control_.backward_solve_out_of_place_supernode_threshold) {
+    if ((supernode_size >= control_.backward_solve_out_of_place_supernode_threshold)) {
       // Fill the work right_hand_sides.
       for (Int j = 0; j < num_rhs; ++j) {
         Field *wrhs_ptr = work_right_hand_sides. Pointer(0, j);
@@ -325,6 +340,21 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
       for (Int j = 0; j < num_rhs; ++j) {
         const Field * rhs_ptr = right_hand_sides         ->Pointer(0, j);
               Field *srhs_ptr = right_hand_sides_supernode.Pointer(0, j);
+#if 1
+        for (Int k = 0; k < supernode_size; ++k) {
+            const Field *subdiagonal_ptr = subdiagonal.Pointer(0, k);
+            Field val = 0;
+            if (is_selfadjoint) {
+                for (Int i = 0; i < subdiagonal.height; ++i)
+                    val -= Conjugate(subdiagonal_ptr[i]) * rhs_ptr[indices[i]];
+            }
+            else {
+                for (Int i = 0; i < subdiagonal.height; ++i)
+                    val -=           subdiagonal_ptr[i]  * rhs_ptr[indices[i]];
+            }
+            srhs_ptr[k] += val;
+        }
+#else
         for (Int k = 0; k < supernode_size; ++k) {
           const Field *subdiagonal_ptr = subdiagonal.Pointer(0, k);
           for (Int i = 0; i < subdiagonal.height; ++i) {
@@ -336,6 +366,7 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
             }
           }
         }
+#endif
       }
     }
   }
@@ -344,8 +375,7 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
   const ConstBlasMatrixView<Field> triangular_right_hand_sides =
       diagonal_factor_->blocks[supernode];
   if (control_.factorization_type == kCholeskyFactorization) {
-    LeftLowerAdjointTriangularSolves(triangular_right_hand_sides,
-                                     &right_hand_sides_supernode);
+    LeftLowerAdjointTriangularSolvesDynamicBLASDispatch(triangular_right_hand_sides, &right_hand_sides_supernode);
   } else if (control_.factorization_type == kLDLAdjointFactorization) {
     LeftLowerAdjointUnitTriangularSolves(triangular_right_hand_sides,
                                          &right_hand_sides_supernode);
@@ -383,6 +413,8 @@ void Factorization<Field>::LowerTransposeTriangularSolveRecursion(
 template <class Field>
 void Factorization<Field>::LowerTransposeTriangularSolve(
     BlasMatrixView<Field>* right_hand_sides) const {
+  BENCHMARK_SCOPED_TIMER_SECTION timer("LowerTransposeTriangularSolve");
+
   // Allocate the workspace.
   const Int workspace_size = max_degree_ * right_hand_sides->width;
   Buffer<Field> packed_input_buf(workspace_size);

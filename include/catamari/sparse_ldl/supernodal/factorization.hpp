@@ -14,6 +14,7 @@
 #include "catamari/sparse_ldl/supernodal/lower_factor.hpp"
 #include "catamari/sparse_ldl/supernodal/supernode_utils.hpp"
 #include <tbb/task_group.h>
+#include <stdexcept>
 
 #ifdef CATAMARI_ENABLE_TIMERS
 #include "quotient/timer.hpp"
@@ -27,6 +28,7 @@ namespace catamari {
 
 template<class Field>
 auto eigenMap(BlasMatrixView<Field> &bm) {
+    if (bm.leading_dim != bm.height) throw std::runtime_error("fail!");
     return Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, Eigen::Dynamic>>(bm.Data(), bm.height, bm.width);
 }
 
@@ -37,6 +39,7 @@ auto eigenMap(Buffer<Field> &b) {
 
 template<class Field>
 auto eigenMap(const ConstBlasMatrixView<Field> &bm) {
+    if (bm.leading_dim != bm.height) throw std::runtime_error("fail!");
     return Eigen::Map<const Eigen::Matrix<Field, Eigen::Dynamic, Eigen::Dynamic>>(bm.Data(), bm.height, bm.width);
 }
 template<class Field>
@@ -72,7 +75,7 @@ struct Control {
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.
-  Int backward_solve_out_of_place_supernode_threshold = 10;
+  Int backward_solve_out_of_place_supernode_threshold = 8;
 
   // The algorithmic block size for the factorization.
   Int block_size = 64;
@@ -247,7 +250,7 @@ class Factorization {
   Int NumRows() const;
 
   // Solve a set of linear systems using the factorization.
-  void Solve(BlasMatrixView<Field>* right_hand_sides) const;
+  void Solve(BlasMatrixView<Field>* right_hand_sides, bool already_permuted = false) const;
 
   // Solves a set of linear systems using the lower-triangular factor.
   void LowerTriangularSolve(BlasMatrixView<Field>* right_hand_sides) const;

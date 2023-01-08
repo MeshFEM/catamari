@@ -9,7 +9,9 @@
 #define CATAMARI_SPARSE_LDL_SUPERNODAL_FACTORIZATION_SOLVE_OPENMP_IMPL_H_
 
 #include <algorithm>
+#include <catamari/dense_basic_linear_algebra-impl.hpp>
 #include <queue>
+#include <stdexcept>
 
 #include <tbb/task_group.h>
 
@@ -46,8 +48,8 @@ void Factorization<Field>::OpenMPLowerSupernodalTrapezoidalSolve(
     InversePermute(permutation, &right_hand_sides_supernode);
   }
   if (is_cholesky) {
-    LeftLowerTriangularSolves(triangular_right_hand_sides,
-                              &right_hand_sides_supernode);
+    LeftLowerTriangularSolvesDynamicBLASDispatch(triangular_right_hand_sides,
+                                                 &right_hand_sides_supernode);
   } else {
     LeftLowerUnitTriangularSolves(triangular_right_hand_sides,
                                   &right_hand_sides_supernode);
@@ -60,13 +62,30 @@ void Factorization<Field>::OpenMPLowerSupernodalTrapezoidalSolve(
   }
 
   // Store the updates in the workspace.
-#if 1
-  MatrixMultiplyNormalNormal(Field{-1}, subdiagonal,
-                             right_hand_sides_supernode.ToConst(), Field{1},
-                             supernode_schur_complement);
+  if (true) {
+      MatrixMultiplyNormalNormal(Field{-1}, subdiagonal,
+                                 right_hand_sides_supernode.ToConst(), Field{1},
+                                 supernode_schur_complement);
+  }
+  else {
+#if 0
+    eigenMap(*supernode_schur_complement).noalias() -= eigenMap(subdiagonal) * eigenMap(right_hand_sides_supernode);
 #else
-  eigenMap(*supernode_schur_complement).noalias() -= eigenMap(subdiagonal) * eigenMap(right_hand_sides_supernode);
+    const Int output_height    = supernode_schur_complement->height;
+    const Int output_width     = supernode_schur_complement->width;
+    const Int contraction_size = subdiagonal.width;
+    for (Int j = 0; j < output_width; ++j) {
+        Field *out_col = supernode_schur_complement->Pointer(0, j);
+        const Field *right_col = right_hand_sides_supernode.Pointer(0, j);
+        for (Int i = 0; i < output_height; ++i) {
+            Field output_entry = out_col[i];
+            for (Int k = 0; k < contraction_size; ++k)
+                output_entry -= subdiagonal(i, k) * right_col[k];
+            out_col[i] = output_entry;
+        }
+    }
 #endif
+  }
 }
 
 template <class Field>
@@ -104,7 +123,11 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
   const Int num_rhs = right_hand_sides->width;
 
   BlasMatrixView<Field>& main_right_hand_sides = shared_state->schur_complements[supernode];
-  eigenMap(main_right_hand_sides).setZero();
+  // eigenMap(main_right_hand_sides).setZero(); // <----- this doesn't account for the stride/height mismatch in main_right_hand_sides!!!!!
+  for (Int j = 0; j < num_rhs; ++j) {
+    for (Int i = 0; i < main_right_hand_sides.height; ++i)
+        main_right_hand_sides(i, j) = 0;
+  }
 
   auto &ncdi = ordering_.assembly_forest.num_child_diag_indices;
   auto  &cri = ordering_.assembly_forest.child_rel_indices;

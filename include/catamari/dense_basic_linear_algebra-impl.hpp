@@ -8,6 +8,7 @@
 #ifndef CATAMARI_DENSE_BASIC_LINEAR_ALGEBRA_IMPL_H_
 #define CATAMARI_DENSE_BASIC_LINEAR_ALGEBRA_IMPL_H_
 
+#include <stdexcept>
 #include "catamari/blas.hpp"
 #include "catamari/macros.hpp"
 
@@ -662,6 +663,50 @@ inline void TriangularSolveLeftUpper(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
+void MatrixMultiplyNormalNormalDynamicBLASDispatch(const Field& alpha,
+                                const ConstBlasMatrixView<Field>& left_matrix,
+                                const ConstBlasMatrixView<Field>& right_matrix,
+                                const Field& beta,
+                                BlasMatrixView<Field>* output_matrix) {
+#ifdef CATAMARI_HAVE_BLAS
+    if (left_matrix.height > 15) // only use BLAS call for large enough matrices
+        return MatrixMultiplyNormalNormal(alpha, left_matrix, right_matrix, beta, output_matrix);
+#endif
+    CATAMARI_ASSERT( left_matrix.height == output_matrix->height, "Output height was incompatible");
+    CATAMARI_ASSERT(right_matrix. width == output_matrix->width,  "Output width was incompatible");
+    CATAMARI_ASSERT( left_matrix. width ==  right_matrix.height,  "Contraction dimensions were incompatible.");
+    const Int output_height    = output_matrix->height;
+    const Int output_width     = output_matrix->width;
+    const Int contraction_size = left_matrix.width;
+    if (alpha == Field(-1)) {
+        for (Int j = 0; j < output_width; ++j) {
+            Field *out_col = output_matrix->Pointer(0, j);
+            const Field *right_col = right_matrix.Pointer(0, j);
+            for (Int i = 0; i < output_height; ++i) {
+                Field output_entry = out_col[i] * beta;
+                for (Int k = 0; k < contraction_size; ++k) {
+                    output_entry -= left_matrix(i, k) * right_col[k];
+                }
+                out_col[i] = output_entry;
+            }
+        }
+    }
+    else {
+        for (Int j = 0; j < output_width; ++j) {
+            Field *out_col = output_matrix->Pointer(0, j);
+            const Field *right_col = right_matrix.Pointer(0, j);
+            for (Int i = 0; i < output_height; ++i) {
+                Field output_entry = out_col[i] * beta;
+                for (Int k = 0; k < contraction_size; ++k) {
+                    output_entry += alpha * left_matrix(i, k) * right_col[k];
+                }
+                out_col[i] = output_entry;
+            }
+        }
+    }
+}
+
+template <class Field>
 void MatrixMultiplyNormalNormal(const Field& alpha,
                                 const ConstBlasMatrixView<Field>& left_matrix,
                                 const ConstBlasMatrixView<Field>& right_matrix,
@@ -1267,21 +1312,58 @@ inline void MatrixMultiplyAdjointNormal(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
+void LowerNormalHermitianOuterProductDynamicBLASDispatch(
+    const ComplexBase<Field>& alpha,
+    const ConstBlasMatrixView<Field>& left_matrix,
+    const ComplexBase<Field>& beta, BlasMatrixView<Field>* output_matrix) {
+  const Int output_height = output_matrix->height;
+  const Int contraction_size = left_matrix.width;
+
+#ifdef CATAMARI_HAVE_BLAS
+    if ((output_height > 2) && (contraction_size > 3)) // only use BLAS call for large enough jobs
+        return LowerNormalHermitianOuterProduct(alpha, left_matrix, beta, output_matrix);
+#endif
+  // throw std::runtime_error("small");
+
+  if (beta != Field(1)) {
+      for (Int j = 0; j < output_height; ++j)
+        for (Int i = j; i < output_height; ++i)
+            output_matrix->Entry(i, j) *= beta;
+  }
+  for (Int k = 0; k < contraction_size; ++k) {
+      const Field *col_k = left_matrix.Pointer(0, k);
+      for (Int j = 0; j < output_height; ++j) {
+          Field alpha_l_jk = alpha * col_k[j];
+          Field *out_col = output_matrix->Pointer(0, j);
+          for (Int i = j; i < output_height; ++i) {
+              out_col[i] += alpha_l_jk * col_k[i];
+          }
+      }
+  }
+}
+
+template <class Field>
 void LowerNormalHermitianOuterProduct(
     const ComplexBase<Field>& alpha,
     const ConstBlasMatrixView<Field>& left_matrix,
     const ComplexBase<Field>& beta, BlasMatrixView<Field>* output_matrix) {
   const Int output_height = output_matrix->height;
   const Int contraction_size = left_matrix.width;
-  for (Int j = 0; j < output_height; ++j) {
-    for (Int i = j; i < output_height; ++i) {
-      Field& output_entry = output_matrix->Entry(i, j);
-      output_entry *= beta;
-      for (Int k = 0; k < contraction_size; ++k) {
-        output_entry +=
-            alpha * left_matrix(i, k) * Conjugate(left_matrix(j, k));
+
+  if (beta != Field(1)) {
+      for (Int j = 0; j < output_height; ++j)
+        for (Int i = j; i < output_height; ++i)
+            output_matrix->Entry(i, j) *= beta;
+  }
+  for (Int k = 0; k < contraction_size; ++k) {
+      const Field *col_k = left_matrix.Pointer(0, k);
+      for (Int j = 0; j < output_height; ++j) {
+          Field alpha_l_jk = alpha * col_k[j];
+          Field *out_col = output_matrix->Pointer(0, j);
+          for (Int i = j; i < output_height; ++i) {
+              out_col[i] += alpha_l_jk * col_k[i];
+          }
       }
-    }
   }
 }
 
@@ -1876,6 +1958,33 @@ inline void MatrixMultiplyLowerTransposeNormal(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
+void LeftLowerTriangularSolvesDynamicBLASDispatch(
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
+  CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                      triangular_matrix.height == matrix->height,
+                  "Incompatible matrix dimensions");
+
+#ifdef CATAMARI_HAVE_BLAS
+    if (triangular_matrix.height > 5) // only use BLAS call for large enough matrices
+        return LeftLowerTriangularSolves(triangular_matrix, matrix);
+#endif
+
+  const Int width = matrix->width;
+  for (Int j = 0; j < width; ++j) {
+    Field* input_column = matrix->Pointer(0, j);
+
+    // Interleave with a subsequent solve against D.
+    for (Int i = 0; i < triangular_matrix.height; ++i) {
+      const Field* l_column = triangular_matrix.Pointer(0, i);
+      Field val = (input_column[i] /= l_column[i]);
+      for (Int k = i + 1; k < triangular_matrix.height; ++k)
+        input_column[k] -= l_column[k] * val;
+    }
+  }
+}
+
+template <class Field>
 void LeftLowerTriangularSolves(
     const ConstBlasMatrixView<Field>& triangular_matrix,
     BlasMatrixView<Field>* matrix) {
@@ -1889,10 +1998,9 @@ void LeftLowerTriangularSolves(
     // Interleave with a subsequent solve against D.
     for (Int i = 0; i < triangular_matrix.height; ++i) {
       const Field* l_column = triangular_matrix.Pointer(0, i);
-      input_column[i] /= l_column[i];
-      for (Int k = i + 1; k < triangular_matrix.height; ++k) {
-        input_column[k] -= l_column[k] * input_column[i];
-      }
+      Field val = (input_column[i] /= l_column[i]);
+      for (Int k = i + 1; k < triangular_matrix.height; ++k)
+        input_column[k] -= l_column[k] * val;
     }
   }
 }
@@ -2115,6 +2223,32 @@ inline void LeftLowerUnitTriangularSolves(
 #endif  // ifdef CATAMARI_HAVE_BLAS
 
 template <class Field>
+void LeftLowerAdjointTriangularSolvesDynamicBLASDispatch(
+    const ConstBlasMatrixView<Field>& triangular_matrix,
+    BlasMatrixView<Field>* matrix) {
+    CATAMARI_ASSERT(triangular_matrix.height == triangular_matrix.width &&
+                    triangular_matrix.height == matrix->height,
+                    "Incompatible matrix dimensions");
+#ifdef CATAMARI_HAVE_BLAS
+    if (triangular_matrix.height > 5) // only use BLAS call for large enough matrices
+        return LeftLowerAdjointTriangularSolves(triangular_matrix, matrix);
+#endif
+
+    const Int width = matrix->width;
+    for (Int j = 0; j < width; ++j) {
+        Field *matrix_col_j = matrix->Pointer(0, j);
+        for (Int k = triangular_matrix.height - 1; k >= 0; --k) {
+            const Field* tri_col = triangular_matrix.Pointer(0, k);
+            Field eta = matrix_col_j[k];
+            for (Int i = k + 1; i < triangular_matrix.height; ++i)
+                eta -= Conjugate(tri_col[i]) * matrix_col_j[i];
+            eta /= Conjugate(tri_col[k]);
+            matrix_col_j[k] = eta;
+        }
+    }
+}
+
+template <class Field>
 void LeftLowerAdjointTriangularSolves(
     const ConstBlasMatrixView<Field>& triangular_matrix,
     BlasMatrixView<Field>* matrix) {
@@ -2123,13 +2257,15 @@ void LeftLowerAdjointTriangularSolves(
                   "Incompatible matrix dimensions");
   const Int width = matrix->width;
   for (Int j = 0; j < width; ++j) {
+    const Field *matrix_col_j = matrix->Pointer(0, j);
     for (Int k = triangular_matrix.height - 1; k >= 0; --k) {
-      const Field* triang_column = triangular_matrix.Pointer(0, k);
-      Field& eta = matrix->Entry(k, j);
+      const Field* tri_col = triangular_matrix.Pointer(0, k);
+      Field eta = matrix->Entry(k, j);
       for (Int i = k + 1; i < triangular_matrix.height; ++i) {
-        eta -= Conjugate(triang_column[i]) * matrix->Entry(i, j);
+        eta -= Conjugate(tri_col[i]) * matrix_col_j[i];
       }
-      eta /= Conjugate(triang_column[k]);
+      eta /= Conjugate(tri_col[k]);
+      matrix->Entry(k, j) = eta;
     }
   }
 }

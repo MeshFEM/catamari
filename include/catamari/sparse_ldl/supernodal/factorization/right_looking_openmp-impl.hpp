@@ -122,17 +122,9 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
                             diagonal_block.ToConst(), &lower_block);
 
   if (control_.factorization_type == kCholeskyFactorization) {
-     // This appears to always be *slightly* worth parallelizing...
-#if 0
-    // Note: does its own #paragma omp taskgroup...
-    OpenMPLowerNormalHermitianOuterProduct(control_.outer_product_tile_size,
-                                           Real{-1}, lower_block.ToConst(),
-                                           Real{1}, &schur_complement);
-#else
-    LowerNormalHermitianOuterProduct(
+    LowerNormalHermitianOuterProductDynamicBLASDispatch(
                                      Real{-1}, lower_block.ToConst(),
                                      Real{1}, &schur_complement);
-#endif
   } else {
     const int thread = tbb::task_arena::current_thread_index(); // TODO(Julian Panetta): switch to thread-local storage
     PrivateState<Field> &private_state = (*private_states)[thread];
@@ -283,7 +275,7 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
                                                : &ordering_.inverse_permutation;
 
   // const Int max_threads = omp_get_max_threads();
-  const Int max_threads = tbb::this_task_arena::max_concurrency();
+  const Int max_threads = get_max_num_tbb_threads();
   Buffer<PrivateState<Field>> private_states(max_threads);
   if (control_.factorization_type != kCholeskyFactorization) {
     const Int workspace_size = max_lower_block_size_;
