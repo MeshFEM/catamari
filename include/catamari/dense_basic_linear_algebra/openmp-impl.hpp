@@ -7,7 +7,6 @@
  */
 #ifndef CATAMARI_DENSE_BASIC_LINEAR_ALGEBRA_OPENMP_IMPL_H_
 #define CATAMARI_DENSE_BASIC_LINEAR_ALGEBRA_OPENMP_IMPL_H_
-#ifdef CATAMARI_OPENMP
 
 #include "catamari/blas.hpp"
 #include "catamari/macros.hpp"
@@ -80,35 +79,30 @@ void OpenMPLowerNormalHermitianOuterProduct(
   const Real beta_copy = beta;
   const ConstBlasMatrixView<Field> left_matrix_copy = left_matrix;
 
-  #pragma omp taskgroup
+  tbb::task_group tg;
   for (Int j = 0; j < height; j += tile_size) {
-    #pragma omp task default(none)                                                \
-        firstprivate(tile_size, j, height, rank, left_matrix_copy, output_matrix, \
-            alpha_copy, beta_copy)
-    {
-      const Int tsize = std::min(height - j, tile_size);
-      const ConstBlasMatrixView<Field> column_block = left_matrix_copy.Submatrix(j, 0, tsize, rank);
-      BlasMatrixView<Field> output_block            =   output_matrix->Submatrix(j, j, tsize, tsize);
-      LowerNormalHermitianOuterProduct(alpha_copy, column_block, beta_copy, &output_block);
-    }
+    tg.run([tile_size, j, height, rank, &left_matrix_copy, &output_matrix, alpha_copy, beta_copy]()
+        {
+          const Int tsize = std::min(height - j, tile_size);
+          const ConstBlasMatrixView<Field> column_block = left_matrix_copy.Submatrix(j, 0, tsize, rank);
+          BlasMatrixView<Field> output_block            =   output_matrix->Submatrix(j, j, tsize, tsize);
+          LowerNormalHermitianOuterProductDynamicBLASDispatch(alpha_copy, column_block, beta_copy, &output_block);
+        });
 
     for (Int i = j + tile_size; i < height; i += tile_size) {
-      #pragma omp task default(none)                                                   \
-          firstprivate(tile_size, i, j, height, rank, left_matrix_copy, output_matrix, \
-              alpha_copy, beta_copy)
-      {
+      tg.run([tile_size, i, j, height, rank, &left_matrix_copy, &output_matrix, alpha_copy, beta_copy]() {
         const Int   row_tsize  = std::min(height - i, tile_size);
         const Int column_tsize = std::min(height - j, tile_size);
         const ConstBlasMatrixView<Field> row_block    = left_matrix_copy.Submatrix(i, 0,    row_tsize, rank);
         const ConstBlasMatrixView<Field> column_block = left_matrix_copy.Submatrix(j, 0, column_tsize, rank);
         BlasMatrixView<Field>            output_block = output_matrix->  Submatrix(i, j, row_tsize, column_tsize);
         MatrixMultiplyNormalAdjoint(Field{alpha_copy}, row_block, column_block, Field{beta_copy}, &output_block);
-      }
+      });
     }
   }
+  tg.wait();
 }
 
 }  // namespace catamari
 
-#endif  // ifdef CATAMARI_OPENMP
 #endif  // ifndef CATAMARI_DENSE_BASIC_LINEAR_ALGEBRA_OPENMP_IMPL_H_

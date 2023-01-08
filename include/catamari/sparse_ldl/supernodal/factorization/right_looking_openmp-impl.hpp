@@ -125,6 +125,9 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     LowerNormalHermitianOuterProductDynamicBLASDispatch(
                                      Real{-1}, lower_block.ToConst(),
                                      Real{1}, &schur_complement);
+    // OpenMPLowerNormalHermitianOuterProduct(control_.factor_tile_size,
+    //                                  Real{-1}, lower_block.ToConst(),
+    //                                  Real{1}, &schur_complement);
   } else {
     const int thread = tbb::task_arena::current_thread_index(); // TODO(Julian Panetta): switch to thread-local storage
     PrivateState<Field> &private_state = (*private_states)[thread];
