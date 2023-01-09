@@ -1320,10 +1320,10 @@ void LowerNormalHermitianOuterProductDynamicBLASDispatch(
   const Int contraction_size = left_matrix.width;
 
 #ifdef CATAMARI_HAVE_BLAS
-    if ((output_height > 2) && (contraction_size > 3)) // only use BLAS call for large enough jobs
+    if (output_height > 100 || contraction_size > 40) // only use BLAS call for large jobs
         return LowerNormalHermitianOuterProduct(alpha, left_matrix, beta, output_matrix);
 #endif
-  // throw std::runtime_error("small");
+  using EVec = Eigen::Matrix<Field, Eigen::Dynamic, 1>;
 
   if (beta != Field(1)) {
       for (Int j = 0; j < output_height; ++j)
@@ -1334,10 +1334,16 @@ void LowerNormalHermitianOuterProductDynamicBLASDispatch(
       const Field *col_k = left_matrix.Pointer(0, k);
       for (Int j = 0; j < output_height; ++j) {
           Field alpha_l_jk = alpha * col_k[j];
+#if 0
+          // Eigen version seems slower...
+          const Int len = output_height - j;
+          Eigen::Map<EVec>(output_matrix->Pointer(j, j), len) += alpha_l_jk * Eigen::Map<const EVec>(col_k + j, len);
+#else
           Field *out_col = output_matrix->Pointer(0, j);
           for (Int i = j; i < output_height; ++i) {
               out_col[i] += alpha_l_jk * col_k[i];
           }
+#endif
       }
   }
 }

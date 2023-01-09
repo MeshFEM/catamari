@@ -71,7 +71,7 @@ struct Control {
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.
-  Int forward_solve_out_of_place_supernode_threshold = 10;
+  Int forward_solve_out_of_place_supernode_threshold = 20;
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.

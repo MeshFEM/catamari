@@ -11,7 +11,8 @@
 #include <algorithm>
 #include <stdexcept>
 
-#include "MeshFEM/GlobalBenchmark.hh"
+#include <MeshFEM/GlobalBenchmark.hh>
+#include <MeshFEM/Types.hh>
 #include <catamari/dense_basic_linear_algebra-impl.hpp>
 #include "catamari/dense_basic_linear_algebra.hpp"
 #include "catamari/dense_factorizations.hpp"
@@ -207,12 +208,49 @@ void Factorization<Field>::LowerSupernodalTrapezoidalSolve(
       }
 #else
       // Julian Panetta: this ordering is measurably faster...
-      for (Int i = 0; i < subdiagonal.height; ++i) {
-        Field val = 0;
-        for (Int k = 0; k < supernode_size; ++k)
-          val += subdiagonal(i, k) * srhs_ptr[k];
-        rhs_ptr[indices[i]] -= val;
+      //  for (Int i = 0; i < subdiagonal.height; ++i) {
+      //     Field val = 0;
+      //     for (Int k = 0; k < supernode_size; ++k)
+      //       val += subdiagonal(i, k) * srhs_ptr[k];
+      //     rhs_ptr[indices[i]] -= val;
+      //  }
+
+#if 1
+      constexpr Int CHUNK_SIZE = 4;
+      using Vec = VecN_T<Field, CHUNK_SIZE>;
+      Int i;
+      for (i = 0; i <= subdiagonal.height - CHUNK_SIZE; i += CHUNK_SIZE) {
+         Vec val = Eigen::Map<const Vec>(subdiagonal.Pointer(i, 0)) * srhs_ptr[0];
+         for (Int k = 1; k < supernode_size; ++k)
+             val += Eigen::Map<const Vec>(subdiagonal.Pointer(i, k)) * srhs_ptr[k];
+         rhs_ptr[indices[i + 0]] -= val[0];
+         rhs_ptr[indices[i + 1]] -= val[1];
+         rhs_ptr[indices[i + 2]] -= val[2];
+         rhs_ptr[indices[i + 3]] -= val[3];
+         // rhs_ptr[indices[i + 4]] -= val[4];
+         // rhs_ptr[indices[i + 5]] -= val[5];
+         // rhs_ptr[indices[i + 6]] -= val[6];
+         // rhs_ptr[indices[i + 7]] -= val[7];
       }
+      for (; i < subdiagonal.height; ++i) {
+         Field val = subdiagonal(i, 0) * srhs_ptr[0];
+         for (Int k = 1; k < supernode_size; ++k)
+             val += subdiagonal(i, k) * srhs_ptr[k];
+         rhs_ptr[indices[i]] -= val;
+      }
+#else
+      const Field *subd_ptr_base = subdiagonal.data;
+      for (Int i = 0; i < subdiagonal.height; ++i) {
+        const Field *subd_ptr = subd_ptr_base;
+        Field val = (*subd_ptr) * srhs_ptr[0];
+        for (Int k = 1; k < supernode_size; ++k) {
+          subd_ptr += subdiagonal.leading_dim;
+          val += (*subd_ptr) * srhs_ptr[k];
+        }
+        rhs_ptr[indices[i]] -= val;
+        ++subd_ptr_base;
+      }
+#endif
 #endif
     }
   }
@@ -343,16 +381,18 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
 #if 1
         for (Int k = 0; k < supernode_size; ++k) {
             const Field *subdiagonal_ptr = subdiagonal.Pointer(0, k);
-            Field val = 0;
+            Field val;
             if (is_selfadjoint) {
-                for (Int i = 0; i < subdiagonal.height; ++i)
-                    val -= Conjugate(subdiagonal_ptr[i]) * rhs_ptr[indices[i]];
+                val = Conjugate(subdiagonal_ptr[0]) * rhs_ptr[indices[0]];
+                for (Int i = 1; i < subdiagonal.height; ++i)
+                    val += Conjugate(subdiagonal_ptr[i]) * rhs_ptr[indices[i]];
             }
             else {
-                for (Int i = 0; i < subdiagonal.height; ++i)
-                    val -=           subdiagonal_ptr[i]  * rhs_ptr[indices[i]];
+                val = subdiagonal_ptr[0] * rhs_ptr[indices[0]];
+                for (Int i = 1; i < subdiagonal.height; ++i)
+                    val +=           subdiagonal_ptr[i]  * rhs_ptr[indices[i]];
             }
-            srhs_ptr[k] += val;
+            srhs_ptr[k] -= val;
         }
 #else
         for (Int k = 0; k < supernode_size; ++k) {
