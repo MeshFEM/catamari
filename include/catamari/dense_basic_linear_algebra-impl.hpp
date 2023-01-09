@@ -1320,7 +1320,12 @@ void LowerNormalHermitianOuterProductDynamicBLASDispatch(
   const Int contraction_size = left_matrix.width;
 
 #ifdef CATAMARI_HAVE_BLAS
-    if (output_height > 100 || contraction_size > 40) // only use BLAS call for large jobs
+    // Only use BLAS call for large jobs
+#ifdef DARWIN
+    if (output_height * output_height * contraction_size > 200000)
+#else
+    if (output_height * output_height * contraction_size > 5000)
+#endif
         return LowerNormalHermitianOuterProduct(alpha, left_matrix, beta, output_matrix);
 #endif
   using EVec = Eigen::Matrix<Field, Eigen::Dynamic, 1>;
