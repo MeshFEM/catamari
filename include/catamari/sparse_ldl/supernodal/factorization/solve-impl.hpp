@@ -352,11 +352,11 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
   BlasMatrixView<Field> right_hand_sides_supernode =
       right_hand_sides->Submatrix(supernode_start, 0, supernode_size, num_rhs);
 
-  const ConstBlasMatrixView<Field> subdiagonal =
+  const ConstBlasMatrixView<Field> & subdiagonal =
       lower_factor_->blocks[supernode];
   if (subdiagonal.height) {
     // Handle the external updates for this supernode.
-    if ((supernode_size >= control_.backward_solve_out_of_place_supernode_threshold)) {
+    if (supernode_size >= control_.backward_solve_out_of_place_supernode_threshold) {
       // Fill the work right_hand_sides.
       for (Int j = 0; j < num_rhs; ++j) {
         Field *wrhs_ptr = work_right_hand_sides. Pointer(0, j);
@@ -376,23 +376,50 @@ void Factorization<Field>::LowerTransposeSupernodalTrapezoidalSolve(
       }
     } else {
       for (Int j = 0; j < num_rhs; ++j) {
-        const Field * rhs_ptr = right_hand_sides         ->Pointer(0, j);
-              Field *srhs_ptr = right_hand_sides_supernode.Pointer(0, j);
+        const Field * const  rhs_ptr = right_hand_sides         ->Pointer(0, j);
+              Field * const srhs_ptr = right_hand_sides_supernode.Pointer(0, j);
 #if 1
-        for (Int k = 0; k < supernode_size; ++k) {
-            const Field *subdiagonal_ptr = subdiagonal.Pointer(0, k);
-            Field val;
-            if (is_selfadjoint) {
-                val = Conjugate(subdiagonal_ptr[0]) * rhs_ptr[indices[0]];
-                for (Int i = 1; i < subdiagonal.height; ++i)
-                    val += Conjugate(subdiagonal_ptr[i]) * rhs_ptr[indices[i]];
+        if (is_selfadjoint) {
+            constexpr Int CHUNK_SIZE = 6;
+            using Vec = VecN_T<Field, CHUNK_SIZE>;
+            Int k;
+            for (k = 0; k <= supernode_size - CHUNK_SIZE; k += CHUNK_SIZE) {
+              Vec val = rhs_ptr[indices[0]] * Eigen::Map<const Vec, 0, Eigen::InnerStride<>>(subdiagonal.Pointer(0, k), Eigen::InnerStride<>(subdiagonal.leading_dim)).conjugate();
+              const Field *subdiagonal_ptr = subdiagonal.Pointer(0, k);
+              for (Int i = 1; i < subdiagonal.height; ++i) {
+                Vec c = Eigen::Map<const Vec, 0, Eigen::InnerStride<>>(subdiagonal.Pointer(i, k), Eigen::InnerStride<>(subdiagonal.leading_dim)).conjugate();
+                val += rhs_ptr[indices[i]] * c;
+              }
+              Eigen::Map<Vec>(srhs_ptr + k) -= val;
             }
-            else {
-                val = subdiagonal_ptr[0] * rhs_ptr[indices[0]];
-                for (Int i = 1; i < subdiagonal.height; ++i)
-                    val +=           subdiagonal_ptr[i]  * rhs_ptr[indices[i]];
+            for (; k < supernode_size; ++k) {
+              Field val = 0;
+              for (Int i = 0; i < subdiagonal.height; ++i) {
+                val += Conjugate(subdiagonal(i, k)) * rhs_ptr[indices[i]];
+              }
+              srhs_ptr[k] -= val;
             }
-            srhs_ptr[k] -= val;
+        }
+        else {
+            constexpr Int CHUNK_SIZE = 6;
+            using Vec = VecN_T<Field, CHUNK_SIZE>;
+            Int k;
+            for (k = 0; k <= supernode_size - CHUNK_SIZE; k += CHUNK_SIZE) {
+              Vec val = rhs_ptr[indices[0]] * Eigen::Map<const Vec, 0, Eigen::InnerStride<>>(subdiagonal.Pointer(0, k), Eigen::InnerStride<>(subdiagonal.leading_dim));
+              const Field *subdiagonal_ptr = subdiagonal.Pointer(0, k);
+              for (Int i = 1; i < subdiagonal.height; ++i) {
+                Vec c = Eigen::Map<const Vec, 0, Eigen::InnerStride<>>(subdiagonal.Pointer(i, k), Eigen::InnerStride<>(subdiagonal.leading_dim));
+                val += rhs_ptr[indices[i]] * c;
+              }
+              Eigen::Map<Vec>(srhs_ptr + k) -= val;
+            }
+            for (; k < supernode_size; ++k) {
+              Field val = 0;
+              for (Int i = 0; i < subdiagonal.height; ++i) {
+                val += subdiagonal(i, k) * rhs_ptr[indices[i]];
+              }
+              srhs_ptr[k] -= val;
+            }
         }
 #else
         for (Int k = 0; k < supernode_size; ++k) {

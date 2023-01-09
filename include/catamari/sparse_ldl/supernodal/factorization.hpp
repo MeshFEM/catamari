@@ -75,7 +75,7 @@ struct Control {
 
   // The minimal supernode size for an out-of-place trapezoidal solve to be
   // used.
-  Int backward_solve_out_of_place_supernode_threshold = 8;
+  Int backward_solve_out_of_place_supernode_threshold = 30;
 
   // The algorithmic block size for the factorization.
   Int block_size = 64;

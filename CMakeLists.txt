@@ -13,7 +13,6 @@ set(BLA_VENDOR Intel10_64_dyn)
 endif()
 
 find_package(BLAS REQUIRED)
-find_package(OpenMP QUIET)
 
 if (NOT TARGET catamari)
     add_library(catamari INTERFACE)
@@ -32,13 +31,6 @@ if (NOT TARGET catamari)
     target_include_directories(catamari SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/subprojects/mantis/include)
     target_include_directories(catamari SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/subprojects/specify/include)
     set_target_properties(catamari PROPERTIES INTERFACE_COMPILE_FEATURES cxx_std_14)
-
-    if (OpenMP_CXX_FOUND)
-        target_link_libraries(catamari INTERFACE OpenMP::OpenMP_CXX)
-        message("OpenMP found")
-    else()
-        message("OpenMP NOT found")
-    endif()
 
     # trigger meson to download the subprojects
     message("running meson in ${CMAKE_CURRENT_SOURCE_DIR}")
