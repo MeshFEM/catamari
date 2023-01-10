@@ -22,9 +22,11 @@ namespace catamari {
 
 template <class Field>
 SparseLDL<Field>::SparseLDL() {
-  // Avoid the potential for order-of-magnitude performance degradation from
-  // slow subnormal processing.
-  EnableFlushToZero();
+  // Julian Panetta: we now apply the floating point settings only to the
+  // methods that we call (prevent Catmari from changing the behavior of user's code).
+  // // Avoid the potential for order-of-magnitude performance degradation from
+  // // slow subnormal processing.
+  // EnableFlushToZero();
 }
 
 template <class Field>
@@ -33,6 +35,8 @@ SparseLDLResult<Field> SparseLDL<Field>::Factor(
     const SparseLDLControl<Field>& control) {
   scalar_factorization.reset();
   supernodal_factorization.reset();
+
+  ScopedEnableFlushToZero scope_guard;
 
 #ifdef CATAMARI_ENABLE_TIMERS
   quotient::Timer timer;
@@ -130,6 +134,7 @@ template <class Field>
 SparseLDLResult<Field> SparseLDL<Field>::Factor(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
     const SparseLDLControl<Field>& control) {
+  ScopedEnableFlushToZero scope_guard;
   scalar_factorization.reset();
   supernodal_factorization.reset();
 
@@ -221,6 +226,7 @@ void SparseLDL<Field>::DynamicRegularizationDiagonal(
 template <class Field>
 SparseLDLResult<Field> SparseLDL<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix) {
+  ScopedEnableFlushToZero scope_guard;
   typedef ComplexBase<Field> Real;
 
   // Optionally equilibrate the matrix.
@@ -259,6 +265,7 @@ SparseLDLResult<Field> SparseLDL<Field>::RefactorWithFixedSparsityPattern(
     const CoordinateMatrix<Field>& matrix,
     const SparseLDLControl<Field>& control) {
   typedef ComplexBase<Field> Real;
+  ScopedEnableFlushToZero scope_guard;
 
   // TODO(Jack Poulson): Add sanity checks here that, for example, the algorithm
   // hasn't changed.
@@ -296,6 +303,7 @@ SparseLDLResult<Field> SparseLDL<Field>::RefactorWithFixedSparsityPattern(
 
 template <class Field>
 void SparseLDL<Field>::Solve(BlasMatrixView<Field>* right_hand_sides, bool already_permuted) const {
+  ScopedEnableFlushToZero scope_guard;
   if (have_equilibration_) {
     // Apply the inverse of the equilibration matrix.
     for (Int j = 0; j < right_hand_sides->width; ++j) {
