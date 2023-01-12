@@ -302,9 +302,14 @@ template <class Field>
 SparseLDLResult<Field> Factorization<Field>::Factor(
     const CoordinateMatrix<Field>& matrix,
     const SymmetricOrdering& manual_ordering, const Control<Field>& control) {
-  BENCHMARK_SCOPED_TIMER_SECTION timer("Factor");
+  BENCHMARK_SCOPED_TIMER_SECTION timer("supernodal_ldl.Factorization.Factor");
   control_ = control;
   ordering_ = manual_ordering;
+
+  // Invalidate sparsity-pattern-dependent caches
+  work_estimates_.Clear();
+  shared_state_.schur_complements.Clear();
+  solve_shared_state_.schur_complements.Clear();
 
 #ifdef CATAMARI_ENABLE_TIMERS
   profile.Reset();
@@ -386,7 +391,7 @@ SparseLDLResult<Field> Factorization<Field>::RefactorWithFixedSparsityPattern(
   }
 #else
   if (control_.algorithm == kAdaptiveLDL) {
-    control_.algorithm = kLeftLookingLDL;
+      control_.algorithm = kLeftLookingLDL;
   }
 #endif  // ifdef CATAMARI_OPENMP
 
@@ -395,9 +400,9 @@ SparseLDLResult<Field> Factorization<Field>::RefactorWithFixedSparsityPattern(
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
   SparseLDLResult<Field> result;
   if (control_.algorithm == kLeftLookingLDL) {
-    result = LeftLooking(matrix);
+      result = LeftLooking(matrix);
   } else {
-    result = RightLooking(matrix);
+      result = RightLooking(matrix);
   }
 
 #ifdef CATAMARI_ENABLE_TIMERS

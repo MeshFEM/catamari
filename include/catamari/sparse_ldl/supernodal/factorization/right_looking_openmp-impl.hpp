@@ -21,11 +21,6 @@
 
 #define FINEGRAINED_PARALLELISM 0
 
-// On-the-fly construction and zeroing of the Schur complement buffers
-// (setting both to 1 obtains the original implementation, which is slower but saves memory).
-#define ALLOCATE_SCHUR_COMPLEMENT_OTF 0
-#define ZERO_SCHUR_COMPLEMENT_OTF 1 // faster in the case of early-failed (indefinite) factorization, slightly slower in successful case.
-
 namespace catamari {
 namespace supernodal_ldl {
 
@@ -129,7 +124,7 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     //                                  Real{-1}, lower_block.ToConst(),
     //                                  Real{1}, &schur_complement);
   } else {
-    const int thread = tbb::task_arena::current_thread_index(); // TODO(Julian Panetta): switch to thread-local storage
+    const int thread = tbb::this_task_arena::current_thread_index(); // TODO(Julian Panetta): switch to thread-local storage
     PrivateState<Field> &private_state = (*private_states)[thread];
     BlasMatrixView<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;

@@ -31,16 +31,21 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
 
+  BlasMatrixView<Field>& schur_complement = shared_state->schur_complements[supernode];
+
+#if ALLOCATE_SCHUR_COMPLEMENT_OTF
   // Initialize this supernode's Schur complement as the zero matrix.
-  Buffer<Field>& schur_complement_buffer =
-      shared_state->schur_complement_buffers[supernode];
-  BlasMatrixView<Field>& schur_complement =
-      shared_state->schur_complements[supernode];
-  schur_complement_buffer.Resize(degree * degree, Field{0});
-  schur_complement.height = degree;
-  schur_complement.width = degree;
-  schur_complement.leading_dim = degree;
-  schur_complement.data = schur_complement_buffer.Data();
+  Buffer<Field>& schur_complement_buffer = shared_state->schur_complement_buffers[supernode];
+  {
+    schur_complement_buffer.Resize(degree * degree, Field{0}); // sets to zero!
+    schur_complement.height = degree;
+    schur_complement.width = degree;
+    schur_complement.leading_dim = degree;
+    schur_complement.data = schur_complement_buffer.Data();
+  }
+#elif ZERO_SCHUR_COMPLEMENT_OTF
+  eigenMap(schur_complement).setZero();
+#endif
 
   CATAMARI_START_TIMER(profile.merge);
   MergeChildSchurComplements(supernode, ordering_, lower_factor_.get(),
@@ -120,6 +125,7 @@ bool Factorization<Field>::RightLookingSubtree(
     const DynamicRegularizationParams<Field>& dynamic_reg_params,
     RightLookingSharedState<Field>* shared_state,
     PrivateState<Field>* private_state, SparseLDLResult<Field>* result) {
+  // assert(false);
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
@@ -163,18 +169,20 @@ bool Factorization<Field>::RightLookingSubtree(
           supernode, dynamic_reg_params, shared_state, private_state, result);
   }
 
+#if ALLOCATE_SCHUR_COMPLEMENT_OTF
   // Clear the child fronts.
   for (Int child_index = 0; child_index < num_children; ++child_index) {
     const Int child = ordering_.assembly_forest.children[child_beg + child_index];
-    Buffer<Field>& child_schur_complement_buffer =
-        shared_state->schur_complement_buffers[child];
-    BlasMatrixView<Field>& child_schur_complement =
-        shared_state->schur_complements[child];
+    Buffer<Field>& child_schur_complement_buffer = shared_state->schur_complement_buffers[child];
+    BlasMatrixView<Field>& child_schur_complement = shared_state->schur_complements[child];
     child_schur_complement.height = 0;
     child_schur_complement.width = 0;
-    child_schur_complement.data = nullptr;
-    child_schur_complement_buffer.Clear();
+    if (child_schur_complement.data) {
+        child_schur_complement.data = nullptr;
+        child_schur_complement_buffer.Clear();
+    }
   }
+#endif
 
   CATAMARI_STOP_TIMER(shared_state->inclusive_timers[supernode]);
   CATAMARI_STOP_TIMER(shared_state->exclusive_timers[supernode]);
@@ -194,9 +202,50 @@ SparseLDLResult<Field> Factorization<Field>::RightLooking(
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
 
-  RightLookingSharedState<Field> shared_state;
-  shared_state.schur_complement_buffers.Resize(num_supernodes);
-  shared_state.schur_complements.Resize(num_supernodes);
+  RightLookingSharedState<Field> &shared_state = shared_state_;
+  if (shared_state.schur_complements.Size() != num_supernodes) {
+      shared_state.schur_complements.Resize(num_supernodes);
+#if ALLOCATE_SCHUR_COMPLEMENT_OTF
+      shared_state.schur_complement_buffers.Resize(num_supernodes);
+#else
+      {
+          BENCHMARK_SCOPED_TIMER_SECTION atimer("Allocate buffers");
+
+          Int total_size = 0;
+          for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+              const Int degree = lower_factor_->blocks[supernode].height;
+              total_size += degree * degree;
+          }
+
+          // std::cout << "Allocating buffer of size " << total_size << "(" << (8.0 * total_size / 1024. / 1024.) << "MB)" << std::endl;
+          shared_state.schur_complement_buffers.Resize(1);
+          Buffer<Field> &workspace_buffer = shared_state.schur_complement_buffers[0];
+          workspace_buffer.Resize(total_size);
+          Int offset = 0;
+          shared_state.schur_complements.Resize(num_supernodes);
+          for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+              const Int degree = lower_factor_->blocks[supernode].height;
+              const Int workspace_size = degree * degree;
+
+              auto &supernode_rhs = shared_state.schur_complements[supernode];
+              supernode_rhs.height = degree;
+              supernode_rhs.width = degree;
+              supernode_rhs.leading_dim = degree;
+              supernode_rhs.data = workspace_buffer.Data() + offset;
+              offset += workspace_size;
+          }
+      }
+#endif
+  }
+
+#if !(ALLOCATE_SCHUR_COMPLEMENT_OTF || ZERO_SCHUR_COMPLEMENT_OTF)
+  {
+      // Existing data in the pre-allocated schur_complements buffer must be cleared.
+      BENCHMARK_SCOPED_TIMER_SECTION sztimer("setZeroParallel");
+      setZeroParallel(eigenMap(shared_state.schur_complement_buffers[0]));
+  }
+#endif
+
 #ifdef CATAMARI_ENABLE_TIMERS
   shared_state.inclusive_timers.Resize(num_supernodes);
   shared_state.exclusive_timers.Resize(num_supernodes);

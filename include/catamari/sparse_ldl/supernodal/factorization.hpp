@@ -22,7 +22,13 @@
 
 #include <Eigen/Dense>
 
+// Control various optimizations/tradeoffs...
 #define LOAD_MATRIX_OUTSIDE 1
+
+// On-the-fly construction and zeroing of the Schur complement buffers
+// (setting both to 1 obtains the original implementation, which is slower but saves memory).
+#define ALLOCATE_SCHUR_COMPLEMENT_OTF 0
+#define ZERO_SCHUR_COMPLEMENT_OTF 1 // faster in the case of early-failed (indefinite) factorization, slightly slower in successful case.
 
 namespace catamari {
 
