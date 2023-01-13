@@ -35,16 +35,28 @@ inline void EnableFlushToZero() {
 
 struct ScopedEnableFlushToZero {
     ScopedEnableFlushToZero() {
+#ifdef CATAMARI_HAVE_XMMINTRIN
+        m_mode = _MM_GET_FLUSH_ZERO_MODE();
+#else
         fegetenv(&m_env);
+#endif
         EnableFlushToZero();
     }
 
     ~ScopedEnableFlushToZero() {
+#ifdef CATAMARI_HAVE_XMMINTRIN
+        _MM_SET_FLUSH_ZERO_MODE(m_mode);
+#else
         fesetenv(&m_env);
+#endif
     }
 
 private:
+#ifdef CATAMARI_HAVE_XMMINTRIN
+    int m_mode;
+#else
     fenv_t m_env;
+#endif
 };
 
 }  // namespace catamari
