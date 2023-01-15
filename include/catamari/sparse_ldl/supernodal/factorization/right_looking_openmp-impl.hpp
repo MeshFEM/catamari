@@ -302,8 +302,10 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
 
       total_work = std::accumulate(work_estimates.begin(), work_estimates.end(), 0.);
   }
+
   const double min_parallel_ratio_work = (total_work * control_.parallel_ratio_threshold) / max_threads;
-  const double min_parallel_work = std::max(control_.min_parallel_threshold, min_parallel_ratio_work);
+  const double min_parallel_work = std::max(std::max(control_.min_parallel_threshold, min_parallel_ratio_work),
+                                            max_threads < 2 ? std::numeric_limits<double>::infinity() : 0); // Forbid parallel execution
 
   // Allocate the map from child structures to parent fronts.
   auto &ncdi = ordering_.assembly_forest.num_child_diag_indices;
@@ -382,44 +384,37 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
 
   Buffer<SparseLDLResult<Field>> result_contributions(num_roots);
 
+  auto process_root = [&, min_parallel_work](Int root_index) {
+      const Int root = ordering_.assembly_forest.roots[root_index];
+      DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
+      subparams.offset = ordering_.supernode_offsets[root];
+      bool success = OpenMPRightLookingSubtree(
+              root, matrix, subparams, work_estimates, min_parallel_work,
+              &shared_state, &private_states, &result_contributions[root_index]);
+      if (!success) fail = true;
+  };
+
+  const int old_max_threads = GetMaxBlasThreads();
+  const bool parallel = (max_threads > 1) && (total_work >= min_parallel_work);
+  if (parallel) SetNumBlasThreads(1);
+
   // Recurse on each tree in the elimination forest.
-  if (total_work < min_parallel_work) {
+  if (total_work < min_parallel_work || num_roots <= 1) {
       for (Int root_index = 0; root_index < num_roots; ++root_index) {
-          const Int root = ordering_.assembly_forest.roots[root_index];
-          DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
-          subparams.offset = ordering_.supernode_offsets[root_index];
-          bool success = RightLookingSubtree(
-                  root, matrix, subparams, &shared_state, &private_states[0],
-                  &result_contributions[root_index]);
-          if (!success) fail = true;
+          process_root(root_index);
+          if (fail) break;
       }
-  } else {
-      BENCHMARK_SCOPED_TIMER_SECTION timer("OpenMPRightLooking recursion");
-      const int old_max_threads = GetMaxBlasThreads();
-      SetNumBlasThreads(1);
-
-      auto processRoot = [&, min_parallel_work](Int root_index) {
-          const Int root = ordering_.assembly_forest.roots[root_index];
-          const Int root_offset = ordering_.supernode_offsets[root];
-          DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
-          subparams.offset = root_offset;
-          bool success = OpenMPRightLookingSubtree(
-                  root, matrix, subparams, work_estimates, min_parallel_work,
-                  &shared_state, &private_states, &result_contributions[root_index]);
-          if (!success) fail = true;
-      };
-      if (num_roots > 1) {
-          tbb::task_group tg;
-          for (Int root_index = 0; root_index < num_roots - 1; ++root_index) {
-              tg.run([&processRoot, root_index]() { processRoot(root_index); });
-          }
-          processRoot(num_roots - 1);
-          tg.wait();
-      }
-      else { processRoot(0); }
-
-      SetNumBlasThreads(old_max_threads);
   }
+  else {
+      tbb::task_group tg;
+      for (Int root_index = 0; root_index < num_roots - 1; ++root_index) {
+          tg.run([&process_root, root_index]() { process_root(root_index); });
+      }
+      process_root(num_roots - 1);
+      tg.wait();
+  }
+
+  if (parallel) SetNumBlasThreads(old_max_threads);
 
   bool succeeded = !fail;
   if (succeeded) {

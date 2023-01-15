@@ -98,8 +98,8 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
 
   CATAMARI_START_TIMER(profile.herk);
   if (control_.factorization_type == kCholeskyFactorization) {
-    LowerNormalHermitianOuterProduct(Real{-1}, lower_block.ToConst(), Real{1},
-                                     &schur_complement);
+    LowerNormalHermitianOuterProductDynamicBLASDispatch(Real{-1}, lower_block.ToConst(), Real{1},
+                                                        &schur_complement);
   } else {
     BlasMatrixView<Field> scaled_transpose;
     scaled_transpose.height = supernode_size;
