@@ -905,6 +905,9 @@ void MergeChildSchurComplements(Int supernode,
         }
     }
 
+    // TODO: try working with the adjoint of all blocks;
+    // this would enable contiguous, vectorized access to all arrays!
+
     // Add the child Schur complement into this supernode's front.
     for (Int j = 0; j < num_child_diag_indices; ++j) {
         const Int j_rel = child_rel_indices[j];

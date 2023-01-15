@@ -1322,7 +1322,8 @@ void LowerNormalHermitianOuterProductDynamicBLASDispatch(
 #ifdef CATAMARI_HAVE_BLAS
     // Only use BLAS call for large jobs
 #ifdef DARWIN
-    if (output_height * output_height * contraction_size > 200000)
+    // if (output_height * output_height * contraction_size > 200000) // Faster for smaller 2D problems :|
+    if (output_height * output_height * contraction_size > 1000)      // Faster for large, volumetric problems :|
 #else
     if (output_height * output_height * contraction_size > 5000)
 #endif
@@ -1330,15 +1331,26 @@ void LowerNormalHermitianOuterProductDynamicBLASDispatch(
 #endif
   using EVec = Eigen::Matrix<Field, Eigen::Dynamic, 1>;
 
-  if (beta != Field(1)) {
+  int k_start = 0;
+  if (beta == Field(0)) {
+      const Field *col_k = left_matrix.Pointer(0, 0);
+      for (Int j = 0; j < output_height; ++j) {
+        Field alpha_l_jk = alpha * Conjugate(col_k[j]);
+        Field *out_col = output_matrix->Pointer(0, j);
+        for (Int i = j; i < output_height; ++i)
+              out_col[i] = alpha_l_jk * col_k[i];
+      }
+      k_start = 1;
+  }
+  else if (beta != Field(1)) {
       for (Int j = 0; j < output_height; ++j)
         for (Int i = j; i < output_height; ++i)
             output_matrix->Entry(i, j) *= beta;
   }
-  for (Int k = 0; k < contraction_size; ++k) {
+  for (Int k = k_start; k < contraction_size; ++k) {
       const Field *col_k = left_matrix.Pointer(0, k);
       for (Int j = 0; j < output_height; ++j) {
-          Field alpha_l_jk = alpha * col_k[j];
+          Field alpha_l_jk = alpha * Conjugate(col_k[j]);
 #if 0
           // Eigen version seems slower...
           const Int len = output_height - j;
@@ -1361,15 +1373,28 @@ void LowerNormalHermitianOuterProduct(
   const Int output_height = output_matrix->height;
   const Int contraction_size = left_matrix.width;
 
+  int k_start = 0;
   if (beta != Field(1)) {
       for (Int j = 0; j < output_height; ++j)
         for (Int i = j; i < output_height; ++i)
             output_matrix->Entry(i, j) *= beta;
   }
-  for (Int k = 0; k < contraction_size; ++k) {
+  else if (beta == Field(0)) {
+      Int k = 0;
       const Field *col_k = left_matrix.Pointer(0, k);
       for (Int j = 0; j < output_height; ++j) {
-          Field alpha_l_jk = alpha * col_k[j];
+          Field alpha_l_jk = alpha * Conjugate(col_k[j]);
+          Field *out_col = output_matrix->Pointer(0, j);
+          for (Int i = j; i < output_height; ++i) {
+              out_col[i] = alpha_l_jk * col_k[i];
+          }
+      }
+      k_start = 1;
+  }
+  for (Int k = k_start; k < contraction_size; ++k) {
+      const Field *col_k = left_matrix.Pointer(0, k);
+      for (Int j = 0; j < output_height; ++j) {
+          Field alpha_l_jk = alpha * Conjugate(col_k[j]);
           Field *out_col = output_matrix->Pointer(0, j);
           for (Int i = j; i < output_height; ++i) {
               out_col[i] += alpha_l_jk * col_k[i];

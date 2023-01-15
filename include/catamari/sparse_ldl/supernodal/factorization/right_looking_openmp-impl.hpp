@@ -36,19 +36,26 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
   BlasMatrixView<Field>& schur_complement = shared_state->schur_complements[supernode];
+#if 1
+  const bool has_children = ordering_.assembly_forest.child_offsets[supernode + 1] > ordering_.assembly_forest.child_offsets[supernode];
+#else
+  const bool has_children = true;
+#endif
 
 #if ALLOCATE_SCHUR_COMPLEMENT_OTF
   // Initialize this supernode's Schur complement as the zero matrix.
   Buffer<Field>& schur_complement_buffer = shared_state->schur_complement_buffers[supernode];
   {
-    schur_complement_buffer.Resize(degree * degree, Field{0}); // sets to zero!
+    schur_complement_buffer.Resize(degree * degree);
     schur_complement.height = degree;
     schur_complement.width = degree;
     schur_complement.leading_dim = degree;
     schur_complement.data = schur_complement_buffer.Data();
   }
-#elif ZERO_SCHUR_COMPLEMENT_OTF
-  eigenMap(schur_complement).setZero();
+#endif
+
+#if ZERO_SCHUR_COMPLEMENT_OTF || ALLOCATE_SCHUR_COMPLEMENT_OTF
+    if (has_children) eigenMap(schur_complement).setZero(); // Notably faster than having `schur_complement_buffer.Resize` zero-init!
 #endif
 
 #if FINEGRAINED_PARALLELISM
@@ -119,7 +126,7 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
   if (control_.factorization_type == kCholeskyFactorization) {
     LowerNormalHermitianOuterProductDynamicBLASDispatch(
                                      Real{-1}, lower_block.ToConst(),
-                                     Real{1}, &schur_complement);
+                                     has_children ? Real{1} : Real{0}, &schur_complement);
     // OpenMPLowerNormalHermitianOuterProduct(control_.factor_tile_size,
     //                                  Real{-1}, lower_block.ToConst(),
     //                                  Real{1}, &schur_complement);

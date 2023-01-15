@@ -37,11 +37,12 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
   // Initialize this supernode's Schur complement as the zero matrix.
   Buffer<Field>& schur_complement_buffer = shared_state->schur_complement_buffers[supernode];
   {
-    schur_complement_buffer.Resize(degree * degree, Field{0}); // sets to zero!
+    schur_complement_buffer.Resize(degree * degree);
     schur_complement.height = degree;
     schur_complement.width = degree;
     schur_complement.leading_dim = degree;
     schur_complement.data = schur_complement_buffer.Data();
+    eigenMap(schur_complement).setZero(); // Notably faster than having `schur_complement_buffer.Resize` zero-init!
   }
 #elif ZERO_SCHUR_COMPLEMENT_OTF
   eigenMap(schur_complement).setZero();
