@@ -13,6 +13,8 @@
 
 #include "quotient/index_utils.hpp"
 
+#define VECTORIZE_MERGE_SCHUR_COMPLEMENTS 1 // Strangely appears to be a pessimization despite shrinking MergeChildSchurComplement percentage in the profiler :(
+
 namespace catamari {
 namespace supernodal_ldl {
 
@@ -862,10 +864,12 @@ void MergeChildSchurComplement(Int supernode, Int child,
     const Int child_degree = child_schur_complement.height;
 
 #if 1
-    auto &ncdi = const_cast<Buffer<Int> &>(ordering.assembly_forest.num_child_diag_indices);
-    auto &cri = const_cast<Buffer<Buffer<Int>> &>(ordering.assembly_forest.child_rel_indices);
+    auto &ncdi   = const_cast<Buffer<Int> &>(ordering.assembly_forest.num_child_diag_indices);
+    auto &cri    = const_cast<Buffer<Buffer<Int>> &>(ordering.assembly_forest.child_rel_indices_run_len);
+    auto &cri_rl = const_cast<Buffer<Buffer<Int>> &>(ordering.assembly_forest.child_rel_indices);
     Int &num_child_diag_indices = ncdi[child];
     auto &child_rel_indices     = cri[child];
+    auto &child_rel_indices_rl  = cri_rl[child];
 #else
     Int num_child_diag_indices = 0;
     Buffer<Int> child_rel_indices;
@@ -894,8 +898,19 @@ void MergeChildSchurComplement(Int supernode, Int child,
               child_rel_indices[i] = i_rel;
             }
           }
-        }
+       }
+       // Calculate the run lengths to assist vectorization...
+       child_rel_indices_rl.Resize(child_degree, 1);
+       for (Int i = 0; i < child_degree; /* incremented inside */ ) {
+           Int rl = 1;
+           while ((i + rl) < child_degree && child_rel_indices[i + rl] == child_rel_indices[i] + rl)
+               ++rl;
+           while (rl > 0) { child_rel_indices_rl[i++] = rl--; } // write all (partial) run lengths
+       }
     }
+
+    using  VecMap = Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>, Eigen::Unaligned>;
+    using CVecMap = Eigen::Map<const Eigen::Matrix<Field, Eigen::Dynamic, 1>, Eigen::Unaligned>;
 
     // Add the child Schur complement into this supernode's front.
     for (Int j = 0; j < num_child_diag_indices; ++j) {
@@ -911,56 +926,49 @@ void MergeChildSchurComplement(Int supernode, Int child,
 
         // Contribute into the lower-left block of the front.
         Field* lower_column = lower_block.Pointer(0, j_rel);
+#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
+        for (Int i = num_child_diag_indices; i < child_degree; i += child_rel_indices_rl[i]) {
+            VecMap(lower_column + child_rel_indices[i], child_rel_indices_rl[i])
+                    += CVecMap(child_column + i, child_rel_indices_rl[i]);
+        }
+#else
         for (Int i = num_child_diag_indices; i < child_degree; ++i) {
             const Int i_rel = child_rel_indices[i];
             lower_column[i_rel] += child_column[i];
         }
+#endif
     }
     if (freshShurComplement) {
-#if 0
-        Int j_child = num_child_diag_indices;
-        Int j_rel   = child_rel_indices[j_child];
-        const Int degree = schur_complement.width;
-        for (Int j = 0; j < degree; ++j) {
-            Field* schur_column = schur_complement.Pointer(0, j);
-            if (j == j_rel) {
-                Int i_child = j_child;
-                Int i_rel = child_rel_indices[i_child];
-                for (Int i = j; i < degree; ++i) {
-                    Field val;
-                    if (i == i_rel) {
-                        val = child_schur_complement(i_child, j_child);
-                        ++i_child;
-                        i_rel = (i_child < child_degree) ? child_rel_indices[i_child] : std::numeric_limits<Int>::max();
-                    }
-                    else { val = 0; }
-                    schur_column[i] = val;
-                }
-                ++j_child;
-                j_rel = (j_child < child_degree) ? child_rel_indices[j_child] : std::numeric_limits<Int>::max();
-            }
-            else {
-                Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>(schur_column + j, degree - j).setZero();
-            }
-        }
-#else
+        // Clear and contribute into the bottom-right block of the front.
         eigenMap(schur_complement).setZero();
         for (Int j = num_child_diag_indices; j < child_degree; ++j) {
             const Field* child_column = child_schur_complement.Pointer(0, j);
-            // Contribute into the bottom-right block of the front.
             Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j]);
+#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
+            for (Int i = j; i < child_degree; i += child_rel_indices_rl[i]) {
+                VecMap(schur_column + child_rel_indices[i], child_rel_indices_rl[i])
+                        = CVecMap(child_column + i, child_rel_indices_rl[i]);
+            }
+#else
             for (Int i = j; i < child_degree; ++i)
                 schur_column[child_rel_indices[i]] = child_column[i];
-        }
 #endif
+        }
     } 
     else {
+        // Contribute into the bottom-right block of the front.
         for (Int j = num_child_diag_indices; j < child_degree; ++j) {
             const Field* child_column = child_schur_complement.Pointer(0, j);
-            // Contribute into the bottom-right block of the front.
             Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j]);
+#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
+            for (Int i = j; i < child_degree; i += child_rel_indices_rl[i]) {
+                VecMap(schur_column + child_rel_indices[i], child_rel_indices_rl[i])
+                        += CVecMap(child_column + i, child_rel_indices_rl[i]);
+            }
+#else
             for (Int i = j; i < child_degree; ++i)
                 schur_column[child_rel_indices[i]] += child_column[i];
+#endif
         }
     }
 }

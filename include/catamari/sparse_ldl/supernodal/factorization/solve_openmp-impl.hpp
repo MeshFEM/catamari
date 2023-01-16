@@ -123,14 +123,16 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
   const Int num_rhs = right_hand_sides->width;
 
   BlasMatrixView<Field>& main_right_hand_sides = shared_state->schur_complements[supernode];
-  // eigenMap(main_right_hand_sides).setZero(); // <----- this doesn't account for the stride/height mismatch in main_right_hand_sides!!!!!
-  for (Int j = 0; j < num_rhs; ++j) {
-    for (Int i = 0; i < main_right_hand_sides.height; ++i)
-        main_right_hand_sides(i, j) = 0;
-  }
 
-  auto &ncdi = ordering_.assembly_forest.num_child_diag_indices;
-  auto  &cri = ordering_.assembly_forest.child_rel_indices;
+  using  VecMap = Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>;
+  using CVecMap = Eigen::Map<const Eigen::Matrix<Field, Eigen::Dynamic, 1>>;
+  // eigenMap(main_right_hand_sides).setZero(); // <----- this doesn't account for the stride/height mismatch in main_right_hand_sides!!!!!
+  for (Int j = 0; j < num_rhs; ++j)
+    VecMap(main_right_hand_sides.Pointer(0, j), main_right_hand_sides.height).setZero();
+
+  auto   &ncdi = ordering_.assembly_forest.num_child_diag_indices;
+  auto    &cri = ordering_.assembly_forest.child_rel_indices;
+  auto &cri_rl = const_cast<Buffer<Buffer<Int>> &>(ordering_.assembly_forest.child_rel_indices);
 
   for (Int child_index = child_beg; child_index < child_end; ++child_index) {
     const Int child = ordering_.assembly_forest.children[child_index];
@@ -139,7 +141,8 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
     const Int child_degree = child_right_hand_sides.height;
 
     const Int &num_child_diag_indices = ncdi[child];
-    const Buffer<Int> &child_rel_indices = cri[child];
+    const Buffer<Int> &child_rel_indices    = cri[child];
+    const Buffer<Int> &child_rel_indices_rl = cri_rl[child];
 
 #if 1
     for (Int j = 0; j < num_rhs; ++j) {
@@ -148,8 +151,14 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
         Field* mrhs_col = main_right_hand_sides.Pointer(0, j);
         for (Int i = 0; i < num_child_diag_indices; ++i)
             rhs_col[child_indices[i]] += crhs_col[i];
-        for (Int i = num_child_diag_indices; i < child_degree; ++i)
-            mrhs_col[child_rel_indices[i]] += crhs_col[i];
+
+        // for (Int i = num_child_diag_indices; i < child_degree; ++i)
+        //     mrhs_col[child_rel_indices[i]] += crhs_col[i];
+
+        for (Int i = num_child_diag_indices; i < child_degree; i += child_rel_indices_rl[i]) {
+            VecMap(mrhs_col + child_rel_indices[i], child_rel_indices_rl[i])
+                    += CVecMap(crhs_col + i, child_rel_indices_rl[i]);
+        }
     }
 #else
     for (Int j = 0; j < num_rhs; ++j) {
