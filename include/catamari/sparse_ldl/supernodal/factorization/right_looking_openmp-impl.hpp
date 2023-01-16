@@ -209,7 +209,7 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
 
           MergeChildSchurComplement(supernode, child, ordering_,
                   lower_factor_.get(), shared_state->schur_complements[child],
-                  lower_block, diagonal_block, schur_complement, child_index == 0);
+                  lower_block, diagonal_block, schur_complement, /* freshShurComplement = */ child_index == 0);
       }
   }
   else {
@@ -223,7 +223,6 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
       // Stop early if a child failed to finalize.
       if (fail) return false;
 
-      BlasMatrixView<Field> schur_complement = shared_state->schur_complements[supernode];
       MergeChildSchurComplements(supernode,
                                  ordering_, lower_factor_.get(),
                                  diagonal_factor_.get(), shared_state);

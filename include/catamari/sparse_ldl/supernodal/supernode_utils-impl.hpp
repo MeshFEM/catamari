@@ -985,7 +985,7 @@ void MergeChildSchurComplements(Int supernode,
       const BlasMatrixView<Field> &child_schur_complement = shared_state->schur_complements[child];
       MergeChildSchurComplement(supernode, child, ordering, lower_factor,
                                 child_schur_complement, lower_block, diagonal_block,
-                                schur_complement, child_index == 0);
+                                schur_complement, /* freshShurComplement = */ child_index == child_beg);
   }
 }
 
