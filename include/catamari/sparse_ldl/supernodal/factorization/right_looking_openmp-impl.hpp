@@ -317,11 +317,13 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
   // Allocate the map from child structures to parent fronts.
   auto &ncdi   = ordering_.assembly_forest.num_child_diag_indices;
   auto &cri    = ordering_.assembly_forest.child_rel_indices;
-  auto &cri_rl = ordering_.assembly_forest.child_rel_indices_run_len;
   if ( cri.Size() != num_supernodes) {
       cri.Resize(num_supernodes);
       ncdi.Resize(num_supernodes);
+#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
+      auto &cri_rl = ordering_.assembly_forest.child_rel_indices_run_len;
       cri_rl.Resize(num_supernodes);
+#endif
   }
 
 #if LOAD_MATRIX_OUTSIDE

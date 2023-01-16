@@ -132,7 +132,7 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
 
   auto   &ncdi = ordering_.assembly_forest.num_child_diag_indices;
   auto    &cri = ordering_.assembly_forest.child_rel_indices;
-  auto &cri_rl = const_cast<Buffer<Buffer<Int>> &>(ordering_.assembly_forest.child_rel_indices);
+  auto &cri_rl = ordering_.assembly_forest.child_rel_indices_run_len;
 
   for (Int child_index = child_beg; child_index < child_end; ++child_index) {
     const Int child = ordering_.assembly_forest.children[child_index];
@@ -152,13 +152,15 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
         for (Int i = 0; i < num_child_diag_indices; ++i)
             rhs_col[child_indices[i]] += crhs_col[i];
 
-        // for (Int i = num_child_diag_indices; i < child_degree; ++i)
-        //     mrhs_col[child_rel_indices[i]] += crhs_col[i];
-
+#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
         for (Int i = num_child_diag_indices; i < child_degree; i += child_rel_indices_rl[i]) {
             VecMap(mrhs_col + child_rel_indices[i], child_rel_indices_rl[i])
                     += CVecMap(crhs_col + i, child_rel_indices_rl[i]);
         }
+#else
+        for (Int i = num_child_diag_indices; i < child_degree; ++i)
+            mrhs_col[child_rel_indices[i]] += crhs_col[i];
+#endif
     }
 #else
     for (Int j = 0; j < num_rhs; ++j) {

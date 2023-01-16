@@ -34,7 +34,7 @@ struct AssemblyForest {
   Buffer<Int> roots;
 
   // Julian Panetta: mapping from each child structure to its parent front.
-  Buffer<Buffer<Int>> child_rel_indices_run_len; // Number of contiguous entries in `child_rel_indices` starting at each offset.
+  Buffer<Buffer<Int>> child_rel_indices_run_len; // Number of contiguous entries in `child_rel_indices` starting at each offset; calculated only #if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
   Buffer<Buffer<Int>> child_rel_indices;
   Buffer<Int> num_child_diag_indices;
 

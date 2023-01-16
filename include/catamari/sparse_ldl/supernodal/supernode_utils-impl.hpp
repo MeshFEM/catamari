@@ -13,7 +13,7 @@
 
 #include "quotient/index_utils.hpp"
 
-#define VECTORIZE_MERGE_SCHUR_COMPLEMENTS 1 // Strangely appears to be a pessimization despite shrinking MergeChildSchurComplement percentage in the profiler :(
+#define VECTORIZE_MERGE_SCHUR_COMPLEMENTS 0 // Appears to be a pessimization :(
 
 namespace catamari {
 namespace supernodal_ldl {
@@ -865,8 +865,8 @@ void MergeChildSchurComplement(Int supernode, Int child,
 
 #if 1
     auto &ncdi   = const_cast<Buffer<Int> &>(ordering.assembly_forest.num_child_diag_indices);
-    auto &cri    = const_cast<Buffer<Buffer<Int>> &>(ordering.assembly_forest.child_rel_indices_run_len);
-    auto &cri_rl = const_cast<Buffer<Buffer<Int>> &>(ordering.assembly_forest.child_rel_indices);
+    auto &cri    = const_cast<Buffer<Buffer<Int>> &>(ordering.assembly_forest.child_rel_indices);
+    auto &cri_rl = const_cast<Buffer<Buffer<Int>> &>(ordering.assembly_forest.child_rel_indices_run_len);
     Int &num_child_diag_indices = ncdi[child];
     auto &child_rel_indices     = cri[child];
     auto &child_rel_indices_rl  = cri_rl[child];
@@ -899,6 +899,7 @@ void MergeChildSchurComplement(Int supernode, Int child,
             }
           }
        }
+#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
        // Calculate the run lengths to assist vectorization...
        child_rel_indices_rl.Resize(child_degree, 1);
        for (Int i = 0; i < child_degree; /* incremented inside */ ) {
@@ -907,6 +908,7 @@ void MergeChildSchurComplement(Int supernode, Int child,
                ++rl;
            while (rl > 0) { child_rel_indices_rl[i++] = rl--; } // write all (partial) run lengths
        }
+#endif
     }
 
     using  VecMap = Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>, Eigen::Unaligned>;
@@ -928,9 +930,20 @@ void MergeChildSchurComplement(Int supernode, Int child,
         Field* lower_column = lower_block.Pointer(0, j_rel);
 #if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
         for (Int i = num_child_diag_indices; i < child_degree; i += child_rel_indices_rl[i]) {
-            VecMap(lower_column + child_rel_indices[i], child_rel_indices_rl[i])
-                    += CVecMap(child_column + i, child_rel_indices_rl[i]);
+            int len = child_rel_indices_rl[i];
+            Field *ptr = lower_column + child_rel_indices[i];
+            if (len > 64)
+                VecMap(ptr, len) += CVecMap(child_column + i, len);
+            else {
+                for (Int ii = 0; ii < len; ++ii) {
+                    ptr[ii] += child_column[i + ii];
+                }
+            }
         }
+        // for (Int i = num_child_diag_indices; i < child_degree; i += child_rel_indices_rl[i]) {
+        //     VecMap(lower_column + child_rel_indices[i], child_rel_indices_rl[i])
+        //             += CVecMap(child_column + i, child_rel_indices_rl[i]);
+        // }
 #else
         for (Int i = num_child_diag_indices; i < child_degree; ++i) {
             const Int i_rel = child_rel_indices[i];
@@ -944,7 +957,7 @@ void MergeChildSchurComplement(Int supernode, Int child,
         for (Int j = num_child_diag_indices; j < child_degree; ++j) {
             const Field* child_column = child_schur_complement.Pointer(0, j);
             Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j]);
-#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
+#if 0
             for (Int i = j; i < child_degree; i += child_rel_indices_rl[i]) {
                 VecMap(schur_column + child_rel_indices[i], child_rel_indices_rl[i])
                         = CVecMap(child_column + i, child_rel_indices_rl[i]);
@@ -960,7 +973,7 @@ void MergeChildSchurComplement(Int supernode, Int child,
         for (Int j = num_child_diag_indices; j < child_degree; ++j) {
             const Field* child_column = child_schur_complement.Pointer(0, j);
             Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j]);
-#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
+#if 0
             for (Int i = j; i < child_degree; i += child_rel_indices_rl[i]) {
                 VecMap(schur_column + child_rel_indices[i], child_rel_indices_rl[i])
                         += CVecMap(child_column + i, child_rel_indices_rl[i]);
