@@ -36,38 +36,7 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
   BlasMatrixView<Field>& schur_complement = shared_state->schur_complements[supernode];
-#if 1
   const bool has_children = ordering_.assembly_forest.child_offsets[supernode + 1] > ordering_.assembly_forest.child_offsets[supernode];
-#else
-  const bool has_children = true;
-#endif
-
-#if ALLOCATE_SCHUR_COMPLEMENT_OTF
-  // Initialize this supernode's Schur complement as the zero matrix.
-  Buffer<Field>& schur_complement_buffer = shared_state->schur_complement_buffers[supernode];
-  {
-    schur_complement_buffer.Resize(degree * degree);
-    schur_complement.height = degree;
-    schur_complement.width = degree;
-    schur_complement.leading_dim = degree;
-    schur_complement.data = schur_complement_buffer.Data();
-  }
-#endif
-
-#if ZERO_SCHUR_COMPLEMENT_OTF || ALLOCATE_SCHUR_COMPLEMENT_OTF
-    if (has_children) eigenMap(schur_complement).setZero(); // Notably faster than having `schur_complement_buffer.Resize` zero-init!
-#endif
-
-#if FINEGRAINED_PARALLELISM
-  #pragma omp taskgroup
-  OpenMPMergeChildSchurComplements(control_.merge_grain_size, supernode,
-                                   ordering_, lower_factor_.get(),
-                                   diagonal_factor_.get(), shared_state);
-#else
-  MergeChildSchurComplements(supernode,
-                             ordering_, lower_factor_.get(),
-                             diagonal_factor_.get(), shared_state);
-#endif
 
   Int num_supernode_pivots;
   if (control_.supernodal_pivoting) {
@@ -127,9 +96,6 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     LowerNormalHermitianOuterProductDynamicBLASDispatch(
                                      Real{-1}, lower_block.ToConst(),
                                      has_children ? Real{1} : Real{0}, &schur_complement);
-    // OpenMPLowerNormalHermitianOuterProduct(control_.factor_tile_size,
-    //                                  Real{-1}, lower_block.ToConst(),
-    //                                  Real{1}, &schur_complement);
   } else {
     const int thread = tbb::this_task_arena::current_thread_index(); // TODO(Julian Panetta): switch to thread-local storage
     PrivateState<Field> &private_state = (*private_states)[thread];
@@ -179,13 +145,11 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
-  CATAMARI_START_TIMER(shared_state->inclusive_timers[supernode]);
-
   Buffer<SparseLDLResult<Field>> result_contributions(num_children);
 
   bool fail = false;
 
-  auto processChild = [&, supernode, min_parallel_work, shared_state, private_states](Int child_index) {
+  auto process_child = [&, supernode, min_parallel_work, shared_state, private_states](Int child_index) {
       const Int child = ordering_.assembly_forest.children[child_beg + child_index];
       const Int child_offset = ordering_.supernode_offsets[child];
       DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
@@ -195,62 +159,81 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
               shared_state, private_states, &result_contributions[child_index]);
       if (!success) fail = true;
   };
-  if (work_estimate < min_parallel_work) {
-      for (Int child_index = 0; (child_index < num_children) && !fail; ++child_index)
-          processChild(child_index);
-  }
-  else {
-      if (num_children > 1) {
-          tbb::task_group tg;
-          for (Int child_index = 0; child_index < num_children - 1; ++child_index) {
-              tg.run([&processChild, child_index]() { processChild(child_index); });
-          }
-          processChild(num_children - 1);
-          tg.wait();
-      }
-      else if (num_children > 0) {
-          processChild(0);
-      }
-  }
 
-  CATAMARI_START_TIMER(shared_state->exclusive_timers[supernode]);
-
-  // Merge the child results (stopping if a failure is detected).
-  bool succeeded = !fail;
-
-  if (succeeded) {
-    for (Int child_index = 0; child_index < num_children; ++child_index) {
-      MergeContribution(result_contributions[child_index], result);
-    }
-    if (dynamic_reg_params.enabled) {
-      MergeDynamicRegularizations(result_contributions, result);
-    }
-#if !LOAD_MATRIX_OUTSIDE
-    InitializeBlockColumn(supernode, matrix); // TODO(Julian Panetta): Make CatamariConverter inject entries directly into the columns (with pre-calculated indices)
-#endif
-    succeeded = OpenMPRightLookingSupernodeFinalize(
-        supernode, dynamic_reg_params, shared_state, private_states, result);
-  }
+  const bool parallel = (work_estimate >= min_parallel_work) && (num_children > 1);
 
 #if ALLOCATE_SCHUR_COMPLEMENT_OTF
-  // Clear the child fronts.
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child = ordering_.assembly_forest.children[child_beg + child_index];
-    Buffer<Field>& child_schur_complement_buffer = shared_state->schur_complement_buffers[child];
-    BlasMatrixView<Field>& child_schur_complement = shared_state->schur_complements[child];
-    child_schur_complement.height = 0;
-    child_schur_complement.width = 0;
-    if (child_schur_complement.data) {
-        child_schur_complement.data = nullptr;
-        child_schur_complement_buffer.Clear();
-    }
+  // Allocate a single buffer to hold all the children's Schur complements
+  // (or just the single largest one in the non-parallel case, where the buffer is reused).
+  Eigen::Matrix<Field, Eigen::Dynamic, 1> child_schur_complement_buffer;
+  {
+      Int total_size = 0;
+      for (Int child_index = child_beg; child_index < child_end; ++child_index) {
+          const Int child = ordering_.assembly_forest.children[child_index];
+          const Int degree = lower_factor_->blocks[child].height;
+          if (parallel) total_size += degree * degree;
+          else          total_size = std::max(total_size, degree * degree);
+      }
+      child_schur_complement_buffer.resize(total_size);
+
+      Int offset = 0;
+      for (Int child_index = child_beg; child_index < child_end; ++child_index) {
+          const Int child = ordering_.assembly_forest.children[child_index];
+          const Int degree = lower_factor_->blocks[child].height;
+          BlasMatrixView<Field>& child_schur_complement = shared_state->schur_complements[child];
+          child_schur_complement.height = degree;
+          child_schur_complement.width = degree;
+          child_schur_complement.leading_dim = degree;
+          child_schur_complement.data = child_schur_complement_buffer.data() + offset;
+          if (parallel) offset += degree * degree; // re-use memory in the single-threaded case (offset === 0)
+      }
   }
 #endif
 
-  CATAMARI_STOP_TIMER(shared_state->inclusive_timers[supernode]);
-  CATAMARI_STOP_TIMER(shared_state->exclusive_timers[supernode]);
+#if !LOAD_MATRIX_OUTSIDE
+    InitializeBlockColumn(supernode, matrix);
+#endif
 
-  return succeeded;
+  if (!parallel) {
+      // Output destination buffers
+      BlasMatrixView<Field> lower_block      = lower_factor_->blocks[supernode];
+      BlasMatrixView<Field> diagonal_block   = diagonal_factor_->blocks[supernode];
+      BlasMatrixView<Field> schur_complement = shared_state->schur_complements[supernode];
+
+      for (Int child_index = 0; child_index < num_children; ++child_index) {
+          const Int child = ordering_.assembly_forest.children[child_beg + child_index];
+
+          process_child(child_index);
+          // Stop early if a child failed to finalize.
+          if (fail) return false;
+
+          MergeChildSchurComplement(supernode, child, ordering_,
+                  lower_factor_.get(), shared_state->schur_complements[child],
+                  lower_block, diagonal_block, schur_complement, child_index == 0);
+      }
+  }
+  else {
+      tbb::task_group tg;
+      for (Int child_index = 0; child_index < num_children - 1; ++child_index) {
+          tg.run([&process_child, child_index]() { process_child(child_index); });
+      }
+      process_child(num_children - 1);
+      tg.wait();
+
+      // Stop early if a child failed to finalize.
+      if (fail) return false;
+
+      BlasMatrixView<Field> schur_complement = shared_state->schur_complements[supernode];
+      MergeChildSchurComplements(supernode,
+                                 ordering_, lower_factor_.get(),
+                                 diagonal_factor_.get(), shared_state);
+  }
+
+  for (Int child_index = 0; child_index < num_children; ++child_index)
+      MergeContribution(result_contributions[child_index], result);
+  if (dynamic_reg_params.enabled) MergeDynamicRegularizations(result_contributions, result);
+
+  return OpenMPRightLookingSupernodeFinalize(supernode, dynamic_reg_params, shared_state, private_states, result);
 }
 
 template <class Field>
@@ -261,6 +244,31 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
 
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
+
+  // {
+  //     // Histogram of the "run lengths" of contiguous indices.
+  //     std::vector<size_t> supernode_run_length_statistics;
+  //     auto record = [&](size_t run_len) {
+  //         if (run_len >= supernode_run_length_statistics.size()) supernode_run_length_statistics.resize(run_len + 1);
+  //         supernode_run_length_statistics[run_len]++;
+  //     };
+
+  //     for (size_t supernode = 0; supernode < num_supernodes; ++supernode) {
+  //         const Int *indices = lower_factor_->StructureBeg(supernode);
+  //         const size_t num_indices = lower_factor_->StructureEnd(supernode) - indices;
+  //         if (num_indices == 0) continue;
+  //         size_t run_len = 1;
+  //         for (size_t i = 1; i < num_indices; ++i) {
+  //             if (indices[i] == indices[i - 1] + 1) ++run_len;
+  //             else { record(run_len); run_len = 1; }
+  //         }
+  //         record(run_len);
+  //     }
+
+  //     for (size_t i = 0; i < supernode_run_length_statistics.size(); ++i) {
+  //         std::cout << "run_len " << i << ": " << supernode_run_length_statistics[i] << std::endl;
+  //     }
+  // }
 
   // Set up the base state of the dynamic regularization parameters. We only
   // need to update the offset for each child.
@@ -349,7 +357,6 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
           Buffer<Field> &workspace_buffer = shared_state.schur_complement_buffers[0];
           workspace_buffer.Resize(total_size);
           Int offset = 0;
-          shared_state.schur_complements.Resize(num_supernodes);
           for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
               const Int degree = lower_factor_->blocks[supernode].height;
               const Int workspace_size = degree * degree;
@@ -365,14 +372,6 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
 #endif
   }
 
-#if !(ALLOCATE_SCHUR_COMPLEMENT_OTF || ZERO_SCHUR_COMPLEMENT_OTF)
-  {
-      // Existing data in the pre-allocated schur_complements buffer must be cleared.
-      BENCHMARK_SCOPED_TIMER_SECTION sztimer("setZeroParallel");
-      setZeroParallel(eigenMap(shared_state.schur_complement_buffers[0]));
-  }
-#endif
-
 #ifdef CATAMARI_ENABLE_TIMERS
   shared_state.inclusive_timers.Resize(num_supernodes);
   shared_state.exclusive_timers.Resize(num_supernodes);
@@ -383,6 +382,32 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
   bool fail = false;
 
   Buffer<SparseLDLResult<Field>> result_contributions(num_roots);
+
+#if ALLOCATE_SCHUR_COMPLEMENT_OTF
+  // Allocate a single buffer to hold all roots' Schur complements.
+  Buffer<Field> root_schur_complement_buffer;
+  {
+      Int total_size = 0;
+      for (Int root_index = 0; root_index < num_roots; ++root_index) {
+          const Int root = ordering_.assembly_forest.roots[root_index];
+          const Int degree = lower_factor_->blocks[root].height;
+          total_size += degree * degree;
+      }
+      root_schur_complement_buffer.Resize(total_size);
+
+      Int offset = 0;
+      for (Int root_index = 0; root_index < num_roots; ++root_index) {
+          const Int root = ordering_.assembly_forest.roots[root_index];
+          const Int degree = lower_factor_->blocks[root].height;
+          BlasMatrixView<Field>& root_schur_complement = shared_state.schur_complements[root];
+          root_schur_complement.height = degree;
+          root_schur_complement.width = degree;
+          root_schur_complement.leading_dim = degree;
+          root_schur_complement.data = root_schur_complement_buffer.Data() + offset;
+          offset += degree * degree;
+      }
+  }
+#endif
 
   auto process_root = [&, min_parallel_work](Int root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
@@ -418,12 +443,10 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
 
   bool succeeded = !fail;
   if (succeeded) {
-    for (Int index = 0; index < num_roots; ++index) {
-      MergeContribution(result_contributions[index], &result);
-    }
-    if (dynamic_reg_params.enabled) {
-      MergeDynamicRegularizations(result_contributions, &result);
-    }
+    for (Int index = 0; index < num_roots; ++index)
+        MergeContribution(result_contributions[index], &result);
+    if (dynamic_reg_params.enabled)
+        MergeDynamicRegularizations(result_contributions, &result);
   }
 
 #ifdef CATAMARI_ENABLE_TIMERS

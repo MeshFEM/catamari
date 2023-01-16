@@ -1323,7 +1323,7 @@ void LowerNormalHermitianOuterProductDynamicBLASDispatch(
     // Only use BLAS call for large jobs
 #ifdef DARWIN
     // if (output_height * output_height * contraction_size > 200000) // Faster for smaller 2D problems :|
-    if (output_height * output_height * contraction_size > 1000)      // Faster for large, volumetric problems :|
+    if (output_height * output_height * contraction_size > 5000)      // Faster for large, volumetric problems :|
 #else
     if (output_height * output_height * contraction_size > 5000)
 #endif

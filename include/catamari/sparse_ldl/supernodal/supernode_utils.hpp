@@ -284,6 +284,17 @@ void MergeChildSchurComplements(Int supernode,
                                 DiagonalFactor<Field>* diagonal_factor,
                                 RightLookingSharedState<Field>* shared_state);
 
+// Adds the schur complements of a single child onto its parent supernode's front.
+template <class Field>
+void MergeChildSchurComplement(Int supernode, Int child,
+                               const SymmetricOrdering& ordering,
+                               const LowerFactor<Field> *lower_factor,
+                               const BlasMatrixView<Field> &child_schur_complement,
+                               BlasMatrixView<Field> lower_block,
+                               BlasMatrixView<Field> diagonal_block,
+                               BlasMatrixView<Field> schur_complement,
+                               bool freshShurComplement);
+
 #ifdef CATAMARI_OPENMP
 template <class Field>
 void OpenMPMergeChildSchurComplements(
