@@ -1373,7 +1373,13 @@ void LowerNormalHermitianOuterProductDynamicBLASDispatch(
     // Rather than basing the treshold on a flop estimate (h^2 c) it seems better to base it
     // separately on `output_height` and `contraction_size`; the naive implementation below
     // performs well if the output matrix fits in cache or if only a rank 1 matrix is added.
-    if (output_height > 128 && contraction_size > 1) {
+    //
+#ifdef DARWIN
+    const bool use_blas = (output_height > 128 && contraction_size > 1);
+#else
+    const bool use_blas = (output_height > 48 && contraction_size > 1);
+#endif
+    if (use_blas) {
         return LowerNormalHermitianOuterProduct(alpha, left_matrix, beta, output_matrix);
     }
 #endif

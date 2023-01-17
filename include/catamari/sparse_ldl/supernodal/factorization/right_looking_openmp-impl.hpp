@@ -454,9 +454,9 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
       if (!success) fail = true;
   };
 
-  const int old_max_threads = GetMaxBlasThreads();
+  // const int old_max_threads = GetMaxBlasThreads();
   const bool parallel = (max_threads > 1) && (total_work >= min_parallel_work);
-  if (parallel) SetNumBlasThreads(1);
+  // if (parallel) SetNumBlasThreads(2);
 
   // Recurse on each tree in the elimination forest.
   if (total_work < min_parallel_work || num_roots <= 1) {
@@ -474,7 +474,7 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
       tg.wait();
   }
 
-  if (parallel) SetNumBlasThreads(old_max_threads);
+  // if (parallel) SetNumBlasThreads(old_max_threads);
 
   bool succeeded = !fail;
   if (succeeded) {
