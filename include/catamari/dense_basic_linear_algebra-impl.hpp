@@ -1314,23 +1314,71 @@ inline void MatrixMultiplyAdjointNormal(
 template <class Field>
 void LowerNormalHermitianOuterProductDynamicBLASDispatch(
     const ComplexBase<Field>& alpha,
+    const Eigen::Matrix<Field, Eigen::Dynamic, Eigen::Dynamic> left_mat_transpose,
+    const ComplexBase<Field>& beta, BlasMatrixView<Field>* output_matrix) {
+  const Int output_height = output_matrix->height;
+  const Int contraction_size = left_mat_transpose.rows();
+
+    if (output_height * output_height * contraction_size > 1000)
+    {
+        // return LowerNormalHermitianOuterProduct(alpha, left_matrix, beta, output_matrix);
+        const char uplo = 'L';
+        const char trans = 'T';
+        const BlasInt height_blas = output_matrix->height;
+        const BlasInt rank_blas = contraction_size;
+        const BlasInt factor_leading_dim_blas = rank_blas;
+        const BlasInt leading_dim_blas = output_matrix->leading_dim;
+        BLAS_SYMBOL(dsyrk)
+        (&uplo, &trans, &height_blas, &rank_blas, &alpha, left_mat_transpose.data(),
+         &factor_leading_dim_blas, &beta, output_matrix->data, &leading_dim_blas);
+        return;
+    }
+
+    if (beta == Field(0)) {
+        for (Int j = 0; j < output_height; ++j) {
+            Field *out_col = output_matrix->Pointer(0, j);
+            for (Int i = j; i < output_height; ++i) {
+                Field val = left_mat_transpose.col(i).dot(left_mat_transpose.col(j));
+                // Field val = 0;
+                // for (Int k = 0; k < contraction_size; ++k)
+                //     val += left_mat_transpose(k, i) * Conjugate(left_mat_transpose(k, j));
+                out_col[i] = alpha * val;
+            }
+        }
+    }
+    else {
+        for (Int j = 0; j < output_height; ++j) {
+            Field *out_col = output_matrix->Pointer(0, j);
+            for (Int i = j; i < output_height; ++i) {
+                Field val = left_mat_transpose.col(i).dot(left_mat_transpose.col(j));
+                // Field val = 0;
+                // for (Int k = 0; k < contraction_size; ++k)
+                //     val += left_mat_transpose(k, i) * Conjugate(left_mat_transpose(k, j));
+                out_col[i] = alpha * val + beta * out_col[i];
+            }
+        }
+    }
+}
+
+template <class Field>
+void LowerNormalHermitianOuterProductDynamicBLASDispatch(
+    const ComplexBase<Field>& alpha,
     const ConstBlasMatrixView<Field>& left_matrix,
     const ComplexBase<Field>& beta, BlasMatrixView<Field>* output_matrix) {
   const Int output_height = output_matrix->height;
   const Int contraction_size = left_matrix.width;
 
 #ifdef CATAMARI_HAVE_BLAS
-    // Only use BLAS call for large jobs
-#ifdef DARWIN
-    // if (output_height * output_height * contraction_size > 200000) // Faster for smaller 2D problems :|
-    if (output_height * output_height * contraction_size > 5000)      // Faster for large, volumetric problems :|
-#else
-    if (output_height * output_height * contraction_size > 5000)
-#endif
+    // Only use BLAS for large enough jobs.
+    // Rather than basing the treshold on a flop estimate (h^2 c) it seems better to base it
+    // separately on `output_height` and `contraction_size`; the naive implementation below
+    // performs well if the output matrix fits in cache or if only a rank 1 matrix is added.
+    if (output_height > 128 && contraction_size > 1) {
         return LowerNormalHermitianOuterProduct(alpha, left_matrix, beta, output_matrix);
+    }
 #endif
-  using EVec = Eigen::Matrix<Field, Eigen::Dynamic, 1>;
 
+  using EVec = Eigen::Matrix<Field, Eigen::Dynamic, 1>;
   int k_start = 0;
   if (beta == Field(0)) {
       const Field *col_k = left_matrix.Pointer(0, 0);
@@ -1360,9 +1408,9 @@ void LowerNormalHermitianOuterProductDynamicBLASDispatch(
           for (Int i = j; i < output_height; ++i) {
               out_col[i] += alpha_l_jk * col_k[i];
           }
-#endif
       }
   }
+#endif
 }
 
 template <class Field>

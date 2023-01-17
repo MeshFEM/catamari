@@ -931,13 +931,10 @@ void MergeChildSchurComplement(Int supernode, Int child,
 #if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
         for (Int i = num_child_diag_indices; i < child_degree; i += child_rel_indices_rl[i]) {
             int len = child_rel_indices_rl[i];
-            Field *ptr = lower_column + child_rel_indices[i];
-            if (len > 64)
-                VecMap(ptr, len) += CVecMap(child_column + i, len);
-            else {
-                for (Int ii = 0; ii < len; ++ii) {
-                    ptr[ii] += child_column[i + ii];
-                }
+            Field * __restrict__ ptr = lower_column + child_rel_indices[i];
+            const Field *__restrict__ iptr = child_column + i;
+            while (len-- > 0) {
+                *ptr++ += *iptr++;
             }
         }
         // for (Int i = num_child_diag_indices; i < child_degree; i += child_rel_indices_rl[i]) {

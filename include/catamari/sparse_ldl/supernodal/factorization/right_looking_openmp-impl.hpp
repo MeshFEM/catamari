@@ -35,7 +35,6 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
   BlasMatrixView<Field> lower_block = lower_factor_->blocks[supernode];
   const Int degree = lower_block.height;
   const Int supernode_size = lower_block.width;
-  BlasMatrixView<Field>& schur_complement = shared_state->schur_complements[supernode];
   const bool has_children = ordering_.assembly_forest.child_offsets[supernode + 1] > ordering_.assembly_forest.child_offsets[supernode];
 
   Int num_supernode_pivots;
@@ -89,13 +88,45 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
         SupernodePermutation(supernode);
     InversePermuteColumns(permutation, &lower_block);
   }
+
+#if 1
   SolveAgainstDiagonalBlock(control_.factorization_type,
                             diagonal_block.ToConst(), &lower_block);
+#else
+  // TODO: try constructing and using the *transpose* of `lower_block`;
+  // this seems like it would be more efficient (e.g., it lends itself to
+  // a more efficient naive implementations of dsyrk).
+  // Solve against the lower-triangular matrix L(K, K)' from the right.
+  Eigen::Matrix<Field, Eigen::Dynamic, Eigen::Dynamic> lower_block_transpose = Eigen::Map<const Eigen::Matrix<Field, Eigen::Dynamic, Eigen::Dynamic>>(lower_block.data, lower_block.height, lower_block.width).transpose();
+  {
+      const char side = 'L';
+      const char uplo = 'L';
+      const char trans_triang = 'N';
+      const char diag = 'N';
+      const BlasInt height_blas = lower_block_transpose.rows();
+      const BlasInt width_blas = lower_block_transpose.cols();
+      const double alpha = 1;
+      const BlasInt triang_leading_dim_blas = diagonal_block.leading_dim;
+      const BlasInt leading_dim_blas = height_blas;
+
+      BLAS_SYMBOL(dtrsm)
+      (&side, &uplo, &trans_triang, &diag, &height_blas, &width_blas, &alpha,
+       (const double *) diagonal_block.data, &triang_leading_dim_blas, (double *) lower_block_transpose.data(),
+       &leading_dim_blas);
+  }
+#endif
 
   if (control_.factorization_type == kCholeskyFactorization) {
+    BlasMatrixView<Field>& schur_complement = shared_state->schur_complements[supernode];
+#if 1
     LowerNormalHermitianOuterProductDynamicBLASDispatch(
                                      Real{-1}, lower_block.ToConst(),
                                      has_children ? Real{1} : Real{0}, &schur_complement);
+#else
+    LowerNormalHermitianOuterProductDynamicBLASDispatch(
+                                     Real{-1}, lower_block_transpose,
+                                     has_children ? Real{1} : Real{0}, &schur_complement);
+#endif
   } else {
     const int thread = tbb::this_task_arena::current_thread_index(); // TODO(Julian Panetta): switch to thread-local storage
     PrivateState<Field> &private_state = (*private_states)[thread];
@@ -115,6 +146,7 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
         control_.factorization_type,
         diagonal_block.ToConst(), lower_block.ToConst(), &scaled_transpose);
 #endif
+    BlasMatrixView<Field>& schur_complement = shared_state->schur_complements[supernode];
 
 #if 0 // These parallelizations don't seem to make a huge difference
     // Note: does its own #paragma omp taskgroup...
