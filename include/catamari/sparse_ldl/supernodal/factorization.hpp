@@ -238,7 +238,7 @@ class Factorization {
   // Factors the given matrix using the prescribed permutation.
   SparseLDLResult<Field> Factor(const CoordinateMatrix<Field>& matrix,
                                 const SymmetricOrdering& manual_ordering,
-                                const Control<Field>& control);
+                                const Control<Field>& control, bool symbolic_only = false);
 
   // Factors the given matrix after having previously factored another matrix
   // with the same sparsity pattern.

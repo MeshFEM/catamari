@@ -32,7 +32,8 @@ SparseLDL<Field>::SparseLDL() {
 template <class Field>
 SparseLDLResult<Field> SparseLDL<Field>::Factor(
     const CoordinateMatrix<Field>& matrix,
-    const SparseLDLControl<Field>& control) {
+    const SparseLDLControl<Field>& control,
+    bool symbolic_only) {
   BENCHMARK_SCOPED_TIMER_SECTION timer("SparseLDL.Factor (no ordering)");
   scalar_factorization.reset();
   supernodal_factorization.reset();
@@ -120,7 +121,8 @@ SparseLDLResult<Field> SparseLDL<Field>::Factor(
     quotient_graph.release();
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
     result = supernodal_factorization->Factor(*matrix_to_factor, ordering,
-                                              control.supernodal_control);
+                                              control.supernodal_control,
+                                              symbolic_only);
   } else {
     quotient_graph.release();
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
@@ -134,7 +136,8 @@ SparseLDLResult<Field> SparseLDL<Field>::Factor(
 template <class Field>
 SparseLDLResult<Field> SparseLDL<Field>::Factor(
     const CoordinateMatrix<Field>& matrix, const SymmetricOrdering& ordering,
-    const SparseLDLControl<Field>& control) {
+    const SparseLDLControl<Field>& control,
+    bool symbolic_only) {
   BENCHMARK_SCOPED_TIMER_SECTION timer("SparseLDL.Factor");
   ScopedEnableFlushToZero scope_guard;
   scalar_factorization.reset();
@@ -168,7 +171,7 @@ SparseLDLResult<Field> SparseLDL<Field>::Factor(
   if (is_supernodal) {
     supernodal_factorization.reset(new supernodal_ldl::Factorization<Field>);
     result = supernodal_factorization->Factor(*matrix_to_factor, ordering,
-                                              control.supernodal_control);
+                                              control.supernodal_control, symbolic_only);
   } else {
     scalar_factorization.reset(new scalar_ldl::Factorization<Field>);
     result = scalar_factorization->Factor(*matrix_to_factor, ordering,

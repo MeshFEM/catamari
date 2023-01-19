@@ -301,7 +301,8 @@ void Factorization<Field>::InitializeBlockColumn(
 template <class Field>
 SparseLDLResult<Field> Factorization<Field>::Factor(
     const CoordinateMatrix<Field>& matrix,
-    const SymmetricOrdering& manual_ordering, const Control<Field>& control) {
+    const SymmetricOrdering& manual_ordering, const Control<Field>& control,
+    bool symbolic_only) {
   BENCHMARK_SCOPED_TIMER_SECTION timer("supernodal_ldl.Factorization.Factor");
   control_ = control;
   ordering_ = manual_ordering;
@@ -338,6 +339,8 @@ SparseLDLResult<Field> Factorization<Field>::Factor(
 #endif  // ifdef CATAMARI_OPENMP
 
   SparseLDLResult<Field> result;
+  if (symbolic_only) return result;
+
   if (control_.algorithm == kLeftLookingLDL) {
     result = LeftLooking(matrix);
   } else {

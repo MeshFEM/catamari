@@ -130,12 +130,14 @@ class SparseLDL {
 
   // Performs the factorization using an automatically determined ordering.
   SparseLDLResult<Field> Factor(const CoordinateMatrix<Field>& matrix,
-                                const SparseLDLControl<Field>& control);
+                                const SparseLDLControl<Field>& control,
+                                bool symbolic_only = false);
 
   // Performs the factorization using a prescribed ordering.
   SparseLDLResult<Field> Factor(const CoordinateMatrix<Field>& matrix,
                                 const SymmetricOrdering& ordering,
-                                const SparseLDLControl<Field>& control);
+                                const SparseLDLControl<Field>& control,
+                                bool symbolic_only = false);
 
   // Returns the diagonal perturbation -- in the original ordering -- given
   // the list of diagonal dynamic regularization permutations in the
