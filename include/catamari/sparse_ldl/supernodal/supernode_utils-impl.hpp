@@ -913,6 +913,7 @@ void MergeChildSchurComplement(Int supernode, Int child,
 
     using  VecMap = Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>, Eigen::Unaligned>;
     using CVecMap = Eigen::Map<const Eigen::Matrix<Field, Eigen::Dynamic, 1>, Eigen::Unaligned>;
+    static tbb::affinity_partitioner ap;
 
     // Add the child Schur complement into this supernode's front.
     for (Int j = 0; j < num_child_diag_indices; ++j) {

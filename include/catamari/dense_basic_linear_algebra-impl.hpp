@@ -1377,7 +1377,7 @@ void LowerNormalHermitianOuterProductDynamicBLASDispatch(
 #ifdef DARWIN
     const bool use_blas = (output_height > 128 && contraction_size > 1);
 #else
-    const bool use_blas = (output_height > 48 && contraction_size > 1);
+    const bool use_blas = (output_height > 64 && contraction_size > 1);
 #endif
     if (use_blas) {
         return LowerNormalHermitianOuterProduct(alpha, left_matrix, beta, output_matrix);

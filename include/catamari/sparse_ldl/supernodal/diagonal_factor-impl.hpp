@@ -14,26 +14,20 @@ namespace catamari {
 namespace supernodal_ldl {
 
 template <class Field>
-DiagonalFactor<Field>::DiagonalFactor(const Buffer<Int>& supernode_sizes) {
+DiagonalFactor<Field>::DiagonalFactor(const Buffer<Int>& supernode_sizes, BlasMatrixView<Field> storage) {
   const Int num_supernodes = supernode_sizes.Size();
 
-  Buffer<Int> diag_value_offsets(num_supernodes + 1);
+  blocks.Resize(num_supernodes);
   Int num_diagonal_entries = 0;
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int supernode_size = supernode_sizes[supernode];
-    diag_value_offsets[supernode] = num_diagonal_entries;
-    num_diagonal_entries += supernode_size * supernode_size;
-  }
-  diag_value_offsets[num_supernodes] = num_diagonal_entries;
-  values_.Resize(num_diagonal_entries);
 
-  blocks.Resize(num_supernodes);
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int supernode_size = supernode_sizes[supernode];
     blocks[supernode].height = supernode_size;
     blocks[supernode].width = supernode_size;
     blocks[supernode].leading_dim = supernode_size;
-    blocks[supernode].data = &values_[diag_value_offsets[supernode]];
+    blocks[supernode].data = storage.Data() + num_diagonal_entries;
+
+    num_diagonal_entries += supernode_size * supernode_size;
   }
 }
 

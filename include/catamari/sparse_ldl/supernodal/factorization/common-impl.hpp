@@ -140,16 +140,34 @@ void Factorization<Field>::FormSupernodes(const CoordinateMatrix<Field>& matrix,
 }
 
 template <class Field>
+void Factorization<Field>::m_allocateFactors(const Buffer<Int> &supernode_degrees) {
+    // Count sizes of the lower and diagonal parts of the factor.
+    Int diagSize = 0, lowerSize = 0;
+    const Int num_supernodes = supernode_degrees.Size();
+    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+        const Int degree = supernode_degrees[supernode];
+        const Int supernode_size = ordering_.supernode_sizes[supernode];
+         diagSize += supernode_size * supernode_size;
+        lowerSize += supernode_size * degree;
+    }
+
+    // Allocate a single buffer holding both parts of the factor.
+    factor_values_.Resize(diagSize + lowerSize, 1);
+
+    diagonal_factor_ = std::make_unique<DiagonalFactor<Field>>(ordering_.supernode_sizes,                    factor_values_.Submatrix(       0, 0,  diagSize, 1));
+    lower_factor_    = std::make_unique<   LowerFactor<Field>>(ordering_.supernode_sizes, supernode_degrees, factor_values_.Submatrix(diagSize, 0, lowerSize, 1));
+}
+
+template <class Field>
 void Factorization<Field>::InitializeFactors(
     const CoordinateMatrix<Field>& matrix,
     const Buffer<Int>& supernode_degrees) {
   BENCHMARK_SCOPED_TIMER_SECTION timer("InitializeFactors");
-  lower_factor_.reset(
-      new LowerFactor<Field>(ordering_.supernode_sizes, supernode_degrees));
-  diagonal_factor_.reset(new DiagonalFactor<Field>(ordering_.supernode_sizes));
 
   CATAMARI_ASSERT(supernode_degrees.Size() == ordering_.supernode_sizes.Size(),
                   "Invalid supernode degrees size.");
+
+  m_allocateFactors(supernode_degrees);
 
   // Store the largest degree of the factorization for use in the solve phase.
   max_degree_ =

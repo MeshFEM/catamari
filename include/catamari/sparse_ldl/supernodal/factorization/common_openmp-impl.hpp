@@ -118,12 +118,10 @@ template <class Field>
 void Factorization<Field>::OpenMPInitializeFactors(
     const CoordinateMatrix<Field>& matrix,
     const Buffer<Int>& supernode_degrees) {
-  lower_factor_.reset(
-      new LowerFactor<Field>(ordering_.supernode_sizes, supernode_degrees));
-  diagonal_factor_.reset(new DiagonalFactor<Field>(ordering_.supernode_sizes));
-
   CATAMARI_ASSERT(supernode_degrees.Size() == ordering_.supernode_sizes.Size(),
                   "Invalid supernode degrees size.");
+
+  m_allocateFactors(supernode_degrees);
 
   // Store the largest degree of the factorization for use in the solve phase.
   max_degree_ =

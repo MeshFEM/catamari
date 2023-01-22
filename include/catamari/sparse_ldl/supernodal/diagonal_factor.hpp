@@ -23,12 +23,7 @@ class DiagonalFactor {
   // Representations of the diagonal blocks of the factorization.
   Buffer<BlasMatrixView<Field>> blocks;
 
-  DiagonalFactor(const Buffer<Int>& supernode_sizes);
-
- // private:
-  // The concatenation of the numerical values of the supernodal diagonal
-  // blocks (stored in a column-major manner in each block).
-  Buffer<Field> values_;
+  DiagonalFactor(const Buffer<Int>& supernode_sizes, BlasMatrixView<Field> storage);
 };
 
 }  // namespace supernodal_ldl

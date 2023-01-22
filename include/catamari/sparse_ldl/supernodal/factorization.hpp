@@ -38,6 +38,11 @@ auto eigenMap(BlasMatrixView<Field> &bm) {
 }
 
 template<class Field>
+auto eigenMap(BlasMatrix<Field> &bm) {
+    return Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, Eigen::Dynamic>>(bm.Data(), bm.Height(), bm.Width());
+}
+
+template<class Field>
 auto eigenMap(Buffer<Field> &b) {
     return Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>(b.Data(), b.Size());
 }
@@ -345,6 +350,8 @@ public:
 
   // The block-diagonal factor.
   std::unique_ptr<DiagonalFactor<Field>> diagonal_factor_;
+
+  BlasMatrix<Field> factor_values_;
 private:
 
   // If supernodal_pivoting is enabled, all of the supernode permutation
@@ -477,6 +484,8 @@ private:
   void LowerTransposeSupernodalTrapezoidalSolve(
       Int supernode, BlasMatrixView<Field>* right_hand_sides,
       BlasMatrixView<Field> &work_right_hand_sides) const;
+
+  void m_allocateFactors(const Buffer<Int> &supernode_degrees);
 };
 
 }  // namespace supernodal_ldl

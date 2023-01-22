@@ -15,39 +15,31 @@ namespace supernodal_ldl {
 
 template <class Field>
 LowerFactor<Field>::LowerFactor(const Buffer<Int>& supernode_sizes,
-                                const Buffer<Int>& supernode_degrees) {
+                                const Buffer<Int>& supernode_degrees,
+                                BlasMatrixView<Field> storage) {
   const Int num_supernodes = supernode_sizes.Size();
 
   Int degree_sum = 0;
   Int num_entries = 0;
   structure_index_offsets_.Resize(num_supernodes + 1);
-  Buffer<Int> lower_value_offsets(num_supernodes + 1);
-  for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-    const Int degree = supernode_degrees[supernode];
-    const Int supernode_size = supernode_sizes[supernode];
-
-    structure_index_offsets_[supernode] = degree_sum;
-    lower_value_offsets[supernode] = num_entries;
-
-    degree_sum += degree;
-    num_entries += degree * supernode_size;
-  }
-  structure_index_offsets_[num_supernodes] = degree_sum;
-  lower_value_offsets[num_supernodes] = num_entries;
-
-  structure_indices_.Resize(degree_sum);
-  values_.Resize(num_entries);
-
   blocks.Resize(num_supernodes);
   for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
     const Int degree = supernode_degrees[supernode];
     const Int supernode_size = supernode_sizes[supernode];
 
+    structure_index_offsets_[supernode] = degree_sum;
+
     blocks[supernode].height = degree;
     blocks[supernode].width = supernode_size;
     blocks[supernode].leading_dim = degree;
-    blocks[supernode].data = &values_[lower_value_offsets[supernode]];
+    blocks[supernode].data = storage.Data() + num_entries;
+
+    degree_sum += degree;
+    num_entries += degree * supernode_size;
   }
+
+  structure_index_offsets_[num_supernodes] = degree_sum;
+  structure_indices_.Resize(degree_sum);
 }
 
 template <class Field>
