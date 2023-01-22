@@ -12,6 +12,7 @@
 
 #include "catamari/blas_matrix_view.hpp"
 #include "catamari/buffer.hpp"
+#include "catamari_config.hh"
 
 namespace catamari {
 namespace supernodal_ldl {

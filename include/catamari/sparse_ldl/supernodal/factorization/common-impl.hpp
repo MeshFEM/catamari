@@ -153,9 +153,22 @@ void Factorization<Field>::m_allocateFactors(const Buffer<Int> &supernode_degree
 
     // Allocate a single buffer holding both parts of the factor.
     factor_values_.Resize(diagSize + lowerSize, 1);
-
     diagonal_factor_ = std::make_unique<DiagonalFactor<Field>>(ordering_.supernode_sizes,                    factor_values_.Submatrix(       0, 0,  diagSize, 1));
     lower_factor_    = std::make_unique<   LowerFactor<Field>>(ordering_.supernode_sizes, supernode_degrees, factor_values_.Submatrix(diagSize, 0, lowerSize, 1));
+#if INTERLEAVED_FACTOR_BLOCKS
+    // Modify the diagonal/lower block pointers to that their data is
+    // interleaved to form contiguous frontal matrix columns.
+    Int offset = 0;
+    for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
+        auto &db = diagonal_factor_->blocks[supernode];
+        auto &lb =    lower_factor_->blocks[supernode];
+        if (db.Width() != lb.Width()) throw std::logic_error("Width mismatch");
+        db.data = factor_values_.Data() + offset;
+        lb.data = db.data + db.Height();
+        db.leading_dim = lb.leading_dim = db.Height() + lb.Height();
+        offset += db.Width() * (db.Height() + lb.Height());
+    }
+#endif
 }
 
 template <class Field>
