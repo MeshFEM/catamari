@@ -900,7 +900,7 @@ void MergeChildSchurComplement(Int supernode, Int child,
     const Int num_child_diag_indices = ordering.assembly_forest.num_child_diag_indices[child];
 
     // Locations of child's rows/cols relative to the parent front's upper-left corner
-    const Buffer<Int> &child_rel_indices = ordering.assembly_forest.child_rel_indices[child]; 
+    const Buffer<Int> &child_rel_indices = ordering.assembly_forest.child_rel_indices[child];
 
     const Int supernode_size = ordering.supernode_sizes[supernode];
 
@@ -918,22 +918,23 @@ void MergeChildSchurComplement(Int supernode, Int child,
             const Field* child_column = child_schur_complement.Pointer(0, j);
             // Get pointer to the (conceptual) full parent front column, of which schur_complement is the bottom part.
             // Note: parent front's upper-left corner is (-supernode_size, -supernode_size) relative to this block...
-            Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j] - supernode_size) - supernode_size;
+            Field* schur_column = schur_complement.Pointer(-supernode_size, child_rel_indices[j] - supernode_size);
             for (Int i = j; i < child_degree; ++i)
                 schur_column[child_rel_indices[i]] = child_column[i];
         }
-    } 
+    }
     else {
         // Contribute into the bottom-right block of the front.
         for (Int j = num_child_diag_indices; j < child_degree; ++j) {
             const Field* child_column = child_schur_complement.Pointer(0, j);
-            Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j] - supernode_size) - supernode_size;
+            Field* schur_column = schur_complement.Pointer(-supernode_size, child_rel_indices[j] - supernode_size);
             for (Int i = j; i < child_degree; ++i)
                 schur_column[child_rel_indices[i]] += child_column[i];
         }
     }
 }
 
+#if 0
 template <class Field>
 void MergeChildSchurComplements(Int supernode,
                                 const SymmetricOrdering& ordering,
@@ -957,6 +958,124 @@ void MergeChildSchurComplements(Int supernode,
                                 schur_complement, /* freshShurComplement = */ child_index == child_beg);
   }
 }
+#else
+template <class Field>
+void MergeChildSchurComplements(Int supernode,
+                                const SymmetricOrdering& ordering,
+                                LowerFactor<Field>* lower_factor,
+                                DiagonalFactor<Field>* diagonal_factor,
+                                RightLookingSharedState<Field>* shared_state) {
+    const auto &af = ordering.assembly_forest;
+    const Int child_beg = af.child_offsets[supernode];
+    const Int child_end = af.child_offsets[supernode + 1];
+    const Int num_children = child_end - child_beg;
+
+    // Output destination buffers
+    BlasMatrixView<Field> lower_block      = lower_factor->blocks[supernode];
+    BlasMatrixView<Field> diagonal_block   = diagonal_factor->blocks[supernode];
+    BlasMatrixView<Field> schur_complement = shared_state->schur_complements[supernode];
+
+    for (Int child_index = child_beg; child_index < child_end; ++child_index) {
+        const Int child = af.children[child_index];
+        const Int child_degree = shared_state->schur_complements[child].height;
+        populateChildToParentMap(supernode, child, child_degree, ordering, lower_factor);
+    }
+
+    const Int supernode_size = ordering.supernode_sizes[supernode];
+    std::vector<size_t> child_j(num_children); // pointer into the child columns
+
+#if 1
+    for (Int j = 0; j < supernode_size; ++j) {
+        Field* factor_column = diagonal_block.Pointer(0, j);
+        for (Int ci = 0; ci < num_children; ++ci) {
+            Int cj = child_j[ci];
+
+            const Int child = af.children[child_beg + ci];
+            const Int num_child_diag_indices = af.num_child_diag_indices[child];
+            const Buffer<Int> &child_rel_indices = af.child_rel_indices[child];
+            if (child_rel_indices[cj] != j) continue;
+
+            const BlasMatrixView<Field> &child_schur_complement = shared_state->schur_complements[child];
+            const Int child_degree = child_schur_complement.height;
+            const Field* child_column = child_schur_complement.Pointer(0, cj);
+
+            factor_column[j] += child_column[cj]; // diagonal entry
+            for (Int i = cj + 1; i < child_degree; ++i)
+                factor_column[child_rel_indices[i]] += child_column[i];
+
+            child_j[ci] = ++cj;
+        }
+    }
+#else
+    for (Int child_index = child_beg; child_index < child_end; ++child_index) {
+        const Int child = af.children[child_index];
+        const Int num_child_diag_indices = af.num_child_diag_indices[child];
+        const Buffer<Int> &child_rel_indices = af.child_rel_indices[child];
+        const BlasMatrixView<Field> &child_schur_complement = shared_state->schur_complements[child];
+        const Int child_degree = child_schur_complement.height;
+        // Add the child Schur complement into this supernode's front.
+        for (Int j = 0; j < num_child_diag_indices; ++j) {
+            const Field* child_column = child_schur_complement.Pointer(0, j);
+            Field* factor_column = diagonal_block.Pointer(0, child_rel_indices[j]);
+            for (Int i = j; i < child_degree; ++i)
+                factor_column[child_rel_indices[i]] += child_column[i];
+        }
+    }
+#endif
+
+    static tbb::affinity_partitioner ap;
+#if 1
+    const Int sc_size = schur_complement.width;
+    tbb::parallel_for(tbb::blocked_range<catamari::Int>(0, sc_size), [&](const tbb::blocked_range<catamari::Int> &r) {
+        for (Int j = r.begin(); j < r.end(); ++j) {
+            Int front_j = j + supernode_size;
+            Field *schur_column = schur_complement.Pointer(-supernode_size, j);
+            Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>(schur_complement.Pointer(0, j), sc_size).setZero();
+
+            for (Int ci = 0; ci < num_children; ++ci) {
+                // Int cj = child_j[ci];
+
+                const Int child = af.children[child_beg + ci];
+                const Int num_child_diag_indices = af.num_child_diag_indices[child];
+                const Buffer<Int> &child_rel_indices = af.child_rel_indices[child];
+
+                auto it = std::lower_bound(child_rel_indices.begin() + num_child_diag_indices, child_rel_indices.end(), front_j);
+                if (it == child_rel_indices.end() || *it != front_j) continue;
+                Int cj = std::distance(child_rel_indices.begin(), it);
+
+                // if (child_rel_indices[cj] != front_j) continue;
+
+                const BlasMatrixView<Field> &child_schur_complement = shared_state->schur_complements[child];
+                const Int child_degree = child_schur_complement.height;
+
+                const Field* child_column = child_schur_complement.Pointer(0, cj);
+                for (Int i = cj; i < child_degree; ++i)
+                    schur_column[child_rel_indices[i]] += child_column[i];
+
+                // child_j[ci] = ++cj;
+            }
+        }
+    });
+#else
+    eigenMap(schur_complement).setZero();
+    for (Int child_index = child_beg; child_index < child_end; ++child_index) {
+        const Int child = af.children[child_index];
+        const Int num_child_diag_indices = af.num_child_diag_indices[child];
+        const Buffer<Int> &child_rel_indices = af.child_rel_indices[child];
+        const BlasMatrixView<Field> &child_schur_complement = shared_state->schur_complements[child];
+        const Int child_degree = child_schur_complement.height;
+        tbb::parallel_for(tbb::blocked_range<catamari::Int>(num_child_diag_indices, child_degree), [&](const tbb::blocked_range<catamari::Int> &r) {
+            for (Int j = r.begin(); j < r.end(); ++j) {
+                const Field* child_column = child_schur_complement.Pointer(0, j);
+                Field* schur_column = schur_complement.Pointer(-supernode_size, child_rel_indices[j] - supernode_size);
+                for (Int i = j; i < child_degree; ++i)
+                    schur_column[child_rel_indices[i]] += child_column[i];
+            }
+        }, ap);
+    }
+#endif
+}
+#endif
 
 template <class Field>
 Int FactorDiagonalBlock(
