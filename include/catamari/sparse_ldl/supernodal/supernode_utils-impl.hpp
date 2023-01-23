@@ -13,8 +13,6 @@
 
 #include "quotient/index_utils.hpp"
 
-#define VECTORIZE_MERGE_SCHUR_COMPLEMENTS 0 // Appears to be a pessimization :(
-
 namespace catamari {
 namespace supernodal_ldl {
 
@@ -853,6 +851,40 @@ void UpdateSubdiagonalBlock(
 }
 
 template <class Field>
+void populateChildToParentMap(Int supernode, Int child, Int child_degree,
+                              const SymmetricOrdering& ordering,
+                              const LowerFactor<Field> *lower_factor) {
+    auto &child_rel_indices = ordering.assembly_forest.child_rel_indices[child]; // locations of child rows/cols relative to the parent front's upper-left corner
+    if (child_rel_indices.Size() == child_degree) return;
+
+    const Int supernode_size = ordering.supernode_sizes[supernode];
+    const Int supernode_start = ordering.supernode_offsets[supernode];
+    const Int supernode_end = supernode_start + supernode_size;
+
+    Int &num_child_diag_indices = ordering.assembly_forest.num_child_diag_indices[child];
+    const Int* parent_indices = lower_factor->StructureBeg(supernode);
+    // Fill the mapping from the child structure into the parent front.
+    child_rel_indices.Resize(child_degree);
+    num_child_diag_indices = 0;
+
+    const Int* child_indices = lower_factor->StructureBeg(child);
+    Int i_rel = 0;
+    for (Int i = 0; i < child_degree; ++i) {
+        const Int row = child_indices[i];
+        if (row < supernode_end) {
+            child_rel_indices[i] = row - supernode_start;
+            ++num_child_diag_indices;
+        } else {
+            while (parent_indices[i_rel] != row) {
+                ++i_rel;
+                CATAMARI_ASSERT(i_rel < schur_complement.height, "Relative index is out-of-bounds.");
+            }
+            child_rel_indices[i] = supernode_size + i_rel; // index into the lower block of the front (diagonal and lower factor blocks are now unified/interleaved!)
+        }
+    }
+}
+
+template <class Field>
 void MergeChildSchurComplement(Int supernode, Int child,
                                const SymmetricOrdering& ordering,
                                const LowerFactor<Field> *lower_factor,
@@ -862,124 +894,42 @@ void MergeChildSchurComplement(Int supernode, Int child,
                                BlasMatrixView<Field> schur_complement,
                                bool freshShurComplement) {
     const Int child_degree = child_schur_complement.height;
+    populateChildToParentMap(supernode, child, child_degree, ordering, lower_factor);
 
-#if 1
-    auto &ncdi   = const_cast<Buffer<Int> &>(ordering.assembly_forest.num_child_diag_indices);
-    auto &cri    = const_cast<Buffer<Buffer<Int>> &>(ordering.assembly_forest.child_rel_indices);
-    auto &cri_rl = const_cast<Buffer<Buffer<Int>> &>(ordering.assembly_forest.child_rel_indices_run_len);
-    Int &num_child_diag_indices = ncdi[child];
-    auto &child_rel_indices     = cri[child];
-    auto &child_rel_indices_rl  = cri_rl[child];
-#else
-    Int num_child_diag_indices = 0;
-    Buffer<Int> child_rel_indices;
-#endif
+    // Number of child rows/cols that map to the parent's diagonal block.
+    const Int num_child_diag_indices = ordering.assembly_forest.num_child_diag_indices[child];
+
+    // Locations of child's rows/cols relative to the parent front's upper-left corner
+    const Buffer<Int> &child_rel_indices = ordering.assembly_forest.child_rel_indices[child]; 
+
     const Int supernode_size = ordering.supernode_sizes[supernode];
-    const Int supernode_start = ordering.supernode_offsets[supernode];
-    const Int supernode_end = supernode_start + supernode_size;
-    if (child_rel_indices.Size() == 0) {
-        const Int* parent_indices = lower_factor->StructureBeg(supernode);
-        // Fill the mapping from the child structure into the parent front.
-        child_rel_indices.Resize(child_degree);
-        num_child_diag_indices = 0;
-        {
-          const Int* child_indices = lower_factor->StructureBeg(child);
-          Int i_rel = 0;
-          for (Int i = 0; i < child_degree; ++i) {
-            const Int row = child_indices[i];
-            if (row < supernode_end) {
-              child_rel_indices[i] = row - supernode_start;
-              ++num_child_diag_indices;
-            } else {
-              while (parent_indices[i_rel] != row) {
-                ++i_rel;
-                CATAMARI_ASSERT(i_rel < schur_complement.height, "Relative index is out-of-bounds.");
-              }
-              child_rel_indices[i] = i_rel;
-            }
-          }
-       }
-#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
-       // Calculate the run lengths to assist vectorization...
-       child_rel_indices_rl.Resize(child_degree, 1);
-       for (Int i = 0; i < child_degree; /* incremented inside */ ) {
-           Int rl = 1;
-           while ((i + rl) < child_degree && child_rel_indices[i + rl] == child_rel_indices[i] + rl)
-               ++rl;
-           while (rl > 0) { child_rel_indices_rl[i++] = rl--; } // write all (partial) run lengths
-       }
-#endif
-    }
-
-    using  VecMap = Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>, Eigen::Unaligned>;
-    using CVecMap = Eigen::Map<const Eigen::Matrix<Field, Eigen::Dynamic, 1>, Eigen::Unaligned>;
-    static tbb::affinity_partitioner ap;
 
     // Add the child Schur complement into this supernode's front.
     for (Int j = 0; j < num_child_diag_indices; ++j) {
-        const Int j_rel = child_rel_indices[j];
         const Field* child_column = child_schur_complement.Pointer(0, j);
-
-        // Contribute into the upper-left diagonal block of the front.
-        Field* diag_column = diagonal_block.Pointer(0, j_rel);
-        for (Int i = j; i < num_child_diag_indices; ++i) {
-            const Int i_rel = child_rel_indices[i];
-            diag_column[i_rel] += child_column[i];
-        }
-
-        // Contribute into the lower-left block of the front.
-        Field* lower_column = lower_block.Pointer(0, j_rel);
-#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
-        for (Int i = num_child_diag_indices; i < child_degree; i += child_rel_indices_rl[i]) {
-            int len = child_rel_indices_rl[i];
-            Field * __restrict__ ptr = lower_column + child_rel_indices[i];
-            const Field *__restrict__ iptr = child_column + i;
-            while (len-- > 0) {
-                *ptr++ += *iptr++;
-            }
-        }
-        // for (Int i = num_child_diag_indices; i < child_degree; i += child_rel_indices_rl[i]) {
-        //     VecMap(lower_column + child_rel_indices[i], child_rel_indices_rl[i])
-        //             += CVecMap(child_column + i, child_rel_indices_rl[i]);
-        // }
-#else
-        for (Int i = num_child_diag_indices; i < child_degree; ++i) {
-            const Int i_rel = child_rel_indices[i];
-            lower_column[i_rel] += child_column[i];
-        }
-#endif
+        Field* factor_column = diagonal_block.Pointer(0, child_rel_indices[j]);
+        for (Int i = j; i < child_degree; ++i)
+            factor_column[child_rel_indices[i]] += child_column[i];
     }
     if (freshShurComplement) {
         // Clear and contribute into the bottom-right block of the front.
         eigenMap(schur_complement).setZero();
         for (Int j = num_child_diag_indices; j < child_degree; ++j) {
             const Field* child_column = child_schur_complement.Pointer(0, j);
-            Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j]);
-#if 0
-            for (Int i = j; i < child_degree; i += child_rel_indices_rl[i]) {
-                VecMap(schur_column + child_rel_indices[i], child_rel_indices_rl[i])
-                        = CVecMap(child_column + i, child_rel_indices_rl[i]);
-            }
-#else
+            // Get pointer to the (conceptual) full parent front column, of which schur_complement is the bottom part.
+            // Note: parent front's upper-left corner is (-supernode_size, -supernode_size) relative to this block...
+            Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j] - supernode_size) - supernode_size;
             for (Int i = j; i < child_degree; ++i)
                 schur_column[child_rel_indices[i]] = child_column[i];
-#endif
         }
     } 
     else {
         // Contribute into the bottom-right block of the front.
         for (Int j = num_child_diag_indices; j < child_degree; ++j) {
             const Field* child_column = child_schur_complement.Pointer(0, j);
-            Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j]);
-#if 0
-            for (Int i = j; i < child_degree; i += child_rel_indices_rl[i]) {
-                VecMap(schur_column + child_rel_indices[i], child_rel_indices_rl[i])
-                        += CVecMap(child_column + i, child_rel_indices_rl[i]);
-            }
-#else
+            Field* schur_column = schur_complement.Pointer(0, child_rel_indices[j] - supernode_size) - supernode_size;
             for (Int i = j; i < child_degree; ++i)
                 schur_column[child_rel_indices[i]] += child_column[i];
-#endif
         }
     }
 }

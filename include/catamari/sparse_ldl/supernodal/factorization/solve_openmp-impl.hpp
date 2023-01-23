@@ -116,7 +116,8 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
   }
 
   const Int supernode_start = ordering_.supernode_offsets[supernode];
-  const Int* main_indices = lower_factor_->StructureBeg(supernode);
+  const Int supernode_size  = ordering_.supernode_sizes[supernode];
+  const Int* main_indices   = lower_factor_->StructureBeg(supernode);
 
   // Merge the child Schur complements into the parent.
   const Int degree = lower_factor_->blocks[supernode].height;
@@ -130,9 +131,8 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
   for (Int j = 0; j < num_rhs; ++j)
     VecMap(main_right_hand_sides.Pointer(0, j), main_right_hand_sides.height).setZero();
 
-  auto   &ncdi = ordering_.assembly_forest.num_child_diag_indices;
-  auto    &cri = ordering_.assembly_forest.child_rel_indices;
-  auto &cri_rl = ordering_.assembly_forest.child_rel_indices_run_len;
+  auto &ncdi = ordering_.assembly_forest.num_child_diag_indices;
+  auto  &cri = ordering_.assembly_forest.child_rel_indices;
 
   for (Int child_index = child_beg; child_index < child_end; ++child_index) {
     const Int child = ordering_.assembly_forest.children[child_index];
@@ -141,8 +141,7 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
     const Int child_degree = child_right_hand_sides.height;
 
     const Int &num_child_diag_indices = ncdi[child];
-    const Buffer<Int> &child_rel_indices    = cri[child];
-    const Buffer<Int> &child_rel_indices_rl = cri_rl[child];
+    const Buffer<Int> &child_rel_indices = cri[child];
 
 #if 1
     for (Int j = 0; j < num_rhs; ++j) {
@@ -152,15 +151,8 @@ void Factorization<Field>::OpenMPLowerTriangularSolveRecursion(
         for (Int i = 0; i < num_child_diag_indices; ++i)
             rhs_col[child_indices[i]] += crhs_col[i];
 
-#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
-        for (Int i = num_child_diag_indices; i < child_degree; i += child_rel_indices_rl[i]) {
-            VecMap(mrhs_col + child_rel_indices[i], child_rel_indices_rl[i])
-                    += CVecMap(crhs_col + i, child_rel_indices_rl[i]);
-        }
-#else
         for (Int i = num_child_diag_indices; i < child_degree; ++i)
-            mrhs_col[child_rel_indices[i]] += crhs_col[i];
-#endif
+            mrhs_col[child_rel_indices[i] - supernode_size] += crhs_col[i];
     }
 #else
     for (Int j = 0; j < num_rhs; ++j) {

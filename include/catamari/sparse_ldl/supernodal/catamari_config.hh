@@ -8,9 +8,4 @@
 // (setting to 1 obtains the original implementation, which is slightly slower for small matrices but saves memory).
 #define ALLOCATE_SCHUR_COMPLEMENT_OTF 1
 
-// Whether data from the diagonal and lower factor blocks should be
-// interleaved so that columns of the entire factor are stored
-// contiguously (rather than placing all lower blocks after all diagonal blocks).
-#define INTERLEAVED_FACTOR_BLOCKS 1
-
 #endif /* end of include guard: CATAMARI_CONFIG_HH */
