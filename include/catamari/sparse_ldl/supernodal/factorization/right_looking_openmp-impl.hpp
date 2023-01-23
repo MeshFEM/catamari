@@ -352,10 +352,6 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
   if ( cri.Size() != num_supernodes) {
       cri.Resize(num_supernodes);
       ncdi.Resize(num_supernodes);
-#if VECTORIZE_MERGE_SCHUR_COMPLEMENTS
-      auto &cri_rl = ordering_.assembly_forest.child_rel_indices_run_len;
-      cri_rl.Resize(num_supernodes);
-#endif
   }
 
 #if LOAD_MATRIX_OUTSIDE

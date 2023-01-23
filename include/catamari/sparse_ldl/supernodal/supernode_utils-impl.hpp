@@ -985,6 +985,8 @@ void MergeChildSchurComplements(Int supernode,
     std::vector<size_t> child_j(num_children); // pointer into the child columns
 
 #if 1
+    // tbb::parallel_for(tbb::blocked_range<catamari::Int>(0, supernode_size), [&](const tbb::blocked_range<catamari::Int> &r) {
+    //   for (Int j = r.begin(); j < r.end(); ++j) {
     for (Int j = 0; j < supernode_size; ++j) {
         Field* factor_column = diagonal_block.Pointer(0, j);
         for (Int ci = 0; ci < num_children; ++ci) {
@@ -993,6 +995,10 @@ void MergeChildSchurComplements(Int supernode,
             const Int child = af.children[child_beg + ci];
             const Int num_child_diag_indices = af.num_child_diag_indices[child];
             const Buffer<Int> &child_rel_indices = af.child_rel_indices[child];
+            // auto end = child_rel_indices.begin() + num_child_diag_indices;
+            // auto it = std::find(child_rel_indices.begin(), end, j);
+            // if (it == end) continue;
+            // const Int cj = std::distance(child_rel_indices.begin(), it);
             if (child_rel_indices[cj] != j) continue;
 
             const BlasMatrixView<Field> &child_schur_complement = shared_state->schur_complements[child];
@@ -1005,7 +1011,7 @@ void MergeChildSchurComplements(Int supernode,
 
             child_j[ci] = ++cj;
         }
-    }
+    } //  });
 #else
     for (Int child_index = child_beg; child_index < child_end; ++child_index) {
         const Int child = af.children[child_index];
@@ -1023,39 +1029,38 @@ void MergeChildSchurComplements(Int supernode,
     }
 #endif
 
-    static tbb::affinity_partitioner ap;
 #if 1
     const Int sc_size = schur_complement.width;
-    tbb::parallel_for(tbb::blocked_range<catamari::Int>(0, sc_size), [&](const tbb::blocked_range<catamari::Int> &r) {
-        for (Int j = r.begin(); j < r.end(); ++j) {
-            Int front_j = j + supernode_size;
-            Field *schur_column = schur_complement.Pointer(-supernode_size, j);
-            Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>(schur_complement.Pointer(0, j), sc_size).setZero();
+    // tbb::parallel_for(tbb::blocked_range<catamari::Int>(0, sc_size), [&](const tbb::blocked_range<catamari::Int> &r) {
+    //     for (Int j = r.begin(); j < r.end(); ++j) {
+    for (Int j = 0; j < sc_size; ++j) {
+        Int front_j = j + supernode_size;
+        Field *schur_column = schur_complement.Pointer(-supernode_size, j);
+        Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>(schur_complement.Pointer(0, j), sc_size).setZero();
 
-            for (Int ci = 0; ci < num_children; ++ci) {
-                // Int cj = child_j[ci];
+        for (Int ci = 0; ci < num_children; ++ci) {
+            Int cj = child_j[ci];
 
-                const Int child = af.children[child_beg + ci];
-                const Int num_child_diag_indices = af.num_child_diag_indices[child];
-                const Buffer<Int> &child_rel_indices = af.child_rel_indices[child];
+            const Int child = af.children[child_beg + ci];
+            const Int num_child_diag_indices = af.num_child_diag_indices[child];
+            const Buffer<Int> &child_rel_indices = af.child_rel_indices[child];
 
-                auto it = std::lower_bound(child_rel_indices.begin() + num_child_diag_indices, child_rel_indices.end(), front_j);
-                if (it == child_rel_indices.end() || *it != front_j) continue;
-                Int cj = std::distance(child_rel_indices.begin(), it);
+            // auto it = std::lower_bound(child_rel_indices.begin() + num_child_diag_indices, child_rel_indices.end(), front_j);
+            // if (it == child_rel_indices.end() || *it != front_j) continue;
+            // Int cj = std::distance(child_rel_indices.begin(), it);
 
-                // if (child_rel_indices[cj] != front_j) continue;
+            if (child_rel_indices[cj] != front_j) continue;
 
-                const BlasMatrixView<Field> &child_schur_complement = shared_state->schur_complements[child];
-                const Int child_degree = child_schur_complement.height;
+            const BlasMatrixView<Field> &child_schur_complement = shared_state->schur_complements[child];
+            const Int child_degree = child_schur_complement.height;
 
-                const Field* child_column = child_schur_complement.Pointer(0, cj);
-                for (Int i = cj; i < child_degree; ++i)
-                    schur_column[child_rel_indices[i]] += child_column[i];
+            const Field* child_column = child_schur_complement.Pointer(0, cj);
+            for (Int i = cj; i < child_degree; ++i)
+                schur_column[child_rel_indices[i]] += child_column[i];
 
-                // child_j[ci] = ++cj;
-            }
+            child_j[ci] = ++cj;
         }
-    });
+    } // });
 #else
     eigenMap(schur_complement).setZero();
     for (Int child_index = child_beg; child_index < child_end; ++child_index) {
