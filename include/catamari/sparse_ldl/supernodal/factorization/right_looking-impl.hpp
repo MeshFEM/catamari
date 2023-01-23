@@ -42,10 +42,7 @@ bool Factorization<Field>::RightLookingSupernodeFinalize(
     schur_complement.width = degree;
     schur_complement.leading_dim = degree;
     schur_complement.data = schur_complement_buffer.Data();
-    eigenMap(schur_complement).setZero(); // Notably faster than having `schur_complement_buffer.Resize` zero-init!
   }
-#elif ZERO_SCHUR_COMPLEMENT_OTF
-  eigenMap(schur_complement).setZero();
 #endif
 
   CATAMARI_START_TIMER(profile.merge);
@@ -238,14 +235,6 @@ SparseLDLResult<Field> Factorization<Field>::RightLooking(
       }
 #endif
   }
-
-#if !(ALLOCATE_SCHUR_COMPLEMENT_OTF || ZERO_SCHUR_COMPLEMENT_OTF)
-  {
-      // Existing data in the pre-allocated schur_complements buffer must be cleared.
-      BENCHMARK_SCOPED_TIMER_SECTION sztimer("setZeroParallel");
-      setZeroParallel(eigenMap(shared_state.schur_complement_buffers[0]));
-  }
-#endif
 
 #ifdef CATAMARI_ENABLE_TIMERS
   shared_state.inclusive_timers.Resize(num_supernodes);

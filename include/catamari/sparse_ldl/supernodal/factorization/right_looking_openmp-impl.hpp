@@ -181,8 +181,7 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
 
   bool fail = false;
 
-  auto process_child = [&, supernode, min_parallel_work, shared_state, private_states](Int child_index) {
-      const Int child = ordering_.assembly_forest.children[child_beg + child_index];
+  auto process_child = [&, supernode, min_parallel_work, shared_state, private_states](Int child, Int child_index) {
       const Int child_offset = ordering_.supernode_offsets[child];
       DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
       subparams.offset = child_offset;
@@ -232,10 +231,16 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
       BlasMatrixView<Field> diagonal_block   = diagonal_factor_->blocks[supernode];
       BlasMatrixView<Field> schur_complement = shared_state->schur_complements[supernode];
 
-      for (Int child_index = 0; child_index < num_children; ++child_index) {
-          const Int child = ordering_.assembly_forest.children[child_beg + child_index];
+      std::vector<Int> sorted_children(num_children);
+      for (Int child_index = 0; child_index < num_children; ++child_index)
+          sorted_children[child_index] = ordering_.assembly_forest.children[child_beg + child_index];
+      std::sort(sorted_children.begin(), sorted_children.end(),
+                [&](Int a, Int b) { return work_estimates[a] > work_estimates[b]; });
 
-          process_child(child_index);
+      for (Int child_index = 0; child_index < num_children; ++child_index) {
+          const Int child = sorted_children[child_index]; // ordering_.assembly_forest.children[child_beg + child_index];
+
+          process_child(child, child_index);
           // Stop early if a child failed to finalize.
           if (fail) return false;
 
@@ -247,9 +252,10 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
   else {
       tbb::task_group tg;
       for (Int child_index = 0; child_index < num_children - 1; ++child_index) {
-          tg.run([&process_child, child_index]() { process_child(child_index); });
+          Int child = ordering_.assembly_forest.children[child_beg + child_index];
+          tg.run([&process_child, child, child_index]() { process_child(child, child_index); });
       }
-      process_child(num_children - 1);
+      process_child(ordering_.assembly_forest.children[child_end - 1], num_children - 1);
       tg.wait();
 
       // Stop early if a child failed to finalize.

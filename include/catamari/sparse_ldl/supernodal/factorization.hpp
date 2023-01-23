@@ -26,6 +26,26 @@
 
 namespace catamari {
 
+// Sparse record of destination location and source entry for each input
+// matrix entry in the lower factor. This is stored in a
+// compressed-sparse-column-type format.
+struct ConversionPlan {
+    // Destination and source of each input matrix entry appearing in the factor.
+    // Crucially does no value initialization, unlike std::pair!
+    struct Entry { Int dst, src; };
+
+    void resize(size_t size) { m_entries.Resize(size); }
+    bool empty() const { return m_entries.Size() == 0; }
+
+    const Entry *entries() const { return m_entries.Data(); }
+          Entry *entries()       { return m_entries.Data(); }
+    const Entry *columnData(int j) const { return entries() + columnOffsets[j]; }
+
+    Eigen::Array<Int, Eigen::Dynamic, 1> columnOffsets;
+private:
+    Buffer<Entry> m_entries;
+};
+
 template<class Field>
 auto eigenMap(BlasMatrixView<Field> &bm) {
     if (bm.leading_dim != bm.height) throw std::runtime_error("map fail!");
@@ -250,6 +270,16 @@ class Factorization {
   // change in minor ways.
   SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
       const CoordinateMatrix<Field>& matrix, const Control<Field>& control);
+
+  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
+      const Field *Ax, const ConversionPlan &cplan) {
+      CoordinateMatrix<Field> dummy;
+      m_Ax = Ax;
+      m_cplan = &cplan;
+      return RightLooking(dummy);
+  }
+  const ConversionPlan *m_cplan = nullptr;
+  const Field *m_Ax = nullptr;
 
   // Returns the number of rows in the last factored matrix.
   Int NumRows() const;

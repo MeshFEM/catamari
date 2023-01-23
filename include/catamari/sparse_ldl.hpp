@@ -10,6 +10,7 @@
 
 #include <limits>
 #include <memory>
+#include <stdexcept>
 
 #include "catamari/sparse_ldl/scalar.hpp"
 #include "catamari/sparse_ldl/supernodal.hpp"
@@ -156,6 +157,14 @@ class SparseLDL {
   SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
       const CoordinateMatrix<Field>& matrix,
       const SparseLDLControl<Field>& control);
+
+  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
+      const Field *Ax, const ConversionPlan &cplan) {
+      if (is_supernodal) {
+        return supernodal_factorization->RefactorWithFixedSparsityPattern( Ax, cplan);
+      }
+      throw std::runtime_error("Implemented for supernodal only");
+  }
 
   // Returns the number of rows of the last factored matrix.
   Int NumRows() const;

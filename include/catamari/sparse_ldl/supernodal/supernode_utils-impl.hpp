@@ -959,12 +959,14 @@ void MergeChildSchurComplements(Int supernode,
   }
 }
 #else
+// TODO: pass (Ax, conversion plan)
 template <class Field>
 void MergeChildSchurComplements(Int supernode,
                                 const SymmetricOrdering& ordering,
                                 LowerFactor<Field>* lower_factor,
                                 DiagonalFactor<Field>* diagonal_factor,
                                 RightLookingSharedState<Field>* shared_state) {
+    using VMap = Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>;
     const auto &af = ordering.assembly_forest;
     const Int child_beg = af.child_offsets[supernode];
     const Int child_end = af.child_offsets[supernode + 1];
@@ -983,18 +985,21 @@ void MergeChildSchurComplements(Int supernode,
 
     const Int supernode_size = ordering.supernode_sizes[supernode];
     std::vector<size_t> child_j(num_children); // pointer into the child columns
-
+    const Int factor_height = diagonal_block.Height() + lower_block.Height();
 #if 1
     // tbb::parallel_for(tbb::blocked_range<catamari::Int>(0, supernode_size), [&](const tbb::blocked_range<catamari::Int> &r) {
     //   for (Int j = r.begin(); j < r.end(); ++j) {
+
     for (Int j = 0; j < supernode_size; ++j) {
         Field* factor_column = diagonal_block.Pointer(0, j);
+        // VMap(factor_column + j, factor_height - j).setZero();
         for (Int ci = 0; ci < num_children; ++ci) {
             Int cj = child_j[ci];
 
             const Int child = af.children[child_beg + ci];
             const Int num_child_diag_indices = af.num_child_diag_indices[child];
             const Buffer<Int> &child_rel_indices = af.child_rel_indices[child];
+
             // auto end = child_rel_indices.begin() + num_child_diag_indices;
             // auto it = std::find(child_rel_indices.begin(), end, j);
             // if (it == end) continue;
@@ -1011,7 +1016,7 @@ void MergeChildSchurComplements(Int supernode,
 
             child_j[ci] = ++cj;
         }
-    } //  });
+    } // });
 #else
     for (Int child_index = child_beg; child_index < child_end; ++child_index) {
         const Int child = af.children[child_index];
@@ -1036,7 +1041,7 @@ void MergeChildSchurComplements(Int supernode,
     for (Int j = 0; j < sc_size; ++j) {
         Int front_j = j + supernode_size;
         Field *schur_column = schur_complement.Pointer(-supernode_size, j);
-        Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>(schur_complement.Pointer(0, j), sc_size).setZero();
+        VMap(schur_complement.Pointer(0, j), sc_size).setZero();
 
         for (Int ci = 0; ci < num_children; ++ci) {
             Int cj = child_j[ci];
@@ -1060,7 +1065,7 @@ void MergeChildSchurComplements(Int supernode,
 
             child_j[ci] = ++cj;
         }
-    } // });
+    }//  });
 #else
     eigenMap(schur_complement).setZero();
     for (Int child_index = child_beg; child_index < child_end; ++child_index) {
