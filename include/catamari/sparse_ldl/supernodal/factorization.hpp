@@ -271,15 +271,42 @@ class Factorization {
   SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
       const CoordinateMatrix<Field>& matrix, const Control<Field>& control);
 
-  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
-      const Field *Ax, const ConversionPlan &cplan) {
+  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(const ConversionPlan &cplan, const Field *Ax, Field sigma = 0, const Field *Bx = nullptr) {
       CoordinateMatrix<Field> dummy;
-      m_Ax = Ax;
-      m_cplan = &cplan;
+      m_inputData.cplan = &cplan;
+      m_inputData.Ax = Ax;
+      m_inputData.Bx = Bx;
+      m_inputData.sigma = sigma;
       return RightLooking(dummy);
   }
-  const ConversionPlan *m_cplan = nullptr;
-  const Field *m_Ax = nullptr;
+
+  struct MatrixData {
+    const ConversionPlan *cplan = nullptr; // Plan for copying each entry lower_factor_.
+    const Field *Ax = nullptr; // Nonzero values of matrix to factor
+    Field sigma = 0;           // Hessian modification shift magnitude. This means we factor `A + sigma I` or `A + sigma B` depending on whether `Bx == nullptr`.
+    const Field *Bx = nullptr; // Nonzero values of Hessian modification shift
+    void injectEntries(const Int j, Field *factorVals) {
+      if (Bx) {
+        for (const ConversionPlan::Entry *e = cplan->columnData(j); e < cplan->columnData(j + 1); ++e)
+            factorVals[e->dst] = Ax[e->src] + sigma * Bx[e->src];
+      }
+      else {
+        for (const ConversionPlan::Entry *e = cplan->columnData(j); e < cplan->columnData(j + 1); ++e)
+            factorVals[e->dst] = Ax[e->src];
+      }
+    }
+  };
+  MatrixData m_inputData;
+
+  // Initialize column `j` of the factor by zero-initializing it and then copying
+  // in values of the matrix `A` or `A + sigma B`
+  void InitializeFactorColumn(Int j, Int local_j, BlasMatrixView<Field> &diagonal_block) {
+      using VMap = Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>;
+      VMap(diagonal_block.Pointer(local_j, local_j),
+           diagonal_block.leading_dim - local_j).setZero();
+      m_inputData.injectEntries(j, factor_values_.Data());
+      diagonal_block(local_j, local_j) += m_inputData.sigma;
+  }
 
   // Returns the number of rows in the last factored matrix.
   Int NumRows() const;
@@ -338,6 +365,15 @@ class Factorization {
   // Adds in the contribution of a subtree into an overall result.
   static void MergeContribution(const SparseLDLResult<Field>& contribution,
                                 SparseLDLResult<Field>* result);
+
+  // Initializes a supernodal block column of the factorization using the
+  // input matrix.
+  void InitializeBlockColumn(Int supernode,
+                             const CoordinateMatrix<Field>& matrix);
+#ifdef CATAMARI_OPENMP
+  void OpenMPInitializeBlockColumn(Int supernode,
+                                   const CoordinateMatrix<Field>& matrix);
+#endif  // ifdef CATAMARI_OPENMP
 
  private:
   // The control structure for the factorization.
@@ -410,17 +446,7 @@ private:
                             Buffer<Int>* supernode_degrees);
 #endif  // ifdef CATAMARI_OPENMP
 
-  // Initializes a supernodal block column of the factorization using the
-  // input matrix.
-public:
-  void InitializeBlockColumn(Int supernode,
-                             const CoordinateMatrix<Field>& matrix);
 private:
-#ifdef CATAMARI_OPENMP
-  void OpenMPInitializeBlockColumn(Int supernode,
-                                   const CoordinateMatrix<Field>& matrix);
-#endif  // ifdef CATAMARI_OPENMP
-
   void InitializeFactors(const CoordinateMatrix<Field>& matrix,
                          const Buffer<Int>& supernode_degrees);
 #ifdef CATAMARI_OPENMP

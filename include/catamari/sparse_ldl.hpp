@@ -158,10 +158,9 @@ class SparseLDL {
       const CoordinateMatrix<Field>& matrix,
       const SparseLDLControl<Field>& control);
 
-  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(
-      const Field *Ax, const ConversionPlan &cplan) {
+  SparseLDLResult<Field> RefactorWithFixedSparsityPattern(const ConversionPlan &cplan, const Field *Ax, Field sigma = 0, const Field *Bx = nullptr) {
       if (is_supernodal) {
-        return supernodal_factorization->RefactorWithFixedSparsityPattern( Ax, cplan);
+        return supernodal_factorization->RefactorWithFixedSparsityPattern(cplan, Ax, sigma, Bx);
       }
       throw std::runtime_error("Implemented for supernodal only");
   }
