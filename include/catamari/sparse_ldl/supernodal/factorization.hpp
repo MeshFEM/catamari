@@ -285,7 +285,7 @@ class Factorization {
     const Field *Ax = nullptr; // Nonzero values of matrix to factor
     Field sigma = 0;           // Hessian modification shift magnitude. This means we factor `A + sigma I` or `A + sigma B` depending on whether `Bx == nullptr`.
     const Field *Bx = nullptr; // Nonzero values of Hessian modification shift
-    void injectEntries(const Int j, Field *factorVals) {
+    void injectEntries(const Int j, Field *factorVals, Field &diagEntry) {
       if (Bx) {
         for (const ConversionPlan::Entry *e = cplan->columnData(j); e < cplan->columnData(j + 1); ++e)
             factorVals[e->dst] = Ax[e->src] + sigma * Bx[e->src];
@@ -293,6 +293,7 @@ class Factorization {
       else {
         for (const ConversionPlan::Entry *e = cplan->columnData(j); e < cplan->columnData(j + 1); ++e)
             factorVals[e->dst] = Ax[e->src];
+        diagEntry += sigma;
       }
     }
   };
@@ -304,8 +305,7 @@ class Factorization {
       using VMap = Eigen::Map<Eigen::Matrix<Field, Eigen::Dynamic, 1>>;
       VMap(diagonal_block.Pointer(local_j, local_j),
            diagonal_block.leading_dim - local_j).setZero();
-      m_inputData.injectEntries(j, factor_values_.Data());
-      diagonal_block(local_j, local_j) += m_inputData.sigma;
+      m_inputData.injectEntries(j, factor_values_.Data(), diagonal_block(local_j, local_j));
   }
 
   // Returns the number of rows in the last factored matrix.
