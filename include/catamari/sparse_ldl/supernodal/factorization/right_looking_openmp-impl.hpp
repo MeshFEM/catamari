@@ -192,7 +192,7 @@ void MergeChildSchurComplement(Int supernode, Int child,
             ldl.InitializeFactorColumn(sno + j, j, diagonal_block);
             Field* factor_column = diagonal_block.Pointer(0, j);
 
-            if (child_rel_indices[cj] != j) continue;
+            if (cj >= child_rel_indices.Size() || child_rel_indices[cj] != j) continue;
 
             const Field* child_column = child_schur_complement.Pointer(0, cj);
             factor_column[j] += child_column[cj]; // diagonal entry
@@ -293,7 +293,7 @@ void MergeChildSchurComplements(Int supernode, Factorization<Field> &ldl,
             //      auto it = std::find(child_rel_indices.begin(), end, j);
             //      if (it == end) continue;
             //      const Int cj = std::distance(child_rel_indices.begin(), it);
-            if (child_rel_indices[cj] != j) continue;
+            if (cj >= child_rel_indices.Size() || child_rel_indices[cj] != j) continue;
 
             const BlasMatrixView<Field> &child_schur_complement = schur_complements[child];
             const Int child_degree = child_schur_complement.height;
@@ -326,7 +326,7 @@ void MergeChildSchurComplements(Int supernode, Factorization<Field> &ldl,
             // if (it == child_rel_indices.end() || *it != front_j) continue;
             // Int cj = std::distance(child_rel_indices.begin(), it);
 
-            if (child_rel_indices[cj] != front_j) continue;
+            if (cj >= child_rel_indices.Size() || child_rel_indices[cj] != front_j) continue;
 
             const BlasMatrixView<Field> &child_schur_complement = schur_complements[child];
             const Int child_degree = child_schur_complement.height;
