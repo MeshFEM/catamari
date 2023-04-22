@@ -358,34 +358,6 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
 
   const bool parallel = (work_estimate >= min_parallel_work) && (num_children > 1);
 
-#if ALLOCATE_SCHUR_COMPLEMENT_OTF
-  // Allocate a single buffer to hold all the children's Schur complements
-  // (or just the single largest one in the non-parallel case, where the buffer is reused).
-  Eigen::Matrix<Field, Eigen::Dynamic, 1> child_schur_complement_buffer;
-  if (num_children > 0) {
-      Int total_size = 0;
-      for (Int child_index = child_beg; child_index < child_end; ++child_index) {
-          const Int child = ordering_.assembly_forest.children[child_index];
-          const Int degree = lower_factor_->blocks[child].height;
-          if (parallel) total_size += degree * degree;
-          else          total_size = std::max(total_size, degree * degree);
-      }
-      child_schur_complement_buffer.resize(total_size);
-
-      Int offset = 0;
-      for (Int child_index = child_beg; child_index < child_end; ++child_index) {
-          const Int child = ordering_.assembly_forest.children[child_index];
-          const Int degree = lower_factor_->blocks[child].height;
-          BlasMatrixView<Field>& child_schur_complement = shared_state->schur_complements[child];
-          child_schur_complement.height = degree;
-          child_schur_complement.width = degree;
-          child_schur_complement.leading_dim = degree;
-          child_schur_complement.data = child_schur_complement_buffer.data() + offset;
-          if (parallel) offset += degree * degree; // re-use memory in the single-threaded case (offset === 0)
-      }
-  }
-#endif
-
   // Clear this supernode's factor columns and load matrix entries into them.
   auto init = [&](){
     BlasMatrixView<Field> diagonal_block = diagonal_factor_->blocks[supernode];
@@ -412,24 +384,50 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
       if (!success) fail = true;
   };
 
+  // Allocate this supernode's Schur complement on the heap.
+  auto allocate_schur_complement = [&]() {
+      BlasMatrixView<Field>& schur_complement = shared_state->schur_complements[supernode];
+      Buffer<Field>& schur_complement_buffer = shared_state->schur_complement_buffers[supernode];
+      const Int degree = lower_factor_->blocks[supernode].height;
+      schur_complement_buffer.Resize(degree * degree);
+      schur_complement.height = degree;
+      schur_complement.width = degree;
+      schur_complement.leading_dim = degree;
+      schur_complement.data = schur_complement_buffer.Data();
+  };
+
+  // Free a child's Schur complement from the heap.
+  auto free_schur_complement = [&](Int child) {
+      shared_state->schur_complements[child].height = 0;
+      shared_state->schur_complements[child].width = 0;
+      shared_state->schur_complements[child].data = nullptr;
+      shared_state->schur_complement_buffers[child].Clear();
+  };
+
   if (!parallel) {
       // Output destination buffers
-      BlasMatrixView<Field> lower_block      = lower_factor_->blocks[supernode];
-      BlasMatrixView<Field> diagonal_block   = diagonal_factor_->blocks[supernode];
-      BlasMatrixView<Field> schur_complement = shared_state->schur_complements[supernode];
+      BlasMatrixView<Field> lower_block    = lower_factor_->blocks[supernode];
+      BlasMatrixView<Field> diagonal_block = diagonal_factor_->blocks[supernode];
 
-      if (num_children == 0) init();
+      if (num_children == 0) {
+          init();
+          allocate_schur_complement();
+      }
 
       for (Int child_index = 0; child_index < num_children; ++child_index) {
           const Int child = ordering_.assembly_forest.children[child_beg + child_index]; // sorted_children[child_index];
 
           process_child(child, child_index);
           // Stop early if a child failed to finalize.
-          if (fail) return false;
+          if (fail) break;
+
+          if (child_index == 0)
+              allocate_schur_complement();
 
           MergeChildSchurComplement(supernode, child, ordering_,
                   lower_factor_.get(), shared_state->schur_complements[child],
-                  lower_block, diagonal_block, schur_complement, *this, /* first_merge = */ child_index == 0);
+                  lower_block, diagonal_block, shared_state->schur_complements[supernode], *this, /* first_merge = */ child_index == 0);
+          free_schur_complement(child);
       }
   }
   else {
@@ -445,10 +443,20 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
       tg.wait();
 
       // Stop early if a child failed to finalize.
-      if (fail) return false;
-
-      MergeChildSchurComplements(supernode, *this, shared_state->schur_complements);
+      if (!fail) {
+          allocate_schur_complement();
+          MergeChildSchurComplements(supernode, *this, shared_state->schur_complements);
+      }
   }
+
+  // Clear the child fronts (if not already cleared)
+  for (Int child_index = 0; child_index < num_children; ++child_index) {
+    const Int child = ordering_.assembly_forest.children[child_beg + child_index];
+    if (shared_state->schur_complements[child].data == nullptr) continue;
+    free_schur_complement(child);
+  }
+
+  if (fail) return false;
 
   for (Int child_index = 0; child_index < num_children; ++child_index)
       MergeContribution(result_contributions[child_index], result);
@@ -564,36 +572,7 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
   RightLookingSharedState<Field> &shared_state = shared_state_;
   if (shared_state.schur_complements.Size() != num_supernodes) {
       shared_state.schur_complements.Resize(num_supernodes);
-#if ALLOCATE_SCHUR_COMPLEMENT_OTF
       shared_state.schur_complement_buffers.Resize(num_supernodes);
-#else
-      {
-          BENCHMARK_SCOPED_TIMER_SECTION atimer("Allocate buffers");
-
-          Int total_size = 0;
-          for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-              const Int degree = lower_factor_->blocks[supernode].height;
-              total_size += degree * degree;
-          }
-
-          // std::cout << "Allocating buffer of size " << total_size << "(" << (8.0 * total_size / 1024. / 1024.) << "MB)" << std::endl;
-          shared_state.schur_complement_buffers.Resize(1);
-          Buffer<Field> &workspace_buffer = shared_state.schur_complement_buffers[0];
-          workspace_buffer.Resize(total_size);
-          Int offset = 0;
-          for (Int supernode = 0; supernode < num_supernodes; ++supernode) {
-              const Int degree = lower_factor_->blocks[supernode].height;
-              const Int workspace_size = degree * degree;
-
-              auto &supernode_rhs = shared_state.schur_complements[supernode];
-              supernode_rhs.height = degree;
-              supernode_rhs.width = degree;
-              supernode_rhs.leading_dim = degree;
-              supernode_rhs.data = workspace_buffer.Data() + offset;
-              offset += workspace_size;
-          }
-      }
-#endif
   }
 
 #ifdef CATAMARI_ENABLE_TIMERS
@@ -606,32 +585,6 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
   bool fail = false;
 
   Buffer<SparseLDLResult<Field>> result_contributions(num_roots);
-
-#if ALLOCATE_SCHUR_COMPLEMENT_OTF
-  // Allocate a single buffer to hold all roots' Schur complements.
-  Buffer<Field> root_schur_complement_buffer;
-  {
-      Int total_size = 0;
-      for (Int root_index = 0; root_index < num_roots; ++root_index) {
-          const Int root = ordering_.assembly_forest.roots[root_index];
-          const Int degree = lower_factor_->blocks[root].height;
-          total_size += degree * degree;
-      }
-      root_schur_complement_buffer.Resize(total_size);
-
-      Int offset = 0;
-      for (Int root_index = 0; root_index < num_roots; ++root_index) {
-          const Int root = ordering_.assembly_forest.roots[root_index];
-          const Int degree = lower_factor_->blocks[root].height;
-          BlasMatrixView<Field>& root_schur_complement = shared_state.schur_complements[root];
-          root_schur_complement.height = degree;
-          root_schur_complement.width = degree;
-          root_schur_complement.leading_dim = degree;
-          root_schur_complement.data = root_schur_complement_buffer.Data() + offset;
-          offset += degree * degree;
-      }
-  }
-#endif
 
   auto process_root = [&, min_parallel_work](Int root_index) {
       const Int root = ordering_.assembly_forest.roots[root_index];
