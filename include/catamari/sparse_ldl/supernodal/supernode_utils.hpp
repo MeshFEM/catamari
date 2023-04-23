@@ -12,9 +12,11 @@
 #include "catamari/sparse_ldl/scalar.hpp"
 #include "catamari/symmetric_ordering.hpp"
 
-#ifdef CATAMARI_ENABLE_TIMERS
+#include "catamari_config.hh"
+
+#if defined(CATAMARI_ENABLE_TIMERS) || CUSTOM_TIMERS
 #include "quotient/timer.hpp"
-#endif  // ifdef CATAMARI_ENABLE_TIMERS
+#endif
 
 namespace catamari {
 
@@ -107,6 +109,12 @@ struct RightLookingSharedState {
   // The underlying buffers for the Schur complement portions of the fronts.
   // They are allocated and deallocated as the factorization progresses.
   Buffer<Buffer<Field>> schur_complement_buffers;
+
+#if CUSTOM_TIMERS
+  Buffer<quotient::Timer> custom_timers;
+#endif
+
+  Buffer<Int> subtree_storage_needed;
 
 #ifdef CATAMARI_ENABLE_TIMERS
   // A separate timer for each supernode's inclusive processing time.

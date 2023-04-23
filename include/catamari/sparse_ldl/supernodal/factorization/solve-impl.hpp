@@ -22,7 +22,7 @@
 
 // Avoid repeated memory allocation/deallocation when applying permutations
 // (at the cost of `right_hand_sides` worth of memory).
-#define SOLVE_PERMUTE_SCRATCH 1 
+#define SOLVE_PERMUTE_SCRATCH 1
 
 namespace catamari {
 namespace supernodal_ldl {

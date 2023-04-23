@@ -13,6 +13,7 @@
 #include "catamari/sparse_ldl/supernodal/diagonal_factor.hpp"
 #include "catamari/sparse_ldl/supernodal/lower_factor.hpp"
 #include "catamari/sparse_ldl/supernodal/supernode_utils.hpp"
+#include "catamari/sparse_ldl/supernodal/factorization/SchurComplementStorage.hpp"
 #include <tbb/task_group.h>
 #include <stdexcept>
 
@@ -477,7 +478,8 @@ private:
       const Buffer<double>& work_estimates, double min_parallel_work,
       RightLookingSharedState<Field>* shared_state,
       Buffer<PrivateState<Field>>* private_states,
-      SparseLDLResult<Field>* result);
+      SparseLDLResult<Field>* result,
+      SchurComplementStorage<Field> *subtreeStorage = nullptr);
 
   void LeftLookingSupernodeUpdate(Int main_supernode,
                                   const CoordinateMatrix<Field>& matrix,

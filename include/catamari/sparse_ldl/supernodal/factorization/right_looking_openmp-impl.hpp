@@ -18,6 +18,7 @@
 
 #include "../../../../../../../src/lib/MeshFEM/GlobalBenchmark.hh"
 #include "../../../../../../../src/lib/MeshFEM/ParallelVectorOps.hh"
+#include "SchurComplementStorage.hpp"
 
 #define FINEGRAINED_PARALLELISM 0
 
@@ -347,8 +348,8 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
     const Buffer<double>& work_estimates, double min_parallel_work,
     RightLookingSharedState<Field>* shared_state,
     Buffer<PrivateState<Field>>* private_states,
-    SparseLDLResult<Field>* result) {
-  const double work_estimate = work_estimates[supernode];
+    SparseLDLResult<Field>* result,
+    SchurComplementStorage<Field> *subtreeStorage) {
 
   const Int child_beg = ordering_.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
@@ -356,6 +357,7 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
 
   bool fail = false;
 
+  const double work_estimate = work_estimates[supernode];
   const bool parallel = (work_estimate >= min_parallel_work) && (num_children > 1);
 
   // Clear this supernode's factor columns and load matrix entries into them.
@@ -373,35 +375,34 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
   // std::sort(sorted_children.begin(), sorted_children.end(),
   //           [&](Int a, Int b) { return work_estimates[a] > work_estimates[b]; });
 
-  Buffer<SparseLDLResult<Field>> result_contributions(num_children);
-  auto process_child = [&, supernode, min_parallel_work, shared_state, private_states](Int child, Int child_index) {
+  auto process_child = [&, supernode, min_parallel_work, shared_state, private_states](Int child, SparseLDLResult<Field> *resultContrib, SchurComplementStorage<Field> *stack) {
       const Int child_offset = ordering_.supernode_offsets[child];
       DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
       subparams.offset = child_offset;
       bool success = OpenMPRightLookingSubtree(
               child, matrix, subparams, work_estimates, min_parallel_work,
-              shared_state, private_states, &result_contributions[child_index]);
+              shared_state, private_states, resultContrib, stack);
       if (!success) fail = true;
   };
 
-  // Allocate this supernode's Schur complement on the heap.
-  auto allocate_schur_complement = [&]() {
-      BlasMatrixView<Field>& schur_complement = shared_state->schur_complements[supernode];
-      Buffer<Field>& schur_complement_buffer = shared_state->schur_complement_buffers[supernode];
+  // Allocate this supernode's Schur complement, either on the heap if a
+  // SchurComplementStorage stack doesn't yet exist for this subtree or in
+  // the stack if it does.
+  // We capture `subtreeStorage` so that the subtree root gets allocated on the
+  // heap.
+  auto allocate_schur_complement = [&, subtreeStorage]() {
+      BlasMatrixView<Field> &sc = shared_state->schur_complements[supernode];
       const Int degree = lower_factor_->blocks[supernode].height;
-      schur_complement_buffer.Resize(degree * degree);
-      schur_complement.height = degree;
-      schur_complement.width = degree;
-      schur_complement.leading_dim = degree;
-      schur_complement.data = schur_complement_buffer.Data();
-  };
 
-  // Free a child's Schur complement from the heap.
-  auto free_schur_complement = [&](Int child) {
-      shared_state->schur_complements[child].height = 0;
-      shared_state->schur_complements[child].width = 0;
-      shared_state->schur_complements[child].data = nullptr;
-      shared_state->schur_complement_buffers[child].Clear();
+      if (subtreeStorage == nullptr) {
+          Buffer<Field>& scb = shared_state->schur_complement_buffers[supernode];
+          scb.Resize(degree * degree);
+          sc.width = sc.height = sc.leading_dim = degree;
+          sc.data = scb.Data();
+      }
+      else {
+          sc = subtreeStorage->push(degree);
+      }
   };
 
   if (!parallel) {
@@ -409,58 +410,83 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
       BlasMatrixView<Field> lower_block    = lower_factor_->blocks[supernode];
       BlasMatrixView<Field> diagonal_block = diagonal_factor_->blocks[supernode];
 
-      if (num_children == 0) {
-          init();
-          allocate_schur_complement();
+      // Construct a stack for holding the child schur complements of this subtree (if it doesn't exist already)
+      std::unique_ptr<SchurComplementStorage<Field>> subtreeStorageHolder;
+      if (subtreeStorage == nullptr) {
+          // std::cout << "Allocating subtree storage at supernode: " << supernode << std::endl;
+#if CUSTOM_TIMERS
+          shared_state->custom_timers[supernode].Start();
+#endif
+          Int &ssn = shared_state->subtree_storage_needed[supernode];
+          if (ssn == -1) ssn = SchurComplementStorage<Field>::storageNeededForChildren(supernode, ordering_.assembly_forest, *lower_factor_);
+          subtreeStorageHolder = std::make_unique<SchurComplementStorage<Field>>(ssn);
+          // subtreeStorageHolder = std::make_unique<SchurComplementStorage<Field>>(supernode, ordering_.assembly_forest, *lower_factor_);
+#if CUSTOM_TIMERS
+          shared_state->custom_timers[supernode].Stop();
+#endif
+          subtreeStorage = subtreeStorageHolder.get();
       }
 
+      if (num_children == 0)
+          init();
+
+      allocate_schur_complement(); // TODO: move this after `process_child` if/when we implement an expand-in-place strategy
       for (Int child_index = 0; child_index < num_children; ++child_index) {
           const Int child = ordering_.assembly_forest.children[child_beg + child_index]; // sorted_children[child_index];
+                                                                                         //
+          SparseLDLResult<Field> resultContrib;
+          process_child(child, &resultContrib, subtreeStorage);
 
-          process_child(child, child_index);
+          MergeContribution(resultContrib, result);
+          if (dynamic_reg_params.enabled) assert(false); /* MergeDynamicRegularizations(result_contributions, result); */
           // Stop early if a child failed to finalize.
           if (fail) break;
 
-          if (child_index == 0)
-              allocate_schur_complement();
-
+          auto &sc_child = shared_state->schur_complements[child];
           MergeChildSchurComplement(supernode, child, ordering_,
-                  lower_factor_.get(), shared_state->schur_complements[child],
+                  lower_factor_.get(), sc_child,
                   lower_block, diagonal_block, shared_state->schur_complements[supernode], *this, /* first_merge = */ child_index == 0);
-          free_schur_complement(child);
+
+          // Deallocate the child Schur complement, which must have been pushed to the stack.
+          subtreeStorage->free(sc_child);
       }
+      // Note: stack is freed automatically when the subtree's `subtreeStorageHolder`
+      // is destroyed, so we needn't manually clean children on failure.
   }
   else {
       tbb::task_group tg;
+      Buffer<SparseLDLResult<Field>> result_contributions(num_children);
       for (Int child_index = 0; child_index < num_children - 1; ++child_index) {
           const Int child = ordering_.assembly_forest.children[child_beg + child_index]; // sorted_children[child_index];
-          tg.run([&process_child, child, child_index]() { process_child(child, child_index); });
+          tg.run([&process_child, &result_contributions, child, child_index]() { process_child(child, &result_contributions[child_index], nullptr); });
       }
       // tg.run([&init]() { init(); });
-      process_child(ordering_.assembly_forest.children[child_end - 1], num_children - 1);
+      process_child(ordering_.assembly_forest.children[child_end - 1], &result_contributions[num_children - 1], nullptr);
       // init();
-      // process_child(sorted_children[num_children - 1], num_children - 1);
+      // process_child(sorted_children[num_children - 1], num_children - 1, nullptr);
       tg.wait();
 
-      // Stop early if a child failed to finalize.
       if (!fail) {
           allocate_schur_complement();
           MergeChildSchurComplements(supernode, *this, shared_state->schur_complements);
       }
+
+      // Clear child fronts from the heap.
+      for (Int child_index = 0; child_index < num_children; ++child_index) {
+        const Int child = ordering_.assembly_forest.children[child_beg + child_index];
+        auto &sc = shared_state->schur_complements[child];
+        sc.width = sc.height = 0;
+        sc.data = nullptr;
+        shared_state->schur_complement_buffers[child].Clear();
+      }
+
+      for (Int child_index = 0; child_index < num_children; ++child_index)
+          MergeContribution(result_contributions[child_index], result);
+      if (dynamic_reg_params.enabled) MergeDynamicRegularizations(result_contributions, result);
   }
 
-  // Clear the child fronts (if not already cleared)
-  for (Int child_index = 0; child_index < num_children; ++child_index) {
-    const Int child = ordering_.assembly_forest.children[child_beg + child_index];
-    if (shared_state->schur_complements[child].data == nullptr) continue;
-    free_schur_complement(child);
-  }
 
   if (fail) return false;
-
-  for (Int child_index = 0; child_index < num_children; ++child_index)
-      MergeContribution(result_contributions[child_index], result);
-  if (dynamic_reg_params.enabled) MergeDynamicRegularizations(result_contributions, result);
 
   return OpenMPRightLookingSupernodeFinalize(supernode, dynamic_reg_params, shared_state, private_states, result);
 }
@@ -468,11 +494,19 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
 template <class Field>
 SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
     const CoordinateMatrix<Field>& matrix) {
-  BENCHMARK_SCOPED_TIMER_SECTION timer("OpenMPRightLooking");
-  typedef ComplexBase<Field> Real;
 
   const Int num_supernodes = ordering_.supernode_sizes.Size();
   const Int num_roots = ordering_.assembly_forest.roots.Size();
+
+#if CUSTOM_TIMERS
+  shared_state_.custom_timers.Resize(num_supernodes);
+  for (Int i = 0; i < num_supernodes; ++i)
+      shared_state_.custom_timers[i].Reset();
+#endif
+
+  BENCHMARK_SCOPED_TIMER_SECTION timer("OpenMPRightLooking");
+  typedef ComplexBase<Field> Real;
+
   // {
   //   // Histogram of child count.
   //   std::vector<size_t> child_count_statistics;
@@ -575,6 +609,10 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
       shared_state.schur_complement_buffers.Resize(num_supernodes);
   }
 
+  if (shared_state.subtree_storage_needed.Size() != num_supernodes) {
+      shared_state.subtree_storage_needed.Resize(num_supernodes, -1);
+  }
+
 #ifdef CATAMARI_ENABLE_TIMERS
   shared_state.inclusive_timers.Resize(num_supernodes);
   shared_state.exclusive_timers.Resize(num_supernodes);
@@ -636,6 +674,14 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
       ordering_.assembly_forest, control_.max_timing_levels,
       control_.avoid_timing_isolated_roots);
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
+
+#if CUSTOM_TIMERS
+  double totalTime = 0;
+  for (Int i = 0; i < num_supernodes; ++i) {
+      totalTime += shared_state.custom_timers[i].TotalSeconds();
+  }
+  std::cout << "Stack allocation time: " << totalTime << std::endl;
+#endif
 
   return result;
 }
