@@ -21,6 +21,7 @@
 
 #include "catamari/sparse_ldl/supernodal/factorization.hpp"
 #include <Eigen/Dense>
+#include <limits>
 
 namespace catamari {
 namespace supernodal_ldl {
@@ -56,30 +57,68 @@ struct SchurComplementStorage {
         return maxStorage;
     }
 
-    static Int storageNeededForChildren(Int supernode, const AssemblyForest &af, const LowerFactor<Field> &lf) {
+    static Int storageNeededExpandInPlace(Int supernode, const AssemblyForest &af, const LowerFactor<Field> &lf) {
+        const Int degree = lf.blocks[supernode].height;
+        if (af.NumChildren(supernode) == 0) {
+            // At the leaves, we store only a single Schur complement
+            return degree * degree;
+        }
         const Int child_beg = af.child_offsets[supernode];
         const Int child_end = af.child_offsets[supernode + 1];
-        Int maxChildStorage = 0;
-        for (Int child_index = child_beg; child_index < child_end; ++child_index) {
+
+        // We use a rather primitive strategy of merging the child Schur complement
+        // into the parent immediately after computing it. This avoids the need to store
+        // the Schur complements of all children on the stack. However, this is not optimal
+        // as it can force storage of Schur complements at multiple levels of the tree.
+        Int maxStorage = std::max(storageNeededExpandInPlace(af.children[child_beg], af, lf), degree * degree); // TODO: we can reduce this to `max(storageNeeded(child_beg), degree * degree)` by expanding the first child "in place"
+
+        for (Int child_index = child_beg + 1; child_index < child_end; ++child_index) {
             const Int child = af.children[child_index];
-            maxChildStorage = std::max(maxChildStorage, storageNeeded(child, af, lf));
+            maxStorage = std::max(maxStorage, storageNeededExpandInPlace(child, af, lf) + degree * degree);
         }
-        return maxChildStorage;
+
+        return maxStorage;
     }
 
-    SchurComplementStorage(Int cap = 0) { reserve(cap); }
-    SchurComplementStorage(Int supernode, const AssemblyForest &af, const LowerFactor<Field> &lf) {
-        reserve(storageNeededForChildren(supernode, af, lf));
+    static Int storageNeededExpandInPlaceOptimal(Int supernode, const AssemblyForest &af, const LowerFactor<Field> &lf) {
+        const Int degree = lf.blocks[supernode].height;
+        if (af.NumChildren(supernode) == 0) {
+            // At the leaves, we store only a single Schur complement
+            return degree * degree;
+        }
+        const Int child_beg = af.child_offsets[supernode];
+        const Int child_end = af.child_offsets[supernode + 1];
+
+        Int best = std::numeric_limits<Int>::max();
+        for (Int first_child = child_beg; first_child < child_end; ++first_child) {
+            Int maxStorage = std::max(storageNeededExpandInPlaceOptimal(af.children[first_child], af, lf), degree * degree);
+            for (Int child_index = child_beg + 1; child_index < child_end; ++child_index) {
+                if (child_index == first_child) continue;
+                const Int child = af.children[child_index];
+                maxStorage = std::max(maxStorage, storageNeededExpandInPlaceOptimal(child, af, lf) + degree * degree);
+            }
+            best = std::min(best, maxStorage);
+        }
+
+        return best;
     }
 
-    void reserve(Int s) { m_storage.resize(s); }
+    SchurComplementStorage(Int cap = 0) { reallocate(cap); }
+
+    void reallocate(Int s) { m_storage.resize(s); m_stackTop = 0; }
     Int capacity() const { return m_storage.size(); }
     Int     size() const { return m_stackTop; }
-    void deallocate() { m_storage.resize(0); }
+
+    BlasMatrixView<Field> allocateSingleMatrixForDegree(int degree) {
+        reallocate(degree * degree);
+        return push(degree);
+    }
+
+    void deallocate() { m_storage.resize(0); m_stackTop = 0; }
 
     // Allocate a `n x n` matrix at the top of the stack
     BlasMatrixView<Field> push(Int n) {
-        // if (size() + n * n > capacity()) throw std::runtime_error("Ran out of stack space attempting push " + std::to_string(n * n) + " at size " + std::to_string(size()) + "/" + std::to_string(capacity()));
+        if (size() + n * n > capacity()) throw std::runtime_error("Ran out of stack space attempting push " + std::to_string(n * n) + " at size " + std::to_string(size()) + "/" + std::to_string(capacity()));
         BlasMatrixView<Field> result;
         result.width = result.height = result.leading_dim = n;
         result.data = m_storage.data() + m_stackTop;
@@ -91,7 +130,7 @@ struct SchurComplementStorage {
     // Remove a `n x n` matrix from the top of the stack
     void pop(Int n) {
         // std::cout << "Pop " << n * n << " attempted at size " << size() << std::endl;
-        // if (n * n > size()) throw std::runtime_error("Out-of-bounds pop");
+        if (n * n > size()) throw std::runtime_error("Out-of-bounds pop");
         m_stackTop -= n * n;
     }
 
@@ -101,9 +140,16 @@ struct SchurComplementStorage {
         sc.data = nullptr;
     }
 
+    Int getStoragedNeeded(Int supernode, const AssemblyForest &af, const LowerFactor<Field> &lf) {
+        if (m_cachedStorageNeeded == -1)
+            m_cachedStorageNeeded = storageNeeded(supernode, af, lf);
+        return m_cachedStorageNeeded;
+    }
+
 private:
     Eigen::Matrix<Field, Eigen::Dynamic, 1> m_storage;
     Int m_stackTop = 0;
+    Int m_cachedStorageNeeded = -1; // cache to avoid repeated calculation of subtree storage requirements.
 };
 
 }  // namespace supernodal_ldl

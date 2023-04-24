@@ -13,6 +13,7 @@
 #include "catamari/symmetric_ordering.hpp"
 
 #include "catamari_config.hh"
+#include "factorization/SchurComplementStorage.hpp"
 
 #if defined(CATAMARI_ENABLE_TIMERS) || CUSTOM_TIMERS
 #include "quotient/timer.hpp"
@@ -108,13 +109,15 @@ struct RightLookingSharedState {
 
   // The underlying buffers for the Schur complement portions of the fronts.
   // They are allocated and deallocated as the factorization progresses.
+  // (Julian Panetta: We no longer use this during factorization;
+  //  we use the `schur_complement_storage` stack below instead!)
   Buffer<Buffer<Field>> schur_complement_buffers;
 
 #if CUSTOM_TIMERS
   Buffer<quotient::Timer> custom_timers;
 #endif
 
-  Buffer<Int> subtree_storage_needed;
+  Buffer<SchurComplementStorage<Field>> schur_complement_storage;
 
 #ifdef CATAMARI_ENABLE_TIMERS
   // A separate timer for each supernode's inclusive processing time.

@@ -153,6 +153,7 @@ void Factorization<Field>::m_allocateFactors(const Buffer<Int> &supernode_degree
 
     // Allocate a single buffer holding both parts of the factor.
     factor_values_.Resize(diagSize + lowerSize, 1);
+    // std::cout << "Lower factor size: " << diagSize + lowerSize << std::endl;
     diagonal_factor_ = std::make_unique<DiagonalFactor<Field>>(ordering_.supernode_sizes,                    factor_values_.Submatrix(       0, 0,  diagSize, 1));
     lower_factor_    = std::make_unique<   LowerFactor<Field>>(ordering_.supernode_sizes, supernode_degrees, factor_values_.Submatrix(diagSize, 0, lowerSize, 1));
 
