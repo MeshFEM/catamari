@@ -81,6 +81,8 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
     return true;
   }
 
+  if (shared_state->hasFailed()) return false; // Stop immediately if another thread encountered a failure!
+
   CATAMARI_ASSERT(supernode_size > 0, "Supernode size was non-positive.");
   if (control_.supernodal_pivoting) {
     // Solve against P^T from the right, which is the same as applying P
@@ -116,6 +118,8 @@ bool Factorization<Field>::OpenMPRightLookingSupernodeFinalize(
        &leading_dim_blas);
   }
 #endif
+
+  if (shared_state->hasFailed()) return false; // Stop immediately if another thread encountered a failure!
 
   if (control_.factorization_type == kCholeskyFactorization) {
     BlasMatrixView<Field>& schur_complement = shared_state->schur_complements[supernode];
@@ -355,8 +359,6 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
   const Int child_end = ordering_.assembly_forest.child_offsets[supernode + 1];
   const Int num_children = child_end - child_beg;
 
-  bool fail = false;
-
   const double work_estimate = work_estimates[supernode];
   const bool parallel = (work_estimate >= min_parallel_work) && (num_children > 1);
 
@@ -379,10 +381,11 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
       const Int child_offset = ordering_.supernode_offsets[child];
       DynamicRegularizationParams<Field> subparams = dynamic_reg_params;
       subparams.offset = child_offset;
+      if (shared_state->hasFailed()) return; // Stop immediately if another thread encountered a failure!
       bool success = OpenMPRightLookingSubtree(
               child, matrix, subparams, work_estimates, min_parallel_work,
               shared_state, private_states, resultContrib, stack);
-      if (!success) fail = true;
+      if (!success) shared_state->setFailed();
   };
 
   // Allocate this supernode's Schur complement either in an existing subtree
@@ -400,6 +403,7 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
       // Output destination buffers
       BlasMatrixView<Field> lower_block    = lower_factor_->blocks[supernode];
       BlasMatrixView<Field> diagonal_block = diagonal_factor_->blocks[supernode];
+      if (shared_state->hasFailed()) return false; // Stop immediately if another thread encountered a failure!
 
       // Construct a stack for holding the child schur complements of the subtree rooted at `supernode` (if it doesn't exist already)
       if (subtreeStorage == nullptr) {
@@ -414,6 +418,7 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
 #endif
       }
 
+      if (shared_state->hasFailed()) return false; // Stop immediately if another thread encountered a failure!
       if (num_children == 0)
           init();
 
@@ -427,8 +432,8 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
           MergeContribution(resultContrib, result);
           if (dynamic_reg_params.enabled) assert(false); /* MergeDynamicRegularizations(result_contributions, result); */
 
-          // Stop early if a child failed to finalize.
-          if (fail) return false;
+          // Stop immediately if this child failed to finalize (or if another thread encountered a failure)
+          if (shared_state->hasFailed()) return false;
 
           auto &sc_child = shared_state->schur_complements[child];
           MergeChildSchurComplement(supernode, child, ordering_,
@@ -447,15 +452,18 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
       Buffer<SparseLDLResult<Field>> result_contributions(num_children);
       for (Int child_index = 0; child_index < num_children - 1; ++child_index) {
           const Int child = ordering_.assembly_forest.children[child_beg + child_index]; // sorted_children[child_index];
-          tg.run([&process_child, &result_contributions, child, child_index]() { process_child(child, &result_contributions[child_index], nullptr); });
+          tg.run([&process_child, &result_contributions, child, child_index, shared_state, &tg]() {
+                process_child(child, &result_contributions[child_index], nullptr);
+                if (shared_state->hasFailed()) tg.cancel();
+            });
       }
-      // tg.run([&init]() { init(); });
       process_child(ordering_.assembly_forest.children[child_end - 1], &result_contributions[num_children - 1], nullptr);
-      // init();
-      // process_child(sorted_children[num_children - 1], num_children - 1, nullptr);
-      tg.wait();
+      if (shared_state->hasFailed()) tg.cancel();
+      auto status = tg.wait();
+      if (status != tbb::task_group_status::complete)
+          shared_state->setFailed();
 
-      if (!fail) {
+      if (!shared_state->hasFailed()) {
           allocate_schur_complement();
           MergeChildSchurComplements(supernode, *this, shared_state->schur_complements);
       }
@@ -474,7 +482,7 @@ bool Factorization<Field>::OpenMPRightLookingSubtree(
       if (dynamic_reg_params.enabled) MergeDynamicRegularizations(result_contributions, result);
   }
 
-  if (fail) return false;
+  if (shared_state->hasFailed()) return false;
 
   return OpenMPRightLookingSupernodeFinalize(supernode, dynamic_reg_params, shared_state, private_states, result);
 }
@@ -615,7 +623,7 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
 
   SparseLDLResult<Field> result;
 
-  bool fail = false;
+  shared_state.unsetFailed();
 
   Buffer<SparseLDLResult<Field>> result_contributions(num_roots);
 
@@ -627,7 +635,7 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
               root, matrix, subparams, work_estimates, min_parallel_work,
               &shared_state, &private_states, &result_contributions[root_index]);
       shared_state.schur_complement_storage[root].deallocate();
-      if (!success) fail = true;
+      if (!success) shared_state.setFailed();
   };
 
   // const int old_max_threads = GetMaxBlasThreads();
@@ -635,10 +643,10 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
   // if (parallel) SetNumBlasThreads(2);
 
   // Recurse on each tree in the elimination forest.
-  if (total_work < min_parallel_work || num_roots <= 1) {
+  if (!parallel || num_roots <= 1) {
       for (Int root_index = 0; root_index < num_roots; ++root_index) {
           process_root(root_index);
-          if (fail) break;
+          if (shared_state.hasFailed()) break;
       }
   }
   else {
@@ -652,7 +660,7 @@ SparseLDLResult<Field> Factorization<Field>::OpenMPRightLooking(
 
   // if (parallel) SetNumBlasThreads(old_max_threads);
 
-  bool succeeded = !fail;
+  bool succeeded = !shared_state.hasFailed();
   if (succeeded) {
     for (Int index = 0; index < num_roots; ++index)
         MergeContribution(result_contributions[index], &result);

@@ -100,8 +100,11 @@ struct LeftLookingSharedState {
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
 };
 
+#include <atomic>
+
 template <typename Field>
 struct RightLookingSharedState {
+  RightLookingSharedState() { unsetFailed(); }
   // The Schur complement matrices for each of the supernodes in the
   // multifrontal method. Each front should only be allocated while it is
   // actively in use.
@@ -119,6 +122,10 @@ struct RightLookingSharedState {
 
   Buffer<SchurComplementStorage<Field>> schur_complement_storage;
 
+  void unsetFailed() { m_fail = false; }
+  void   setFailed() { m_fail = true; }
+  bool   hasFailed() const { return m_fail; }
+
 #ifdef CATAMARI_ENABLE_TIMERS
   // A separate timer for each supernode's inclusive processing time.
   Buffer<quotient::Timer> inclusive_timers;
@@ -126,6 +133,9 @@ struct RightLookingSharedState {
   // A separate timer for each supernode's exclusive processing time.
   Buffer<quotient::Timer> exclusive_timers;
 #endif  // ifdef CATAMARI_ENABLE_TIMERS
+
+private:
+  std::atomic<bool> m_fail; // Global flag to indicate factorization failure and accelerate early-exit in parallel case.
 };
 
 template <typename Field>
