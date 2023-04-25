@@ -122,9 +122,9 @@ struct RightLookingSharedState {
 
   Buffer<SchurComplementStorage<Field>> schur_complement_storage;
 
-  void unsetFailed() { m_fail = false; }
-  void   setFailed() { m_fail = true; }
-  bool   hasFailed() const { return m_fail; }
+  void unsetFailed() { m_fail.store(false, std::memory_order_relaxed); }
+  void   setFailed() { m_fail.store(true, std::memory_order_relaxed); }
+  bool   hasFailed() const { return m_fail.load(std::memory_order_relaxed); }
 
 #ifdef CATAMARI_ENABLE_TIMERS
   // A separate timer for each supernode's inclusive processing time.
