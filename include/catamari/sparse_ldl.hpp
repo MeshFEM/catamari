@@ -126,6 +126,18 @@ class SparseLDL {
   std::unique_ptr<supernodal_ldl::Factorization<Field>>
       supernodal_factorization;
 
+  std::unique_ptr<SparseLDL> Clone() const {
+    std::unique_ptr<SparseLDL> result = std::make_unique<SparseLDL>();
+    result->is_supernodal = is_supernodal;
+    if (!is_supernodal || !supernodal_factorization || scalar_factorization)
+        throw std::runtime_error("Only supernodal factorizations support cloning");
+    result->supernodal_factorization = supernodal_factorization->Clone();
+    result ->have_equilibration_     = have_equilibration_;
+    result->equilibration_           = equilibration_;
+
+    return result;
+  }
+
   // The default constructor.
   SparseLDL();
 

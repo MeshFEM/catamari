@@ -376,6 +376,34 @@ class Factorization {
                                    const CoordinateMatrix<Field>& matrix);
 #endif  // ifdef CATAMARI_OPENMP
 
+  std::unique_ptr<Factorization> Clone() const {
+    std::unique_ptr<Factorization> result = std::make_unique<Factorization>();
+
+    result->control_                            = control_;
+    result->ordering_                           = ordering_;
+    result->supernode_member_to_index_          = supernode_member_to_index_;
+    result->max_degree_                         = max_degree_;
+    result->max_lower_block_size_               = max_lower_block_size_;
+    result->left_looking_workspace_size_        = left_looking_workspace_size_;
+    result->left_looking_scaled_transpose_size_ = left_looking_scaled_transpose_size_;
+    result->work_estimates_                     = work_estimates_;
+    result->total_work_                         = total_work_;
+
+    result->   lower_factor_ = std::make_unique<   LowerFactor<Field>>(*   lower_factor_);
+    result->diagonal_factor_ = std::make_unique<DiagonalFactor<Field>>(*diagonal_factor_);
+    result->factor_values_   = factor_values_;
+
+    // Point the lower/diagonal factors at the correct data.
+    Int dataPtrOffset = result->factor_values_.Data() - factor_values_.Data();
+    const Int ns = ordering_.supernode_sizes.Size();
+    for (Int s = 0; s < ns; ++s) {
+        result->   lower_factor_->blocks[s].data += dataPtrOffset;
+        result->diagonal_factor_->blocks[s].data += dataPtrOffset;
+    }
+
+    return result;
+  }
+
  private:
   // The control structure for the factorization.
   Control<Field> control_;
