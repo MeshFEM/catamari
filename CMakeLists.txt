@@ -22,6 +22,7 @@ if (NOT TARGET catamari)
         target_compile_definitions(catamari INTERFACE -DDARWIN -DARM -DCATAMARI_HAVE_FENV_DISABLE_DENORMS -DCATAMARI_HAVE_BLAS -DCATAMARI_HAVE_LAPACK -DQUOTIENT_USE_64BIT)
     elseif  (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         target_compile_definitions(catamari INTERFACE -DMANTIS_GCC_FUSED_MULTIPLY_ADD -DX86 -DLINUX -DCATAMARI_HAVE_XMMINTRIN -DMANTIS_GCC_FUSED_MULTIPLY_ADD -DCATAMARI_HAVE_MKL -DCATAMARI_HAVE_BLAS -DCATAMARI_HAVE_LAPACK -DQUOTIENT_USE_64BIT)
+        target_include_directories(catamari SYSTEM INTERFACE /usr/include/mkl) # Needed for Ubuntu MKL
     else()
         message(FATAL_ERROR "Unrecognized CMAKE_SYSTEM_NAME")
     endif()
