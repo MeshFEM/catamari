@@ -885,13 +885,13 @@ void populateChildToParentMap(Int supernode, Int child, Int child_degree,
 }
 
 
-#if 0
 template <class Field>
 void MergeChildSchurComplements(Int supernode,
                                 const SymmetricOrdering& ordering,
                                 LowerFactor<Field>* lower_factor,
                                 DiagonalFactor<Field>* diagonal_factor,
                                 RightLookingSharedState<Field>* shared_state) {
+#if 0
   const Int child_beg = ordering.assembly_forest.child_offsets[supernode];
   const Int child_end = ordering.assembly_forest.child_offsets[supernode + 1];
 
@@ -908,8 +908,9 @@ void MergeChildSchurComplements(Int supernode,
                                 child_schur_complement, lower_block, diagonal_block,
                                 schur_complement, /* freshShurComplement = */ child_index == child_beg);
   }
-}
 #endif
+  throw std::runtime_error("Disabled"); // The single-threaded version is disabled...
+}
 
 template <class Field>
 Int FactorDiagonalBlock(
