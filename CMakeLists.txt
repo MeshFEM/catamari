@@ -15,14 +15,16 @@ endif()
 find_package(BLAS REQUIRED)
 find_package(OpenMP REQUIRED)
 
+option(CATAMARI_INT64 "Use 64 bit integers" OFF)
+
 if (NOT TARGET catamari)
     add_library(catamari INTERFACE)
     # TODO: actually detect the proper flags here rather than hard-coding for
     # M1-based Mac and x86-based Linux.
     if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-        target_compile_definitions(catamari INTERFACE -DDARWIN -DARM -DCATAMARI_HAVE_FENV_DISABLE_DENORMS -DCATAMARI_HAVE_BLAS -DCATAMARI_HAVE_LAPACK -DQUOTIENT_USE_64BIT -DCATAMARI_OPENMP)
+        target_compile_definitions(catamari INTERFACE -DDARWIN -DARM -DCATAMARI_HAVE_FENV_DISABLE_DENORMS -DCATAMARI_HAVE_BLAS -DCATAMARI_HAVE_LAPACK -DCATAMARI_OPENMP)
     elseif  (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        target_compile_definitions(catamari INTERFACE -DMANTIS_GCC_FUSED_MULTIPLY_ADD -DX86 -DLINUX -DCATAMARI_HAVE_XMMINTRIN -DMANTIS_GCC_FUSED_MULTIPLY_ADD -DCATAMARI_HAVE_MKL -DCATAMARI_HAVE_BLAS -DCATAMARI_HAVE_LAPACK -DQUOTIENT_USE_64BIT -DCATAMARI_OPENMP)
+        target_compile_definitions(catamari INTERFACE -DMANTIS_GCC_FUSED_MULTIPLY_ADD -DX86 -DLINUX -DCATAMARI_HAVE_XMMINTRIN -DMANTIS_GCC_FUSED_MULTIPLY_ADD -DCATAMARI_HAVE_MKL -DCATAMARI_HAVE_BLAS -DCATAMARI_HAVE_LAPACK -DCATAMARI_OPENMP)
         target_include_directories(catamari SYSTEM INTERFACE /usr/include/mkl) # Needed for Ubuntu MKL
     else()
         message(FATAL_ERROR "Unrecognized CMAKE_SYSTEM_NAME")
@@ -30,6 +32,10 @@ if (NOT TARGET catamari)
 
     target_link_libraries(catamari INTERFACE BLAS::BLAS)
     target_link_libraries(catamari INTERFACE OpenMP::OpenMP_CXX)
+
+    if (CATAMARI_INT64)
+        target_compile_definitions(catamari INTERFACE -DQUOTIENT_USE_64BIT)
+    endif()
 
     target_include_directories(catamari SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_include_directories(catamari SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/subprojects/quotient/include)
